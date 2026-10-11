@@ -1,0 +1,31 @@
+[package]
+name = "slicc-browsers"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.83"
+license = "Apache-2.0"
+description = "SLICC's shared browser catalog, JSON schemas and discovery conformance corpus"
+repository = "https://github.com/ai-ecoverse/slicc-browsers"
+homepage = "https://github.com/ai-ecoverse/slicc-browsers"
+readme = "README.md"
+keywords = ["chrome", "chromium", "cdp", "devtools", "browser"]
+categories = ["development-tools", "web-programming"]
+include = ["/Cargo.toml", "/README.md", "/LICENSE", "/catalog.json", "/corpus.json", "/schema/*.json", "/src/**"]
+
+[lib]
+name = "slicc_browsers"
+path = "src/lib.rs"
+
+[features]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
+corpus = ["serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+
+[[test]]
+name = "integration"
+path = "test/integration/rust.rs"
+required-features = ["corpus"]

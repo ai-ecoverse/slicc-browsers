@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9378",
+      "kind": "endpoint",
+      "tier": 1,
+      "name": "Chrome",
+      "version": "150.0.7800.10",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9378",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9378/devtools/browser/p8",
+        "name": "Chrome",
+        "version": "150.0.7800.10",
+        "product": "Chrome/150.0.7800.10",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7800.10 Safari/537.36",
+        "source": "process",
+        "userDataDir": "{home}/tmp/pw2",
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "P1",
+            "url": "https://lars.sliccy.ai/",
+            "title": "seven"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9371",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9371",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9371/devtools/browser/p1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "process",
+        "userDataDir": "{home}/tmp/pw1",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9372",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9372",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9372/devtools/browser/p2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "process",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9384",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9384",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9384/devtools/browser/p14",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "process",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

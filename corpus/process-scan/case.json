@@ -1,0 +1,197 @@
+{
+  "description": "The process source: --remote-debugging-port=<n> or <n>, port 0 through the --user-data-dir's DevToolsActivePort, skipping pid 0, this process, wrappers, six's profiles and ports that don't answer",
+  "needs": ["process"],
+  "files": {
+    "{home}/tmp/pw2/DevToolsActivePort": "9378\n/devtools/browser/p8\n",
+    "{home}/six/slicc/profiles/browser-coding-agent-chrome/DevToolsActivePort": "9380\n/devtools/browser/p10\n"
+  },
+  "processes": [
+    {
+      "pid": 101,
+      "command": "/opt/google/chrome/chrome --type=browser --remote-debugging-port=9371 --user-data-dir={home}/tmp/pw1"
+    },
+    {
+      "pid": 102,
+      "command": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --remote-debugging-port 9372 --no-first-run"
+    },
+    {
+      "pid": 103,
+      "command": "node /usr/lib/node_modules/tool/cli.js --remote-debugging-port=9373"
+    },
+    {
+      "pid": 104,
+      "command": "/usr/bin/env CHROME=1 chrome --remote-debugging-port=9374"
+    },
+    {
+      "pid": 105,
+      "command": "C:\\Windows\\System32\\cmd.exe /c chrome.exe --remote-debugging-port=9375"
+    },
+    {
+      "pid": 0,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9376"
+    },
+    {
+      "self": true,
+      "command": "/usr/local/bin/tool --remote-debugging-port=9377"
+    },
+    {
+      "pid": 106,
+      "command": "/Applications/Chromium.app/Contents/MacOS/Chromium --remote-debugging-port=0 --user-data-dir={home}/tmp/pw2"
+    },
+    {
+      "pid": 107,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=0"
+    },
+    {
+      "pid": 108,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9379"
+    },
+    {
+      "pid": 109,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir={home}/six/slicc/profiles/browser-coding-agent-chrome"
+    },
+    {
+      "pid": 110,
+      "command": "/opt/google/chrome/chrome --remote-debugging-pipe --remote-debugging-port=notaport"
+    },
+    {
+      "pid": 111,
+      "command": "PowerShell.EXE -Command chrome --remote-debugging-port=9383"
+    },
+    {
+      "pid": 112,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9384 --remote-debugging-address=127.0.0.1"
+    }
+  ],
+  "http": {
+    "127.0.0.1:9371": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9371/devtools/browser/p1"
+      },
+      "list": []
+    },
+    "127.0.0.1:9372": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9372/devtools/browser/p2"
+      },
+      "list": []
+    },
+    "127.0.0.1:9373": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9373/devtools/browser/p3"
+      },
+      "list": []
+    },
+    "127.0.0.1:9374": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9374/devtools/browser/p4"
+      },
+      "list": []
+    },
+    "127.0.0.1:9375": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9375/devtools/browser/p5"
+      },
+      "list": []
+    },
+    "127.0.0.1:9376": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9376/devtools/browser/p6"
+      },
+      "list": []
+    },
+    "127.0.0.1:9377": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9377/devtools/browser/p7"
+      },
+      "list": []
+    },
+    "127.0.0.1:9378": {
+      "version": {
+        "Browser": "Chrome/150.0.7800.10",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7800.10 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9378/devtools/browser/p8"
+      },
+      "list": [
+        {
+          "id": "P1",
+          "type": "page",
+          "url": "https://lars.sliccy.ai/",
+          "title": "seven",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P1"
+        }
+      ]
+    },
+    "127.0.0.1:9380": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9380/devtools/browser/p10"
+      },
+      "list": []
+    },
+    "127.0.0.1:9383": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9383/devtools/browser/p13"
+      },
+      "list": []
+    },
+    "127.0.0.1:9384": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9384/devtools/browser/p14"
+      },
+      "list": []
+    }
+  }
+}

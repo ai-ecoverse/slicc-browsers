@@ -1,0 +1,36 @@
+{
+  "description": "A DevToolsActivePort is stale unless its port answers /json/version with the websocket path on the file's second line",
+  "needs": ["user-data-dirs", "seven-profiles"],
+  "files": {
+    "{sevenProfiles}/chrome/DevToolsActivePort": "9311\n/devtools/browser/old\n",
+    "{sevenProfiles}/gone/DevToolsActivePort": "9312\n/devtools/browser/gone\n",
+    "{sevenProfiles}/junk/DevToolsActivePort": "not a port\n",
+    "{sevenProfiles}/zero/DevToolsActivePort": "0\n/devtools/browser/zero\n",
+    "{sevenProfiles}/high/DevToolsActivePort": "70000\n/devtools/browser/high\n",
+    "{userData:chrome}/DevToolsActivePort": "9313\n/devtools/browser/live\n"
+  },
+  "http": {
+    "127.0.0.1:9311": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9311/devtools/browser/new"
+      },
+      "list": []
+    },
+    "127.0.0.1:9313": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9313/devtools/browser/live"
+      },
+      "list": []
+    }
+  }
+}

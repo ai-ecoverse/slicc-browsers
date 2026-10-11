@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9361",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Google Chrome",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9361",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9361/devtools/browser/ws1",
+        "name": "Google Chrome",
+        "source": "devtools-active-port",
+        "browser": "chrome",
+        "userDataDir": "{userData:chrome}",
+        "wsOnly": true,
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9362",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chromium",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9362",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9362/devtools/browser/ws2",
+        "name": "Chromium",
+        "source": "devtools-active-port",
+        "userDataDir": "{sevenProfiles}/side",
+        "profile": "side",
+        "wsOnly": true,
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9365",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chromium",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9365",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9365/devtools/browser/ws5",
+        "name": "Chromium",
+        "source": "flag",
+        "wsOnly": true,
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

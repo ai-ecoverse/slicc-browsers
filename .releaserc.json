@@ -1,0 +1,10 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "./scripts/major-guard.mjs",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/github"
+  ]
+}

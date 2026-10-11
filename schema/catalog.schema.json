@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ai-ecoverse/slicc-browsers/schema/catalog.schema.json",
+  "title": "slicc-browsers catalog, schema 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "minChromiumMajor",
+    "browsers",
+    "electron",
+    "rank",
+    "discovery",
+    "seven",
+    "profiles",
+    "launch",
+    "platforms"
+  ],
+  "properties": {
+    "schema": { "const": 1 },
+    "minChromiumMajor": { "type": "integer", "minimum": 1 },
+    "browsers": {
+      "description": "Every known Chromium browser, in rank priority order.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/browser" }
+    },
+    "electron": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macosApps", "debugBlocked", "idPrefix"],
+      "properties": {
+        "macosApps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bundleId", "name"],
+            "properties": {
+              "bundleId": { "$ref": "#/$defs/name" },
+              "name": { "$ref": "#/$defs/name" }
+            }
+          }
+        },
+        "debugBlocked": { "$ref": "#/$defs/names" },
+        "idPrefix": { "const": "electron:" }
+      }
+    },
+    "rank": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tiers", "chromeId"],
+      "properties": {
+        "tiers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sevenOpen", "endpoint", "chrome", "chromium", "electron"],
+          "properties": {
+            "sevenOpen": { "$ref": "#/$defs/tier" },
+            "endpoint": { "$ref": "#/$defs/tier" },
+            "chrome": { "$ref": "#/$defs/tier" },
+            "chromium": { "$ref": "#/$defs/tier" },
+            "electron": { "$ref": "#/$defs/tier" }
+          }
+        },
+        "chromeId": { "$ref": "#/$defs/id" }
+      }
+    },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "activePortFile",
+        "probePorts",
+        "sourceRank",
+        "chromeMajorPattern",
+        "names",
+        "process"
+      ],
+      "properties": {
+        "activePortFile": { "$ref": "#/$defs/name" },
+        "probePorts": { "$ref": "#/$defs/ports" },
+        "sourceRank": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["devtools-active-port", "flag", "process", "probe"],
+          "properties": {
+            "devtools-active-port": { "type": "integer", "minimum": 0 },
+            "flag": { "type": "integer", "minimum": 0 },
+            "process": { "type": "integer", "minimum": 0 },
+            "probe": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "chromeMajorPattern": { "type": "string", "format": "regex" },
+        "names": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["electronUserAgent", "electron", "products", "fallback"],
+          "properties": {
+            "electronUserAgent": { "$ref": "#/$defs/name" },
+            "electron": { "$ref": "#/$defs/name" },
+            "products": { "type": "object", "additionalProperties": { "$ref": "#/$defs/name" } },
+            "fallback": { "$ref": "#/$defs/name" }
+          }
+        },
+        "process": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unix",
+            "windows",
+            "portFlag",
+            "userDataDirFlag",
+            "wrappers",
+            "wrapperSuffixes"
+          ],
+          "properties": {
+            "unix": { "$ref": "#/$defs/names" },
+            "windows": { "$ref": "#/$defs/names" },
+            "portFlag": { "type": "string", "pattern": "^--" },
+            "userDataDirFlag": { "type": "string", "pattern": "^--" },
+            "wrappers": { "$ref": "#/$defs/names" },
+            "wrapperSuffixes": { "$ref": "#/$defs/names" }
+          }
+        }
+      }
+    },
+    "seven": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "originScheme",
+        "originHostPattern",
+        "excludedLabels",
+        "sitePattern",
+        "switches",
+        "disabledFeatures",
+        "prefs",
+        "discardExceptions",
+        "cleanExit"
+      ],
+      "properties": {
+        "originScheme": { "const": "https" },
+        "originHostPattern": { "type": "string", "format": "regex" },
+        "excludedLabels": { "$ref": "#/$defs/names" },
+        "sitePattern": { "$ref": "#/$defs/name" },
+        "switches": { "type": "array", "items": { "type": "string", "pattern": "^--" } },
+        "disabledFeatures": { "$ref": "#/$defs/names" },
+        "prefs": { "type": "array", "items": { "$ref": "#/$defs/pref" } },
+        "discardExceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "type", "form"],
+            "properties": {
+              "path": { "$ref": "#/$defs/segments" },
+              "type": { "enum": ["list", "chrome-time-map"] },
+              "form": { "$ref": "#/$defs/form" }
+            }
+          }
+        },
+        "cleanExit": { "type": "array", "items": { "$ref": "#/$defs/pref" } }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "snapRoot", "legacyRoot", "sixProfilePattern", "namePattern"],
+      "properties": {
+        "root": { "$ref": "#/$defs/segments" },
+        "snapRoot": { "$ref": "#/$defs/segments" },
+        "legacyRoot": { "$ref": "#/$defs/segments" },
+        "sixProfilePattern": { "type": "string", "format": "regex" },
+        "namePattern": { "type": "string", "format": "regex" }
+      }
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chromiumArgs", "headless", "disableFeaturesFlag", "electron"],
+      "properties": {
+        "chromiumArgs": { "type": "array", "items": { "type": "string", "pattern": "^--" } },
+        "headless": { "type": "string", "pattern": "^--" },
+        "disableFeaturesFlag": { "type": "string", "pattern": "^--.*=$" },
+        "electron": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["portFlag", "minPort", "reservedPorts"],
+          "properties": {
+            "portFlag": { "type": "string", "pattern": "\\{port\\}" },
+            "minPort": { "$ref": "#/$defs/port" },
+            "reservedPorts": { "$ref": "#/$defs/ports" }
+          }
+        }
+      }
+    },
+    "platforms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macos", "windows", "linux"],
+      "properties": {
+        "macos": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["config"],
+          "properties": { "config": { "$ref": "#/$defs/location" } }
+        },
+        "windows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["config", "roots", "registry"],
+          "properties": {
+            "config": { "$ref": "#/$defs/location" },
+            "roots": { "type": "object", "additionalProperties": { "$ref": "#/$defs/location" } },
+            "registry": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["hives", "startMenuInternet", "openCommand", "appPaths", "appPathNames"],
+              "properties": {
+                "hives": { "type": "array", "items": { "enum": ["HKCU", "HKLM"] } },
+                "startMenuInternet": { "$ref": "#/$defs/names" },
+                "openCommand": { "$ref": "#/$defs/name" },
+                "appPaths": { "$ref": "#/$defs/name" },
+                "appPathNames": { "$ref": "#/$defs/names" }
+              }
+            }
+          }
+        },
+        "linux": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["config"],
+          "properties": { "config": { "$ref": "#/$defs/location" } }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": { "type": "string", "minLength": 1 },
+    "names": { "type": "array", "items": { "$ref": "#/$defs/name" } },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "segments": {
+      "description": "A relative path, one segment per item.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$" }
+    },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
+    "tier": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "form": { "enum": ["six", "chrome-154"] },
+    "pref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "value"],
+      "properties": {
+        "path": { "$ref": "#/$defs/segments" },
+        "value": { "type": ["boolean", "number", "string"] },
+        "form": { "$ref": "#/$defs/form" }
+      }
+    },
+    "location": {
+      "description": "An environment variable, else a dir under the home dir or an absolute path.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "env": { "$ref": "#/$defs/name" },
+        "home": { "$ref": "#/$defs/segments" },
+        "absolute": { "$ref": "#/$defs/name" }
+      },
+      "oneOf": [{ "required": ["home"] }, { "required": ["absolute"] }]
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "channel", "engine", "chromiumVersion", "macos"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "$ref": "#/$defs/name" },
+        "channel": {
+          "enum": ["stable", "beta", "dev", "canary", "nightly", "snapshot", "testing"]
+        },
+        "engine": { "const": "chromium" },
+        "chromiumVersion": {
+          "description": "The browser's version is the Chromium version, so minChromiumMajor applies to it.",
+          "type": "boolean"
+        },
+        "macos": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bundleId", "app", "executable"],
+          "properties": {
+            "bundleId": { "$ref": "#/$defs/name" },
+            "app": { "type": "string", "pattern": "\\.app$" },
+            "executable": { "$ref": "#/$defs/name" },
+            "dataDir": { "$ref": "#/$defs/segments" }
+          }
+        },
+        "windows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataRoot", "dataDir"],
+          "properties": {
+            "roots": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/name" } },
+            "executables": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/segments" }
+            },
+            "dataRoot": { "$ref": "#/$defs/name" },
+            "dataDir": { "$ref": "#/$defs/segments" },
+            "startMenuInternet": { "$ref": "#/$defs/names" }
+          },
+          "dependentRequired": { "executables": ["roots"], "roots": ["executables"] }
+        },
+        "linux": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["configDir"],
+          "properties": {
+            "bins": { "$ref": "#/$defs/names" },
+            "desktopIds": { "$ref": "#/$defs/names" },
+            "flatpak": { "$ref": "#/$defs/name" },
+            "snap": { "$ref": "#/$defs/name" },
+            "snapDataDir": { "$ref": "#/$defs/segments" },
+            "configDir": { "$ref": "#/$defs/segments" },
+            "debs": { "$ref": "#/$defs/names" }
+          },
+          "dependentRequired": { "snapDataDir": ["snap"] }
+        }
+      }
+    }
+  }
+}

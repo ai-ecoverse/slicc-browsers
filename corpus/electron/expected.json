@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9351",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Electron",
+      "version": "138.0.7204.251",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9351",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9351/devtools/browser/el1",
+        "name": "Electron",
+        "version": "138.0.7204.251",
+        "product": "Chrome/138.0.7204.251",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Slack/4.46.99 Chrome/138.0.7204.251 Electron/37.6.0 Safari/537.36 Sonic Slack_SSB/4.46.99",
+        "source": "process",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9352",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9352",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9352/devtools/browser/el2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "chrome",
+      "kind": "installed",
+      "tier": 3,
+      "name": "Google Chrome",
+      "version": "154.0.8037.98",
+      "installed": {
+        "id": "chrome",
+        "name": "Google Chrome",
+        "engine": "chromium",
+        "channel": "stable",
+        "version": "154.0.8037.98",
+        "path": "/Applications/Google Chrome.app",
+        "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "bundleId": "com.google.Chrome",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "electron:claude",
+      "kind": "installed",
+      "tier": 5,
+      "name": "Claude",
+      "version": "0.14.10",
+      "installed": {
+        "id": "electron:claude",
+        "name": "Claude",
+        "engine": "electron",
+        "version": "0.14.10",
+        "path": "/Applications/Claude.app",
+        "executable": "/Applications/Claude.app/Contents/MacOS/Claude",
+        "bundleId": "com.anthropic.claudefordesktop",
+        "debugSupport": "disabled"
+      }
+    },
+    {
+      "id": "electron:slack",
+      "kind": "installed",
+      "tier": 5,
+      "name": "Slack",
+      "version": "4.46.99",
+      "installed": {
+        "id": "electron:slack",
+        "name": "Slack",
+        "engine": "electron",
+        "version": "4.46.99",
+        "path": "/Applications/Slack.app",
+        "executable": "/Applications/Slack.app/Contents/MacOS/Slack",
+        "bundleId": "com.tinyspeck.slackmacgap",
+        "debugSupport": "supported"
+      }
+    }
+  ]
+}

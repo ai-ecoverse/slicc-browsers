@@ -1,0 +1,16 @@
+{
+  "description": "A DevToolsActivePort or ws:// --cdp URL whose port is open but serves no /json/version is listed as wsOnly, with the websocket URL from the file or flag",
+  "needs": ["user-data-dirs", "seven-profiles", "flag"],
+  "files": {
+    "{userData:chrome}/DevToolsActivePort": "9361\n/devtools/browser/ws1\n",
+    "{sevenProfiles}/side/DevToolsActivePort": "9362\n/devtools/browser/ws2\n",
+    "{sevenProfiles}/closed/DevToolsActivePort": "9363\n/devtools/browser/ws3\n"
+  },
+  "cdp": ["127.0.0.1:9364", "ws://127.0.0.1:9365/devtools/browser/ws5"],
+  "http": {
+    "127.0.0.1:9361": {},
+    "127.0.0.1:9362": {},
+    "127.0.0.1:9364": {},
+    "127.0.0.1:9365": {}
+  }
+}

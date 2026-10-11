@@ -1,0 +1,770 @@
+{
+  "schema": 1,
+  "minChromiumMajor": 116,
+  "browsers": [
+    {
+      "id": "chrome",
+      "name": "Google Chrome",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.google.Chrome",
+        "app": "Google Chrome.app",
+        "executable": "Google Chrome",
+        "dataDir": ["Google", "Chrome"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Google", "Chrome", "Application", "chrome.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Google", "Chrome", "User Data"],
+        "startMenuInternet": ["Google Chrome"]
+      },
+      "linux": {
+        "bins": ["google-chrome-stable", "google-chrome"],
+        "desktopIds": ["google-chrome", "com.google.Chrome"],
+        "flatpak": "com.google.Chrome",
+        "configDir": ["google-chrome"],
+        "debs": ["google-chrome-stable"]
+      }
+    },
+    {
+      "id": "edge",
+      "name": "Microsoft Edge",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.microsoft.edgemac",
+        "app": "Microsoft Edge.app",
+        "executable": "Microsoft Edge",
+        "dataDir": ["Microsoft Edge"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Microsoft", "Edge", "Application", "msedge.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Microsoft", "Edge", "User Data"],
+        "startMenuInternet": ["Microsoft Edge"]
+      },
+      "linux": {
+        "bins": ["microsoft-edge-stable", "microsoft-edge"],
+        "desktopIds": ["microsoft-edge", "com.microsoft.Edge"],
+        "flatpak": "com.microsoft.Edge",
+        "configDir": ["microsoft-edge"],
+        "debs": ["microsoft-edge-stable"]
+      }
+    },
+    {
+      "id": "brave",
+      "name": "Brave Browser",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.brave.Browser",
+        "app": "Brave Browser.app",
+        "executable": "Brave Browser",
+        "dataDir": ["BraveSoftware", "Brave-Browser"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["BraveSoftware", "Brave-Browser", "Application", "brave.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["BraveSoftware", "Brave-Browser", "User Data"],
+        "startMenuInternet": ["Brave"]
+      },
+      "linux": {
+        "bins": ["brave-browser", "brave-browser-stable", "brave"],
+        "desktopIds": ["brave-browser", "com.brave.Browser", "brave_brave"],
+        "flatpak": "com.brave.Browser",
+        "snap": "brave",
+        "configDir": ["BraveSoftware", "Brave-Browser"],
+        "debs": ["brave-browser"]
+      }
+    },
+    {
+      "id": "opera",
+      "name": "Opera",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.operasoftware.Opera",
+        "app": "Opera.app",
+        "executable": "Opera",
+        "dataDir": ["com.operasoftware.Opera"]
+      },
+      "windows": {
+        "roots": ["LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"],
+        "executables": [["Programs", "Opera", "opera.exe"], ["Opera", "opera.exe"]],
+        "dataRoot": "APPDATA",
+        "dataDir": ["Opera Software", "Opera Stable"],
+        "startMenuInternet": ["OperaStable"]
+      },
+      "linux": {
+        "bins": ["opera"],
+        "desktopIds": ["opera", "com.opera.Opera", "opera_opera"],
+        "flatpak": "com.opera.Opera",
+        "snap": "opera",
+        "configDir": ["opera"],
+        "debs": ["opera-stable"]
+      }
+    },
+    {
+      "id": "vivaldi",
+      "name": "Vivaldi",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.vivaldi.Vivaldi",
+        "app": "Vivaldi.app",
+        "executable": "Vivaldi",
+        "dataDir": ["Vivaldi"]
+      },
+      "windows": {
+        "roots": ["LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"],
+        "executables": [["Vivaldi", "Application", "vivaldi.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Vivaldi", "User Data"],
+        "startMenuInternet": ["Vivaldi"]
+      },
+      "linux": {
+        "bins": ["vivaldi-stable", "vivaldi"],
+        "desktopIds": ["vivaldi-stable", "com.vivaldi.Vivaldi"],
+        "flatpak": "com.vivaldi.Vivaldi",
+        "configDir": ["vivaldi"],
+        "debs": ["vivaldi-stable"]
+      }
+    },
+    {
+      "id": "arc",
+      "name": "Arc",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "company.thebrowser.Browser",
+        "app": "Arc.app",
+        "executable": "Arc",
+        "dataDir": ["Arc", "User Data"]
+      }
+    },
+    {
+      "id": "atlas",
+      "name": "ChatGPT Atlas",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.openai.atlas",
+        "app": "ChatGPT Atlas.app",
+        "executable": "ChatGPT Atlas"
+      }
+    },
+    {
+      "id": "dia",
+      "name": "Dia",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "company.thebrowser.dia",
+        "app": "Dia.app",
+        "executable": "Dia",
+        "dataDir": ["Dia", "User Data"]
+      }
+    },
+    {
+      "id": "chrome-beta",
+      "name": "Google Chrome Beta",
+      "channel": "beta",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.google.Chrome.beta",
+        "app": "Google Chrome Beta.app",
+        "executable": "Google Chrome Beta",
+        "dataDir": ["Google", "Chrome Beta"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Google", "Chrome Beta", "Application", "chrome.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Google", "Chrome Beta", "User Data"],
+        "startMenuInternet": ["Google Chrome Beta"]
+      },
+      "linux": {
+        "bins": ["google-chrome-beta"],
+        "desktopIds": ["google-chrome-beta"],
+        "configDir": ["google-chrome-beta"],
+        "debs": ["google-chrome-beta"]
+      }
+    },
+    {
+      "id": "chrome-dev",
+      "name": "Google Chrome Dev",
+      "channel": "dev",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.google.Chrome.dev",
+        "app": "Google Chrome Dev.app",
+        "executable": "Google Chrome Dev",
+        "dataDir": ["Google", "Chrome Dev"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Google", "Chrome Dev", "Application", "chrome.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Google", "Chrome Dev", "User Data"],
+        "startMenuInternet": ["Google Chrome Dev"]
+      },
+      "linux": {
+        "bins": ["google-chrome-unstable"],
+        "desktopIds": ["google-chrome-unstable", "com.google.ChromeDev"],
+        "flatpak": "com.google.ChromeDev",
+        "configDir": ["google-chrome-unstable"],
+        "debs": ["google-chrome-unstable"]
+      }
+    },
+    {
+      "id": "chrome-canary",
+      "name": "Google Chrome Canary",
+      "channel": "canary",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.google.Chrome.canary",
+        "app": "Google Chrome Canary.app",
+        "executable": "Google Chrome Canary",
+        "dataDir": ["Google", "Chrome Canary"]
+      },
+      "windows": {
+        "roots": ["LOCALAPPDATA"],
+        "executables": [["Google", "Chrome SxS", "Application", "chrome.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Google", "Chrome SxS", "User Data"],
+        "startMenuInternet": ["Google Chrome Canary"]
+      },
+      "linux": {
+        "bins": ["google-chrome-canary"],
+        "desktopIds": ["google-chrome-canary"],
+        "configDir": ["google-chrome-canary"],
+        "debs": ["google-chrome-canary"]
+      }
+    },
+    {
+      "id": "brave-beta",
+      "name": "Brave Browser Beta",
+      "channel": "beta",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.brave.Browser.beta",
+        "app": "Brave Browser Beta.app",
+        "executable": "Brave Browser Beta",
+        "dataDir": ["BraveSoftware", "Brave-Browser-Beta"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["BraveSoftware", "Brave-Browser-Beta", "Application", "brave.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["BraveSoftware", "Brave-Browser-Beta", "User Data"]
+      },
+      "linux": {
+        "bins": ["brave-browser-beta"],
+        "desktopIds": ["brave-browser-beta"],
+        "configDir": ["BraveSoftware", "Brave-Browser-Beta"],
+        "debs": ["brave-browser-beta"]
+      }
+    },
+    {
+      "id": "brave-nightly",
+      "name": "Brave Browser Nightly",
+      "channel": "nightly",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.brave.Browser.nightly",
+        "app": "Brave Browser Nightly.app",
+        "executable": "Brave Browser Nightly",
+        "dataDir": ["BraveSoftware", "Brave-Browser-Nightly"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["BraveSoftware", "Brave-Browser-Nightly", "Application", "brave.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["BraveSoftware", "Brave-Browser-Nightly", "User Data"]
+      },
+      "linux": {
+        "bins": ["brave-browser-nightly"],
+        "desktopIds": ["brave-browser-nightly"],
+        "configDir": ["BraveSoftware", "Brave-Browser-Nightly"],
+        "debs": ["brave-browser-nightly"]
+      }
+    },
+    {
+      "id": "edge-beta",
+      "name": "Microsoft Edge Beta",
+      "channel": "beta",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.microsoft.edgemac.Beta",
+        "app": "Microsoft Edge Beta.app",
+        "executable": "Microsoft Edge Beta",
+        "dataDir": ["Microsoft Edge Beta"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Microsoft", "Edge Beta", "Application", "msedge.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Microsoft", "Edge Beta", "User Data"],
+        "startMenuInternet": ["Microsoft Edge Beta"]
+      },
+      "linux": {
+        "bins": ["microsoft-edge-beta"],
+        "desktopIds": ["microsoft-edge-beta"],
+        "configDir": ["microsoft-edge-beta"],
+        "debs": ["microsoft-edge-beta"]
+      }
+    },
+    {
+      "id": "edge-dev",
+      "name": "Microsoft Edge Dev",
+      "channel": "dev",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.microsoft.edgemac.Dev",
+        "app": "Microsoft Edge Dev.app",
+        "executable": "Microsoft Edge Dev",
+        "dataDir": ["Microsoft Edge Dev"]
+      },
+      "windows": {
+        "roots": ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"],
+        "executables": [["Microsoft", "Edge Dev", "Application", "msedge.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Microsoft", "Edge Dev", "User Data"],
+        "startMenuInternet": ["Microsoft Edge Dev"]
+      },
+      "linux": {
+        "bins": ["microsoft-edge-dev"],
+        "desktopIds": ["microsoft-edge-dev"],
+        "configDir": ["microsoft-edge-dev"],
+        "debs": ["microsoft-edge-dev"]
+      }
+    },
+    {
+      "id": "edge-canary",
+      "name": "Microsoft Edge Canary",
+      "channel": "canary",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.microsoft.edgemac.Canary",
+        "app": "Microsoft Edge Canary.app",
+        "executable": "Microsoft Edge Canary",
+        "dataDir": ["Microsoft Edge Canary"]
+      },
+      "windows": {
+        "roots": ["LOCALAPPDATA"],
+        "executables": [["Microsoft", "Edge SxS", "Application", "msedge.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Microsoft", "Edge SxS", "User Data"],
+        "startMenuInternet": ["Microsoft Edge Canary"]
+      }
+    },
+    {
+      "id": "vivaldi-snapshot",
+      "name": "Vivaldi Snapshot",
+      "channel": "snapshot",
+      "engine": "chromium",
+      "chromiumVersion": false,
+      "macos": {
+        "bundleId": "com.vivaldi.Vivaldi.snapshot",
+        "app": "Vivaldi Snapshot.app",
+        "executable": "Vivaldi Snapshot",
+        "dataDir": ["Vivaldi Snapshot"]
+      },
+      "linux": {
+        "bins": ["vivaldi-snapshot"],
+        "desktopIds": ["vivaldi-snapshot"],
+        "configDir": ["vivaldi-snapshot"],
+        "debs": ["vivaldi-snapshot"]
+      }
+    },
+    {
+      "id": "chrome-for-testing",
+      "name": "Google Chrome for Testing",
+      "channel": "testing",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "com.google.chrome.for.testing",
+        "app": "Google Chrome for Testing.app",
+        "executable": "Google Chrome for Testing",
+        "dataDir": ["Google", "Chrome for Testing"]
+      },
+      "windows": {
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Google", "Chrome for Testing", "User Data"]
+      },
+      "linux": {
+        "configDir": ["google-chrome-for-testing"]
+      }
+    },
+    {
+      "id": "chromium",
+      "name": "Chromium",
+      "channel": "stable",
+      "engine": "chromium",
+      "chromiumVersion": true,
+      "macos": {
+        "bundleId": "org.chromium.Chromium",
+        "app": "Chromium.app",
+        "executable": "Chromium",
+        "dataDir": ["Chromium"]
+      },
+      "windows": {
+        "roots": ["LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"],
+        "executables": [["Chromium", "Application", "chrome.exe"]],
+        "dataRoot": "LOCALAPPDATA",
+        "dataDir": ["Chromium", "User Data"],
+        "startMenuInternet": ["Chromium"]
+      },
+      "linux": {
+        "bins": ["chromium", "chromium-browser"],
+        "desktopIds": [
+          "chromium",
+          "chromium-browser",
+          "chromium_chromium",
+          "org.chromium.Chromium"
+        ],
+        "flatpak": "org.chromium.Chromium",
+        "snap": "chromium",
+        "snapDataDir": ["chromium"],
+        "configDir": ["chromium"],
+        "debs": ["chromium", "chromium-browser"]
+      }
+    }
+  ],
+  "electron": {
+    "macosApps": [
+      {
+        "bundleId": "com.microsoft.teams2",
+        "name": "Microsoft Teams"
+      },
+      {
+        "bundleId": "com.microsoft.VSCode",
+        "name": "Visual Studio Code"
+      },
+      {
+        "bundleId": "com.microsoft.VSCodeInsiders",
+        "name": "VS Code Insiders"
+      },
+      {
+        "bundleId": "com.spotify.client",
+        "name": "Spotify"
+      },
+      {
+        "bundleId": "com.tinyspeck.slackmacgap",
+        "name": "Slack"
+      },
+      {
+        "bundleId": "com.hnc.Discord",
+        "name": "Discord"
+      },
+      {
+        "bundleId": "com.todesktop.230313mzl4w4u92",
+        "name": "Cursor"
+      },
+      {
+        "bundleId": "com.figma.Desktop",
+        "name": "Figma"
+      },
+      {
+        "bundleId": "notion.id",
+        "name": "Notion"
+      },
+      {
+        "bundleId": "com.obsproject.obs-studio",
+        "name": "OBS Studio"
+      },
+      {
+        "bundleId": "com.1password.1password",
+        "name": "1Password"
+      },
+      {
+        "bundleId": "us.zoom.xos",
+        "name": "Zoom"
+      },
+      {
+        "bundleId": "com.linear",
+        "name": "Linear"
+      },
+      {
+        "bundleId": "com.loom.desktop",
+        "name": "Loom"
+      },
+      {
+        "bundleId": "md.obsidian",
+        "name": "Obsidian"
+      },
+      {
+        "bundleId": "com.bitwarden.desktop",
+        "name": "Bitwarden"
+      },
+      {
+        "bundleId": "com.todoist.mac.Todoist",
+        "name": "Todoist"
+      },
+      {
+        "bundleId": "com.github.GitHubClient",
+        "name": "GitHub Desktop"
+      },
+      {
+        "bundleId": "com.postmanlabs.mac",
+        "name": "Postman"
+      },
+      {
+        "bundleId": "org.whispersystems.signal-desktop",
+        "name": "Signal"
+      },
+      {
+        "bundleId": "com.tdesktop.Telegram",
+        "name": "Telegram Desktop"
+      },
+      {
+        "bundleId": "com.logseq.logseq",
+        "name": "Logseq"
+      },
+      {
+        "bundleId": "com.whatsonchain.WhatsOnChain",
+        "name": "WhatsOnChain"
+      },
+      {
+        "bundleId": "io.trystorybook.app",
+        "name": "Storybook"
+      },
+      {
+        "bundleId": "com.mongodb.compass",
+        "name": "MongoDB Compass"
+      },
+      {
+        "bundleId": "com.insomnia.app",
+        "name": "Insomnia"
+      },
+      {
+        "bundleId": "com.jetbrains.toolbox",
+        "name": "JetBrains Toolbox"
+      },
+      {
+        "bundleId": "com.electron.replit",
+        "name": "Replit"
+      },
+      {
+        "bundleId": "com.twitch.studio",
+        "name": "Twitch Studio"
+      }
+    ],
+    "debugBlocked": ["Claude", "1Password"],
+    "idPrefix": "electron:"
+  },
+  "rank": {
+    "tiers": {
+      "sevenOpen": 1,
+      "endpoint": 2,
+      "chrome": 3,
+      "chromium": 4,
+      "electron": 5
+    },
+    "chromeId": "chrome"
+  },
+  "discovery": {
+    "activePortFile": "DevToolsActivePort",
+    "probePorts": [9222, 9223, 9224, 9225, 9226, 9227, 9228, 9229],
+    "sourceRank": {
+      "devtools-active-port": 0,
+      "flag": 1,
+      "process": 2,
+      "probe": 3
+    },
+    "chromeMajorPattern": "(?:Chrome|Chromium|HeadlessChrome)/(\\d+)",
+    "names": {
+      "electronUserAgent": " Electron/",
+      "electron": "Electron",
+      "products": {
+        "Edg": "Microsoft Edge",
+        "HeadlessChrome": "Chrome (headless)"
+      },
+      "fallback": "Chromium"
+    },
+    "process": {
+      "unix": ["ps", "-ax", "-o", "pid=", "-o", "command="],
+      "windows": [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress"
+      ],
+      "portFlag": "--remote-debugging-port",
+      "userDataDirFlag": "--user-data-dir",
+      "wrappers": [
+        "node",
+        "npx",
+        "tsx",
+        "npm",
+        "open",
+        "bash",
+        "zsh",
+        "sh",
+        "csh",
+        "fish",
+        "dash",
+        "timeout",
+        "env",
+        "sudo",
+        "caffeinate",
+        "cmd",
+        "powershell",
+        "pwsh"
+      ],
+      "wrapperSuffixes": [".exe", ".cmd", ".bat"]
+    }
+  },
+  "seven": {
+    "originScheme": "https",
+    "originHostPattern": "^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.sliccy\\.ai$",
+    "excludedLabels": ["www"],
+    "sitePattern": "[*.]sliccy.ai",
+    "switches": [
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-background-tracing"
+    ],
+    "disabledFeatures": [
+      "LocalNetworkAccessChecks",
+      "LocalNetworkAccessChecksWebSockets",
+      "IntensiveWakeUpThrottling",
+      "HighEfficiencyModeAvailable",
+      "InfiniteTabsFreezing",
+      "InfiniteTabsFreezingOnMemoryPressure",
+      "CPUMeasurementInFreezingPolicy",
+      "MemoryMeasurementInFreezingPolicy",
+      "AllowDevtoolsConnectedDiscard"
+    ],
+    "prefs": [
+      {
+        "path": ["tab_freezing_enabled"],
+        "value": false,
+        "form": "six"
+      },
+      {
+        "path": ["performance_tuning", "tab_freezing", "enabled"],
+        "value": false,
+        "form": "chrome-154"
+      },
+      {
+        "path": ["performance_tuning", "high_efficiency_mode", "state"],
+        "value": 0,
+        "form": "chrome-154"
+      }
+    ],
+    "discardExceptions": [
+      {
+        "path": ["performance_tuning", "tab_discarding", "exceptions"],
+        "type": "list",
+        "form": "six"
+      },
+      {
+        "path": ["performance_tuning", "tab_discarding", "exceptions_with_time"],
+        "type": "chrome-time-map",
+        "form": "chrome-154"
+      }
+    ],
+    "cleanExit": [
+      {
+        "path": ["profile", "exit_type"],
+        "value": "Normal"
+      },
+      {
+        "path": ["profile", "exited_cleanly"],
+        "value": true
+      }
+    ]
+  },
+  "profiles": {
+    "root": ["slicc", "seven-profiles"],
+    "snapRoot": ["slicc", "seven-profiles"],
+    "legacyRoot": ["slicc", "profiles"],
+    "sixProfilePattern": "^browser-coding-agent-chrome(-[0-9]+)?$",
+    "namePattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+  },
+  "launch": {
+    "chromiumArgs": [
+      "--remote-debugging-port=0",
+      "--user-data-dir={profile}",
+      "--no-first-run",
+      "--no-default-browser-check"
+    ],
+    "headless": "--headless=new",
+    "disableFeaturesFlag": "--disable-features=",
+    "electron": {
+      "portFlag": "--remote-debugging-port={port}",
+      "minPort": 9333,
+      "reservedPorts": [9222, 9223, 9224, 9225, 9226, 9227, 9228, 9229]
+    }
+  },
+  "platforms": {
+    "macos": {
+      "config": {
+        "home": ["Library", "Application Support"]
+      }
+    },
+    "windows": {
+      "config": {
+        "env": "APPDATA",
+        "home": ["AppData", "Roaming"]
+      },
+      "roots": {
+        "PROGRAMFILES": {
+          "env": "PROGRAMFILES",
+          "absolute": "C:\\Program Files"
+        },
+        "PROGRAMFILES(X86)": {
+          "env": "PROGRAMFILES(X86)",
+          "absolute": "C:\\Program Files (x86)"
+        },
+        "LOCALAPPDATA": {
+          "env": "LOCALAPPDATA",
+          "home": ["AppData", "Local"]
+        },
+        "APPDATA": {
+          "env": "APPDATA",
+          "home": ["AppData", "Roaming"]
+        }
+      },
+      "registry": {
+        "hives": ["HKCU", "HKLM"],
+        "startMenuInternet": [
+          "SOFTWARE\\Clients\\StartMenuInternet",
+          "SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet"
+        ],
+        "openCommand": "shell\\open\\command",
+        "appPaths": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths",
+        "appPathNames": ["chrome.exe", "msedge.exe", "brave.exe", "vivaldi.exe", "opera.exe"]
+      }
+    },
+    "linux": {
+      "config": {
+        "env": "XDG_CONFIG_HOME",
+        "home": [".config"]
+      }
+    }
+  }
+}

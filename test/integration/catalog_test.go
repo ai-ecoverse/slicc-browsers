@@ -1,0 +1,183 @@
+package integration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"reflect"
+	"slices"
+	"strings"
+	"testing"
+
+	sliccbrowsers "github.com/ai-ecoverse/slicc-browsers"
+)
+
+func decode(t *testing.T, b []byte) any {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestTheTypedCatalogCoversEveryField(t *testing.T) {
+	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.CatalogJSON()))
+	d.DisallowUnknownFields()
+	var c sliccbrowsers.Catalog
+	if err := d.Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+	back, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decode(t, back), decode(t, sliccbrowsers.CatalogJSON())) {
+		t.Fatal("catalog.json does not round-trip through the Go types")
+	}
+	def := sliccbrowsers.Default()
+	if def.Schema != sliccbrowsers.Schema || len(def.Browsers) != len(c.Browsers) {
+		t.Fatalf("Default: schema %d, %d browsers", def.Schema, len(def.Browsers))
+	}
+	if def.Priority("chrome") != 0 || def.Priority("edge") != 1 || def.Priority("nope") != len(def.Browsers) {
+		t.Fatal("Priority follows the catalog order")
+	}
+	if b, ok := def.Browser("chromium"); !ok || b.Linux.Snap != "chromium" {
+		t.Fatalf("Browser(chromium) = %+v, %v", b, ok)
+	}
+	if _, err := sliccbrowsers.Parse([]byte(`{"schema":2}`)); err == nil {
+		t.Fatal("Parse accepts schema 2")
+	}
+}
+
+func TestTheSchemasAreEmbedded(t *testing.T) {
+	for name, b := range map[string][]byte{"catalog": sliccbrowsers.CatalogSchemaJSON(), "browsers": sliccbrowsers.BrowsersSchemaJSON()} {
+		v, ok := decode(t, b).(map[string]any)
+		if !ok || !strings.HasSuffix(v["$id"].(string), "/schema/"+name+".schema.json") {
+			t.Fatalf("%s schema: %v", name, v["$id"])
+		}
+	}
+}
+
+type layoutVector struct {
+	OS           string              `json:"os"`
+	Home         string              `json:"home"`
+	Env          map[string]string   `json:"env"`
+	Tokens       map[string]*string  `json:"tokens"`
+	UserDataDirs map[string][]string `json:"userDataDirs"`
+	Expand       map[string]string   `json:"expand"`
+}
+
+func TestLayoutsMatchTheSharedVectors(t *testing.T) {
+	b, err := os.ReadFile("layout.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors []layoutVector
+	if err := json.Unmarshal(b, &vectors); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range vectors {
+		l := sliccbrowsers.Layout{OS: v.OS, Home: v.Home, Getenv: func(k string) string { return v.Env[k] }}
+		for tok, want := range v.Tokens {
+			got, ok := l.Token(tok)
+			if want == nil {
+				if ok {
+					t.Errorf("%s %s = %q, want none", v.OS, tok, got)
+				}
+				continue
+			}
+			if !ok || got != *want {
+				t.Errorf("%s %s = %q, want %q", v.OS, tok, got, *want)
+			}
+		}
+		for id, want := range v.UserDataDirs {
+			if got := l.UserDataDirs(id); !slices.Equal(got, want) {
+				t.Errorf("%s %s dirs = %q, want %q", v.OS, id, got, want)
+			}
+		}
+		for in, want := range v.Expand {
+			if got := l.Expand(in); got != want {
+				t.Errorf("%s Expand(%q) = %q, want %q", v.OS, in, got, want)
+			}
+		}
+	}
+}
+
+func TestEveryCaseExpandsOnEveryOSItRunsOn(t *testing.T) {
+	cases, err := sliccbrowsers.Corpus()
+	if err != nil || len(cases) == 0 {
+		t.Fatalf("corpus: %v, %d cases", err, len(cases))
+	}
+	all := []string{
+		sliccbrowsers.NeedUserDataDirs, sliccbrowsers.NeedProfiles, sliccbrowsers.NeedFlag, sliccbrowsers.NeedProcess,
+		sliccbrowsers.NeedProbe, sliccbrowsers.NeedOrigins, sliccbrowsers.NeedInstalled,
+	}
+	for _, c := range cases {
+		for _, goos := range []string{"darwin", "linux", "windows"} {
+			if !c.Runs(goos, all...) {
+				continue
+			}
+			home := "/h"
+			if goos == "windows" {
+				home = `C:\h`
+			}
+			l := sliccbrowsers.Layout{OS: goos, Home: home}
+			for path := range c.Files(l) {
+				if strings.Contains(path, "{") || !strings.HasPrefix(path, home) {
+					t.Errorf("%s %s: file %q", c.Name, goos, path)
+				}
+			}
+			exp, err := c.ExpectedJSON(l)
+			if err != nil || bytes.Contains(exp, []byte("{home}")) || bytes.Contains(exp, []byte("{sevenProfiles}")) {
+				t.Errorf("%s %s: expected %s, %v", c.Name, goos, exp, err)
+			}
+			if n := strings.Count(c.PSOutput(l, 77), "\n"); n != len(c.Input.Processes) {
+				t.Errorf("%s: %d ps lines", c.Name, n)
+			}
+			var rows []map[string]any
+			if err := json.Unmarshal([]byte(c.CIMOutput(l, 77)), &rows); err != nil || len(rows) != len(c.Input.Processes)+1 {
+				t.Errorf("%s: CIM %v, %d rows", c.Name, err, len(rows))
+			}
+		}
+	}
+}
+
+func TestTheFakeServesOnlyItsPorts(t *testing.T) {
+	cases, _ := sliccbrowsers.Corpus()
+	i := slices.IndexFunc(cases, func(c sliccbrowsers.Case) bool { return c.Name == "dedupe" })
+	if i < 0 {
+		t.Fatal("no dedupe case")
+	}
+	c := cases[i]
+	client := &http.Client{Transport: c.Transport()}
+	get := func(url string) (int, string, error) {
+		resp, err := client.Get(url)
+		if err != nil {
+			return 0, "", err
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b), nil
+	}
+	if code, body, err := get("http://localhost:9391/json/version"); err != nil || code != 200 || !strings.Contains(body, "/devtools/browser/d1") {
+		t.Fatalf("version: %d %q %v", code, body, err)
+	}
+	if code, _, err := get("http://127.0.0.1:9391/json/new"); err != nil || code != 404 {
+		t.Fatalf("other path: %d %v", code, err)
+	}
+	if _, _, err := get("http://127.0.0.1:1/json/version"); err == nil {
+		t.Fatal("an unlisted port answers")
+	}
+	if conn, err := c.DialContext(context.Background(), "tcp", "127.0.0.1:9392"); err != nil {
+		t.Fatal(err)
+	} else {
+		_ = conn.Close()
+	}
+	if _, err := c.DialContext(context.Background(), "tcp", "127.0.0.1:9222"); err == nil {
+		t.Fatal("9222 is never fake")
+	}
+}

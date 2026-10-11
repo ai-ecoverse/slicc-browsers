@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ai-ecoverse/slicc-browsers/schema/browsers.schema.json",
+  "title": "slicc browsers --json and playwright-cli list --json, schema 1",
+  "type": "object",
+  "required": ["schema", "minChromium", "entries"],
+  "properties": {
+    "schema": { "const": 1 },
+    "minChromium": { "type": "integer", "minimum": 1 },
+    "entries": { "type": "array", "items": { "$ref": "#/$defs/entry" } }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1 },
+    "entry": {
+      "type": "object",
+      "required": ["id", "kind", "tier", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/text" },
+        "kind": { "enum": ["endpoint", "installed"] },
+        "tier": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "name": { "type": "string" },
+        "version": { "$ref": "#/$defs/text" },
+        "endpoint": { "$ref": "#/$defs/endpoint" },
+        "installed": { "$ref": "#/$defs/installed" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": { "const": "endpoint" },
+            "id": { "type": "string", "pattern": "^cdp:" },
+            "tier": { "enum": [1, 2] }
+          },
+          "required": ["endpoint"],
+          "not": { "required": ["installed"] }
+        },
+        {
+          "properties": {
+            "kind": { "const": "installed" },
+            "id": { "type": "string", "pattern": "^(?!cdp:)" },
+            "tier": { "enum": [3, 4, 5] }
+          },
+          "required": ["installed"],
+          "not": { "required": ["endpoint"] }
+        }
+      ]
+    },
+    "tab": {
+      "type": "object",
+      "required": ["id", "url", "title"],
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "title": { "type": "string" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["cdp", "webSocketDebuggerUrl", "name", "source", "sevenOpen", "sevenTabs"],
+      "properties": {
+        "cdp": { "type": "string", "pattern": "^https?://[^/]+$" },
+        "webSocketDebuggerUrl": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "$ref": "#/$defs/text" },
+        "product": { "$ref": "#/$defs/text" },
+        "userAgent": { "$ref": "#/$defs/text" },
+        "source": { "enum": ["devtools-active-port", "flag", "probe", "process"] },
+        "browser": { "$ref": "#/$defs/text" },
+        "userDataDir": { "$ref": "#/$defs/text" },
+        "profile": { "$ref": "#/$defs/text" },
+        "wsOnly": { "const": true },
+        "sevenOpen": { "type": "boolean" },
+        "sevenTabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } }
+      }
+    },
+    "installed": {
+      "type": "object",
+      "required": ["id", "name", "engine", "path", "executable", "debugSupport"],
+      "properties": {
+        "id": { "$ref": "#/$defs/text" },
+        "name": { "type": "string" },
+        "engine": { "enum": ["chromium", "electron"] },
+        "channel": { "$ref": "#/$defs/text" },
+        "version": { "$ref": "#/$defs/text" },
+        "path": { "type": "string" },
+        "executable": { "type": "string" },
+        "bundleId": { "$ref": "#/$defs/text" },
+        "via": { "enum": ["snap", "flatpak"] },
+        "package": { "$ref": "#/$defs/text" },
+        "userDataDir": { "$ref": "#/$defs/text" },
+        "debugSupport": { "enum": ["supported", "disabled", "unknown"] },
+        "debugBuild": { "const": true }
+      }
+    }
+  }
+}

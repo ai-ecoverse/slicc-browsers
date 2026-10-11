@@ -68,12 +68,14 @@ Every feature builds for `wasm32-wasip1`.
 - `electron`: `macosApps` (known Electron apps by bundle id, with display names), `debugBlocked` (app names that block remote debugging; they're listed with `debugSupport: "disabled"` and never launched), and `idPrefix` (`electron:`, followed by the slug of the name: lower case, runs of other characters as one `-`).
 - `rank`: `tiers`, 1 to 5: `sevenOpen` (an endpoint with a seven tab), `endpoint` (any other endpoint), `chrome` (installed `chromeId`), `chromium` (other installed Chromium browsers), `electron` (installed Electron apps).
 - `discovery`:
-  - `activePortFile` (`DevToolsActivePort`) and `probePorts` (9222 to 9229, probed by `slicc` only);
+  - `activePortFile` (`DevToolsActivePort`): its first line is the port (1 to 65535) and its second the browser's websocket path, which starts with `/`. A file without both is ignored. A file is live only when its port answers `/json/version` with a `webSocketDebuggerUrl` whose path is that websocket path; otherwise it's stale and ignored. When the port accepts connections but serves no `/json/version`, the endpoint is listed as `wsOnly`, with `ws://127.0.0.1:<port><path>`;
+  - `probePorts` (9222 to 9229, probed by `slicc` only);
+  - every endpoint's `cdp` is `<scheme>://<host>:<port>`, with the host in lower case and `localhost` and `::1` written as `127.0.0.1`, whatever form the URL was found in. Endpoints with the same host and port, written that way, are one endpoint. A `ws://` `--cdp` URL that is listed as `wsOnly` keeps its websocket URL as given;
   - `sourceRank`: when two sources find the same host and port, the lower rank wins, and on a tie the first found;
   - `names`: an endpoint's name when it isn't from a known browser's user-data dir: `electron` when the user agent contains `electronUserAgent`, else `products[<product>]` for the product before the `/` in `/json/version`'s `Browser`, else that product, else `fallback`;
   - `process`: the process scan, see [The process source](#the-process-source).
 - `seven`:
-  - `originScheme` and `originHostPattern`: a seven origin is `https://<host>` with a host matching the pattern, except for the `excludedLabels` (`www`);
+  - `originScheme` and `originHostPattern`: a seven origin is `https://<host>` with a host matching the pattern, except for the `excludedLabels` (`www`). An origin is compared without the scheme's default port (443 for `https`, 80 for `http`), so `https://seven.sliccy.ai:443` is seven and `https://seven.sliccy.ai:8443` is not. The same goes for extra seven origins;
   - `sitePattern` (`[*.]sliccy.ai`);
   - `switches` and `disabledFeatures`: the seven flags, all `--disable-features` values merged into one switch;
   - `prefs`: values merged into a profile's `Default/Preferences` at the `path` of keys;
@@ -90,7 +92,7 @@ The process scan finds browsers started with a debugging port by something else:
 - **Process list.** On Unix it's `discovery.process.unix` (`ps -ax -o pid= -o command=`): one process a line, the pid, whitespace, and the command line. On Windows it's `discovery.process.windows`, which prints a JSON array (or one object) of `ProcessId` and `CommandLine`; entries with no command line are skipped.
 - **What's skipped:** pid 0, the scanning process itself, and commands whose first token is a wrapper. The first token is the quoted string when the command starts with a quote. A wrapper is a token whose base name, without `.exe`, `.cmd` or `.bat`, is one of `wrappers`, case-insensitively. A command with no executable before its first `-` token is skipped too.
 - **The port** comes from the first `--remote-debugging-port` followed by `=` or whitespace and then digits. A port above 65535 drops the process.
-- **The dir** is `--user-data-dir` at the start of a token, followed by `=` or whitespace, then one token (or a quoted string).
+- **The dir** is the value of `--user-data-dir` at the start of a token, followed by `=` or by whitespace (which is skipped). A value that starts with one of `valueQuotes` (`"` or `'`) runs to the matching quote. Any other value runs up to the first whitespace that is followed by `valueStop` (`--`), or to the end of the command, without trailing whitespace. So `--user-data-dir=/Users/me/Library/Application Support/x --no-first-run` gives `/Users/me/Library/Application Support/x`. A value that would start with `--` is empty.
 - **Port 0** means the port is in the dir's `DevToolsActivePort`, checked like any other. With no dir, or a dir under the legacy profile root (a `slicc` segment followed by `profiles`, case-insensitively), the process is skipped.
 - **Any other port** is probed on `127.0.0.1`. An endpoint from the process scan has `source: "process"` and `userDataDir` set to the dir when there is one.
 - **Tests** must fake the process list: never scan the real one in a test.

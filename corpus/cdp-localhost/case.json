@@ -1,0 +1,46 @@
+{
+  "description": "A --cdp URL on localhost or [::1] is listed with cdp on 127.0.0.1; a ws:// URL keeps its websocket URL as given",
+  "needs": ["flag"],
+  "cdp": [
+    "localhost:9521",
+    "http://LOCALHOST:9522",
+    "ws://localhost:9523/devtools/browser/c3",
+    "[::1]:9524"
+  ],
+  "http": {
+    "127.0.0.1:9521": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9521/devtools/browser/c1"
+      },
+      "list": []
+    },
+    "127.0.0.1:9522": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9522/devtools/browser/c2"
+      },
+      "list": []
+    },
+    "127.0.0.1:9523": {},
+    "127.0.0.1:9524": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9524/devtools/browser/c4"
+      },
+      "list": []
+    }
+  }
+}

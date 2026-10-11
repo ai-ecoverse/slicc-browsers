@@ -1,0 +1,74 @@
+{
+  "description": "A process's --user-data-dir runs to the next whitespace followed by --, or to the end; a value that starts with a quote runs to the matching quote",
+  "needs": ["process"],
+  "files": {
+    "{home}/Library/Application Support/ms-playwright/mcp-chrome/DevToolsActivePort": "9511\n/devtools/browser/u1\n",
+    "{home}/with space/quoted/DevToolsActivePort": "9512\n/devtools/browser/u2\n",
+    "{home}/tail space/DevToolsActivePort": "9513\n/devtools/browser/u3\n",
+    "{home}/single quote/DevToolsActivePort": "9514\n/devtools/browser/u4\n"
+  },
+  "processes": [
+    {
+      "pid": 401,
+      "command": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=0 --user-data-dir={home}/Library/Application Support/ms-playwright/mcp-chrome --no-first-run --no-default-browser-check about:blank"
+    },
+    {
+      "pid": 402,
+      "command": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --remote-debugging-port=0 --user-data-dir=\"{home}/with space/quoted\" --no-first-run"
+    },
+    {
+      "pid": 403,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port 0 --user-data-dir {home}/tail space"
+    },
+    {
+      "pid": 404,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir='{home}/single quote' --headless=new"
+    }
+  ],
+  "http": {
+    "127.0.0.1:9511": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9511/devtools/browser/u1"
+      },
+      "list": []
+    },
+    "127.0.0.1:9512": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9512/devtools/browser/u2"
+      },
+      "list": []
+    },
+    "127.0.0.1:9513": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9513/devtools/browser/u3"
+      },
+      "list": []
+    },
+    "127.0.0.1:9514": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9514/devtools/browser/u4"
+      },
+      "list": []
+    }
+  }
+}

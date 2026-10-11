@@ -113,6 +113,8 @@ type Process struct {
 	Windows         []string `json:"windows"`
 	PortFlag        string   `json:"portFlag"`
 	UserDataDirFlag string   `json:"userDataDirFlag"`
+	ValueQuotes     []string `json:"valueQuotes"`
+	ValueStop       string   `json:"valueStop"`
 	Wrappers        []string `json:"wrappers"`
 	WrapperSuffixes []string `json:"wrapperSuffixes"`
 }

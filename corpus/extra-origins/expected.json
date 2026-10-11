@@ -22,6 +22,11 @@
             "id": "O1",
             "url": "https://dev.example.test/app",
             "title": "dev"
+          },
+          {
+            "id": "O3",
+            "url": "https://dev.example.test:443/other",
+            "title": "dev again"
           }
         ]
       }

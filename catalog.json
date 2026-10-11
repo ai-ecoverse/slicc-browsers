@@ -613,6 +613,8 @@
       ],
       "portFlag": "--remote-debugging-port",
       "userDataDirFlag": "--user-data-dir",
+      "valueQuotes": ["\"", "'"],
+      "valueStop": "--",
       "wrappers": [
         "node",
         "npx",

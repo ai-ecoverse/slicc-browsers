@@ -1,0 +1,52 @@
+{
+  "description": "https://<label>.sliccy.ai:443 is the same origin as without the port; any other port is a different origin",
+  "needs": ["flag"],
+  "cdp": ["127.0.0.1:9531", "127.0.0.1:9532"],
+  "http": {
+    "127.0.0.1:9531": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9531/devtools/browser/d1"
+      },
+      "list": [
+        {
+          "id": "D1",
+          "type": "page",
+          "url": "https://seven.sliccy.ai:443/",
+          "title": "seven",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D1"
+        },
+        {
+          "id": "D2",
+          "type": "page",
+          "url": "https://lars.sliccy.ai:8443/",
+          "title": "other port",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D2"
+        }
+      ]
+    },
+    "127.0.0.1:9532": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9532/devtools/browser/d2"
+      },
+      "list": [
+        {
+          "id": "D3",
+          "type": "page",
+          "url": "https://lars.sliccy.ai:8443/",
+          "title": "other port",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D3"
+        }
+      ]
+    }
+  }
+}

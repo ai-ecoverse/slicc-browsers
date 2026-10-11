@@ -131,6 +131,8 @@ pub struct Process {
     pub windows: Vec<String>,
     pub port_flag: String,
     pub user_data_dir_flag: String,
+    pub value_quotes: Vec<String>,
+    pub value_stop: String,
     pub wrappers: Vec<String>,
     pub wrapper_suffixes: Vec<String>,
 }

@@ -1,5 +1,5 @@
 {
-  "description": "An extra seven origin (--origin, --page) makes a tab on it a seven tab",
+  "description": "An extra seven origin (--origin, --page) makes a tab on it a seven tab, with or without the default port",
   "needs": ["flag", "origins"],
   "cdp": ["127.0.0.1:9326"],
   "origins": ["https://dev.example.test/"],
@@ -20,6 +20,13 @@
           "url": "https://dev.example.test/app",
           "title": "dev",
           "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/O1"
+        },
+        {
+          "id": "O3",
+          "type": "page",
+          "url": "https://dev.example.test:443/other",
+          "title": "dev again",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/O3"
         },
         {
           "id": "O2",

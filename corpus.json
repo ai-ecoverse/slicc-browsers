@@ -127,6 +127,232 @@
       }
     },
     {
+      "name": "active-port-without-websocket",
+      "case": {
+        "description": "A DevToolsActivePort without a websocket path starting with / on its second line is stale, even when its port answers",
+        "needs": [
+          "user-data-dirs",
+          "seven-profiles"
+        ],
+        "files": {
+          "{userData:chrome}/DevToolsActivePort": "9501\n",
+          "{sevenProfiles}/bare/DevToolsActivePort": "9502",
+          "{sevenProfiles}/relative/DevToolsActivePort": "9503\ndevtools/browser/k3\n",
+          "{sevenProfiles}/blank/DevToolsActivePort": "9505\n\n",
+          "{sevenProfiles}/ok/DevToolsActivePort": "9504\n/devtools/browser/k4\n"
+        },
+        "http": {
+          "127.0.0.1:9501": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9501/devtools/browser/k1"
+            },
+            "list": []
+          },
+          "127.0.0.1:9502": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9502/devtools/browser/k2"
+            },
+            "list": []
+          },
+          "127.0.0.1:9503": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9503/devtools/browser/k3"
+            },
+            "list": []
+          },
+          "127.0.0.1:9504": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9504/devtools/browser/k4"
+            },
+            "list": []
+          },
+          "127.0.0.1:9505": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9505/devtools/browser/k5"
+            },
+            "list": []
+          }
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9504",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9504",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9504/devtools/browser/k4",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{sevenProfiles}/ok",
+              "profile": "ok",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "cdp-localhost",
+      "case": {
+        "description": "A --cdp URL on localhost or [::1] is listed with cdp on 127.0.0.1; a ws:// URL keeps its websocket URL as given",
+        "needs": [
+          "flag"
+        ],
+        "cdp": [
+          "localhost:9521",
+          "http://LOCALHOST:9522",
+          "ws://localhost:9523/devtools/browser/c3",
+          "[::1]:9524"
+        ],
+        "http": {
+          "127.0.0.1:9521": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9521/devtools/browser/c1"
+            },
+            "list": []
+          },
+          "127.0.0.1:9522": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9522/devtools/browser/c2"
+            },
+            "list": []
+          },
+          "127.0.0.1:9523": {},
+          "127.0.0.1:9524": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9524/devtools/browser/c4"
+            },
+            "list": []
+          }
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9521",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9521",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9521/devtools/browser/c1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9522",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9522",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9522/devtools/browser/c2",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9523",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chromium",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9523",
+              "webSocketDebuggerUrl": "ws://localhost:9523/devtools/browser/c3",
+              "name": "Chromium",
+              "source": "flag",
+              "wsOnly": true,
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9524",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9524",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9524/devtools/browser/c4",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "dedupe",
       "case": {
         "description": "An endpoint found by several sources is listed once, by host and port (localhost is 127.0.0.1): DevToolsActivePort wins over --cdp, which wins over the process scan",
@@ -441,7 +667,7 @@
     {
       "name": "extra-origins",
       "case": {
-        "description": "An extra seven origin (--origin, --page) makes a tab on it a seven tab",
+        "description": "An extra seven origin (--origin, --page) makes a tab on it a seven tab, with or without the default port",
         "needs": [
           "flag",
           "origins"
@@ -469,6 +695,13 @@
                 "url": "https://dev.example.test/app",
                 "title": "dev",
                 "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/O1"
+              },
+              {
+                "id": "O3",
+                "type": "page",
+                "url": "https://dev.example.test:443/other",
+                "title": "dev again",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/O3"
               },
               {
                 "id": "O2",
@@ -505,6 +738,11 @@
                   "id": "O1",
                   "url": "https://dev.example.test/app",
                   "title": "dev"
+                },
+                {
+                  "id": "O3",
+                  "url": "https://dev.example.test:443/other",
+                  "title": "dev again"
                 }
               ]
             }
@@ -1007,6 +1245,167 @@
       }
     },
     {
+      "name": "process-user-data-dir-spaces",
+      "case": {
+        "description": "A process's --user-data-dir runs to the next whitespace followed by --, or to the end; a value that starts with a quote runs to the matching quote",
+        "needs": [
+          "process"
+        ],
+        "files": {
+          "{home}/Library/Application Support/ms-playwright/mcp-chrome/DevToolsActivePort": "9511\n/devtools/browser/u1\n",
+          "{home}/with space/quoted/DevToolsActivePort": "9512\n/devtools/browser/u2\n",
+          "{home}/tail space/DevToolsActivePort": "9513\n/devtools/browser/u3\n",
+          "{home}/single quote/DevToolsActivePort": "9514\n/devtools/browser/u4\n"
+        },
+        "processes": [
+          {
+            "pid": 401,
+            "command": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=0 --user-data-dir={home}/Library/Application Support/ms-playwright/mcp-chrome --no-first-run --no-default-browser-check about:blank"
+          },
+          {
+            "pid": 402,
+            "command": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --remote-debugging-port=0 --user-data-dir=\"{home}/with space/quoted\" --no-first-run"
+          },
+          {
+            "pid": 403,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port 0 --user-data-dir {home}/tail space"
+          },
+          {
+            "pid": 404,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir='{home}/single quote' --headless=new"
+          }
+        ],
+        "http": {
+          "127.0.0.1:9511": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9511/devtools/browser/u1"
+            },
+            "list": []
+          },
+          "127.0.0.1:9512": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9512/devtools/browser/u2"
+            },
+            "list": []
+          },
+          "127.0.0.1:9513": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9513/devtools/browser/u3"
+            },
+            "list": []
+          },
+          "127.0.0.1:9514": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9514/devtools/browser/u4"
+            },
+            "list": []
+          }
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9511",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9511",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9511/devtools/browser/u1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{home}/Library/Application Support/ms-playwright/mcp-chrome",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9512",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9512",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9512/devtools/browser/u2",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{home}/with space/quoted",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9513",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9513",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9513/devtools/browser/u3",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{home}/tail space",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9514",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9514",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9514/devtools/browser/u4",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{home}/single quote",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "ranking-ties",
       "case": {
         "description": "Tiers first; endpoints by host, then port as a number; browsers in catalog order; Electron apps by name without case, then id, then path",
@@ -1409,6 +1808,114 @@
               "path": "/Applications/zoom.us.app",
               "executable": "/Applications/zoom.us.app",
               "debugSupport": "supported"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "seven-tab-default-port",
+      "case": {
+        "description": "https://<label>.sliccy.ai:443 is the same origin as without the port; any other port is a different origin",
+        "needs": [
+          "flag"
+        ],
+        "cdp": [
+          "127.0.0.1:9531",
+          "127.0.0.1:9532"
+        ],
+        "http": {
+          "127.0.0.1:9531": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9531/devtools/browser/d1"
+            },
+            "list": [
+              {
+                "id": "D1",
+                "type": "page",
+                "url": "https://seven.sliccy.ai:443/",
+                "title": "seven",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D1"
+              },
+              {
+                "id": "D2",
+                "type": "page",
+                "url": "https://lars.sliccy.ai:8443/",
+                "title": "other port",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D2"
+              }
+            ]
+          },
+          "127.0.0.1:9532": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9532/devtools/browser/d2"
+            },
+            "list": [
+              {
+                "id": "D3",
+                "type": "page",
+                "url": "https://lars.sliccy.ai:8443/",
+                "title": "other port",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/D3"
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9531",
+            "kind": "endpoint",
+            "tier": 1,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9531",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9531/devtools/browser/d1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "sevenOpen": true,
+              "sevenTabs": [
+                {
+                  "id": "D1",
+                  "url": "https://seven.sliccy.ai:443/",
+                  "title": "seven"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9532",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9532",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9532/devtools/browser/d2",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "sevenOpen": false,
+              "sevenTabs": []
             }
           }
         ]

@@ -1,0 +1,59 @@
+{
+  "name": "@ai-ecoverse/slicc-browsers",
+  "version": "0.0.0",
+  "description": "SLICC's shared browser catalog, JSON schemas and discovery conformance corpus",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ai-ecoverse/slicc-browsers.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "fledgling": {
+    "provider": "github",
+    "workflow": "release.yml",
+    "repo": "ai-ecoverse/slicc-browsers",
+    "publish": true
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "exports": {
+    ".": "./catalog.json",
+    "./catalog.json": "./catalog.json",
+    "./corpus.json": "./corpus.json",
+    "./schema/catalog.schema.json": "./schema/catalog.schema.json",
+    "./schema/browsers.schema.json": "./schema/browsers.schema.json",
+    "./schema/corpus.schema.json": "./schema/corpus.schema.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "catalog.json",
+    "corpus.json",
+    "schema"
+  ],
+  "scripts": {
+    "prepare": "lefthook install",
+    "corpus": "node scripts/corpus.mjs",
+    "validate": "node scripts/validate.mjs",
+    "lint": "slicc-lint && test -z \"$(gofmt -l .)\" && go mod tidy -diff && go vet ./... && golangci-lint run && cargo fmt --check && cargo clippy --all-features --all-targets -- -D warnings",
+    "format": "biome check --write . && gofmt -w . && cargo fmt",
+    "test": "npm run validate && go test -race -count=1 ./test/integration/... && cargo test --all-features",
+    "test:unit": "go test -race -cover ./...",
+    "build": "go build ./... && cargo build --all-features && cargo build --target wasm32-wasip1 --all-features && npm pack --dry-run",
+    "trust": "npx fledgling sync -y --skip-publish",
+    "trust:dry": "npx fledgling sync --dry-run -y --skip-publish",
+    "release": "semantic-release"
+  },
+  "devDependencies": {
+    "@ai-ecoverse/slicc-shared-web": "1.12.3",
+    "@biomejs/biome": "2.5.15",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "lefthook": "2.1.16",
+    "semantic-release": "25.0.9"
+  }
+}

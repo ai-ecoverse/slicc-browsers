@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9411",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Google Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9411",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9411/devtools/browser/l1",
+        "name": "Google Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "devtools-active-port",
+        "browser": "chrome",
+        "userDataDir": "{home}/.var/app/com.google.Chrome/config/google-chrome",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9412",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chromium",
+      "version": "150.0.7800.10",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9412",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9412/devtools/browser/l2",
+        "name": "Chromium",
+        "version": "150.0.7800.10",
+        "product": "Chrome/150.0.7800.10",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.7800.10 Safari/537.36",
+        "source": "devtools-active-port",
+        "browser": "chromium",
+        "userDataDir": "{home}/snap/chromium/common/chromium",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9413",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9413",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9413/devtools/browser/l3",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "devtools-active-port",
+        "userDataDir": "{home}/snap/chromium/common/slicc/seven-profiles/snappy",
+        "profile": "snappy",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ai-ecoverse/slicc-browsers/schema/corpus.schema.json",
+  "title": "slicc-browsers conformance corpus, schema 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "cases"],
+  "properties": {
+    "schema": { "const": 1 },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "case", "expected"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "case": { "$ref": "#/$defs/case" },
+          "expected": { "$ref": "browsers.schema.json" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "needs"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "os": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["darwin", "linux", "windows"] }
+        },
+        "needs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "user-data-dirs",
+              "seven-profiles",
+              "flag",
+              "process",
+              "probe",
+              "origins",
+              "installed"
+            ]
+          }
+        },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "files": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^\\{(home|config|sevenProfiles|userData:[a-z0-9-]+)\\}/[^\\\\]+$"
+          },
+          "additionalProperties": { "type": "string" }
+        },
+        "cdp": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "origins": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "probePorts": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "not": { "type": "integer", "minimum": 9222, "maximum": 9229 }
+          }
+        },
+        "processes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command"],
+            "properties": {
+              "pid": { "type": "integer", "minimum": 0 },
+              "self": { "const": true },
+              "command": { "type": "string" }
+            },
+            "oneOf": [{ "required": ["pid"] }, { "required": ["self"] }]
+          }
+        },
+        "http": {
+          "type": "object",
+          "propertyNames": { "type": "string", "pattern": "^(?!.*:922[2-9]$)[a-z0-9.-]+:[0-9]+$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "version": { "type": "object" },
+              "list": { "type": "array" }
+            }
+          }
+        },
+        "installed": {
+          "type": "array",
+          "items": { "$ref": "browsers.schema.json#/$defs/installed" }
+        }
+      }
+    }
+  }
+}

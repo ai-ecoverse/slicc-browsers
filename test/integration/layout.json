@@ -1,0 +1,83 @@
+[
+  {
+    "os": "darwin",
+    "home": "/Users/me",
+    "tokens": {
+      "home": "/Users/me",
+      "config": "/Users/me/Library/Application Support",
+      "sevenProfiles": "/Users/me/Library/Application Support/slicc/seven-profiles",
+      "userData:chrome": "/Users/me/Library/Application Support/Google/Chrome",
+      "userData:opera": "/Users/me/Library/Application Support/com.operasoftware.Opera",
+      "userData:atlas": null,
+      "userData:nope": null
+    },
+    "expand": {
+      "{sevenProfiles}/chrome/DevToolsActivePort": "/Users/me/Library/Application Support/slicc/seven-profiles/chrome/DevToolsActivePort",
+      "chrome --user-data-dir={home}/tmp/pw1 --x": "chrome --user-data-dir=/Users/me/tmp/pw1 --x",
+      "{nope}/x and {userData:atlas}/y": "{nope}/x and {userData:atlas}/y"
+    }
+  },
+  {
+    "os": "windows",
+    "home": "C:\\Users\\me",
+    "tokens": {
+      "config": "C:\\Users\\me\\AppData\\Roaming",
+      "sevenProfiles": "C:\\Users\\me\\AppData\\Roaming\\slicc\\seven-profiles",
+      "userData:chrome": "C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data",
+      "userData:opera": "C:\\Users\\me\\AppData\\Roaming\\Opera Software\\Opera Stable",
+      "userData:arc": null
+    },
+    "expand": {
+      "{sevenProfiles}/chrome/DevToolsActivePort": "C:\\Users\\me\\AppData\\Roaming\\slicc\\seven-profiles\\chrome\\DevToolsActivePort",
+      "\"C:\\Program Files\\chrome.exe\" --user-data-dir={home}/tmp/pw1 --x": "\"C:\\Program Files\\chrome.exe\" --user-data-dir=C:\\Users\\me\\tmp\\pw1 --x"
+    }
+  },
+  {
+    "os": "windows",
+    "home": "C:\\Users\\me",
+    "env": { "LOCALAPPDATA": "D:\\Local", "APPDATA": "D:\\Roaming" },
+    "tokens": {
+      "config": "D:\\Roaming",
+      "sevenProfiles": "D:\\Roaming\\slicc\\seven-profiles",
+      "userData:edge": "D:\\Local\\Microsoft\\Edge\\User Data"
+    },
+    "expand": {}
+  },
+  {
+    "os": "linux",
+    "home": "/home/me",
+    "env": { "XDG_CONFIG_HOME": "relative/config" },
+    "tokens": {
+      "config": "/home/me/.config",
+      "sevenProfiles": "/home/me/.config/slicc/seven-profiles",
+      "userData:chromium": "/home/me/.config/chromium",
+      "userData:brave": "/home/me/.config/BraveSoftware/Brave-Browser",
+      "userData:edge-canary": null
+    },
+    "userDataDirs": {
+      "chromium": [
+        "/home/me/.config/chromium",
+        "/home/me/.var/app/org.chromium.Chromium/config/chromium",
+        "/home/me/snap/chromium/common/chromium"
+      ],
+      "brave": [
+        "/home/me/.config/BraveSoftware/Brave-Browser",
+        "/home/me/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser"
+      ]
+    },
+    "expand": {
+      "{userData:brave}/DevToolsActivePort": "/home/me/.config/BraveSoftware/Brave-Browser/DevToolsActivePort"
+    }
+  },
+  {
+    "os": "linux",
+    "home": "/home/me",
+    "env": { "XDG_CONFIG_HOME": "/xdg" },
+    "tokens": {
+      "config": "/xdg",
+      "sevenProfiles": "/xdg/slicc/seven-profiles",
+      "userData:chrome": "/xdg/google-chrome"
+    },
+    "expand": {}
+  }
+]

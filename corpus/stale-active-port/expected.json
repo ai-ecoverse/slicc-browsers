@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9313",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Google Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9313",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9313/devtools/browser/live",
+        "name": "Google Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "devtools-active-port",
+        "browser": "chrome",
+        "userDataDir": "{userData:chrome}",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

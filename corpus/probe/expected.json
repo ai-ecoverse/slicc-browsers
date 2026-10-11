@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9401",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9401",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9401/devtools/browser/q1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "probe",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9403",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9403",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9403/devtools/browser/q3",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "process",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

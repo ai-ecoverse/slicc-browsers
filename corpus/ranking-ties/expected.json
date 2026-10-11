@@ -1,0 +1,239 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9342",
+      "kind": "endpoint",
+      "tier": 1,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9342",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9342/devtools/browser/r4",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "S1",
+            "url": "https://b.sliccy.ai/",
+            "title": "seven b"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9344",
+      "kind": "endpoint",
+      "tier": 1,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9344",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9344/devtools/browser/r5",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "S2",
+            "url": "https://a.sliccy.ai/",
+            "title": "seven a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdp:10.0.0.5:9343",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://10.0.0.5:9343",
+        "webSocketDebuggerUrl": "ws://10.0.0.5:9343/devtools/browser/r3",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9341",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9341",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9341/devtools/browser/r2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:10001",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:10001",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:10001/devtools/browser/r1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "chrome",
+      "kind": "installed",
+      "tier": 3,
+      "name": "Google Chrome",
+      "installed": {
+        "id": "chrome",
+        "name": "Google Chrome",
+        "engine": "chromium",
+        "channel": "stable",
+        "path": "/usr/bin/google-chrome-stable",
+        "executable": "/usr/bin/google-chrome-stable",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "edge",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Microsoft Edge",
+      "installed": {
+        "id": "edge",
+        "name": "Microsoft Edge",
+        "engine": "chromium",
+        "channel": "stable",
+        "path": "/usr/bin/microsoft-edge-stable",
+        "executable": "/usr/bin/microsoft-edge-stable",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "vivaldi",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Vivaldi",
+      "installed": {
+        "id": "vivaldi",
+        "name": "Vivaldi",
+        "engine": "chromium",
+        "channel": "stable",
+        "path": "/usr/bin/vivaldi-stable",
+        "executable": "/usr/bin/vivaldi-stable",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "edge-dev",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Microsoft Edge Dev",
+      "installed": {
+        "id": "edge-dev",
+        "name": "Microsoft Edge Dev",
+        "engine": "chromium",
+        "channel": "dev",
+        "path": "/usr/bin/microsoft-edge-dev",
+        "executable": "/usr/bin/microsoft-edge-dev",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "chromium",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Chromium",
+      "installed": {
+        "id": "chromium",
+        "name": "Chromium",
+        "engine": "chromium",
+        "channel": "stable",
+        "path": "/usr/bin/chromium",
+        "executable": "/usr/bin/chromium",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "electron:1password",
+      "kind": "installed",
+      "tier": 5,
+      "name": "1Password",
+      "installed": {
+        "id": "electron:1password",
+        "name": "1Password",
+        "engine": "electron",
+        "path": "/Applications/1Password.app",
+        "executable": "/Applications/1Password.app",
+        "debugSupport": "disabled"
+      }
+    },
+    {
+      "id": "electron:discord",
+      "kind": "installed",
+      "tier": 5,
+      "name": "Discord",
+      "installed": {
+        "id": "electron:discord",
+        "name": "Discord",
+        "engine": "electron",
+        "path": "/Applications/Discord.app",
+        "executable": "/Applications/Discord.app",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "electron:discord",
+      "kind": "installed",
+      "tier": 5,
+      "name": "discord",
+      "installed": {
+        "id": "electron:discord",
+        "name": "discord",
+        "engine": "electron",
+        "path": "/Users/me/Applications/Discord.app",
+        "executable": "/Users/me/Applications/Discord.app",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "electron:zoom",
+      "kind": "installed",
+      "tier": 5,
+      "name": "Zoom",
+      "installed": {
+        "id": "electron:zoom",
+        "name": "Zoom",
+        "engine": "electron",
+        "path": "/Applications/zoom.us.app",
+        "executable": "/Applications/zoom.us.app",
+        "debugSupport": "supported"
+      }
+    }
+  ]
+}

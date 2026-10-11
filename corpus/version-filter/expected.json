@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9332",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "116.0.5845.96",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9332",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/v2",
+        "name": "Chrome",
+        "version": "116.0.5845.96",
+        "product": "Chrome/116.0.5845.96",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.96 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9334",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome (headless)",
+      "version": "120.0.6099.0",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9334",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9334/devtools/browser/v4",
+        "name": "Chrome (headless)",
+        "version": "120.0.6099.0",
+        "product": "HeadlessChrome/120.0.6099.0",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0.6099.0 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "edge",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Microsoft Edge",
+      "installed": {
+        "id": "edge",
+        "name": "Microsoft Edge",
+        "engine": "chromium",
+        "channel": "stable",
+        "path": "/usr/bin/microsoft-edge-stable",
+        "executable": "/usr/bin/microsoft-edge-stable",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "brave",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Brave Browser",
+      "version": "1.60.110",
+      "installed": {
+        "id": "brave",
+        "name": "Brave Browser",
+        "engine": "chromium",
+        "channel": "stable",
+        "version": "1.60.110",
+        "path": "/Applications/Brave Browser.app",
+        "executable": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "bundleId": "com.brave.Browser",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "chrome-beta",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Google Chrome Beta",
+      "version": "116.0.5845.50",
+      "installed": {
+        "id": "chrome-beta",
+        "name": "Google Chrome Beta",
+        "engine": "chromium",
+        "channel": "beta",
+        "version": "116.0.5845.50",
+        "path": "/Applications/Google Chrome Beta.app",
+        "executable": "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+        "bundleId": "com.google.Chrome.beta",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "chromium",
+      "kind": "installed",
+      "tier": 4,
+      "name": "Chromium",
+      "version": "dev",
+      "installed": {
+        "id": "chromium",
+        "name": "Chromium",
+        "engine": "chromium",
+        "channel": "stable",
+        "version": "dev",
+        "path": "/usr/bin/chromium",
+        "executable": "/usr/bin/chromium",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "electron:slack",
+      "kind": "installed",
+      "tier": 5,
+      "name": "Slack",
+      "version": "4.41.105",
+      "installed": {
+        "id": "electron:slack",
+        "name": "Slack",
+        "engine": "electron",
+        "version": "4.41.105",
+        "path": "/Applications/Slack.app",
+        "executable": "/Applications/Slack.app/Contents/MacOS/Slack",
+        "bundleId": "com.tinyspeck.slackmacgap",
+        "debugSupport": "supported"
+      }
+    }
+  ]
+}

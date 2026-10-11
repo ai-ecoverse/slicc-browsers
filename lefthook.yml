@@ -1,0 +1,8 @@
+extends:
+  - node_modules/@ai-ecoverse/slicc-shared-web/lefthook.yml
+
+pre-commit:
+  jobs:
+    - name: corpus bundle
+      glob: "corpus/**"
+      run: node scripts/corpus.mjs --check

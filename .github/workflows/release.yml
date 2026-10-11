@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LEFTHOOK: '0'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-wasip1
+          rustup default stable
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: cargo build --target wasm32-wasip1 --all-features
+
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Version
+        id: version
+        run: |
+          git fetch origin --tags --force
+          tag=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
+          if [ -z "$tag" ]; then
+            echo "no release tag on HEAD"
+            exit 0
+          fi
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "release $tag"
+
+      - name: Warm the Go module proxy and pkg.go.dev
+        if: steps.version.outputs.version != ''
+        continue-on-error: true
+        timeout-minutes: 5
+        working-directory: ${{ runner.temp }}
+        env:
+          MODULE: github.com/ai-ecoverse/slicc-browsers
+          TAG: v${{ steps.version.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "$MODULE@$TAG"; then
+              break
+            fi
+            sleep $((attempt * 10))
+          done
+          curl -fsS -X POST --max-time 30 "https://pkg.go.dev/fetch/$MODULE@$TAG" || echo "::warning::pkg.go.dev did not accept a fetch of $MODULE@$TAG"
+
+  npm:
+    needs: release
+    if: needs.release.outputs.version != '' && vars.SLICC_BROWSERS_NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish to npm
+        run: |
+          name=$(node -p "require('./package.json').name")
+          if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+            echo "$name@$VERSION is already on npm"
+            exit 0
+          fi
+          if ! node -e "const [a,b,c]=process.argv[1].split('.').map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)" "$(npm --version)"; then
+            npm install -g npm@11
+          fi
+          npm version "$VERSION" --no-git-tag-version --allow-same-version --ignore-scripts
+          npm publish --provenance --access public --ignore-scripts
+
+  crates:
+    needs: release
+    if: needs.release.outputs.version != '' && vars.SLICC_BROWSERS_CRATES_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: v${{ needs.release.outputs.version }}
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Decide
+        id: decide
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -A "slicc-browsers (https://github.com/ai-ecoverse/slicc-browsers)" "https://crates.io/api/v1/crates/slicc-browsers/$VERSION")
+          if [ "$code" = "200" ]; then
+            echo "slicc-browsers $VERSION is already on crates.io"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18
+        id: auth
+        if: steps.decide.outputs.publish == 'true'
+
+      - name: Publish to crates.io
+        if: steps.decide.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          node scripts/set-crate-version.mjs "$VERSION"
+          cargo publish --allow-dirty

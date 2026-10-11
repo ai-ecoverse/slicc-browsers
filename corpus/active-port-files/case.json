@@ -1,0 +1,53 @@
+{
+  "description": "DevToolsActivePort files in a browser's default user-data dir and in seven-profiles, with CRLF line ends; names come from the browser id or from /json/version",
+  "needs": ["user-data-dirs", "seven-profiles"],
+  "files": {
+    "{userData:chrome}/DevToolsActivePort": "9301\n/devtools/browser/c1\n",
+    "{sevenProfiles}/edge/DevToolsActivePort": "9302\n/devtools/browser/e1\n",
+    "{sevenProfiles}/work/DevToolsActivePort": "9303\r\n/devtools/browser/w1\r\n",
+    "{sevenProfiles}/empty/Default/Preferences": "{}"
+  },
+  "http": {
+    "127.0.0.1:9301": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9301/devtools/browser/c1"
+      },
+      "list": [
+        {
+          "id": "A1",
+          "type": "page",
+          "url": "https://example.com/",
+          "title": "Example",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/A1"
+        }
+      ]
+    },
+    "127.0.0.1:9302": {
+      "version": {
+        "Browser": "Edg/154.0.3485.54",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Edg/154.0.3485.54 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9302/devtools/browser/e1"
+      },
+      "list": []
+    },
+    "127.0.0.1:9303": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9303/devtools/browser/w1"
+      },
+      "list": []
+    }
+  }
+}

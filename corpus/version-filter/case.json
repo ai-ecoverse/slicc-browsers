@@ -1,0 +1,115 @@
+{
+  "description": "Endpoints below Chromium 116 by their user agent, and installed browsers whose version is a Chromium version below 116, are left out",
+  "needs": ["flag", "installed"],
+  "cdp": ["127.0.0.1:9331", "127.0.0.1:9332", "127.0.0.1:9333", "127.0.0.1:9334"],
+  "http": {
+    "127.0.0.1:9331": {
+      "version": {
+        "Browser": "Chrome/115.0.5790.170",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.5790.170 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/v1"
+      },
+      "list": []
+    },
+    "127.0.0.1:9332": {
+      "version": {
+        "Browser": "Chrome/116.0.5845.96",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.5845.96 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/v2"
+      },
+      "list": []
+    },
+    "127.0.0.1:9333": {
+      "version": {
+        "Browser": "Chrome/108.0.5359.215",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.5359.215 Electron/22.3.27 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9333/devtools/browser/v3"
+      },
+      "list": []
+    },
+    "127.0.0.1:9334": {
+      "version": {
+        "Browser": "HeadlessChrome/120.0.6099.0",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0.6099.0 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9334/devtools/browser/v4"
+      },
+      "list": []
+    }
+  },
+  "installed": [
+    {
+      "id": "chrome",
+      "name": "Google Chrome",
+      "engine": "chromium",
+      "channel": "stable",
+      "version": "115.0.5790.170",
+      "path": "/Applications/Google Chrome.app",
+      "executable": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "bundleId": "com.google.Chrome",
+      "debugSupport": "supported"
+    },
+    {
+      "id": "chrome-beta",
+      "name": "Google Chrome Beta",
+      "engine": "chromium",
+      "channel": "beta",
+      "version": "116.0.5845.50",
+      "path": "/Applications/Google Chrome Beta.app",
+      "executable": "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+      "bundleId": "com.google.Chrome.beta",
+      "debugSupport": "supported"
+    },
+    {
+      "id": "brave",
+      "name": "Brave Browser",
+      "engine": "chromium",
+      "channel": "stable",
+      "version": "1.60.110",
+      "path": "/Applications/Brave Browser.app",
+      "executable": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+      "bundleId": "com.brave.Browser",
+      "debugSupport": "supported"
+    },
+    {
+      "id": "edge",
+      "name": "Microsoft Edge",
+      "engine": "chromium",
+      "channel": "stable",
+      "path": "/usr/bin/microsoft-edge-stable",
+      "executable": "/usr/bin/microsoft-edge-stable",
+      "debugSupport": "supported"
+    },
+    {
+      "id": "chromium",
+      "name": "Chromium",
+      "engine": "chromium",
+      "channel": "stable",
+      "version": "dev",
+      "path": "/usr/bin/chromium",
+      "executable": "/usr/bin/chromium",
+      "debugSupport": "supported"
+    },
+    {
+      "id": "electron:slack",
+      "name": "Slack",
+      "engine": "electron",
+      "version": "4.41.105",
+      "path": "/Applications/Slack.app",
+      "executable": "/Applications/Slack.app/Contents/MacOS/Slack",
+      "bundleId": "com.tinyspeck.slackmacgap",
+      "debugSupport": "supported"
+    }
+  ]
+}

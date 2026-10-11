@@ -26,7 +26,7 @@ export function bundle() {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const text = bundle();
   if (process.argv.includes('--check')) {
-    const have = existsSync(out) ? readFileSync(out, 'utf8') : '';
+    const have = existsSync(out) ? readFileSync(out, 'utf8').replaceAll('\r\n', '\n') : '';
     if (have !== text) {
       process.stderr.write('corpus.json is out of date; run npm run corpus\n');
       process.exit(1);

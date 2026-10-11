@@ -85,7 +85,7 @@ try {
 } catch (e) {
   fail(e.message);
 }
-if (text && text !== readFileSync(join(root, 'corpus.json'), 'utf8')) {
+if (text && text !== readFileSync(join(root, 'corpus.json'), 'utf8').replaceAll('\r\n', '\n')) {
   fail('corpus.json is out of date; run npm run corpus');
 }
 const corpus = read('corpus.json');

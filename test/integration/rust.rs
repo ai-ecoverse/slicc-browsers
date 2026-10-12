@@ -1,6 +1,7 @@
 use serde_json::Value;
 use slicc_browsers::corpus::{self, Layout};
-use slicc_browsers::{catalog, Catalog, CATALOG, CORPUS};
+use slicc_browsers::protected;
+use slicc_browsers::{catalog, Catalog, CATALOG, CORPUS, PROTECTED};
 use std::collections::BTreeMap;
 
 const LAYOUT: &str = include_str!("layout.json");
@@ -129,4 +130,26 @@ fn the_fake_http_normalizes_localhost() {
     );
     assert_eq!(c.http_get("127.0.0.1:9391", "/nope").unwrap().0, 404);
     assert!(c.http_get("127.0.0.1:1", "/json/version").is_none());
+}
+
+#[test]
+fn the_protected_vectors_parse_and_round_trip() {
+    let v = protected::vectors();
+    assert_eq!(v.schema, slicc_browsers::SCHEMA);
+    assert!(!v.origins.is_empty() && !v.urls.is_empty() && !v.targets.is_empty());
+    let raw: Value = serde_json::from_str(PROTECTED).unwrap();
+    assert_eq!(strip_nulls(serde_json::to_value(&v).unwrap()), raw);
+    let openers = [
+        protected::OPENER_PROTECTED,
+        protected::OPENER_UNPROTECTED,
+        protected::OPENER_UNKNOWN,
+    ];
+    assert!(v
+        .targets
+        .iter()
+        .all(|t| t.opener.as_deref().is_none_or(|o| openers.contains(&o))));
+    let po = catalog().protected_origins;
+    assert!(po.domains.iter().any(|d| d == "sliccy.ai"));
+    assert_eq!(po.refusal, "slicc: refused: target is on seven's origin");
+    assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
 }

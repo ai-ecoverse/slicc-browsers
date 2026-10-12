@@ -10,8 +10,13 @@ pub const BROWSERS_SCHEMA: &str = include_str!("../schema/browsers.schema.json")
 
 pub const CORPUS_SCHEMA: &str = include_str!("../schema/corpus.schema.json");
 
+pub const PROTECTED_SCHEMA: &str = include_str!("../schema/protected.schema.json");
+
 #[cfg(feature = "corpus")]
 pub const CORPUS: &str = include_str!("../corpus.json");
+
+#[cfg(feature = "corpus")]
+pub const PROTECTED: &str = include_str!("../protected.json");
 
 #[cfg(feature = "serde")]
 mod catalog;
@@ -21,3 +26,6 @@ pub use catalog::*;
 
 #[cfg(feature = "corpus")]
 pub mod corpus;
+
+#[cfg(feature = "corpus")]
+pub mod protected;

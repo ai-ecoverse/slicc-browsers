@@ -11,6 +11,7 @@ pub struct Catalog {
     pub rank: Rank,
     pub discovery: Discovery,
     pub seven: Seven,
+    pub protected_origins: ProtectedOrigins,
     pub profiles: Profiles,
     pub launch: Launch,
     pub platforms: Platforms,
@@ -150,6 +151,17 @@ pub struct Seven {
     pub prefs: Vec<Pref>,
     pub discard_exceptions: Vec<DiscardException>,
     pub clean_exit: Vec<Pref>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedOrigins {
+    pub domains: Vec<String>,
+    pub schemes: Vec<String>,
+    pub inner_schemes: Vec<String>,
+    pub any_schemes: Vec<String>,
+    pub inheriting: Vec<String>,
+    pub refusal: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

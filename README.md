@@ -4,6 +4,8 @@ The browser catalog, JSON schemas and conformance corpus shared by the two progr
 - `slicc browsers` and `slicc launch` in [slicc-cli](https://github.com/ai-ecoverse/slicc-cli) (Go, `CGO_ENABLED=0`);
 - `playwright-cli list` and `open` in [slicc-cdp](https://github.com/ai-ecoverse/slicc-cdp) (Rust, also built for `wasm32-wasip1`).
 
+It also holds the [protected origins](#protected-origins): the origins browser control must never reach, which slicc-agent checks too.
+
 They can't share code, so they share data. Three packages wrap the same files, at one version:
 
 | package | what it gives you |
@@ -20,6 +22,8 @@ They can't share code, so they share data. Three packages wrap the same files, a
 | `schema/corpus.schema.json` | JSON Schema for `corpus.json` |
 | `corpus/<case>/case.json`, `corpus/<case>/expected.json` | the conformance cases |
 | `corpus.json` | every case in one file, generated from `corpus/` by `npm run corpus` |
+| `protected.json`, `schema/protected.schema.json` | the protected-origin test vectors and their schema |
+| `protected.mjs` | the reference protected-origin matcher, in JavaScript (npm only) |
 
 ## Go
 
@@ -32,7 +36,8 @@ b, ok := c.Browser("chrome")
 
 - `Default() *Catalog` parses the embedded `catalog.json` once and panics if it doesn't parse (CI makes sure it does). `Load() (*Catalog, error)` is the same without the panic. Treat the result as read-only. `Parse([]byte)` parses another copy and rejects a `schema` other than 1.
 - `(*Catalog).Browser(id)` and `(*Catalog).Priority(id)`, the index in `browsers` (its length for an unknown id).
-- `CatalogJSON()`, `CatalogSchemaJSON()`, `BrowsersSchemaJSON()` and `CorpusJSON()` return copies of the embedded files.
+- `CatalogJSON()`, `CatalogSchemaJSON()`, `BrowsersSchemaJSON()`, `CorpusJSON()`, `ProtectedJSON()` and `ProtectedSchemaJSON()` return copies of the embedded files.
+- `(*Catalog).ProtectedOrigins` is `catalog.json`'s `protectedOrigins`. `Protected() (*ProtectedVectors, error)` parses `protected.json` (`Origins`, `URLs`, `Targets`, `CookieDomains`, `StorageKeys`; a target's `Opener` is `""`, `OpenerProtected`, `OpenerUnprotected` or `OpenerUnknown`).
 - `Corpus() ([]Case, error)` returns the cases. See [Running the corpus](#running-the-corpus) for the helpers.
 
 ## Rust
@@ -45,15 +50,17 @@ slicc-browsers = "1"
 slicc-browsers = { version = "1", features = ["corpus"] }
 ```
 
-- Always: `CATALOG`, `CATALOG_SCHEMA`, `BROWSERS_SCHEMA` and `CORPUS_SCHEMA`, each the file's text via `include_str!`, and `SCHEMA` (1). No dependencies.
-- Feature `serde`: `Catalog` and the other types, `Catalog::parse(&str)`, `catalog()` (parses `CATALOG`), `Catalog::browser` and `Catalog::priority`. It pulls in `serde` and `serde_json`.
-- Feature `corpus` (implies `serde`): `CORPUS`, the text of `corpus.json`, and the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
+- Always: `CATALOG`, `CATALOG_SCHEMA`, `BROWSERS_SCHEMA`, `CORPUS_SCHEMA` and `PROTECTED_SCHEMA`, each the file's text via `include_str!`, and `SCHEMA` (1). No dependencies.
+- Feature `serde`: `Catalog` and the other types (`protected_origins` is a `ProtectedOrigins`), `Catalog::parse(&str)`, `catalog()` (parses `CATALOG`), `Catalog::browser` and `Catalog::priority`. It pulls in `serde` and `serde_json`.
+- Feature `corpus` (implies `serde`): `CORPUS` and `PROTECTED`, the text of `corpus.json` and `protected.json`; the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below; and the module `protected` with `vectors()`, `Vectors` and the `OPENER_*` constants. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
 
 Every feature builds for `wasm32-wasip1`.
 
 ## npm
 
-`import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' }`. The exports are `.` (`catalog.json`), `./catalog.json`, `./corpus.json`, `./schema/catalog.schema.json`, `./schema/browsers.schema.json` and `./schema/corpus.schema.json`.
+`import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' }`. The exports are `.` (`catalog.json`), `./catalog.json`, `./corpus.json`, `./protected.json`, `./protected.mjs`, `./schema/catalog.schema.json`, `./schema/browsers.schema.json`, `./schema/corpus.schema.json` and `./schema/protected.schema.json`.
+
+`protected.mjs` is the reference matcher for [protected origins](#protected-origins): `import { protectedOrigins } from '@ai-ecoverse/slicc-browsers/protected.mjs'`, then `protectedOrigins(catalog.protectedOrigins, extraOrigins)` returns `{ url(text), target({ url, previous, opener }), cookieDomain(domain), storageKey(key) }`, each a boolean. It needs only the WHATWG `URL`, so it runs in Node and in a browser.
 
 ## `catalog.json`
 
@@ -82,12 +89,37 @@ Every feature builds for `wasm32-wasip1`.
   - `discardExceptions`: where the site pattern and the extra origins' hosts go, as a `list` of strings or as a `chrome-time-map`, a map from site to the time it was added (microseconds since 1601-01-01 UTC, as a decimal string);
   - `cleanExit`: values that mark the last exit clean;
   - `form` says where a key comes from: `six` (SLICC six's keys) or `chrome-154` (what Chrome 154 reads).
+- `protectedOrigins`: what browser control must never reach, see [Protected origins](#protected-origins). `domains` (`sliccy.ai`), `schemes` (`https`, `http`), `innerSchemes` (`blob`, `filesystem`, `view-source`), `anySchemes` (`devtools`), `inheriting` (`about:blank`, `about:srcdoc`), and `refusal`, the text of a refusal.
 - `profiles`: SLICC profiles live in `<config dir>/<root>/<name>`, and a snap's in `~/snap/<snap>/common/<snapRoot>/<name>`. `legacyRoot` is the old root, never scanned; on macOS's case-insensitive volume it is SLICC six's root too. `sixProfilePattern` matches six's profile names, case-insensitively. `namePattern` is a valid profile name. `six` describes SLICC six's Chrome profiles (see [SLICC six's profiles](#slicc-sixs-profiles)):
   - `roots`: six's profile root per OS (`macos`, `linux`, `windows`), a `base` location followed by the `path` segments. The base is its `env` when that is set and not empty (any value, as six takes it), else `home` under the home dir.
   - `defaultName` (`browser-coding-agent-chrome`), `defaultPort` (5710) and `portSuffix` (`-{port}`): six's profile for its serve port `<port>` is `<root>/<defaultName>`, with `portSuffix` added for any port other than `defaultPort`.
   - `userDataDirEnv` (`SLICC_USER_DATA_DIR`): when set, its value, trimmed of whitespace, is six's profile for every port, unless it is empty.
 - `launch`: `chromiumArgs` (with `{profile}` for the profile dir), then the seven flags, then `headless` with `--headless`. Electron apps get `electron.portFlag` with the first free port from `electron.minPort` up that isn't in `electron.reservedPorts`.
 - `platforms`: the config dir per OS, the Windows roots, and the Windows registry keys. A location is the environment variable `env` when it's set (on Linux only an absolute path counts), else `absolute`, else `home` under the home dir. `registry`: under each of `hives`, every subkey of each `startMenuInternet` key, with its `openCommand` default value, and the default value of `appPaths\<name>` for each of `appPathNames`.
+
+## Protected origins
+
+Browser control must never navigate to, open or attach to a target on seven's own origin, or read or write its cookies or storage: not slicc-cli's `cdp` relay, not slicc-cdp's `playwright-cli`, not slicc-agent. `protectedOrigins` in `catalog.json` says what is protected, and every implementation runs the vectors in `protected.json`.
+
+**URLs.** A URL is parsed the way the WHATWG URL Standard (and so the browser) parses it, so `https:\\seven.sliccy.ai`, a tab or newline inside the URL, `%2E`, `。` and full-width letters all reach seven. In Go and Rust that takes a WHATWG parser, not `net/url`. A URL that doesn't parse isn't protected; the browser doesn't load it either. Then:
+1. While its scheme is one of `innerSchemes`, the rest of the URL after `<scheme>:` takes its place, at most 8 times: `blob:https://seven.sliccy.ai/<uuid>` is `https://seven.sliccy.ai/<uuid>`.
+2. A scheme in `anySchemes` is protected whatever follows: a DevTools front end (`devtools://`) can be inspecting seven.
+3. A scheme in `schemes` is protected when its host is one of `domains` or under one, at any depth and on any port. The host is lower-cased, and one trailing dot is dropped.
+4. Any other URL is protected when its origin is one of the program's **extra origins**: the seven origins it accepts besides `sliccy.ai` (slicc-cli's `--origin` and `--page` origins), compared as `scheme://host[:port]` without the scheme's default port, with the host as in 3.
+
+This is wider than the rule for finding seven (`seven.originHostPattern`, which leaves out `www`). Every `sliccy.ai` host shares the `sliccy.ai` cookies, and cookies ignore the port and, without `Secure`, the scheme. SLICC six lives on `www.sliccy.ai` and the apex, and its cookies matter. `*.kernel.localhost` is not protected: each port is its own origin, and the agent's own servers live there. An extra origin is matched exactly, so `http://127.0.0.1:5710` doesn't protect `http://127.0.0.1:5711`.
+
+**Targets.** A target's effective origin is its URL's (`TargetInfo.url`), except when the URL inherits the origin of whoever made the document: the empty URL, and `inheriting` with any query or fragment. Such a target is protected when it was protected before this URL (a seven tab that went to `about:blank` keeps seven's origin), or when its opener (`openerId`, else `openerFrameId`) is protected or unknown, for an opener closed before the program saw it. The URL, `openerFrameId` and `browserContextId` alone can't tell: a blank popup that seven opens has seven's origin and the URL `about:blank`. A program that holds a session to the target also has the document's real origin: the main frame's `securityOrigin` in `Page.frameNavigated`, and the default context's `origin` in `Runtime.executionContextCreated`. When one of those is protected, the target is protected too, until a URL with an origin of its own replaces it.
+
+A same-site frame shares its parent's process and has no target of its own. Every `sliccy.ai` host is protected, and site isolation gives a seven frame inside any other site its own target, so this only matters for an extra origin whose site has other origins (another port of `127.0.0.1`, say).
+
+**Cookies.** A cookie domain, lower-cased and without a leading or trailing dot, is protected when it is one of `domains` or under one, or when it is the host of a protected domain or an extra origin, or a parent of one: a cookie on `.example.test` reaches `https://seven.example.test`.
+
+**Storage keys** (`Storage`, `IndexedDB`, `CacheStorage` and `FileSystem` in CDP): a key is protected when its origin (up to the first `^`) or its top-level site (a part after `^0`) is a protected URL.
+
+**Refusals** carry the text in `refusal`, `slicc: refused: target is on seven's origin`.
+
+**`protected.json`** (schema `schema/protected.schema.json`): `origins`, the extra origins every vector runs with; `urls` (`url`, `protected`); `targets` (`url`, `previous?`, whether the target was protected before; `opener?`, `protected`, `unprotected` or `unknown`, and no `opener` for a target without one; `protected`); `cookieDomains` (`domain`, `protected`); `storageKeys` (`key`, `protected`). `npm run validate` runs every vector through `protected.mjs`, and no vector uses a port from 9222 to 9229.
 
 ## The process source
 
@@ -198,7 +230,7 @@ for case in corpus().cases {
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json` and `corpus.json` against the schemas, plus what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json`, `corpus.json` and `protected.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

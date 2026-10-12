@@ -25,14 +25,19 @@
     ".": "./catalog.json",
     "./catalog.json": "./catalog.json",
     "./corpus.json": "./corpus.json",
+    "./protected.json": "./protected.json",
+    "./protected.mjs": "./protected.mjs",
     "./schema/catalog.schema.json": "./schema/catalog.schema.json",
     "./schema/browsers.schema.json": "./schema/browsers.schema.json",
     "./schema/corpus.schema.json": "./schema/corpus.schema.json",
+    "./schema/protected.schema.json": "./schema/protected.schema.json",
     "./package.json": "./package.json"
   },
   "files": [
     "catalog.json",
     "corpus.json",
+    "protected.json",
+    "protected.mjs",
     "schema"
   ],
   "scripts": {

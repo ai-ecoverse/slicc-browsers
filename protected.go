@@ -1,0 +1,79 @@
+package sliccbrowsers
+
+import (
+	"bytes"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+)
+
+//go:embed protected.json
+var protectedJSON []byte
+
+//go:embed schema/protected.schema.json
+var protectedSchemaJSON []byte
+
+const (
+	OpenerProtected   = "protected"
+	OpenerUnprotected = "unprotected"
+	OpenerUnknown     = "unknown"
+)
+
+type ProtectedOrigins struct {
+	Domains      []string `json:"domains"`
+	Schemes      []string `json:"schemes"`
+	InnerSchemes []string `json:"innerSchemes"`
+	AnySchemes   []string `json:"anySchemes"`
+	Inheriting   []string `json:"inheriting"`
+	Refusal      string   `json:"refusal"`
+}
+
+type ProtectedVectors struct {
+	Schema        int            `json:"schema"`
+	Origins       []string       `json:"origins"`
+	URLs          []URLVector    `json:"urls"`
+	Targets       []TargetVector `json:"targets"`
+	CookieDomains []CookieVector `json:"cookieDomains"`
+	StorageKeys   []KeyVector    `json:"storageKeys"`
+}
+
+type URLVector struct {
+	URL       string `json:"url"`
+	Protected bool   `json:"protected"`
+}
+
+type TargetVector struct {
+	URL       string `json:"url"`
+	Previous  bool   `json:"previous,omitempty"`
+	Opener    string `json:"opener,omitempty"`
+	Protected bool   `json:"protected"`
+}
+
+type CookieVector struct {
+	Domain    string `json:"domain"`
+	Protected bool   `json:"protected"`
+}
+
+type KeyVector struct {
+	Key       string `json:"key"`
+	Protected bool   `json:"protected"`
+}
+
+func ProtectedJSON() []byte {
+	return bytes.Clone(protectedJSON)
+}
+
+func ProtectedSchemaJSON() []byte {
+	return bytes.Clone(protectedSchemaJSON)
+}
+
+func Protected() (*ProtectedVectors, error) {
+	var v ProtectedVectors
+	if err := json.Unmarshal(protectedJSON, &v); err != nil {
+		return nil, fmt.Errorf("slicc-browsers protected vectors: %w", err)
+	}
+	if v.Schema != Schema {
+		return nil, fmt.Errorf("slicc-browsers protected vectors: schema %d, want %d", v.Schema, Schema)
+	}
+	return &v, nil
+}

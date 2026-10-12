@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { protectedOrigins } from '../protected.mjs';
 import { bundle } from './corpus.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,7 +19,7 @@ const ajv = new Ajv2020({
   allowUnionTypes: true,
 });
 addFormats(ajv);
-for (const name of ['catalog', 'browsers', 'corpus'])
+for (const name of ['catalog', 'browsers', 'corpus', 'protected'])
   ajv.addSchema(read(`schema/${name}.schema.json`));
 const schemaURL = (name) =>
   `https://github.com/ai-ecoverse/slicc-browsers/schema/${name}.schema.json`;
@@ -146,10 +147,30 @@ for (const { name, case: c, expected } of corpus.cases ?? []) {
     fail(`${label}: needs installed iff it has installed`);
 }
 
+const vectors = read('protected.json');
+check('protected', vectors, 'protected.json');
+const po = catalog.protectedOrigins;
+if (!po.domains.every((d) => po.domains.every((x) => d === x || !d.endsWith(`.${x}`))))
+  fail('catalog.json: protectedOrigins.domains lists a domain under another');
+const m = protectedOrigins(po, vectors.origins);
+const vectorChecks = [
+  ['urls', (v) => m.url(v.url), (v) => v.url],
+  ['targets', (v) => m.target(v), (v) => JSON.stringify(v)],
+  ['cookieDomains', (v) => m.cookieDomain(v.domain), (v) => v.domain],
+  ['storageKeys', (v) => m.storageKey(v.key), (v) => v.key],
+];
+for (const [field, run, label] of vectorChecks) {
+  for (const v of vectors[field] ?? []) {
+    if (run(v) !== v.protected)
+      fail(`protected.json: ${field} ${JSON.stringify(label(v))} should be ${v.protected}`);
+  }
+}
+if (reserved.test(JSON.stringify(vectors))) fail('protected.json: never use ports 9222-9229');
+
 if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);
   process.exit(1);
 }
 process.stdout.write(
-  `ok: catalog.json (${ids.length} browsers) and ${corpus.cases.length} corpus cases\n`
+  `ok: catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases and the protected-origin vectors\n`
 );

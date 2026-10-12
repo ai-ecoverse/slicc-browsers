@@ -20,16 +20,17 @@ var browsersSchemaJSON []byte
 const Schema = 1
 
 type Catalog struct {
-	Schema           int       `json:"schema"`
-	MinChromiumMajor int       `json:"minChromiumMajor"`
-	Browsers         []Browser `json:"browsers"`
-	Electron         Electron  `json:"electron"`
-	Rank             Rank      `json:"rank"`
-	Discovery        Discovery `json:"discovery"`
-	Seven            Seven     `json:"seven"`
-	Profiles         Profiles  `json:"profiles"`
-	Launch           Launch    `json:"launch"`
-	Platforms        Platforms `json:"platforms"`
+	Schema           int              `json:"schema"`
+	MinChromiumMajor int              `json:"minChromiumMajor"`
+	Browsers         []Browser        `json:"browsers"`
+	Electron         Electron         `json:"electron"`
+	Rank             Rank             `json:"rank"`
+	Discovery        Discovery        `json:"discovery"`
+	Seven            Seven            `json:"seven"`
+	ProtectedOrigins ProtectedOrigins `json:"protectedOrigins"`
+	Profiles         Profiles         `json:"profiles"`
+	Launch           Launch           `json:"launch"`
+	Platforms        Platforms        `json:"platforms"`
 }
 
 type Browser struct {

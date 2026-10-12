@@ -12,6 +12,7 @@
     "rank",
     "discovery",
     "seven",
+    "protectedOrigins",
     "profiles",
     "launch",
     "platforms"
@@ -169,6 +170,31 @@
         "cleanExit": { "type": "array", "items": { "$ref": "#/$defs/pref" } }
       }
     },
+    "protectedOrigins": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domains", "schemes", "innerSchemes", "anySchemes", "inheriting", "refusal"],
+      "properties": {
+        "domains": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
+          }
+        },
+        "schemes": { "$ref": "#/$defs/schemes", "type": "array", "minItems": 1 },
+        "innerSchemes": { "$ref": "#/$defs/schemes" },
+        "anySchemes": { "$ref": "#/$defs/schemes" },
+        "inheriting": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^about:[a-z]+$" }
+        },
+        "refusal": { "$ref": "#/$defs/name" }
+      }
+    },
     "profiles": {
       "type": "object",
       "additionalProperties": false,
@@ -267,6 +293,11 @@
   "$defs": {
     "name": { "type": "string", "minLength": 1 },
     "names": { "type": "array", "items": { "$ref": "#/$defs/name" } },
+    "schemes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*$" }
+    },
     "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
     "segments": {
       "description": "A relative path, one segment per item.",

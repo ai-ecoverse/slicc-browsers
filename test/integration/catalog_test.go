@@ -181,3 +181,33 @@ func TestTheFakeServesOnlyItsPorts(t *testing.T) {
 		t.Fatal("9222 is never fake")
 	}
 }
+
+func TestTheProtectedVectorsParse(t *testing.T) {
+	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.ProtectedJSON()))
+	d.DisallowUnknownFields()
+	var raw sliccbrowsers.ProtectedVectors
+	if err := d.Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	v, err := sliccbrowsers.Protected()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*v, raw) || len(v.Origins) == 0 || len(v.URLs) == 0 || len(v.Targets) == 0 || len(v.CookieDomains) == 0 || len(v.StorageKeys) == 0 {
+		t.Fatalf("vectors: %+v", v)
+	}
+	openers := []string{"", sliccbrowsers.OpenerProtected, sliccbrowsers.OpenerUnprotected, sliccbrowsers.OpenerUnknown}
+	for _, tv := range v.Targets {
+		if !slices.Contains(openers, tv.Opener) {
+			t.Fatalf("target vector %+v has opener %q", tv, tv.Opener)
+		}
+	}
+	po := sliccbrowsers.Default().ProtectedOrigins
+	if !slices.Contains(po.Domains, "sliccy.ai") || !slices.Contains(po.Schemes, "https") || po.Refusal != "slicc: refused: target is on seven's origin" {
+		t.Fatalf("protectedOrigins: %+v", po)
+	}
+	s, ok := decode(t, sliccbrowsers.ProtectedSchemaJSON()).(map[string]any)
+	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/protected.schema.json") {
+		t.Fatalf("protected schema: %v", s["$id"])
+	}
+}

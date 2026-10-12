@@ -10,7 +10,7 @@ homepage = "https://github.com/ai-ecoverse/slicc-browsers"
 readme = "README.md"
 keywords = ["chrome", "chromium", "cdp", "devtools", "browser"]
 categories = ["development-tools", "web-programming"]
-include = ["/Cargo.toml", "/README.md", "/LICENSE", "/catalog.json", "/corpus.json", "/schema/*.json", "/src/**"]
+include = ["/Cargo.toml", "/README.md", "/LICENSE", "/catalog.json", "/corpus.json", "/protected.json", "/schema/*.json", "/src/**"]
 
 [lib]
 name = "slicc_browsers"

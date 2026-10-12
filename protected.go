@@ -21,6 +21,7 @@ const (
 
 type ProtectedOrigins struct {
 	Domains      []string `json:"domains"`
+	Hosts        []string `json:"hosts"`
 	Schemes      []string `json:"schemes"`
 	InnerSchemes []string `json:"innerSchemes"`
 	AnySchemes   []string `json:"anySchemes"`

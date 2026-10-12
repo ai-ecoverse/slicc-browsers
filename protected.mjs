@@ -39,6 +39,7 @@ export function protectedOrigins(rules, extraOrigins = []) {
     if (!u) return false;
     const s = scheme(u);
     if (rules.anySchemes.includes(s)) return true;
+    if (rules.schemes.includes(s) && rules.hosts.includes(hostOf(u))) return true;
     if (rules.schemes.includes(s) && rules.domains.some((d) => under(hostOf(u), d))) return true;
     const o = originOf(u);
     return o !== null && extra.includes(o);
@@ -65,7 +66,7 @@ export function protectedOrigins(rules, extraOrigins = []) {
     if (d.endsWith('.')) d = d.slice(0, -1);
     if (d === '') return false;
     if (rules.domains.some((x) => under(d, x))) return true;
-    return [...rules.domains, ...extraHosts].some((h) => under(h, d));
+    return [...rules.domains, ...rules.hosts, ...extraHosts].some((h) => under(h, d));
   };
 
   const storageKey = (key) => {

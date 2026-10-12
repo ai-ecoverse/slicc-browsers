@@ -150,6 +150,7 @@ fn the_protected_vectors_parse_and_round_trip() {
         .all(|t| t.opener.as_deref().is_none_or(|o| openers.contains(&o))));
     let po = catalog().protected_origins;
     assert!(po.domains.iter().any(|d| d == "sliccy.ai"));
+    assert!(po.hosts.iter().any(|h| h == "vault.sliccy.ai"));
     assert_eq!(po.refusal, "slicc: refused: target is on seven's origin");
     assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
 }

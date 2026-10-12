@@ -114,7 +114,7 @@ func TestEveryCaseExpandsOnEveryOSItRunsOn(t *testing.T) {
 	}
 	all := []string{
 		sliccbrowsers.NeedUserDataDirs, sliccbrowsers.NeedProfiles, sliccbrowsers.NeedFlag, sliccbrowsers.NeedProcess,
-		sliccbrowsers.NeedProbe, sliccbrowsers.NeedOrigins, sliccbrowsers.NeedInstalled,
+		sliccbrowsers.NeedProbe, sliccbrowsers.NeedOrigins, sliccbrowsers.NeedInstalled, sliccbrowsers.NeedSix,
 	}
 	for _, c := range cases {
 		for _, goos := range []string{"darwin", "linux", "windows"} {
@@ -132,7 +132,7 @@ func TestEveryCaseExpandsOnEveryOSItRunsOn(t *testing.T) {
 				}
 			}
 			exp, err := c.ExpectedJSON(l)
-			if err != nil || bytes.Contains(exp, []byte("{home}")) || bytes.Contains(exp, []byte("{sevenProfiles}")) {
+			if err != nil || bytes.Contains(exp, []byte("{home}")) || bytes.Contains(exp, []byte("{sevenProfiles}")) || bytes.Contains(exp, []byte("{sixProfiles}")) {
 				t.Errorf("%s %s: expected %s, %v", c.Name, goos, exp, err)
 			}
 			if n := strings.Count(c.PSOutput(l, 77), "\n"); n != len(c.Input.Processes) {

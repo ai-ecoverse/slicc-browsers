@@ -6,6 +6,7 @@
       "home": "/Users/me",
       "config": "/Users/me/Library/Application Support",
       "sevenProfiles": "/Users/me/Library/Application Support/slicc/seven-profiles",
+      "sixProfiles": "/Users/me/Library/Application Support/Slicc/profiles",
       "userData:chrome": "/Users/me/Library/Application Support/Google/Chrome",
       "userData:opera": "/Users/me/Library/Application Support/com.operasoftware.Opera",
       "userData:atlas": null,
@@ -23,6 +24,7 @@
     "tokens": {
       "config": "C:\\Users\\me\\AppData\\Roaming",
       "sevenProfiles": "C:\\Users\\me\\AppData\\Roaming\\slicc\\seven-profiles",
+      "sixProfiles": "C:\\Users\\me\\AppData\\Local\\Slicc\\profiles",
       "userData:chrome": "C:\\Users\\me\\AppData\\Local\\Google\\Chrome\\User Data",
       "userData:opera": "C:\\Users\\me\\AppData\\Roaming\\Opera Software\\Opera Stable",
       "userData:arc": null
@@ -39,6 +41,7 @@
     "tokens": {
       "config": "D:\\Roaming",
       "sevenProfiles": "D:\\Roaming\\slicc\\seven-profiles",
+      "sixProfiles": "D:\\Local\\Slicc\\profiles",
       "userData:edge": "D:\\Local\\Microsoft\\Edge\\User Data"
     },
     "expand": {}
@@ -50,6 +53,7 @@
     "tokens": {
       "config": "/home/me/.config",
       "sevenProfiles": "/home/me/.config/slicc/seven-profiles",
+      "sixProfiles": "/home/me/.local/state/slicc/profiles",
       "userData:chromium": "/home/me/.config/chromium",
       "userData:brave": "/home/me/.config/BraveSoftware/Brave-Browser",
       "userData:edge-canary": null
@@ -72,10 +76,11 @@
   {
     "os": "linux",
     "home": "/home/me",
-    "env": { "XDG_CONFIG_HOME": "/xdg" },
+    "env": { "XDG_CONFIG_HOME": "/xdg", "XDG_STATE_HOME": "/state" },
     "tokens": {
       "config": "/xdg",
       "sevenProfiles": "/xdg/slicc/seven-profiles",
+      "sixProfiles": "/state/slicc/profiles",
       "userData:chrome": "/xdg/google-chrome"
     },
     "expand": {}

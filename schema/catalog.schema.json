@@ -54,13 +54,14 @@
         "tiers": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["sevenOpen", "endpoint", "chrome", "chromium", "electron"],
+          "required": ["sevenOpen", "endpoint", "chrome", "chromium", "electron", "six"],
           "properties": {
             "sevenOpen": { "$ref": "#/$defs/tier" },
             "endpoint": { "$ref": "#/$defs/tier" },
             "chrome": { "$ref": "#/$defs/tier" },
             "chromium": { "$ref": "#/$defs/tier" },
-            "electron": { "$ref": "#/$defs/tier" }
+            "electron": { "$ref": "#/$defs/tier" },
+            "six": { "$ref": "#/$defs/tier" }
           }
         },
         "chromeId": { "$ref": "#/$defs/id" }
@@ -171,13 +172,35 @@
     "profiles": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["root", "snapRoot", "legacyRoot", "sixProfilePattern", "namePattern"],
+      "required": ["root", "snapRoot", "legacyRoot", "sixProfilePattern", "namePattern", "six"],
       "properties": {
         "root": { "$ref": "#/$defs/segments" },
         "snapRoot": { "$ref": "#/$defs/segments" },
         "legacyRoot": { "$ref": "#/$defs/segments" },
         "sixProfilePattern": { "type": "string", "format": "regex" },
-        "namePattern": { "type": "string", "format": "regex" }
+        "namePattern": { "type": "string", "format": "regex" },
+        "six": {
+          "description": "SLICC six's Chrome profiles, used in place and never written to.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["roots", "defaultName", "defaultPort", "portSuffix", "userDataDirEnv"],
+          "properties": {
+            "roots": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["macos", "linux", "windows"],
+              "properties": {
+                "macos": { "$ref": "#/$defs/sixRoot" },
+                "linux": { "$ref": "#/$defs/sixRoot" },
+                "windows": { "$ref": "#/$defs/sixRoot" }
+              }
+            },
+            "defaultName": { "$ref": "#/$defs/name" },
+            "defaultPort": { "$ref": "#/$defs/port" },
+            "portSuffix": { "type": "string", "pattern": "\\{port\\}" },
+            "userDataDirEnv": { "$ref": "#/$defs/name" }
+          }
+        }
       }
     },
     "launch": {
@@ -253,7 +276,7 @@
     },
     "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
     "ports": { "type": "array", "items": { "$ref": "#/$defs/port" } },
-    "tier": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "tier": { "type": "integer", "minimum": 1, "maximum": 6 },
     "form": { "enum": ["six", "chrome-154"] },
     "pref": {
       "type": "object",
@@ -263,6 +286,16 @@
         "path": { "$ref": "#/$defs/segments" },
         "value": { "type": ["boolean", "number", "string"] },
         "form": { "$ref": "#/$defs/form" }
+      }
+    },
+    "sixRoot": {
+      "description": "A base location, then path segments under it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base", "path"],
+      "properties": {
+        "base": { "$ref": "#/$defs/location" },
+        "path": { "$ref": "#/$defs/segments" }
       }
     },
     "location": {

@@ -101,7 +101,9 @@ fn every_case_expands_on_every_os_it_runs_on() {
             }
             let expected = c.expected(&l).to_string();
             assert!(
-                !expected.contains("{home}") && !expected.contains("{sevenProfiles}"),
+                !expected.contains("{home}")
+                    && !expected.contains("{sevenProfiles}")
+                    && !expected.contains("{sixProfiles}"),
                 "{} {os}",
                 c.name
             );

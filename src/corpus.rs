@@ -10,6 +10,7 @@ pub const NEED_PROCESS: &str = "process";
 pub const NEED_PROBE: &str = "probe";
 pub const NEED_ORIGINS: &str = "origins";
 pub const NEED_INSTALLED: &str = "installed";
+pub const NEED_SIX: &str = "six";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Corpus {
@@ -48,6 +49,8 @@ pub struct Input {
     pub http: BTreeMap<String, Server>,
     #[serde(default)]
     pub installed: Vec<Value>,
+    #[serde(default)]
+    pub auto: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -134,6 +137,16 @@ impl Layout<'_> {
         self.under(&self.config(), &self.catalog.profiles.root)
     }
 
+    pub fn six_profiles(&self) -> String {
+        let roots = &self.catalog.profiles.six.roots;
+        let root = match self.os {
+            "darwin" => &roots.macos,
+            "windows" => &roots.windows,
+            _ => &roots.linux,
+        };
+        self.under(&self.resolve(&root.base, false), &root.path)
+    }
+
     pub fn windows_root(&self, name: &str) -> String {
         match self.catalog.platforms.windows.roots.get(name) {
             Some(loc) => self.resolve(loc, false),
@@ -181,6 +194,7 @@ impl Layout<'_> {
             "home" => Some(self.home.to_string()),
             "config" => Some(self.config()),
             "sevenProfiles" => Some(self.seven_profiles()),
+            "sixProfiles" => Some(self.six_profiles()),
             _ => {
                 let id = name.strip_prefix("userData:")?;
                 self.user_data_dirs(id).into_iter().next()
@@ -225,7 +239,7 @@ impl Layout<'_> {
 
 fn valid_token(name: &str) -> bool {
     match name {
-        "home" | "config" | "sevenProfiles" => true,
+        "home" | "config" | "sevenProfiles" | "sixProfiles" => true,
         _ => name.strip_prefix("userData:").is_some_and(|id| {
             !id.is_empty()
                 && id

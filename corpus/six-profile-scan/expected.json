@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "chrome",
+      "kind": "installed",
+      "tier": 3,
+      "name": "Google Chrome",
+      "version": "154.0.8037.98",
+      "installed": {
+        "id": "chrome",
+        "name": "Google Chrome",
+        "engine": "chromium",
+        "channel": "stable",
+        "version": "154.0.8037.98",
+        "path": "/opt/google/chrome/google-chrome",
+        "executable": "/opt/google/chrome/google-chrome",
+        "debugSupport": "supported"
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9311",
+      "kind": "endpoint",
+      "tier": 6,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9311",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9311/devtools/browser/x1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "devtools-active-port",
+        "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+        "six": true,
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "S1",
+            "url": "https://lars.sliccy.ai/",
+            "title": "seven"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9312",
+      "kind": "endpoint",
+      "tier": 6,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9312",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9312/devtools/browser/x2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "devtools-active-port",
+        "userDataDir": "{sixProfiles}/BROWSER-Coding-Agent-Chrome-5720",
+        "six": true,
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    }
+  ]
+}

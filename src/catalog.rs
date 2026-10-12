@@ -157,6 +157,7 @@ pub struct Seven {
 #[serde(rename_all = "camelCase")]
 pub struct ProtectedOrigins {
     pub domains: Vec<String>,
+    pub hosts: Vec<String>,
     pub schemes: Vec<String>,
     pub inner_schemes: Vec<String>,
     pub any_schemes: Vec<String>,

@@ -153,6 +153,13 @@ const po = catalog.protectedOrigins;
 if (!po.domains.every((d) => po.domains.every((x) => d === x || !d.endsWith(`.${x}`))))
   fail('catalog.json: protectedOrigins.domains lists a domain under another');
 const m = protectedOrigins(po, vectors.origins);
+const byName = protectedOrigins({ ...po, domains: [] });
+for (const h of po.hosts) {
+  if (!byName.url(`https://${h}/`) || !byName.cookieDomain(h))
+    fail(`catalog.json: ${h} in protectedOrigins.hosts isn't protected without domains`);
+  if (!vectors.urls.some((v) => v.protected && new URL(v.url).hostname === h))
+    fail(`protected.json: no vector for ${h}`);
+}
 const vectorChecks = [
   ['urls', (v) => m.url(v.url), (v) => v.url],
   ['targets', (v) => m.target(v), (v) => JSON.stringify(v)],

@@ -203,7 +203,7 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 		}
 	}
 	po := sliccbrowsers.Default().ProtectedOrigins
-	if !slices.Contains(po.Domains, "sliccy.ai") || !slices.Contains(po.Schemes, "https") || po.Refusal != "slicc: refused: target is on seven's origin" {
+	if !slices.Contains(po.Domains, "sliccy.ai") || !slices.Contains(po.Hosts, "vault.sliccy.ai") || !slices.Contains(po.Schemes, "https") || po.Refusal != "slicc: refused: target is on seven's origin" {
 		t.Fatalf("protectedOrigins: %+v", po)
 	}
 	s, ok := decode(t, sliccbrowsers.ProtectedSchemaJSON()).(map[string]any)

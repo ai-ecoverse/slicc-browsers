@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9332",
+      "kind": "endpoint",
+      "tier": 2,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9332",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/y2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "probe",
+        "sevenOpen": false,
+        "sevenTabs": []
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9331",
+      "kind": "endpoint",
+      "tier": 6,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9331",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/y1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "process",
+        "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+        "six": true,
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "S1",
+            "url": "https://lars.sliccy.ai/",
+            "title": "seven"
+          }
+        ]
+      }
+    }
+  ]
+}

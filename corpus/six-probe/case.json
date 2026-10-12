@@ -1,0 +1,44 @@
+{
+  "description": "A port probe hit that the process list maps to six's profile is six's; a probe hit the process list doesn't know ranks as usual",
+  "needs": ["six", "process", "probe"],
+  "probePorts": [9331, 9332],
+  "processes": [
+    {
+      "pid": 301,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9331 --user-data-dir={sixProfiles}/browser-coding-agent-chrome"
+    }
+  ],
+  "http": {
+    "127.0.0.1:9331": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/y1"
+      },
+      "list": [
+        {
+          "id": "S1",
+          "type": "page",
+          "url": "https://lars.sliccy.ai/",
+          "title": "seven",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+        }
+      ]
+    },
+    "127.0.0.1:9332": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/y2"
+      },
+      "list": []
+    }
+  },
+  "auto": "cdp:127.0.0.1:9332"
+}

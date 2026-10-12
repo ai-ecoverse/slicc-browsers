@@ -1,0 +1,65 @@
+{
+  "description": "A process whose --user-data-dir is one of six's profiles is six's: with a port, and with port 0 through the profile's DevToolsActivePort; other processes rank as usual and come first",
+  "needs": ["six", "process"],
+  "files": {
+    "{sixProfiles}/browser-coding-agent-chrome-5711/DevToolsActivePort": "9322\n/devtools/browser/x8\n"
+  },
+  "processes": [
+    {
+      "pid": 201,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9321 --user-data-dir={sixProfiles}/browser-coding-agent-chrome --no-first-run"
+    },
+    {
+      "pid": 202,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir={sixProfiles}/browser-coding-agent-chrome-5711"
+    },
+    {
+      "pid": 203,
+      "command": "/opt/google/chrome/chrome --remote-debugging-port=9323 --user-data-dir={home}/tmp/pw"
+    }
+  ],
+  "http": {
+    "127.0.0.1:9321": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9321/devtools/browser/x7"
+      },
+      "list": [
+        {
+          "id": "S1",
+          "type": "page",
+          "url": "https://lars.sliccy.ai/",
+          "title": "seven",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+        }
+      ]
+    },
+    "127.0.0.1:9322": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9322/devtools/browser/x8"
+      },
+      "list": []
+    },
+    "127.0.0.1:9323": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9323/devtools/browser/x9"
+      },
+      "list": []
+    }
+  },
+  "auto": "cdp:127.0.0.1:9323"
+}

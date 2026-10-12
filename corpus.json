@@ -2128,6 +2128,565 @@
       }
     },
     {
+      "name": "six-flag",
+      "case": {
+        "description": "A --cdp URL is still six's when the process list maps its port to six's profile: the flag wins as the source, and the endpoint keeps six's userDataDir",
+        "needs": [
+          "six",
+          "process",
+          "flag"
+        ],
+        "cdp": [
+          "127.0.0.1:9341"
+        ],
+        "processes": [
+          {
+            "pid": 401,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=9341 --user-data-dir={sixProfiles}/browser-coding-agent-chrome"
+          }
+        ],
+        "http": {
+          "127.0.0.1:9341": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9341/devtools/browser/z1"
+            },
+            "list": []
+          }
+        },
+        "auto": null
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9341",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9341",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9341/devtools/browser/z1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "flag",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+              "six": true,
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "six-probe",
+      "case": {
+        "description": "A port probe hit that the process list maps to six's profile is six's; a probe hit the process list doesn't know ranks as usual",
+        "needs": [
+          "six",
+          "process",
+          "probe"
+        ],
+        "probePorts": [
+          9331,
+          9332
+        ],
+        "processes": [
+          {
+            "pid": 301,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=9331 --user-data-dir={sixProfiles}/browser-coding-agent-chrome"
+          }
+        ],
+        "http": {
+          "127.0.0.1:9331": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/y1"
+            },
+            "list": [
+              {
+                "id": "S1",
+                "type": "page",
+                "url": "https://lars.sliccy.ai/",
+                "title": "seven",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+              }
+            ]
+          },
+          "127.0.0.1:9332": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/y2"
+            },
+            "list": []
+          }
+        },
+        "auto": "cdp:127.0.0.1:9332"
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9332",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9332",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9332/devtools/browser/y2",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "probe",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9331",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9331",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/y1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+              "six": true,
+              "sevenOpen": true,
+              "sevenTabs": [
+                {
+                  "id": "S1",
+                  "url": "https://lars.sliccy.ai/",
+                  "title": "seven"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "six-process-scan",
+      "case": {
+        "description": "A process whose --user-data-dir is one of six's profiles is six's: with a port, and with port 0 through the profile's DevToolsActivePort; other processes rank as usual and come first",
+        "needs": [
+          "six",
+          "process"
+        ],
+        "files": {
+          "{sixProfiles}/browser-coding-agent-chrome-5711/DevToolsActivePort": "9322\n/devtools/browser/x8\n"
+        },
+        "processes": [
+          {
+            "pid": 201,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=9321 --user-data-dir={sixProfiles}/browser-coding-agent-chrome --no-first-run"
+          },
+          {
+            "pid": 202,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=0 --user-data-dir={sixProfiles}/browser-coding-agent-chrome-5711"
+          },
+          {
+            "pid": 203,
+            "command": "/opt/google/chrome/chrome --remote-debugging-port=9323 --user-data-dir={home}/tmp/pw"
+          }
+        ],
+        "http": {
+          "127.0.0.1:9321": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9321/devtools/browser/x7"
+            },
+            "list": [
+              {
+                "id": "S1",
+                "type": "page",
+                "url": "https://lars.sliccy.ai/",
+                "title": "seven",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+              }
+            ]
+          },
+          "127.0.0.1:9322": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9322/devtools/browser/x8"
+            },
+            "list": []
+          },
+          "127.0.0.1:9323": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9323/devtools/browser/x9"
+            },
+            "list": []
+          }
+        },
+        "auto": "cdp:127.0.0.1:9323"
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9323",
+            "kind": "endpoint",
+            "tier": 2,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9323",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9323/devtools/browser/x9",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{home}/tmp/pw",
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9321",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9321",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9321/devtools/browser/x7",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "process",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+              "six": true,
+              "sevenOpen": true,
+              "sevenTabs": [
+                {
+                  "id": "S1",
+                  "url": "https://lars.sliccy.ai/",
+                  "title": "seven"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9322",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9322",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9322/devtools/browser/x8",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome-5711",
+              "six": true,
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "six-profile-scan",
+      "case": {
+        "description": "DevToolsActivePort in six's profiles (the default name and its -<port> variants, matched case-insensitively) gives endpoints marked six, in the last tier even with a seven tab open, after installed browsers; other names in six's root are never read, and nothing is chosen from six's profiles without being asked",
+        "needs": [
+          "six",
+          "installed"
+        ],
+        "files": {
+          "{sixProfiles}/browser-coding-agent-chrome/DevToolsActivePort": "9311\n/devtools/browser/x1\n",
+          "{sixProfiles}/BROWSER-Coding-Agent-Chrome-5720/DevToolsActivePort": "9312\n/devtools/browser/x2\n",
+          "{sixProfiles}/leader/DevToolsActivePort": "9313\n/devtools/browser/x3\n",
+          "{sixProfiles}/browser-coding-agent-chrome-old/DevToolsActivePort": "9314\n/devtools/browser/x4\n"
+        },
+        "http": {
+          "127.0.0.1:9311": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9311/devtools/browser/x1"
+            },
+            "list": [
+              {
+                "id": "S1",
+                "type": "page",
+                "url": "https://lars.sliccy.ai/",
+                "title": "seven",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+              }
+            ]
+          },
+          "127.0.0.1:9312": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9312/devtools/browser/x2"
+            },
+            "list": []
+          },
+          "127.0.0.1:9313": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9313/devtools/browser/x3"
+            },
+            "list": []
+          },
+          "127.0.0.1:9314": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9314/devtools/browser/x4"
+            },
+            "list": []
+          }
+        },
+        "installed": [
+          {
+            "id": "chrome",
+            "name": "Google Chrome",
+            "engine": "chromium",
+            "channel": "stable",
+            "version": "154.0.8037.98",
+            "path": "/opt/google/chrome/google-chrome",
+            "executable": "/opt/google/chrome/google-chrome",
+            "debugSupport": "supported"
+          }
+        ],
+        "auto": "chrome"
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "chrome",
+            "kind": "installed",
+            "tier": 3,
+            "name": "Google Chrome",
+            "version": "154.0.8037.98",
+            "installed": {
+              "id": "chrome",
+              "name": "Google Chrome",
+              "engine": "chromium",
+              "channel": "stable",
+              "version": "154.0.8037.98",
+              "path": "/opt/google/chrome/google-chrome",
+              "executable": "/opt/google/chrome/google-chrome",
+              "debugSupport": "supported"
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9311",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9311",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9311/devtools/browser/x1",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+              "six": true,
+              "sevenOpen": true,
+              "sevenTabs": [
+                {
+                  "id": "S1",
+                  "url": "https://lars.sliccy.ai/",
+                  "title": "seven"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9312",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9312",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9312/devtools/browser/x2",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{sixProfiles}/BROWSER-Coding-Agent-Chrome-5720",
+              "six": true,
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "six-user-data-dir",
+      "case": {
+        "description": "SLICC_USER_DATA_DIR, trimmed, is six's profile too, next to the ones in six's root; when every entry is six's, nothing is chosen without being asked",
+        "needs": [
+          "six"
+        ],
+        "env": {
+          "SLICC_USER_DATA_DIR": "  {home}/elsewhere/six-chrome  "
+        },
+        "files": {
+          "{home}/elsewhere/six-chrome/DevToolsActivePort": "9315\n/devtools/browser/x5\n",
+          "{sixProfiles}/browser-coding-agent-chrome/DevToolsActivePort": "9316\n/devtools/browser/x6\n"
+        },
+        "http": {
+          "127.0.0.1:9315": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9315/devtools/browser/x5"
+            },
+            "list": [
+              {
+                "id": "S1",
+                "type": "page",
+                "url": "https://lars.sliccy.ai/",
+                "title": "seven",
+                "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/S1"
+              }
+            ]
+          },
+          "127.0.0.1:9316": {
+            "version": {
+              "Browser": "Chrome/154.0.8037.98",
+              "Protocol-Version": "1.3",
+              "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "V8-Version": "15.4.79.1",
+              "WebKit-Version": "537.36 (@a1b2c3)",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9316/devtools/browser/x6"
+            },
+            "list": []
+          }
+        },
+        "auto": null
+      },
+      "expected": {
+        "schema": 1,
+        "minChromium": 116,
+        "entries": [
+          {
+            "id": "cdp:127.0.0.1:9315",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9315",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9315/devtools/browser/x5",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{home}/elsewhere/six-chrome",
+              "six": true,
+              "sevenOpen": true,
+              "sevenTabs": [
+                {
+                  "id": "S1",
+                  "url": "https://lars.sliccy.ai/",
+                  "title": "seven"
+                }
+              ]
+            }
+          },
+          {
+            "id": "cdp:127.0.0.1:9316",
+            "kind": "endpoint",
+            "tier": 6,
+            "name": "Chrome",
+            "version": "154.0.8037.98",
+            "endpoint": {
+              "cdp": "http://127.0.0.1:9316",
+              "webSocketDebuggerUrl": "ws://127.0.0.1:9316/devtools/browser/x6",
+              "name": "Chrome",
+              "version": "154.0.8037.98",
+              "product": "Chrome/154.0.8037.98",
+              "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+              "source": "devtools-active-port",
+              "userDataDir": "{sixProfiles}/browser-coding-agent-chrome",
+              "six": true,
+              "sevenOpen": false,
+              "sevenTabs": []
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "stale-active-port",
       "case": {
         "description": "A DevToolsActivePort is stale unless its port answers /json/version with the websocket path on the file's second line",

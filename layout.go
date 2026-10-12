@@ -12,7 +12,7 @@ type Layout struct {
 	Catalog *Catalog
 }
 
-var tokenRE = regexp.MustCompile(`\{(home|config|sevenProfiles|userData:[a-z0-9-]+)\}([^\s"',]*)`)
+var tokenRE = regexp.MustCompile(`\{(home|config|sevenProfiles|sixProfiles|userData:[a-z0-9-]+)\}([^\s"',]*)`)
 
 func (l Layout) catalog() *Catalog {
 	if l.Catalog != nil {
@@ -78,6 +78,18 @@ func (l Layout) SevenProfiles() string {
 	return l.Join(append([]string{l.Config()}, l.catalog().Profiles.Root...)...)
 }
 
+func (l Layout) SixProfiles() string {
+	r := l.catalog().Profiles.Six.Roots
+	root := r.Linux
+	switch l.OS {
+	case "darwin":
+		root = r.MacOS
+	case "windows":
+		root = r.Windows
+	}
+	return l.Join(append([]string{l.resolve(root.Base, false)}, root.Path...)...)
+}
+
 func (l Layout) WindowsRoot(name string) string {
 	return l.resolve(l.catalog().Platforms.Windows.Roots[name], false)
 }
@@ -120,6 +132,8 @@ func (l Layout) Token(name string) (string, bool) {
 		return l.Config(), true
 	case name == "sevenProfiles":
 		return l.SevenProfiles(), true
+	case name == "sixProfiles":
+		return l.SixProfiles(), true
 	case strings.HasPrefix(name, "userData:"):
 		dirs := l.UserDataDirs(strings.TrimPrefix(name, "userData:"))
 		if len(dirs) == 0 {

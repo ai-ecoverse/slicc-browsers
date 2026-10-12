@@ -580,7 +580,8 @@
       "endpoint": 2,
       "chrome": 3,
       "chromium": 4,
-      "electron": 5
+      "electron": 5,
+      "six": 6
     },
     "chromeId": "chrome"
   },
@@ -705,7 +706,27 @@
     "snapRoot": ["slicc", "seven-profiles"],
     "legacyRoot": ["slicc", "profiles"],
     "sixProfilePattern": "^browser-coding-agent-chrome(-[0-9]+)?$",
-    "namePattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    "namePattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+    "six": {
+      "roots": {
+        "macos": {
+          "base": { "home": ["Library", "Application Support"] },
+          "path": ["Slicc", "profiles"]
+        },
+        "linux": {
+          "base": { "env": "XDG_STATE_HOME", "home": [".local", "state"] },
+          "path": ["slicc", "profiles"]
+        },
+        "windows": {
+          "base": { "env": "LOCALAPPDATA", "home": ["AppData", "Local"] },
+          "path": ["Slicc", "profiles"]
+        }
+      },
+      "defaultName": "browser-coding-agent-chrome",
+      "defaultPort": 5710,
+      "portSuffix": "-{port}",
+      "userDataDirEnv": "SLICC_USER_DATA_DIR"
+    }
   },
   "launch": {
     "chromiumArgs": [

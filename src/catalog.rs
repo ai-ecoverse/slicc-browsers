@@ -102,6 +102,7 @@ pub struct Tiers {
     pub chrome: u8,
     pub chromium: u8,
     pub electron: u8,
+    pub six: u8,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -175,6 +176,30 @@ pub struct Profiles {
     pub legacy_root: Vec<String>,
     pub six_profile_pattern: String,
     pub name_pattern: String,
+    pub six: Six,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Six {
+    pub roots: SixRoots,
+    pub default_name: String,
+    pub default_port: u16,
+    pub port_suffix: String,
+    pub user_data_dir_env: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SixRoots {
+    pub macos: SixRoot,
+    pub linux: SixRoot,
+    pub windows: SixRoot,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SixRoot {
+    pub base: Location,
+    pub path: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

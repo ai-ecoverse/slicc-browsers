@@ -65,11 +65,21 @@ if (
     t.sevenOpen < t.endpoint &&
     t.endpoint < t.chrome &&
     t.chrome < t.chromium &&
-    t.chromium < t.electron
+    t.chromium < t.electron &&
+    t.electron < t.six
   )
 ) {
-  fail('catalog.json: tiers must rise from sevenOpen to electron');
+  fail('catalog.json: tiers must rise from sevenOpen to six');
 }
+const six = catalog.profiles.six;
+if (!new RegExp(catalog.profiles.sixProfilePattern, 'i').test(six.defaultName))
+  fail('catalog.json: profiles.six.defaultName does not match sixProfilePattern');
+if (
+  !new RegExp(catalog.profiles.sixProfilePattern, 'i').test(
+    `${six.defaultName}${six.portSuffix.replace('{port}', '5711')}`
+  )
+)
+  fail('catalog.json: a six port variant does not match sixProfilePattern');
 for (const pattern of [
   catalog.discovery.chromeMajorPattern,
   catalog.seven.originHostPattern,
@@ -112,9 +122,25 @@ for (const { name, case: c, expected } of corpus.cases ?? []) {
       const open = e.endpoint.sevenTabs.length > 0;
       if (e.endpoint.sevenOpen !== open)
         fail(`${label}: ${e.id} sevenOpen disagrees with sevenTabs`);
-      if ((e.tier === t.sevenOpen) !== open)
+      if (e.endpoint.six) {
+        if (e.tier !== t.six) fail(`${label}: ${e.id} is six's but not in tier ${t.six}`);
+      } else if ((e.tier === t.sevenOpen) !== open) {
         fail(`${label}: ${e.id} tier disagrees with sevenOpen`);
+      }
+    } else if (e.tier === t.six) {
+      fail(`${label}: ${e.id} is in tier ${t.six} but not six's`);
     }
+  }
+  const needsSix = c.needs?.includes('six') ?? false;
+  if (needsSix !== Object.hasOwn(c, 'auto')) fail(`${label}: needs six iff it has auto`);
+  if (!needsSix && expected.entries.some((e) => e.endpoint?.six))
+    fail(`${label}: lists six's endpoints without needing six`);
+  if (needsSix) {
+    const first = expected.entries.find((e) => !e.endpoint?.six);
+    if (c.auto !== (first?.id ?? null))
+      fail(
+        `${label}: auto is ${c.auto}, not the first entry that isn't six's (${first?.id ?? null})`
+      );
   }
   if (c.needs?.includes('installed') !== Array.isArray(c.installed))
     fail(`${label}: needs installed iff it has installed`);

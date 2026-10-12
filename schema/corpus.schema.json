@@ -46,7 +46,8 @@
               "process",
               "probe",
               "origins",
-              "installed"
+              "installed",
+              "six"
             ]
           }
         },
@@ -55,7 +56,7 @@
           "type": "object",
           "propertyNames": {
             "type": "string",
-            "pattern": "^\\{(home|config|sevenProfiles|userData:[a-z0-9-]+)\\}/[^\\\\]+$"
+            "pattern": "^\\{(home|config|sevenProfiles|sixProfiles|userData:[a-z0-9-]+)\\}/[^\\\\]+$"
           },
           "additionalProperties": { "type": "string" }
         },
@@ -99,6 +100,10 @@
         "installed": {
           "type": "array",
           "items": { "$ref": "browsers.schema.json#/$defs/installed" }
+        },
+        "auto": {
+          "description": "With needs six: the id of the first entry that isn't six's, or null.",
+          "type": ["string", "null"]
         }
       }
     }

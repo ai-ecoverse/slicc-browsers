@@ -17,7 +17,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/text" },
         "kind": { "enum": ["endpoint", "installed"] },
-        "tier": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "tier": { "type": "integer", "minimum": 1, "maximum": 6 },
         "name": { "type": "string" },
         "version": { "$ref": "#/$defs/text" },
         "endpoint": { "$ref": "#/$defs/endpoint" },
@@ -28,7 +28,7 @@
           "properties": {
             "kind": { "const": "endpoint" },
             "id": { "type": "string", "pattern": "^cdp:" },
-            "tier": { "enum": [1, 2] }
+            "tier": { "enum": [1, 2, 6] }
           },
           "required": ["endpoint"],
           "not": { "required": ["installed"] }
@@ -68,6 +68,7 @@
         "userDataDir": { "$ref": "#/$defs/text" },
         "profile": { "$ref": "#/$defs/text" },
         "wsOnly": { "const": true },
+        "six": { "const": true },
         "sevenOpen": { "type": "boolean" },
         "sevenTabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } }
       }

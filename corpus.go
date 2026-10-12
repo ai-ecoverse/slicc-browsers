@@ -21,6 +21,7 @@ const (
 	NeedProbe        = "probe"
 	NeedOrigins      = "origins"
 	NeedInstalled    = "installed"
+	NeedSix          = "six"
 )
 
 type Case struct {
@@ -41,6 +42,7 @@ type Input struct {
 	Processes   []FakeProcess     `json:"processes,omitempty"`
 	HTTP        map[string]Server `json:"http,omitempty"`
 	Installed   json.RawMessage   `json:"installed,omitempty"`
+	Auto        *string           `json:"auto,omitempty"`
 }
 
 type FakeProcess struct {

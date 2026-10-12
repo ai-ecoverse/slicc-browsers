@@ -66,7 +66,7 @@ Every feature builds for `wasm32-wasip1`.
   - `windows?`: `roots` (names from `platforms.windows.roots`, searched in order) and `executables` (each tried under each root); `dataRoot` and `dataDir`, the default user-data dir; `startMenuInternet?`, the browser's key names under the `StartMenuInternet` registry keys.
   - `linux?`: `bins` (names on `PATH`), `desktopIds` (`.desktop` file names without the suffix), `flatpak?` (the app id), `snap?` (the snap name), `snapDataDir?` (the user-data dir under `~/snap/<snap>/common`), `configDir` (the user-data dir under the config dir, also under `~/.var/app/<flatpak>/config` for a flatpak), and `debs` (dpkg package names for the version).
 - `electron`: `macosApps` (known Electron apps by bundle id, with display names), `debugBlocked` (app names that block remote debugging; they're listed with `debugSupport: "disabled"` and never launched), and `idPrefix` (`electron:`, followed by the slug of the name: lower case, runs of other characters as one `-`).
-- `rank`: `tiers`, 1 to 5: `sevenOpen` (an endpoint with a seven tab), `endpoint` (any other endpoint), `chrome` (installed `chromeId`), `chromium` (other installed Chromium browsers), `electron` (installed Electron apps).
+- `rank`: `tiers`, 1 to 6: `sevenOpen` (an endpoint with a seven tab), `endpoint` (any other endpoint), `chrome` (installed `chromeId`), `chromium` (other installed Chromium browsers), `electron` (installed Electron apps), `six` (an endpoint in SLICC six's profile, with or without a seven tab; see [SLICC six's profiles](#slicc-sixs-profiles)).
 - `discovery`:
   - `activePortFile` (`DevToolsActivePort`): its first line is the port (1 to 65535) and its second the browser's websocket path, which starts with `/`. A file without both is ignored. A file is live only when its port answers `/json/version` with a `webSocketDebuggerUrl` whose path is that websocket path; otherwise it's stale and ignored. When the port accepts connections but serves no `/json/version`, the endpoint is listed as `wsOnly`, with `ws://127.0.0.1:<port><path>`;
   - `probePorts` (9222 to 9229, probed by `slicc` only);
@@ -82,7 +82,10 @@ Every feature builds for `wasm32-wasip1`.
   - `discardExceptions`: where the site pattern and the extra origins' hosts go, as a `list` of strings or as a `chrome-time-map`, a map from site to the time it was added (microseconds since 1601-01-01 UTC, as a decimal string);
   - `cleanExit`: values that mark the last exit clean;
   - `form` says where a key comes from: `six` (SLICC six's keys) or `chrome-154` (what Chrome 154 reads).
-- `profiles`: SLICC profiles live in `<config dir>/<root>/<name>`, and a snap's in `~/snap/<snap>/common/<snapRoot>/<name>`. `legacyRoot` is the old root, which SLICC six also uses, and `sixProfilePattern` matches six's profile names; neither is ever scanned. `namePattern` is a valid profile name.
+- `profiles`: SLICC profiles live in `<config dir>/<root>/<name>`, and a snap's in `~/snap/<snap>/common/<snapRoot>/<name>`. `legacyRoot` is the old root, never scanned; on macOS's case-insensitive volume it is SLICC six's root too. `sixProfilePattern` matches six's profile names, case-insensitively. `namePattern` is a valid profile name. `six` describes SLICC six's Chrome profiles (see [SLICC six's profiles](#slicc-sixs-profiles)):
+  - `roots`: six's profile root per OS (`macos`, `linux`, `windows`), a `base` location followed by the `path` segments. The base is its `env` when that is set and not empty (any value, as six takes it), else `home` under the home dir.
+  - `defaultName` (`browser-coding-agent-chrome`), `defaultPort` (5710) and `portSuffix` (`-{port}`): six's profile for its serve port `<port>` is `<root>/<defaultName>`, with `portSuffix` added for any port other than `defaultPort`.
+  - `userDataDirEnv` (`SLICC_USER_DATA_DIR`): when set, its value, trimmed of whitespace, is six's profile for every port, unless it is empty.
 - `launch`: `chromiumArgs` (with `{profile}` for the profile dir), then the seven flags, then `headless` with `--headless`. Electron apps get `electron.portFlag` with the first free port from `electron.minPort` up that isn't in `electron.reservedPorts`.
 - `platforms`: the config dir per OS, the Windows roots, and the Windows registry keys. A location is the environment variable `env` when it's set (on Linux only an absolute path counts), else `absolute`, else `home` under the home dir. `registry`: under each of `hives`, every subkey of each `startMenuInternet` key, with its `openCommand` default value, and the default value of `appPaths\<name>` for each of `appPathNames`.
 
@@ -93,13 +96,40 @@ The process scan finds browsers started with a debugging port by something else:
 - **What's skipped:** pid 0, the scanning process itself, and commands whose first token is a wrapper. The first token is the quoted string when the command starts with a quote. A wrapper is a token whose base name, without `.exe`, `.cmd` or `.bat`, is one of `wrappers`, case-insensitively. A command with no executable before its first `-` token is skipped too.
 - **The port** comes from the first `--remote-debugging-port` followed by `=` or whitespace and then digits. A port above 65535 drops the process.
 - **The dir** is the value of `--user-data-dir` at the start of a token, followed by `=` or by whitespace (which is skipped). A value that starts with one of `valueQuotes` (`"` or `'`) runs to the matching quote. Any other value runs up to the first whitespace that is followed by `valueStop` (`--`), or to the end of the command, without trailing whitespace. So `--user-data-dir=/Users/me/Library/Application Support/x --no-first-run` gives `/Users/me/Library/Application Support/x`. A value that would start with `--` is empty.
-- **Port 0** means the port is in the dir's `DevToolsActivePort`, checked like any other. With no dir, or a dir under the legacy profile root (a `slicc` segment followed by `profiles`, case-insensitively), the process is skipped.
+- **Port 0** means the port is in the dir's `DevToolsActivePort`, checked like any other. With no dir, or a dir under the legacy profile root (a `slicc` segment followed by `profiles`, case-insensitively) that isn't one of [six's profile dirs](#slicc-sixs-profiles), the process is skipped.
 - **Any other port** is probed on `127.0.0.1`. An endpoint from the process scan has `source: "process"` and `userDataDir` set to the dir when there is one.
 - **Tests** must fake the process list: never scan the real one in a test.
 
+## SLICC six's profiles
+
+SLICC six launches Chrome in a profile of its own, and slicc-cli can use that profile in place (`slicc --profile six`). Discovery never chooses it: its endpoints are listed, marked and ranked last.
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| six's root | `~/Library/Application Support/Slicc/profiles` | `$XDG_STATE_HOME/slicc/profiles`, else `~/.local/state/slicc/profiles` | `%LOCALAPPDATA%\Slicc\profiles`, else `~\AppData\Local\Slicc\profiles` |
+
+Taken from [ai-ecoverse/slicc](https://github.com/ai-ecoverse/slicc) at `65c5a79b4` (v6.247.17-8):
+
+| what | where |
+| --- | --- |
+| the root per OS | `packages/node-server/src/chrome-launch.ts:119-136` (`resolveProfilesDir`); `packages/swift-server/Sources/Browser/ChromeLauncher.swift:314-322` (macOS only) |
+| `browser-coding-agent-chrome` | `chrome-launch.ts:27`; `ChromeLauncher.swift:5` |
+| the `-<port>` suffix for a serve port other than 5710 | `chrome-launch.ts:147`; `ChromeLauncher.swift:6`, `:323` |
+| `SLICC_USER_DATA_DIR`, trimmed | `chrome-launch.ts:143-146` (node-server only) |
+| six's own `--remote-debugging-port` (9222 by default) | `chrome-launch.ts:283`, `packages/node-server/src/runtime-flags.ts:47`; `ChromeLauncher.swift:213` |
+
+**Six's profile dirs** are the dirs in six's root whose name matches `sixProfilePattern` case-insensitively, and the `SLICC_USER_DATA_DIR` dir. A dir found anywhere is six's when it is one of them: the paths are compared case-insensitively, with `/` and `\` alike, and after resolving symlinks where the program can (so a symlink to six's profile, or a symlinked root, is six's too).
+
+**Discovery** marks an endpoint `six: true` when one of its sources found it in six's profile:
+- `DevToolsActivePort` in each of six's profile dirs, checked like any other. No other dir in six's root is read.
+- The process list: a process whose `--user-data-dir` is six's. With port 0 its `DevToolsActivePort` is read, which the legacy-root rule would otherwise skip.
+- Merging: an endpoint is six's when any source that found it, and whose checks passed, is six's. So a port probe hit or a `--cdp` URL that the process list maps to six's profile is six's, while a stale `DevToolsActivePort` in six's profile marks nothing. Its `userDataDir` is six's dir when the source that wins has none.
+
+A six endpoint has tier `six`, whatever its seven tabs. **A program never chooses it by itself**: a default choice, an "attach to the best" rule, or a non-interactive mode skips it. Only an explicit request for six's profile unlocks it, such as `slicc --profile six` or picking it in a picker.
+
 ## Output schema 1
 
-`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`.
+`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6).
 
 ## The corpus
 
@@ -107,15 +137,16 @@ Each case is a fake machine: a home tree, `DevToolsActivePort` files, fake `/jso
 
 **`case.json`:**
 - `description`, and `os?`: the OSes the case runs on (`darwin`, `linux`, `windows`; default all).
-- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes, `slicc` only), `origins` (extra seven origins), `installed` (ranking installed browsers). A program skips a case that needs something it doesn't do.
+- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes, `slicc` only), `origins` (extra seven origins), `installed` (ranking installed browsers), `six` (finding and marking SLICC six's profiles). A program skips a case that needs something it doesn't do.
 - `env?`: environment variables for discovery, which sees nothing else from the real environment.
 - `files?`: file contents by path. Every path starts with a token.
 - `cdp?`, `origins?`, `probePorts?`: `--cdp` URLs, extra seven origins, and the ports to probe.
 - `processes?`: `{ "pid", "command" }`, or `{ "self": true, "command" }` for the scanning process, whose pid the harness fills in.
 - `http?`: fake servers by `host:port`. `localhost` and `[::1]` are `127.0.0.1`. A listed port accepts TCP connections. `/json/version` answers 200 with `version`, `/json/list` (and `/json`) with `list`. A missing body, or any other path, answers 404. An unlisted port refuses connections.
 - `installed?`: installed browsers in the shape of output schema 1's `installed`, ranked along with the endpoints.
+- `auto`: exactly in the cases that need `six`, the id of the first entry in `expected.json` that isn't six's, or `null` when every entry is. A program that chooses without being asked must choose no entry before it, and never a six entry.
 
-**Tokens.** `{home}` (the fake home), `{config}` (the config dir), `{sevenProfiles}` (the profile root) and `{userData:<id>}` (the browser's first default user-data dir on this OS) stand for directories. In `files`, `env`, `cdp`, process commands and `expected.json`, a token and the path characters after it (up to whitespace, `"`, `'` or `,`) become a path on the OS under test, with `\` on Windows. The token values come from `catalog.json`, with the case's `env`.
+**Tokens.** `{home}` (the fake home), `{config}` (the config dir), `{sevenProfiles}` (the profile root), `{sixProfiles}` (SLICC six's root) and `{userData:<id>}` (the browser's first default user-data dir on this OS) stand for directories. In `files`, `env`, `cdp`, process commands and `expected.json`, a token and the path characters after it (up to whitespace, `"`, `'` or `,`) become a path on the OS under test, with `\` on Windows. The token values come from `catalog.json`, with the case's `env`.
 
 **Never 9222 to 9229.** A developer's own Chrome listens there. The corpus schema refuses those ports, `npm run validate` refuses them anywhere in the corpus, and the fakes never serve them.
 
@@ -161,13 +192,13 @@ for case in corpus().cases {
 }
 ```
 
-`Layout` also gives `Config`, `SevenProfiles`, `UserDataDirs(id)`, `Token(name)` and `Expand(text)` (Rust: `config`, `seven_profiles`, `user_data_dirs`, `token`, `expand`). Their results for a few homes are pinned in `test/integration/layout.json`, which the Go and Rust tests both check.
+`Layout` also gives `Config`, `SevenProfiles`, `SixProfiles`, `UserDataDirs(id)`, `Token(name)` and `Expand(text)` (Rust: `config`, `seven_profiles`, `six_profiles`, `user_data_dirs`, `token`, `expand`). Their results for a few homes are pinned in `test/integration/layout.json`, which the Go and Rust tests both check.
 
 ## Development
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json` and `corpus.json` against the schemas, plus what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order and `sevenOpen` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json` and `corpus.json` against the schemas, plus what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

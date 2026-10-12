@@ -90,6 +90,7 @@ type Tiers struct {
 	Chrome    int `json:"chrome"`
 	Chromium  int `json:"chromium"`
 	Electron  int `json:"electron"`
+	Six       int `json:"six"`
 }
 
 type Discovery struct {
@@ -149,6 +150,26 @@ type Profiles struct {
 	LegacyRoot        []string `json:"legacyRoot"`
 	SixProfilePattern string   `json:"sixProfilePattern"`
 	NamePattern       string   `json:"namePattern"`
+	Six               Six      `json:"six"`
+}
+
+type Six struct {
+	Roots          SixRoots `json:"roots"`
+	DefaultName    string   `json:"defaultName"`
+	DefaultPort    int      `json:"defaultPort"`
+	PortSuffix     string   `json:"portSuffix"`
+	UserDataDirEnv string   `json:"userDataDirEnv"`
+}
+
+type SixRoots struct {
+	MacOS   SixRoot `json:"macos"`
+	Linux   SixRoot `json:"linux"`
+	Windows SixRoot `json:"windows"`
+}
+
+type SixRoot struct {
+	Base Location `json:"base"`
+	Path []string `json:"path"`
 }
 
 type Launch struct {

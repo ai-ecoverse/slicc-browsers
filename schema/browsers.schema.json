@@ -31,7 +31,12 @@
             "tier": { "enum": [1, 2, 6] }
           },
           "required": ["endpoint"],
-          "not": { "required": ["installed"] }
+          "not": { "required": ["installed"] },
+          "if": { "properties": { "tier": { "const": 6 } } },
+          "then": { "properties": { "endpoint": { "type": "object", "required": ["six"] } } },
+          "else": {
+            "properties": { "endpoint": { "type": "object", "not": { "required": ["six"] } } }
+          }
         },
         {
           "properties": {

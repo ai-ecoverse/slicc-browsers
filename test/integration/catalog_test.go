@@ -24,6 +24,20 @@ func decode(t *testing.T, b []byte) any {
 	return v
 }
 
+func TestIsSevenLabel(t *testing.T) {
+	seven := sliccbrowsers.Default().Seven
+	for _, label := range []string{"seven", "link-websockets"} {
+		if !seven.IsSevenLabel(label) {
+			t.Errorf("IsSevenLabel(%q) = false, want true", label)
+		}
+	}
+	for _, label := range []string{"", "www", "vault", "vault-preview", "get", "mcpcat", "vault-feature-x"} {
+		if seven.IsSevenLabel(label) {
+			t.Errorf("IsSevenLabel(%q) = true, want false", label)
+		}
+	}
+}
+
 func TestTheTypedCatalogCoversEveryField(t *testing.T) {
 	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.CatalogJSON()))
 	d.DisallowUnknownFields()

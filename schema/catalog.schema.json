@@ -150,6 +150,7 @@
         "originScheme": { "const": "https" },
         "originHostPattern": { "type": "string", "format": "regex" },
         "excludedLabels": { "$ref": "#/$defs/names" },
+        "excludedLabelPrefixes": { "$ref": "#/$defs/names", "default": [] },
         "sitePattern": { "$ref": "#/$defs/name" },
         "switches": { "type": "array", "items": { "type": "string", "pattern": "^--" } },
         "disabledFeatures": { "$ref": "#/$defs/names" },

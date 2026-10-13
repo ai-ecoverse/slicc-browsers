@@ -20,6 +20,25 @@ fn strip_nulls(v: Value) -> Value {
 }
 
 #[test]
+fn is_seven_label() {
+    let seven = &catalog().seven;
+    for label in ["seven", "link-websockets"] {
+        assert!(seven.is_seven_label(label), "{label} should be seven");
+    }
+    for label in [
+        "",
+        "www",
+        "vault",
+        "vault-preview",
+        "get",
+        "mcpcat",
+        "vault-feature-x",
+    ] {
+        assert!(!seven.is_seven_label(label), "{label} should not be seven");
+    }
+}
+
+#[test]
 fn the_typed_catalog_round_trips_every_field() {
     let typed = catalog();
     let raw: Value = serde_json::from_str(CATALOG).unwrap();

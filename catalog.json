@@ -642,7 +642,8 @@
   "seven": {
     "originScheme": "https",
     "originHostPattern": "^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.sliccy\\.ai$",
-    "excludedLabels": ["www"],
+    "excludedLabels": ["www", "vault", "vault-preview", "get", "mcpcat"],
+    "excludedLabelPrefixes": ["vault-"],
     "sitePattern": "[*.]sliccy.ai",
     "switches": [
       "--disable-background-timer-throttling",
@@ -719,15 +720,23 @@
     "six": {
       "roots": {
         "macos": {
-          "base": { "home": ["Library", "Application Support"] },
+          "base": {
+            "home": ["Library", "Application Support"]
+          },
           "path": ["Slicc", "profiles"]
         },
         "linux": {
-          "base": { "env": "XDG_STATE_HOME", "home": [".local", "state"] },
+          "base": {
+            "env": "XDG_STATE_HOME",
+            "home": [".local", "state"]
+          },
           "path": ["slicc", "profiles"]
         },
         "windows": {
-          "base": { "env": "LOCALAPPDATA", "home": ["AppData", "Local"] },
+          "base": {
+            "env": "LOCALAPPDATA",
+            "home": ["AppData", "Local"]
+          },
           "path": ["Slicc", "profiles"]
         }
       },

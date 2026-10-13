@@ -125,7 +125,7 @@ type Seven struct {
 	OriginScheme          string             `json:"originScheme"`
 	OriginHostPattern     string             `json:"originHostPattern"`
 	ExcludedLabels        []string           `json:"excludedLabels"`
-	ExcludedLabelPrefixes []string           `json:"excludedLabelPrefixes"`
+	ExcludedLabelPrefixes []string           `json:"excludedLabelPrefixes,omitempty"`
 	SitePattern           string             `json:"sitePattern"`
 	Switches              []string           `json:"switches"`
 	DisabledFeatures      []string           `json:"disabledFeatures"`

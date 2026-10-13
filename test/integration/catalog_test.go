@@ -24,6 +24,41 @@ func decode(t *testing.T, b []byte) any {
 	return v
 }
 
+func TestIsSevenLabel(t *testing.T) {
+	seven := sliccbrowsers.Default().Seven
+	for _, label := range []string{"seven", "link-websockets"} {
+		if !seven.IsSevenLabel(label) {
+			t.Errorf("IsSevenLabel(%q) = false, want true", label)
+		}
+	}
+	for _, label := range []string{"", "www", "vault", "vault-preview", "get", "mcpcat", "vault-feature-x"} {
+		if seven.IsSevenLabel(label) {
+			t.Errorf("IsSevenLabel(%q) = true, want false", label)
+		}
+	}
+}
+
+func TestSevenWithoutPrefixesRoundTrips(t *testing.T) {
+	original := []byte(`{"originScheme":"https","originHostPattern":"^x$","excludedLabels":["www"],"sitePattern":"s","switches":[],"disabledFeatures":[],"prefs":[],"discardExceptions":[],"cleanExit":[]}`)
+	var s sliccbrowsers.Seven
+	if err := json.Unmarshal(original, &s); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.ExcludedLabelPrefixes) != 0 {
+		t.Fatalf("expected nil/empty prefixes, got %v", s.ExcludedLabelPrefixes)
+	}
+	back, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decode(t, back), decode(t, original)) {
+		t.Fatalf("round-trip failed:\n  got  %s\n  want %s", back, original)
+	}
+	if s.IsSevenLabel("vault") != true {
+		t.Error("IsSevenLabel(vault) should be true without excludedLabelPrefixes")
+	}
+}
+
 func TestTheTypedCatalogCoversEveryField(t *testing.T) {
 	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.CatalogJSON()))
 	d.DisallowUnknownFields()

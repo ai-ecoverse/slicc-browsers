@@ -145,12 +145,33 @@ pub struct Seven {
     pub origin_scheme: String,
     pub origin_host_pattern: String,
     pub excluded_labels: Vec<String>,
+    #[serde(default)]
+    pub excluded_label_prefixes: Vec<String>,
     pub site_pattern: String,
     pub switches: Vec<String>,
     pub disabled_features: Vec<String>,
     pub prefs: Vec<Pref>,
     pub discard_exceptions: Vec<DiscardException>,
     pub clean_exit: Vec<Pref>,
+}
+
+impl Seven {
+    pub fn is_seven_label(&self, label: &str) -> bool {
+        if label.is_empty() {
+            return false;
+        }
+        if self.excluded_labels.iter().any(|e| e == label) {
+            return false;
+        }
+        if self
+            .excluded_label_prefixes
+            .iter()
+            .any(|p| label.starts_with(p.as_str()))
+        {
+            return false;
+        }
+        true
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

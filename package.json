@@ -27,6 +27,7 @@
     "./corpus.json": "./corpus.json",
     "./protected.json": "./protected.json",
     "./protected.mjs": "./protected.mjs",
+    "./seven.mjs": "./seven.mjs",
     "./schema/catalog.schema.json": "./schema/catalog.schema.json",
     "./schema/browsers.schema.json": "./schema/browsers.schema.json",
     "./schema/corpus.schema.json": "./schema/corpus.schema.json",
@@ -38,6 +39,7 @@
     "corpus.json",
     "protected.json",
     "protected.mjs",
+    "seven.mjs",
     "schema"
   ],
   "scripts": {

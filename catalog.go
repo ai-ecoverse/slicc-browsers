@@ -122,15 +122,16 @@ type Process struct {
 }
 
 type Seven struct {
-	OriginScheme      string             `json:"originScheme"`
-	OriginHostPattern string             `json:"originHostPattern"`
-	ExcludedLabels    []string           `json:"excludedLabels"`
-	SitePattern       string             `json:"sitePattern"`
-	Switches          []string           `json:"switches"`
-	DisabledFeatures  []string           `json:"disabledFeatures"`
-	Prefs             []Pref             `json:"prefs"`
-	DiscardExceptions []DiscardException `json:"discardExceptions"`
-	CleanExit         []Pref             `json:"cleanExit"`
+	OriginScheme          string             `json:"originScheme"`
+	OriginHostPattern     string             `json:"originHostPattern"`
+	ExcludedLabels        []string           `json:"excludedLabels"`
+	ExcludedLabelPrefixes []string           `json:"excludedLabelPrefixes,omitempty"`
+	SitePattern           string             `json:"sitePattern"`
+	Switches              []string           `json:"switches"`
+	DisabledFeatures      []string           `json:"disabledFeatures"`
+	Prefs                 []Pref             `json:"prefs"`
+	DiscardExceptions     []DiscardException `json:"discardExceptions"`
+	CleanExit             []Pref             `json:"cleanExit"`
 }
 
 type Pref struct {
@@ -280,4 +281,21 @@ func (c *Catalog) Priority(id string) int {
 		}
 	}
 	return len(c.Browsers)
+}
+
+func (s *Seven) IsSevenLabel(label string) bool {
+	if label == "" {
+		return false
+	}
+	for _, excluded := range s.ExcludedLabels {
+		if label == excluded {
+			return false
+		}
+	}
+	for _, prefix := range s.ExcludedLabelPrefixes {
+		if len(label) >= len(prefix) && label[:len(prefix)] == prefix {
+			return false
+		}
+	}
+	return true
 }

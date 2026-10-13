@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { protectedOrigins } from '../protected.mjs';
+import { isSevenLabel } from '../seven.mjs';
 import { bundle } from './corpus.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,6 +89,17 @@ for (const pattern of [
   catalog.profiles.namePattern,
 ]) {
   new RegExp(pattern);
+}
+
+const sevenLabelsTrue = ['seven', 'link-websockets'];
+const sevenLabelsFalse = ['', 'www', 'vault', 'vault-preview', 'get', 'mcpcat', 'vault-feature-x'];
+for (const label of sevenLabelsTrue) {
+  if (!isSevenLabel(catalog.seven, label))
+    fail(`isSevenLabel(${JSON.stringify(label)}) should be true`);
+}
+for (const label of sevenLabelsFalse) {
+  if (isSevenLabel(catalog.seven, label))
+    fail(`isSevenLabel(${JSON.stringify(label)}) should be false`);
 }
 
 let text = '';

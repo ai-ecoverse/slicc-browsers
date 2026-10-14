@@ -4,7 +4,7 @@ The browser catalog, JSON schemas and conformance corpus shared by the two progr
 - `slicc browsers` and `slicc launch` in [slicc-cli](https://github.com/ai-ecoverse/slicc-cli) (Go, `CGO_ENABLED=0`);
 - `playwright-cli list` and `open` in [slicc-cdp](https://github.com/ai-ecoverse/slicc-cdp) (Rust, also built for `wasm32-wasip1`).
 
-It also holds the [protected origins](#protected-origins): the origins browser control must never reach, which slicc-agent checks too.
+It also holds the [protected origins](#protected-origins): the origins browser control must never reach, which slicc-agent checks too. It also holds the [guard vectors](#guard-vectors), which every CDP guard runs: bios, slicc-cdp, slicc-extension and slicc-cli.
 
 They can't share code, so they share data. Three packages wrap the same files, at one version:
 
@@ -24,6 +24,8 @@ They can't share code, so they share data. Three packages wrap the same files, a
 | `corpus.json` | every case in one file, generated from `corpus/` by `npm run corpus` |
 | `protected.json`, `schema/protected.schema.json` | the protected-origin test vectors and their schema |
 | `protected.mjs` | the reference protected-origin matcher, in JavaScript (npm only) |
+| `guard-vectors.json`, `schema/guard-vectors.schema.json` | the guard vectors and their schema |
+| `guard-driver.mjs` | the guard vectors' beacon and canary helpers, in JavaScript (npm only) |
 
 ## Go
 
@@ -38,6 +40,7 @@ b, ok := c.Browser("chrome")
 - `(*Catalog).Browser(id)` and `(*Catalog).Priority(id)`, the index in `browsers` (its length for an unknown id).
 - `CatalogJSON()`, `CatalogSchemaJSON()`, `BrowsersSchemaJSON()`, `CorpusJSON()`, `ProtectedJSON()` and `ProtectedSchemaJSON()` return copies of the embedded files.
 - `(*Catalog).ProtectedOrigins` is `catalog.json`'s `protectedOrigins`. `Protected() (*ProtectedVectors, error)` parses `protected.json` (`Origins`, `URLs`, `Targets`, `CookieDomains`, `StorageKeys`; a target's `Opener` is `""`, `OpenerProtected`, `OpenerUnprotected` or `OpenerUnknown`).
+- `Guard() (*GuardVectors, error)` parses `guard-vectors.json`; `GuardVectorsJSON()` and `GuardVectorsSchemaJSON()` return copies of the files. `Guard()` parses it into `SchemaVersion`, `SetVersion`, `Targets`, `Variants`, `Placeholders` and `Vectors`. A `GuardExpected` is `Checks` (names to booleans) or `Text`. The `GuardTarget*`, `GuardOrdinary`, `GuardSameSite`, `GuardKind*`, `GuardVia*`, `GuardScopeAny`, `GuardControl` and `GuardGuarded` constants name the values.
 - `Corpus() ([]Case, error)` returns the cases. See [Running the corpus](#running-the-corpus) for the helpers.
 
 ## Rust
@@ -50,15 +53,17 @@ slicc-browsers = "1"
 slicc-browsers = { version = "1", features = ["corpus"] }
 ```
 
-- Always: `CATALOG`, `CATALOG_SCHEMA`, `BROWSERS_SCHEMA`, `CORPUS_SCHEMA` and `PROTECTED_SCHEMA`, each the file's text via `include_str!`, and `SCHEMA` (1). No dependencies.
+- Always: `CATALOG`, `CATALOG_SCHEMA`, `BROWSERS_SCHEMA`, `CORPUS_SCHEMA`, `PROTECTED_SCHEMA` and `GUARD_VECTORS_SCHEMA`, each the file's text via `include_str!`, and `SCHEMA` (1). No dependencies.
 - Feature `serde`: `Catalog` and the other types (`protected_origins` is a `ProtectedOrigins`), `Catalog::parse(&str)`, `catalog()` (parses `CATALOG`), `Catalog::browser` and `Catalog::priority`. It pulls in `serde` and `serde_json`.
-- Feature `corpus` (implies `serde`): `CORPUS` and `PROTECTED`, the text of `corpus.json` and `protected.json`; the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below; and the module `protected` with `vectors()`, `Vectors` and the `OPENER_*` constants. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
+- Feature `corpus` (implies `serde`): `CORPUS`, `PROTECTED` and `GUARD_VECTORS`, the text of `corpus.json`, `protected.json` and `guard-vectors.json`; the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below; the module `protected` with `vectors()`, `Vectors` and the `OPENER_*` constants; and the module `guard` with `vectors()`, `Vectors`, `Vector`, `Step`, `Expected` (`Checks` or `Text`), and the `TARGET_*`, `ORDINARY*`, `KIND_*`, `VIA_*`, `SCOPE_ANY`, `CONTROL` and `GUARDED` constants. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
 
 Every feature builds for `wasm32-wasip1`.
 
 ## npm
 
-`import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' }`. The exports are `.` (`catalog.json`), `./catalog.json`, `./corpus.json`, `./protected.json`, `./protected.mjs`, `./schema/catalog.schema.json`, `./schema/browsers.schema.json`, `./schema/corpus.schema.json` and `./schema/protected.schema.json`.
+`import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' }`. The exports are `.` (`catalog.json`), `./catalog.json`, `./corpus.json`, `./protected.json`, `./protected.mjs`, `./guard-vectors.json`, `./guard-driver.mjs`, `./schema/catalog.schema.json`, `./schema/browsers.schema.json`, `./schema/corpus.schema.json`, `./schema/protected.schema.json` and `./schema/guard-vectors.schema.json`.
+
+`guard-driver.mjs` is described under [Guard vectors](#guard-vectors).
 
 `protected.mjs` is the reference matcher for [protected origins](#protected-origins): `import { protectedOrigins } from '@ai-ecoverse/slicc-browsers/protected.mjs'`, then `protectedOrigins(catalog.protectedOrigins, extraOrigins)` returns `{ url(text), target({ url, previous, opener }), cookieDomain(domain), storageKey(key) }`, each a boolean. It needs only the WHATWG `URL`, so it runs in Node and in a browser.
 
@@ -122,6 +127,109 @@ A same-site frame shares its parent's process and has no target of its own. Ever
 **Refusals** carry the text in `refusal`, `slicc: refused: target is on seven's origin`.
 
 **`protected.json`** (schema `schema/protected.schema.json`): `origins`, the extra origins every vector runs with; `urls` (`url`, `protected`); `targets` (`url`, `previous?`, whether the target was protected before; `opener?`, `protected`, `unprotected` or `unknown`, and no `opener` for a target without one; `protected`); `cookieDomains` (`domain`, `protected`); `storageKeys` (`key`, `protected`). `npm run validate` runs every vector through `protected.mjs`, and no vector uses a port from 9222 to 9229.
+
+## Guard vectors
+
+Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-vectors.schema.json`): bios, slicc-cdp, slicc-extension and slicc-cli. The sources are listed in `sources`:
+- slicc-cli's `protectVectors` at `2d5d981` (`test/integration/testdata/link/protect.js`), with the ids kept;
+- slicc-cdp's `test/integration/guard-vectors.json` at `4907a45`, where its `E1`, `E2`, `E3`, `E5` and `B2` are renamed `E1.onload`, `E2.binding`, `E3.bypass-csp`, `E5.console` and `B2.headers`;
+- the cert lane's E and B rows;
+- `C5.continue-request` and `C5.continue-response`, added next to `C5.document`.
+
+**Top level.**
+- `schemaVersion` (1): guards pin it.
+- `setVersion`: the package version. The release flow stamps it into the npm package and the crate (`scripts/set-crate-version.mjs`). In git, and so in the Go module, it reads `0.0.0`; Go code gets the version from the module.
+- `targets`: the names a runner maps to a scheme, host and port: `seven`, `vault`, `vault-x` (a vault branch preview), `apex`, `own` (the guard host's own page origin), `ordinary` and `ordinary-same-site`. Each has a `description` and, for the protected ones, a default `host`. Nothing in the file is a URL a runner must use.
+- `variants`: the detach variants in ms. `prompt` and `lagging` are documented; a runner may add others, such as `lagging-8s`, and reports the name it ran.
+- `placeholders`: every `{name}` used in the vectors, with what it stands for.
+
+**A vector** has:
+- `id`, and `family` (`C`, `E` or `B`, the id's first letter);
+- `kind`: `cdp` (runnable steps) or `text` (rows in words, which runners report as `not-run`, never `pass`);
+- `scope`: `any`, or the one guard the vector is for;
+- `setup` and `trigger`, both lists of steps;
+- `targets`: the protected targets it runs against;
+- `observe?`: what each observed name means;
+- `live`: the liveness check;
+- `control` (`origin: "ordinary"`, `via`, `expected`) and `expected`: an object of names and booleans, or text;
+- `skip?` (`target`, `reason`): `reason` starts with a code, as in `not-applicable: …`.
+
+**Steps** are declarative and transport-neutral. Any step can take `on` (`control` or `guarded`), which runs it on that leg only.
+- `{ "cdp": method, "params"?, "session"?, "as"?, "refusable"?, "refusal"? }`: a CDP call. It runs on the page session by default, on the browser with `browser`, or on the current auto-attached target with `child`. `as` names its outcome. `refusable: true` with `refusal: { "match" }` (a regular expression for the error message or code) marks a call that a guard may refuse at registration.
+- `{ "page": action, … }`:
+  - `tab`: a new tab at `url`, in `context`, which becomes the page;
+  - `navigate`: go to `url` and wait for the load;
+  - `href`, `replace`, `form`, `post`: navigate from the page, 50 ms later;
+  - `open`: `window.open` with a user gesture;
+  - `iframe`: add an iframe;
+  - `framed`: load the `/framed` page from `from`, with `url` in an iframe;
+  - `fetch`, `xhr`, `image`: load `url` and name the body (`width N` for an image, or `<status> <body>` with `status`); `background` doesn't wait;
+  - `eval`: evaluate `expression`.
+  `hops` routes `url` through `/hop` on each `origin`, with its `code`.
+- `{ "answer": { "url", "stage"?, "cdp"?, "params"?, "hold"? } }`: answer each paused request or auth challenge for `url` with that call; `hold` leaves it paused. Every other paused request continues unchanged.
+- `{ "children": steps }`: run these steps on each target auto-attached from then on, then resume it.
+- `{ "settle": { "beacon"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
+- `{ "wait": ms }`.
+- `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.
+- `{ "text": … }`: a step in words.
+
+Popups are observed by `Target.targetCreated` with the opener's `openerId`, or by the child's `Target.attachedToTarget`, never by the URL: a popup waiting for the debugger can still be `about:blank`.
+
+**The stand-in** serves these routes on every origin. It never listens on 9222 to 9229.
+- `/doc?n=`: an HTML page with the `data-canary` marker; `csp=1` adds a CSP;
+- `/hop?code=&to=` and `/framed?src=`;
+- `/data?n=`: `real-<n>`, with CORS;
+- `/img`: a 1×1 PNG;
+- `/auth`: Basic `u`:`p`, then `authed`;
+- `/rewritten` (title `rewritten`);
+- `/plant`: sets the canary;
+- `/beacon`, and `/log?n=`, which returns `{ hits, beacons }`.
+
+**The control rule.** Every vector has a control on an ordinary origin: the same setup and trigger against an unprotected origin must succeed. A missing or failing control fails the id. With `via: "guard"`, the control runs through the guard. With `via: "unguarded"`, the runner runs setup and trigger through its own CDP against the ordinary origin and against the protected stand-in, and both must show the effect. The runner reports the control's transport as `via`.
+
+**Refusals.** When a guard refuses a `refusable` step and the error matches `refusal.match`, the runner records `refused: true` and skips the observations that depend on the step. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. A guard that allows the step must pass its control through the guard. A refusal on the protected target only fails.
+
+**Liveness.** A runner checks `live` through its own CDP, never through the guard path: either the protected document loaded (title, marker or URL), or the guard returned its own refusal for a refusable step. A failing `live` fails the id.
+
+**Design-dependent outcomes.** A key listed in `designDependent` may expect `"either"`: a guard that refuses a setup step lets the real document load, and one that blocks before commit doesn't. The hard negatives stay required.
+
+**Observability.** `observable.own: false` marks a vector the guard host's own origin can't show (headers, auth, redirects); a runner whose `own` is a static server reports it as `skip` with `not-observable`.
+
+**Applies to.** `appliesTo` lists the triggers a vector runs with (`href`, `iframe`, `popup`, `redirect`). Chrome doesn't apply some session overrides inside a cross-site iframe, so those E6 rows list `href` only.
+
+**Variants.** `variants` gives the delay in milliseconds before the client's `Target.detachFromTarget`: `prompt` 0, `lagging` 8000. A runner may add its own variant names.
+
+**Reports.** There is one row per id, target, variant and transport. `control`, `guarded` and `live` are each `pass`, `fail`, `skip` (with the skip's `reason`) or `not-run` (for text rows):
+
+```json
+{ "id": "C1.script-nav", "target": "vault", "variant": "lagging", "transport": "cli", "via": "guard", "control": "pass", "guarded": "pass", "live": "pass" }
+```
+
+**`guard-driver.mjs`** has no dependencies and no imports. It uses no Node APIs, so it runs in a plain browser page as well as in Node. It drives a client of this shape:
+- `send(method, params, sessionId)`: returns a promise of the result, and rejects with an error carrying `cdp`, the CDP error;
+- `waitEvent(predicate, ms)`: resolves with the first matching event `{ method, params, sessionId }`;
+- `events`: every event received so far.
+
+It exports:
+- `beacon(log, tag)` and `probe(log, tag)`: the sources for `{beacon}` and `{probe}`;
+- `canary.plant(value)`, `canary.read()` and `canary.untouched(value, read)`: the canary in `localStorage`, IndexedDB and the stand-in's marker;
+- `hop`, `expand(value, vars)`, and `steps(vector, side, vars)`, a leg's expanded steps;
+- `outcome`, `call(client, step, sessionId)` and `isRefusal(outcome, step)`;
+- `instrument(client, sessionId, log, tag)`, `load(client, sessionId, url)` and `popup(client, openerId)`;
+- `judge(vector, side, observed)`;
+- `result(vector, run)`: a report row from `{ target, variant, transport, via?, control, guarded, live }`;
+- `summary({ guard, sha, set, results })`: `set` is the parsed `guard-vectors.json`. It returns `{ set, schemaVersion, guard, sha, variants, targets, transports, results, skipped, notRun, pass, line }`, where `line` is `GUARD-PASS <guard>@<sha> (vectors @ai-ecoverse/slicc-browsers@X.Y.Z)` or `GUARD-FAIL …`.
+
+**`npm run validate`** checks that:
+- the file matches the schema, and ids are unique;
+- every vector has a control and an `expected`, text rows included;
+- each id is in its family;
+- a `cdp` vector has a `cdp` or `page` step, and a `text` vector has neither;
+- every CDP method on the guarded leg also runs on the control;
+- a skip names one of the vector's targets;
+- `observe` defines every expected name, and `refused` for any vector with a refusable step;
+- every `{name}` is in `placeholders`;
+- no URL uses a port from 9222 to 9229.
 
 ## The process source
 
@@ -232,7 +340,7 @@ for case in corpus().cases {
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json`, `corpus.json` and `protected.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

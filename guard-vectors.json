@@ -1,0 +1,4892 @@
+{
+  "schemaVersion": 1,
+  "setVersion": "0.0.0",
+  "sources": [
+    {
+      "repo": "ai-ecoverse/slicc-cli",
+      "ref": "2d5d98188667cd70180f825c7cba985399167732",
+      "path": "test/integration/testdata/link/protect.js"
+    },
+    {
+      "repo": "ai-ecoverse/slicc-cdp",
+      "ref": "4907a45d5ab8547483eaa013d4378deafe9f82d8",
+      "path": "test/integration/guard-vectors.json"
+    },
+    {
+      "repo": "cert lane",
+      "ref": "guard-rows.md",
+      "path": "E1-E6, B1-B7"
+    }
+  ],
+  "targets": {
+    "seven": {
+      "host": "seven.sliccy.ai",
+      "description": "seven"
+    },
+    "vault": {
+      "host": "vault.sliccy.ai",
+      "description": "the vault"
+    },
+    "vault-x": {
+      "host": "vault-x.sliccy.ai",
+      "description": "a vault branch preview"
+    },
+    "apex": {
+      "host": "sliccy.ai",
+      "description": "the apex"
+    },
+    "own": {
+      "description": "the guard host's own page origin"
+    },
+    "ordinary": {
+      "description": "an unprotected origin"
+    },
+    "ordinary-same-site": {
+      "description": "an unprotected origin same-site with the target"
+    }
+  },
+  "variants": {
+    "prompt": 0,
+    "lagging": 8000
+  },
+  "placeholders": {
+    "target": "the target's origin; {plain} on the control",
+    "targetHost": "{target}'s host",
+    "seven": "the seven target's origin",
+    "vault": "the vault target's origin",
+    "vault-x": "the vault-x target's origin",
+    "apex": "the apex target's origin",
+    "own": "the own target's origin",
+    "ordinary": "the ordinary origin the run starts from",
+    "ordinary-same-site": "the ordinary-same-site origin",
+    "cross": "another ordinary origin, cross-site with {ordinary}",
+    "plain": "an ordinary destination origin, the control target",
+    "log": "the stand-in's log origin",
+    "tag": "a tag unique to the run",
+    "cookie": "the name of the cookie the runner planted on {target}",
+    "context": "the browser context the control created",
+    "beacon": "guard-driver.mjs beacon({log}, {tag})",
+    "probe": "guard-driver.mjs probe({log}, {tag})"
+  },
+  "vectors": [
+    {
+      "id": "C1.script-nav",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.chain-301-302-303",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 301
+            },
+            {
+              "origin": "{cross}",
+              "code": 302
+            },
+            {
+              "origin": "{ordinary}",
+              "code": 303
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.chain-307-308-302",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 307
+            },
+            {
+              "origin": "{cross}",
+              "code": 308
+            },
+            {
+              "origin": "{ordinary}",
+              "code": 302
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.chain-303-301-308",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{cross}",
+              "code": 303
+            },
+            {
+              "origin": "{ordinary}",
+              "code": 301
+            },
+            {
+              "origin": "{cross}",
+              "code": 308
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.post-307-308",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "post",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 307
+            },
+            {
+              "origin": "{cross}",
+              "code": 308
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.post-308-307",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "post",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{cross}",
+              "code": 308
+            },
+            {
+              "origin": "{ordinary}",
+              "code": 307
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the page session was detached",
+        "hopped": "every hop in the chain was served",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false,
+          "hopped": true
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true,
+        "hopped": true
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C2.through-302",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{cross}/doc?n={tag}-after",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 301
+            },
+            {
+              "origin": "{target}",
+              "code": 302
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{cross}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "protectedHop": "the stand-in served {target}/hop?code=302",
+        "landed": "the stand-in served {cross}/doc?n={tag}-after",
+        "afterBeacon": "a beacon from {cross}",
+        "detached": "the page session was detached",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "protectedHop": true,
+          "landed": true,
+          "afterBeacon": true,
+          "detached": false
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "protectedHop": false,
+        "landed": false,
+        "afterBeacon": false,
+        "detached": true
+      },
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "C2.through-307",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed tab with an init script that beacons its origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=next-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{cross}/doc?n={tag}-after",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 301
+            },
+            {
+              "origin": "{target}",
+              "code": 307
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{cross}"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "protectedHop": "the stand-in served {target}/hop?code=307",
+        "landed": "the stand-in served {cross}/doc?n={tag}-after",
+        "afterBeacon": "a beacon from {cross}",
+        "detached": "the page session was detached",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "protectedHop": true,
+          "landed": true,
+          "afterBeacon": true,
+          "detached": false
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "protectedHop": false,
+        "landed": false,
+        "afterBeacon": false,
+        "detached": true
+      },
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "C3.popup-self-nav",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed opener whose auto-attached popup gets an init script, then loads an allowed page"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            },
+            {
+              "cdp": "Page.setBypassCSP",
+              "params": {
+                "enabled": true
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            }
+          ]
+        },
+        {
+          "page": "open",
+          "url": "{ordinary}/doc?n=popup-{tag}"
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=popup-{tag}&again=1",
+          "session": "child"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "session": "child"
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "session": "child"
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": false,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "allowedBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "detached": "the popup session was detached",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "allowedBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "detached": false
+        }
+      },
+      "expected": {
+        "allowedBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "detached": true
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C3.popup-on-redirect-302",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed opener with auto-attach that instruments every popup it gets"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            },
+            {
+              "cdp": "Page.setBypassCSP",
+              "params": {
+                "enabled": true
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            },
+            {
+              "cdp": "Page.reload"
+            }
+          ]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 302
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 5000
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": false,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "committed": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+        "attached": "the client got Target.attachedToTarget for that target",
+        "beacon": "a beacon from {target}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "committed": true,
+          "attached": true,
+          "beacon": true
+        }
+      },
+      "expected": {
+        "committed": true,
+        "attached": false,
+        "beacon": false
+      },
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "C3.popup-on-redirect-chain",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed opener with auto-attach that instruments every popup it gets"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            },
+            {
+              "cdp": "Page.setBypassCSP",
+              "params": {
+                "enabled": true
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            },
+            {
+              "cdp": "Page.reload"
+            }
+          ]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 301
+            },
+            {
+              "origin": "{cross}",
+              "code": 307
+            },
+            {
+              "origin": "{ordinary}",
+              "code": 303
+            }
+          ]
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 5000
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": false,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "committed": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+        "attached": "the client got Target.attachedToTarget for that target",
+        "beacon": "a beacon from {target}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "committed": true,
+          "attached": true,
+          "beacon": true
+        }
+      },
+      "expected": {
+        "committed": true,
+        "attached": false,
+        "beacon": false
+      },
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "C4.static-cross-site",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain cross-site page with an init script, auto-attaching and instrumenting its frames"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=frame-start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            }
+          ]
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "page",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 4000
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "frameTree"
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "pageBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "frameOnDest": "a child frame or iframe target is on {target}",
+        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "pageBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "frameOnDest": true,
+          "errorFrame": false
+        }
+      },
+      "expected": {
+        "pageBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "frameOnDest": false,
+        "errorFrame": true
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C4.script-cross-site",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain cross-site page with an init script, auto-attaching and instrumenting its frames"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=frame-start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            }
+          ]
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "page",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=frame-host"
+        },
+        {
+          "page": "iframe",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 4000
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "frameTree"
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "pageBeacon": "a beacon from {ordinary}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "frameOnDest": "a child frame or iframe target is on {target}",
+        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "pageBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "frameOnDest": true,
+          "errorFrame": false
+        }
+      },
+      "expected": {
+        "pageBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "frameOnDest": false,
+        "errorFrame": true
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C4.static-same-site",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain same-site page with an init script, auto-attaching and instrumenting its frames"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary-same-site}/doc?n=frame-start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            }
+          ]
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "page",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary-same-site}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 4000
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "frameTree"
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets"
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "observe": {
+        "pageBeacon": "a beacon from {ordinary-same-site}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "frameOnDest": "a child frame or iframe target is on {target}",
+        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "pageBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "frameOnDest": true,
+          "errorFrame": false
+        }
+      },
+      "expected": {
+        "pageBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "frameOnDest": false,
+        "errorFrame": true
+      },
+      "skip": {
+        "target": "vault",
+        "reason": "not-applicable: every sliccy.ai host is protected, so no unprotected page is same-site with the vault"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C4.script-same-site",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain same-site page with an init script, auto-attaching and instrumenting its frames"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary-same-site}/doc?n=frame-start"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            },
+            {
+              "cdp": "Page.addScriptToEvaluateOnNewDocument",
+              "params": {
+                "source": "{beacon}"
+              },
+              "refusable": true,
+              "refusal": {
+                "match": "refused"
+              }
+            }
+          ]
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "page",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{ordinary-same-site}/doc?n=frame-host"
+        },
+        {
+          "page": "iframe",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{target}",
+            "ms": 4000
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "frameTree"
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets"
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "observe": {
+        "pageBeacon": "a beacon from {ordinary-same-site}",
+        "beacon": "a beacon from {target}",
+        "loaded": "the stand-in served {target}/doc?n={tag}",
+        "frameOnDest": "a child frame or iframe target is on {target}",
+        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "pageBeacon": true,
+          "beacon": true,
+          "loaded": true,
+          "frameOnDest": true,
+          "errorFrame": false
+        }
+      },
+      "expected": {
+        "pageBeacon": true,
+        "beacon": false,
+        "loaded": "either",
+        "frameOnDest": false,
+        "errorFrame": true
+      },
+      "skip": {
+        "target": "vault",
+        "reason": "not-applicable: every sliccy.ai host is protected, so no unprotected page is same-site with the vault"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "C5.document",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request at both stages, and fulfils the probe's document with a forged one"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              },
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/doc?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/html"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "PCFkb2N0eXBlIGh0bWw+PHRpdGxlPmZvcmdlZDwvdGl0bGU+"
+            }
+          }
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "forged"
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.title",
+          "as": "title"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
+        "forged": "title is 'forged'",
+        "detached": "the page session was detached"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "forged": true,
+          "detached": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "forged": false,
+        "detached": true
+      }
+    },
+    {
+      "id": "C5.continue-request",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request, and continues the probe document with client params"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/doc?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.continueRequest",
+            "params": {
+              "url": "{plain}/rewritten?case={tag}",
+              "headers": [
+                {
+                  "name": "x-probe",
+                  "value": "{tag}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "rewritten"
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.title",
+          "as": "title"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
+        "rewritten": "title is 'rewritten'",
+        "detached": "the page session was detached"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "rewritten": true,
+          "detached": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "rewritten": false,
+        "detached": true
+      }
+    },
+    {
+      "id": "C5.continue-response",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every response, and continues the probe's with a client status"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "stage": "Response",
+            "cdp": "Fetch.continueResponse",
+            "params": {
+              "responseCode": 299,
+              "responsePhrase": "Probe"
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "status": true,
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+        "changed": "body is '299 real-{tag}'",
+        "answered": "body is '200 real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "changed": true,
+          "answered": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "changed": false,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.fetch",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request at both stages, and fulfils the probe's"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              },
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/plain"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "ZnVsZmlsbGVk"
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+        "fulfilled": "body is 'fulfilled'",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "fulfilled": true,
+          "answered": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "fulfilled": false,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.xhr",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request at both stages, and fulfils the probe's"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              },
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/plain"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "ZnVsZmlsbGVk"
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "xhr",
+          "url": "{target}/data?n={tag}",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+        "fulfilled": "body is 'fulfilled'",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "fulfilled": true,
+          "answered": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "fulfilled": false,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.image",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request at both stages, and fulfils the probe's"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              },
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/img?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "image/png"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGP4z8AARAAI/gH/xp559wAAAABJRU5ErkJggg=="
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "image",
+          "url": "{target}/img?n={tag}",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.requestPaused for {target}/img?n={tag} reached the client",
+        "fulfilled": "body is 'width 2'",
+        "answered": "body is 'width 1'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "fulfilled": true,
+          "answered": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "fulfilled": false,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.auth",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable handles auth requests, and answers the probe's challenge with credentials; a second tab without Fetch shows the untouched outcome"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=plain-{tag}"
+        },
+        {
+          "page": "fetch",
+          "url": "{target}/auth/{tag}?n={tag}&plain=1",
+          "credentials": "include",
+          "status": true,
+          "as": "plain"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*"
+              }
+            ],
+            "handleAuthRequests": true
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/auth/{tag}?n={tag}",
+            "cdp": "Fetch.continueWithAuth",
+            "params": {
+              "authChallengeResponse": {
+                "response": "ProvideCredentials",
+                "username": "u",
+                "password": "p"
+              }
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{target}/auth/{tag}?n={tag}",
+          "credentials": "include",
+          "status": true,
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": "a Fetch.authRequired for {target}/auth/{tag}?n={tag} reached the client",
+        "pausedSeen": "a Fetch.requestPaused for {target}/auth/{tag}?n={tag} reached the client",
+        "authed": "body is '200 authed'",
+        "untouched": "body equals plain"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "pausedSeen": true,
+          "authed": true,
+          "untouched": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "pausedSeen": false,
+        "authed": false,
+        "untouched": true
+      },
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "C5.guessed-id",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "hold": true
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=a-{tag}"
+        },
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "background": true,
+          "as": "body"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=b-{tag}"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=a-{tag}", "{ordinary}/data?n=b-{tag}"],
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/plain"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "Z3Vlc3NlZA=="
+            }
+          },
+          "as": "attempts"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "candidates": "attempts is not empty",
+        "fulfilled": "body is 'guessed'",
+        "refused": "every attempt was refused",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "candidates": true,
+          "fulfilled": true,
+          "refused": false,
+          "answered": false
+        }
+      },
+      "expected": {
+        "candidates": true,
+        "fulfilled": false,
+        "refused": true,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.guessed-id.continue-request",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "hold": true
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=a-{tag}"
+        },
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "background": true,
+          "as": "body"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=b-{tag}"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=a-{tag}", "{ordinary}/data?n=b-{tag}"],
+            "cdp": "Fetch.continueRequest",
+            "params": {
+              "url": "{ordinary}/data?n=rewritten-{tag}"
+            }
+          },
+          "as": "attempts"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "candidates": "attempts is not empty",
+        "fulfilled": "body is 'guessed'",
+        "refused": "every attempt was refused",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "candidates": true,
+          "fulfilled": true,
+          "refused": false,
+          "answered": false
+        }
+      },
+      "expected": {
+        "candidates": true,
+        "fulfilled": false,
+        "refused": true,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.guessed-id.continue-response",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "hold": true
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=a-{tag}"
+        },
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "background": true,
+          "as": "body"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=b-{tag}"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=a-{tag}", "{ordinary}/data?n=b-{tag}"],
+            "cdp": "Fetch.continueResponse",
+            "params": {
+              "responseCode": 200
+            }
+          },
+          "as": "attempts"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "candidates": "attempts is not empty",
+        "fulfilled": "body is 'guessed'",
+        "refused": "every attempt was refused",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "candidates": true,
+          "fulfilled": true,
+          "refused": false,
+          "answered": false
+        }
+      },
+      "expected": {
+        "candidates": true,
+        "fulfilled": false,
+        "refused": true,
+        "answered": true
+      }
+    },
+    {
+      "id": "C5.guessed-id.continue-with-auth",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/data?n={tag}",
+            "hold": true
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=a-{tag}"
+        },
+        {
+          "page": "fetch",
+          "url": "{target}/data?n={tag}",
+          "background": true,
+          "as": "body"
+        },
+        {
+          "wait": 300
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=b-{tag}"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=a-{tag}", "{ordinary}/data?n=b-{tag}"],
+            "cdp": "Fetch.continueWithAuth",
+            "params": {
+              "authChallengeResponse": {
+                "response": "ProvideCredentials",
+                "username": "u",
+                "password": "p"
+              }
+            }
+          },
+          "as": "attempts"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "candidates": "attempts is not empty",
+        "fulfilled": "body is 'guessed'",
+        "refused": "every attempt was refused",
+        "answered": "body is 'real-{tag}'"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "candidates": true,
+          "fulfilled": true,
+          "refused": false,
+          "answered": false
+        }
+      },
+      "expected": {
+        "candidates": true,
+        "fulfilled": false,
+        "refused": true,
+        "answered": true
+      }
+    },
+    {
+      "id": "C6.read-cookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a cookie named {cookie} on each origin with its own, unfiltered CDP"
+        },
+        {
+          "page": "tab",
+          "url": "about:blank"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.getCookies",
+          "params": {
+            "urls": ["{target}/"]
+          },
+          "as": "byURL"
+        },
+        {
+          "cdp": "Network.getCookies",
+          "params": {
+            "urls": ["{vault}/", "{seven}/", "{plain}/"]
+          },
+          "as": "mixedURLs"
+        },
+        {
+          "cdp": "Network.getAllCookies",
+          "as": "all"
+        },
+        {
+          "cdp": "Storage.getCookies",
+          "session": "browser",
+          "as": "storage"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "byURL": "byURL succeeded and holds {cookie}",
+        "mixedURLs": "mixedURLs succeeded and holds {cookie}",
+        "all": "all succeeded and holds {cookie}",
+        "storage": "storage succeeded and holds {cookie}"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "byURL": true,
+          "mixedURLs": true,
+          "all": true,
+          "storage": true
+        }
+      },
+      "expected": {
+        "byURL": false,
+        "mixedURLs": false,
+        "all": false,
+        "storage": false
+      }
+    },
+    {
+      "id": "C6.write-cookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a session on about:blank"
+        },
+        {
+          "page": "tab",
+          "url": "about:blank"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.setCookie",
+          "params": {
+            "name": "w1-{tag}",
+            "value": "1",
+            "url": "{target}/"
+          },
+          "as": "setURL"
+        },
+        {
+          "cdp": "Network.setCookie",
+          "params": {
+            "name": "w2-{tag}",
+            "value": "1",
+            "domain": "{targetHost}",
+            "path": "/"
+          },
+          "as": "setDomain"
+        },
+        {
+          "cdp": "Network.setCookies",
+          "params": {
+            "cookies": [
+              {
+                "name": "w3-{tag}",
+                "value": "1",
+                "url": "{target}/"
+              }
+            ]
+          },
+          "as": "setMany"
+        },
+        {
+          "cdp": "Storage.setCookies",
+          "params": {
+            "cookies": [
+              {
+                "name": "w4-{tag}",
+                "value": "1",
+                "domain": "{targetHost}",
+                "path": "/"
+              }
+            ]
+          },
+          "session": "browser",
+          "as": "storageSet"
+        },
+        {
+          "cdp": "Network.deleteCookies",
+          "params": {
+            "name": "w1-{tag}",
+            "url": "{target}/"
+          },
+          "as": "remove"
+        },
+        {
+          "cdp": "Network.getCookies",
+          "params": {
+            "urls": ["{target}/"]
+          },
+          "as": "read"
+        },
+        {
+          "cdp": "Network.deleteCookies",
+          "params": {
+            "name": "w2-{tag}",
+            "url": "{target}/"
+          }
+        },
+        {
+          "cdp": "Network.deleteCookies",
+          "params": {
+            "name": "w3-{tag}",
+            "url": "{target}/"
+          }
+        },
+        {
+          "cdp": "Network.deleteCookies",
+          "params": {
+            "name": "w4-{tag}",
+            "url": "{target}/"
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "setURL": "setURL succeeded",
+        "setDomain": "setDomain succeeded",
+        "setMany": "setMany succeeded",
+        "storageSet": "storageSet succeeded",
+        "deleted": "remove and setURL succeeded and read lacks w1-{tag}",
+        "written": "read holds w2-{tag}, w3-{tag} and w4-{tag}",
+        "refused": "setURL, setDomain, setMany, storageSet and remove were all refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "setURL": true,
+          "setDomain": true,
+          "setMany": true,
+          "storageSet": true,
+          "deleted": true,
+          "written": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "setURL": false,
+        "setDomain": false,
+        "setMany": false,
+        "storageSet": false,
+        "deleted": false,
+        "written": false,
+        "refused": true
+      }
+    },
+    {
+      "id": "C6.clear-cookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the control clears a browser context the stream created; seven and the vault live in the default context"
+        },
+        {
+          "cdp": "Target.createBrowserContext",
+          "session": "browser",
+          "as": "context",
+          "on": "control"
+        },
+        {
+          "page": "tab",
+          "url": "about:blank",
+          "context": "{context}",
+          "on": "control"
+        },
+        {
+          "page": "tab",
+          "url": "about:blank",
+          "on": "guarded"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.clearBrowserCookies",
+          "as": "network"
+        },
+        {
+          "cdp": "Storage.clearCookies",
+          "params": {
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "storage",
+          "on": "control"
+        },
+        {
+          "cdp": "Storage.clearCookies",
+          "session": "browser",
+          "as": "storage",
+          "on": "guarded"
+        },
+        {
+          "cdp": "Target.disposeBrowserContext",
+          "params": {
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "on": "control"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "network": "network succeeded",
+        "storage": "storage succeeded",
+        "refused": "network and storage were both refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "network": true,
+          "storage": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "network": false,
+        "storage": false,
+        "refused": true
+      }
+    },
+    {
+      "id": "C6.storage",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a session on an allowed page; each command names the origin or its storage key"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=storage"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Storage.clearDataForOrigin",
+          "params": {
+            "origin": "{target}",
+            "storageTypes": "local_storage"
+          },
+          "session": "browser",
+          "as": "clearDataForOrigin"
+        },
+        {
+          "cdp": "Storage.getUsageAndQuota",
+          "params": {
+            "origin": "{target}"
+          },
+          "session": "browser",
+          "as": "getUsageAndQuota"
+        },
+        {
+          "cdp": "Storage.clearDataForStorageKey",
+          "params": {
+            "storageKey": "{target}/",
+            "storageTypes": "local_storage"
+          },
+          "session": "browser",
+          "as": "clearDataForStorageKey"
+        },
+        {
+          "cdp": "DOMStorage.getDOMStorageItems",
+          "params": {
+            "storageId": {
+              "securityOrigin": "{target}",
+              "isLocalStorage": true
+            }
+          },
+          "as": "domStorageItems"
+        },
+        {
+          "cdp": "DOMStorage.getDOMStorageItems",
+          "params": {
+            "storageId": {
+              "storageKey": "{target}/",
+              "isLocalStorage": true
+            }
+          },
+          "as": "domStorageByKey"
+        },
+        {
+          "cdp": "DOMStorage.setDOMStorageItem",
+          "params": {
+            "storageId": {
+              "securityOrigin": "{target}",
+              "isLocalStorage": true
+            },
+            "key": "k",
+            "value": "v"
+          },
+          "as": "domStorageSet"
+        },
+        {
+          "cdp": "IndexedDB.requestDatabaseNames",
+          "params": {
+            "securityOrigin": "{target}"
+          },
+          "as": "indexedDBNames"
+        },
+        {
+          "cdp": "IndexedDB.requestDatabaseNames",
+          "params": {
+            "storageKey": "{target}/"
+          },
+          "as": "indexedDBByKey"
+        },
+        {
+          "cdp": "CacheStorage.requestCacheNames",
+          "params": {
+            "securityOrigin": "{target}"
+          },
+          "as": "cacheNames"
+        },
+        {
+          "cdp": "CacheStorage.requestCacheNames",
+          "params": {
+            "storageKey": "{target}/"
+          },
+          "as": "cacheByKey"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "reachedAll": "no call was refused",
+        "refusedAll": "every call was refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "reachedAll": true,
+          "refusedAll": false
+        }
+      },
+      "expected": {
+        "reachedAll": false,
+        "refusedAll": true
+      }
+    },
+    {
+      "id": "C1.href",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C1.replace",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "replace",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C1.form",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "form",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C2.302",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{plain}",
+              "code": 302
+            }
+          ]
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C2.307",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{plain}",
+              "code": 307
+            }
+          ]
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C2.twohop",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}",
+          "hops": [
+            {
+              "origin": "{plain}",
+              "code": 302
+            },
+            {
+              "origin": "{plain}",
+              "code": 302
+            }
+          ]
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C3.popup",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "flatten": true,
+            "waitForDebuggerOnStart": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "popup": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+        "beacon": "a beacon from {target}",
+        "delivered": "an event carried the guarded document",
+        "attached": "the client got Target.attachedToTarget for that target",
+        "refused": "a refusable step was refused at registration"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "popup": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "delivered": false,
+        "attached": false
+      }
+    },
+    {
+      "id": "C4.iframe",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "delivered": false,
+        "attached": false
+      }
+    },
+    {
+      "id": "C5.fulfill",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/doc?n={tag}",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/html"
+                }
+              ],
+              "body": "PCFkb2N0eXBlIGh0bWw+PHRpdGxlPmZ1bGZpbGxlZDwvdGl0bGU+PHA+RlVMRklMTEVEPC9wPg=="
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "fulfilled": "the fulfilled body renders",
+        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
+        "served": "the stand-in served {target}/doc?n={tag}"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "fulfilled": true
+        }
+      },
+      "expected": {
+        "paused": false,
+        "fulfilled": false,
+        "served": false
+      }
+    },
+    {
+      "id": "C5.continue-url",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/doc?n={tag}",
+            "cdp": "Fetch.continueRequest",
+            "params": {
+              "url": "{plain}/rewritten?case={tag}"
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "rewritten": "the rewritten body renders",
+        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
+        "served": "the stand-in served {target}/doc?n={tag}"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "rewritten": true
+        }
+      },
+      "expected": {
+        "paused": false,
+        "rewritten": false,
+        "served": false
+      }
+    },
+    {
+      "id": "C5.paused",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/doc?n={tag}",
+            "cdp": "Fetch.continueRequest",
+            "params": {}
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
+        "served": "the stand-in served {target}/doc?n={tag}"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "paused": true
+        }
+      },
+      "expected": {
+        "paused": false,
+        "served": false
+      }
+    },
+    {
+      "id": "E1.onload",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnLoad",
+          "params": {
+            "scriptSource": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "E2.binding",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "probeBinding"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "binding": "a Runtime.bindingCalled from {target}/doc?n={tag}",
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "binding": true
+        }
+      },
+      "expected": {
+        "binding": false,
+        "beacon": false,
+        "served": "either"
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "E3.bypass-csp",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Page.setBypassCSP",
+          "params": {
+            "enabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}&csp=1"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "delivered": "an event carried the guarded document",
+        "attached": "an attachedToTarget for another target reached the client",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "beacon": true
+        }
+      },
+      "expected": {
+        "beacon": false,
+        "served": "either",
+        "delivered": false,
+        "attached": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "E5.console",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{probe}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "console": "a Runtime.consoleAPICalled from {target}/doc?n={tag}",
+        "beacon": "a beacon from {target}",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "console": true
+        }
+      },
+      "expected": {
+        "console": false,
+        "beacon": false,
+        "served": "either"
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "B2.headers",
+      "family": "B",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setExtraHTTPHeaders",
+          "params": {
+            "headers": {
+              "x-probe": "{tag}"
+            }
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "variant": true
+          }
+        },
+        {
+          "page": "eval",
+          "expression": "document.body ? document.body.innerText : ''",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "observe": {
+        "header": "the request for {target}/doc?n={tag} carried x-probe",
+        "served": "the stand-in served {target}/doc?n={tag}",
+        "refused": "the guard refused a refusable setup step with its own refusal"
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "header": true
+        }
+      },
+      "expected": {
+        "header": false,
+        "served": "either"
+      },
+      "observable": {
+        "own": false
+      },
+      "designDependent": ["served"]
+    },
+    {
+      "id": "C6.getCookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.getCookies",
+          "params": {
+            "urls": ["{target}/", "{plain}/"]
+          },
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "read": "the result holds {plain}'s canary cookie",
+        "leaked": "the result holds {target}'s cookies"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "read": true
+        }
+      },
+      "expected": {
+        "leaked": false
+      }
+    },
+    {
+      "id": "C6.getAllCookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.getAllCookies",
+          "params": {},
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "read": "the result holds {plain}'s canary cookie",
+        "leaked": "the result holds {target}'s cookies"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "read": true
+        }
+      },
+      "expected": {
+        "leaked": false
+      }
+    },
+    {
+      "id": "C6.setCookie",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.setCookie",
+          "params": {
+            "name": "probe",
+            "value": "{tag}",
+            "url": "{target}/"
+          },
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "ok": "the call succeeded",
+        "refused": "the call was refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "ok": true
+        }
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "id": "C6.deleteCookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Network.deleteCookies",
+          "params": {
+            "name": "del",
+            "url": "{target}/"
+          },
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "ok": "the call succeeded",
+        "refused": "the call was refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "ok": true
+        }
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "id": "C6.storage-getCookies",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Storage.getCookies",
+          "params": {},
+          "session": "browser",
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "read": "the result holds {plain}'s canary cookie",
+        "leaked": "the result holds {target}'s cookies"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "read": true
+        }
+      },
+      "expected": {
+        "leaked": false
+      }
+    },
+    {
+      "id": "C6.clearDataForOrigin",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the runner plants a canary and a del cookie on each origin"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Storage.clearDataForOrigin",
+          "params": {
+            "origin": "{target}",
+            "storageTypes": "cookies,local_storage"
+          },
+          "as": "call"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "ok": "the call succeeded",
+        "refused": "the call was refused"
+      },
+      "live": "the runner's own CDP reads {cookie} on {target}",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "ok": true
+        }
+      },
+      "expected": {
+        "refused": true
+      }
+    },
+    {
+      "id": "E1",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Page.addScriptToEvaluateOnLoad, otherwise as C1."
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "no beacon from the protected host, canary untouched, nothing about the protected document delivered."
+    },
+    {
+      "id": "E2",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Runtime.addBinding plus a script calling it"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "no bindingCalled from the protected document."
+    },
+    {
+      "id": "E3",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Page.setBypassCSP"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "it isn't applied on the protected page."
+    },
+    {
+      "id": "E4",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Debugger.enable plus setBreakpointByUrl with a condition, setInstrumentationBreakpoint, DOMDebugger.setEventListenerBreakpoint"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "the condition is never evaluated in the protected document and there's no Debugger.paused for it."
+    },
+    {
+      "id": "E5",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Runtime.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "no consoleAPICalled or exceptionThrown from the protected document."
+    },
+    {
+      "id": "E6.headers",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.setExtraHTTPHeaders set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        },
+        {
+          "text": "as C4"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.setExtraHTTPHeaders is not applied to the protected document or its requests",
+      "appliesTo": ["href", "iframe"],
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "E6.ua-network",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.setUserAgentOverride set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        },
+        {
+          "text": "as C4"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.setUserAgentOverride is not applied to the protected document or its requests",
+      "appliesTo": ["href", "iframe"],
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "E6.ua-emulation",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Emulation.setUserAgentOverride set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        },
+        {
+          "text": "as C4"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Emulation.setUserAgentOverride is not applied to the protected document or its requests",
+      "appliesTo": ["href", "iframe"],
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "E6.cache-disabled",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.setCacheDisabled set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        },
+        {
+          "text": "as C4"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.setCacheDisabled is not applied to the protected document or its requests",
+      "appliesTo": ["href", "iframe"]
+    },
+    {
+      "id": "E6.network-conditions",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.emulateNetworkConditions set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        },
+        {
+          "text": "as C4"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.emulateNetworkConditions is not applied to the protected document or its requests",
+      "appliesTo": ["href", "iframe"]
+    },
+    {
+      "id": "E6.locale",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Emulation.setLocaleOverride set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Emulation.setLocaleOverride is not applied to the protected document or its requests",
+      "appliesTo": ["href"]
+    },
+    {
+      "id": "E6.timezone",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Emulation.setTimezoneOverride set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Emulation.setTimezoneOverride is not applied to the protected document or its requests",
+      "appliesTo": ["href"]
+    },
+    {
+      "id": "E6.network-state",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.overrideNetworkState set on the session before the trigger"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.overrideNetworkState is not applied to the protected document or its requests",
+      "appliesTo": ["href"]
+    },
+    {
+      "id": "E6.blocked-urls",
+      "family": "E",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Network.setBlockedURLs set on the session before the trigger; observe a subresource, since setBlockedURLs does not block navigation"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "Network.setBlockedURLs is not applied to the protected document or its requests",
+      "appliesTo": ["href"]
+    },
+    {
+      "id": "B1",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "The protected target set includes the guard host's own origin (protectedOrigins(catalog,[ownOrigin])), not only *.sliccy.ai, for C1-C4."
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as C1-C4"
+        }
+      ],
+      "targets": ["own"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "as C1-C4"
+    },
+    {
+      "id": "B2",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Session-wide state set before a protected navigation: Network.setExtraHTTPHeaders, Network.setUserAgentOverride and Emulation.setUserAgentOverride"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "a protected navigation"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "must not reach the protected request (no client header or UA). addScriptToEvaluateOnNewDocument, addScriptToEvaluateOnLoad, Runtime.addBinding and setBypassCSP may be refused at registration, or the guard must prove they never run in the protected document (C1, E1, E2, E3).",
+      "observable": {
+        "own": false
+      }
+    },
+    {
+      "id": "B3",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "A cut session's paused document"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "after the cut, Fetch.requestPaused and authRequired on that session"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "are still continued by the guard (a lagging detach must not stall the protected frame) and never reach the client."
+    },
+    {
+      "id": "B4",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "Held Network events"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "events that arrive before their requestWillBeSent"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "are delivered after it, in arrival order."
+    },
+    {
+      "id": "B5",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "C5 variants"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "fulfillRequest, failRequest, continueRequest with a url rewrite, continueWithAuth with credentials, and getResponseBody on a protected requestId"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "are all refused, and the paused event never reaches the client."
+    },
+    {
+      "id": "B6",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "C6 variants"
+        }
+      ],
+      "trigger": [
+        {
+          "text": "getCookies {urls:[vault, plain]}; setCookie by url or domain, setCookies, Storage.setCookies, deleteCookies by url or domain, clearBrowserCookies, Storage.clearCookies and Storage.clearDataForOrigin(vault)"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "getCookies drops the protected cookies; the others are refused."
+    },
+    {
+      "id": "B7",
+      "family": "B",
+      "kind": "text",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "The same vectors through every transport a guard exposes (bios: the page-side link, and the kernel CDP facade)."
+        }
+      ],
+      "trigger": [
+        {
+          "text": "as each vector"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+      },
+      "expected": "as each vector"
+    }
+  ]
+}

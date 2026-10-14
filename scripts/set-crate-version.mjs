@@ -15,5 +15,12 @@ if (after === before) {
   process.stderr.write('Cargo.toml has no version = "0.0.0" line\n');
   process.exit(1);
 }
+const guard = readFileSync('guard-vectors.json', 'utf8');
+const stamped = guard.replace(/^  "setVersion": "0\.0\.0",$/m, `  "setVersion": "${version}",`);
+if (stamped === guard) {
+  process.stderr.write('guard-vectors.json has no "setVersion": "0.0.0" line\n');
+  process.exit(1);
+}
 writeFileSync('Cargo.toml', after);
-process.stdout.write(`Cargo.toml is ${version}\n`);
+writeFileSync('guard-vectors.json', stamped);
+process.stdout.write(`Cargo.toml and guard-vectors.json are ${version}\n`);

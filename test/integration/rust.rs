@@ -1,7 +1,7 @@
 use serde_json::Value;
 use slicc_browsers::corpus::{self, Layout};
-use slicc_browsers::protected;
-use slicc_browsers::{catalog, Catalog, CATALOG, CORPUS, PROTECTED};
+use slicc_browsers::{catalog, Catalog, CATALOG, CORPUS, GUARD_VECTORS, PROTECTED};
+use slicc_browsers::{guard, protected};
 use std::collections::BTreeMap;
 
 const LAYOUT: &str = include_str!("layout.json");
@@ -172,4 +172,53 @@ fn the_protected_vectors_parse_and_round_trip() {
     assert!(po.hosts.iter().any(|h| h == "vault.sliccy.ai"));
     assert_eq!(po.refusal, "slicc: refused: target is on seven's origin");
     assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
+}
+
+#[test]
+fn the_guard_vectors_parse_and_round_trip() {
+    let v = guard::vectors();
+    assert_eq!(v.schema_version, slicc_browsers::SCHEMA);
+    assert!(v.variants.contains_key("prompt") && v.variants.contains_key("lagging"));
+    let c1 = v.vectors.iter().find(|x| x.id == "C1.script-nav").unwrap();
+    assert!(!c1.design_dependent.is_empty());
+    let e6 = v.vectors.iter().find(|x| x.id == "E6.locale").unwrap();
+    assert_eq!(e6.applies_to, vec!["href".to_string()]);
+    let raw: Value = serde_json::from_str(GUARD_VECTORS).unwrap();
+    assert_eq!(serde_json::to_value(&v).unwrap(), raw);
+    let targets = [
+        guard::TARGET_SEVEN,
+        guard::TARGET_VAULT,
+        guard::TARGET_VAULT_X,
+        guard::TARGET_APEX,
+        guard::TARGET_OWN,
+    ];
+    for t in targets
+        .iter()
+        .chain(&[guard::ORDINARY, guard::ORDINARY_SAME_SITE])
+    {
+        assert!(v.targets.contains_key(*t));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for vec in &v.vectors {
+        assert!(ids.insert(vec.id.clone()), "duplicate {}", vec.id);
+        assert_eq!(vec.control.origin, guard::ORDINARY);
+        assert!(vec.control.via == guard::VIA_GUARD || vec.control.via == guard::VIA_UNGUARDED);
+        assert!(vec.kind == guard::KIND_CDP || vec.kind == guard::KIND_TEXT);
+        assert_eq!(vec.scope, guard::SCOPE_ANY);
+        assert!(vec.targets.iter().all(|t| targets.contains(&t.as_str())));
+        for s in vec.setup.iter().chain(&vec.trigger) {
+            assert!(s
+                .on
+                .as_deref()
+                .is_none_or(|o| o == guard::CONTROL || o == guard::GUARDED));
+            assert_eq!(s.refusable, s.refusal.is_some());
+        }
+    }
+    let skip = v
+        .vectors
+        .iter()
+        .find(|x| x.id == "C4.static-same-site")
+        .unwrap();
+    assert_eq!(skip.skip.as_ref().unwrap().target, guard::TARGET_VAULT);
+    assert!(slicc_browsers::GUARD_VECTORS_SCHEMA.contains("/schema/guard-vectors.schema.json"));
 }

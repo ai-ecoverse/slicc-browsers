@@ -27,11 +27,14 @@
     "./corpus.json": "./corpus.json",
     "./protected.json": "./protected.json",
     "./protected.mjs": "./protected.mjs",
+    "./guard-vectors.json": "./guard-vectors.json",
+    "./guard-driver.mjs": "./guard-driver.mjs",
     "./seven.mjs": "./seven.mjs",
     "./schema/catalog.schema.json": "./schema/catalog.schema.json",
     "./schema/browsers.schema.json": "./schema/browsers.schema.json",
     "./schema/corpus.schema.json": "./schema/corpus.schema.json",
     "./schema/protected.schema.json": "./schema/protected.schema.json",
+    "./schema/guard-vectors.schema.json": "./schema/guard-vectors.schema.json",
     "./package.json": "./package.json"
   },
   "files": [
@@ -39,6 +42,8 @@
     "corpus.json",
     "protected.json",
     "protected.mjs",
+    "guard-vectors.json",
+    "guard-driver.mjs",
     "seven.mjs",
     "schema"
   ],
@@ -60,7 +65,7 @@
     "@biomejs/biome": "2.5.15",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "lefthook": "2.2.0",
+    "lefthook": "2.1.17",
     "semantic-release": "25.0.9"
   }
 }

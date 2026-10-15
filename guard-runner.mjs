@@ -832,6 +832,18 @@ const inactive = (vector, target, capabilities) =>
   !supported(vector.requires, capabilities) ||
   (vector.scope !== 'any' && vector.scope !== capabilities.scope);
 
+function unavailableOrigin(vector, target, targets = {}) {
+  const defaults = { plain: 'ordinary', cross: 'client', log: 'ordinary', own: 'client' };
+  const references = [target, 'plain', vector.control.origin];
+  for (const match of q([vector.setup, vector.trigger, vector.observe, vector.liveCheck]).matchAll(
+    /\{([A-Za-z][A-Za-z-]*)\}/g
+  ))
+    references.push(match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]);
+  return references
+    .map((name) => (targets[name] === undefined ? (defaults[name] ?? name) : name))
+    .find((name) => targets[name] === null);
+}
+
 function variables(targets, target, side, slot, index) {
   const tag = `guard-${Date.now()}-${slot}-${index}-${side}-${Math.random().toString(36).slice(2)}`;
   const vars = {
@@ -860,6 +872,15 @@ async function executeRow(job, opts, clients, set, slot, index) {
     via: vector.control.via,
     transportVariant: clients.transportVariant === true,
   };
+  const unavailable = unavailableOrigin(vector, target, opts.targets);
+  if (unavailable)
+    return {
+      ...base,
+      control: 'skip',
+      guarded: 'skip',
+      live: 'skip',
+      reason: `not-applicable:no-${unavailable}-origin`,
+    };
   if (vector.kind === 'text')
     return {
       ...base,

@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 
-export async function launch(fixture) {
+export async function launch(fixture, { spki } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
   const child = spawn(
     chromium.executablePath(),
     [
       '--headless',
+      ...(spki ? [`--ignore-certificate-errors-spki-list=${spki}`] : []),
       '--no-sandbox',
       '--disable-gpu',
       '--disable-extensions',
@@ -149,7 +150,8 @@ export async function connect(url) {
 }
 
 export function origins(fixture) {
-  const origin = (host) => `http://${host}:${fixture.port}`;
+  const origin = (host) =>
+    `${new URL(fixture.origin ?? 'http://127.0.0.1').protocol}//${host}:${fixture.port}`;
   return {
     ordinary: origin('ordinary.example.test'),
     'ordinary-same-site': origin('ordinary.sliccy.ai'),

@@ -270,7 +270,13 @@ of supported names. `capabilities.scope` selects owner-specific rows.
 Map `ordinary`, `ordinary-same-site`, `seven`, `vault`, `vault-x`, `apex`, `own`
 and `client` to origins. Optionally map `plain`, `cross` and `log`; their defaults
 are `ordinary`, `client` and `ordinary`. Origins must preserve the site
-relationships of the data. Tags and cookie names are unique per leg. `variant`
+relationships of the data. Explicitly map an unavailable target to `null`: every
+row needing that origin is reported as `skip` for control, guarded and live, with
+reason `not-applicable:no-<target>-origin`; no substitute origin is used and the
+row never passes. A guard whose whole site is protected, such as the extension
+where every `sliccy.ai` host is protected, passes `ordinary-same-site: null`.
+This also applies to origins referenced in setup, triggers, observations and
+liveness checks, not only the row target. Tags and cookie names are unique per leg. `variant`
 selects one variant or an array; omission selects all. `parallel` defaults to 1.
 `log(row)` receives completed rows. A variant supplies the wait before an
 explicit `Target.detachFromTarget` step and for a `settle.variant` step.
@@ -319,7 +325,12 @@ fixture log. A setup beacon on the same origin and tag cannot settle an unfinish
 redirect chain. This does not change the observations used to judge either leg.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
-`fixtureServer({ host, port })`, defaulting to a random loopback port. It returns
+`fixtureServer({ host, port, tls })`, defaulting to a random loopback port.
+Pass `tls: { key, cert }` to serve HTTPS using Node TLS key and certificate
+values. The returned origin, request logs, redirect URLs and document heartbeats
+use `https://<Host>` with TLS, so `served`, `hops` and `liveCheck` compare against
+the mapped HTTPS origins, including an extension client at `https://*.sliccy.ai`.
+Without `tls`, the server and logged URLs remain HTTP. It returns
 `origin`, `port`, `log()`, `reset()` and `close()`. Log entries contain `url`,
 `method`, `headers` and `time`. Mirror that API when using another fixture.
 The server serves document, frame, redirect, CSP, authentication, data, image,

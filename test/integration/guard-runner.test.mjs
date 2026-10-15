@@ -30,7 +30,7 @@ test('foreground tab requests are reflected by the real document', async () => {
           },
         },
       },
-      liveCheck: { executed: 'trigger', observer: 'client' },
+      liveCheck: { loaded: '{ordinary}/doc?n={tag}', observer: 'fixture' },
       control: { origin: 'ordinary', via: 'guard', expected: { visible: true } },
       expected: { visible: true },
     };

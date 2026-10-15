@@ -26,6 +26,18 @@ test('the exported schema requires observations, live checks and their observer 
   assert.equal(validate(chain), false);
   for (const mutate of [
     (v) => {
+      v.liveCheck = { executed: 'trigger', observer: 'client' };
+    },
+    (v) => {
+      v.liveCheck = { live: true, observer: 'unguarded' };
+    },
+    (v) => {
+      v.liveCheck = { header: 'x-test', on: 'control', observer: 'fixture' };
+    },
+    (v) => {
+      v.liveCheck = { any: [{ executed: 'trigger', observer: 'client' }], observer: 'client' };
+    },
+    (v) => {
       delete v.observe[name].check;
     },
     (v) => {

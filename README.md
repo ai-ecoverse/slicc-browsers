@@ -278,18 +278,33 @@ explicit `Target.detachFromTarget` step and for a `settle.variant` step.
 Every runnable vector has a declarative `liveCheck`; every observation has a
 declarative `check`. Each check declares its `observer`: `fixture` reads request
 logs, `client` reads already-delivered transport data, and `unguarded` requires
-an independent CDP observer. Composite checks inherit their children's observer
-requirements. Checks include: `beacon`, `served`, `header` with
+an independent CDP observer. `all` needs the observers for every operand; `any`
+can use an available fixture or client alternative without an unguarded observer.
+Unavailable optional observer alternatives are false, never substituted with guarded reads.
+Checks include: `beacon`, `served`, `header` with
 `on`, `event` with `where`, `result` with `path` and `equals`, `cookie` with `from`,
 `compare`, `refused`, `reached`, `attached`, `delivered`, `title`, `expression`,
-`hops` (each exact nested redirect URL), `executed` (a completed trigger or setup)
-or `live` (an observer browser read).
+`hops` (each exact nested redirect URL), `detached`, `loaded`, `pre`, `blocked`,
+`registration`, `state` and `filtered`. The diagnostic `executed` and `live`
+checks are not valid liveness proofs.
 Compose checks with `all`, `any` or `not`. Predicates support nested partial
 objects, `$contains`, `$regex`, `$some`, nonempty `$every`, and `$encoded` with
 `{ value, prefix }` for a base64-encoded value with an optional prefix. Reads of titles and
 expressions use the unguarded observer. Registration refusals must match the
 step's declared expression; dependent observations are omitted and reported by
 the existing result evaluator.
+
+`liveCheck` applies only to the guarded leg. Controls are judged by their positive
+observations: a missing or failing effect fails the control. Guarded liveness
+requires the exact target URL in the fixture log or a target-origin `/live`
+heartbeat; alternatively a pre-action `/live?tag=...&step=pre&to=...` request and
+an exact-URL block/error from the client or unguarded frame tree. An error for a
+different URL is not evidence. A declared setup refusal can supply liveness only
+when its `refusal.match` matched. Transport connectivity and command completion
+alone never prove liveness. Cookie and storage rows seed a canary outside the
+guard and read it back outside the guard; refused writes require unchanged
+canary state and a refusal or filtered call response. Their control can clear or
+modify state as required by its positive observations.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
 `fixtureServer({ host, port })`, defaulting to a random loopback port. It returns

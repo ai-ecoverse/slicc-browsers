@@ -46,8 +46,15 @@ function route(req, url, send, html) {
         'set-cookie': [`canary=planted-${url.hostname}; Path=/`, 'del=1; Path=/'],
       }),
     '/rewritten': () => html('rewritten', '<p>REWRITTEN</p>'),
-    '/framed': () =>
-      html('framed', `<iframe src="${escape(p.get('url') ?? 'about:blank')}"></iframe>`),
+    '/framed': () => {
+      const to = p.get('url') ?? 'about:blank';
+      const log = p.get('log') ?? url.origin;
+      const pre = `${log}/live?tag=${encodeURIComponent(p.get('tag') ?? '')}&step=pre&to=${encodeURIComponent(to)}`;
+      return html(
+        'framed',
+        `<script>navigator.sendBeacon(${JSON.stringify(pre)})</script><iframe src="${escape(to)}"></iframe>`
+      );
+    },
     '/doc': () => document(url, html),
     '/csp': () => document(url, html),
   };
@@ -92,7 +99,7 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0 } = {}) {
     const html = (title, body = '', headers = {}) =>
       send(
         200,
-        `<!doctype html><meta charset="utf-8"><title>${title}</title>${body}<img hidden src="/live?tag=${encodeURIComponent(p.get('tag') ?? p.get('n') ?? p.get('case') ?? '')}">`,
+        `<!doctype html><meta charset="utf-8"><title>${title}</title>${body}<img hidden src="/live?tag=${encodeURIComponent(p.get('tag') ?? p.get('n') ?? p.get('case') ?? p.get('value') ?? '')}&to=${encodeURIComponent(url.href)}">`,
         'text/html',
         headers
       );

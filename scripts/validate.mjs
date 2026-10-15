@@ -213,6 +213,7 @@ for (const v of guard.vectors ?? []) {
     e === undefined || e === '' || (typeof e === 'object' && Object.keys(e).length === 0);
   if (v.control?.origin !== 'ordinary' || blank(v.control.expected))
     gv(`${v.id} has no control on an ordinary origin`);
+  if (v.liveCheck?.on === 'control') gv(`${v.id}: liveCheck applies only to the guarded leg`);
   if (blank(v.expected)) gv(`${v.id} has no expected`);
   if (v.kind === 'cdp' && !v.liveCheck) gv(`${v.id} lacks liveCheck`);
   if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
@@ -301,11 +302,12 @@ if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);
   process.exit(1);
 }
-const observerNeeded = (check) =>
-  check?.observer === 'unguarded' ||
-  [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(
-    observerNeeded
-  );
+const observerNeeded = (check) => {
+  if (check?.observer === 'unguarded') return true;
+  if (check?.all) return check.all.some(observerNeeded);
+  if (check?.any) return check.any.every(observerNeeded);
+  return check?.not ? observerNeeded(check.not) : false;
+};
 const observerRows = guard.vectors.filter(
   (v) =>
     v.kind === 'cdp' &&

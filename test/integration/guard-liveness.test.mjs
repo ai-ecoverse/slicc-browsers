@@ -118,6 +118,7 @@ test('an exact blocked navigation is evidenced by a pre-action request and real 
       },
     };
     const vector = navigation();
+    vector.setup.push({ answer: { url: '{target}/doc?n={tag}', hold: true } });
     vector.liveCheck = {
       all: [
         { pre: '{target}/doc?n={tag}', observer: 'fixture' },
@@ -130,7 +131,7 @@ test('an exact blocked navigation is evidenced by a pre-action request and real 
       { client, unguarded: browser.unguarded, targets, fixture }
     );
     assert.equal(execution.results[0].control, 'pass');
-    assert.equal(execution.results[0].live, 'pass');
+    assert.equal(execution.results[0].live, 'pass', JSON.stringify(execution.results[0]));
     assert.equal(execution.results[0].guarded, 'pass');
     const logs = fixture.log();
     assert(logs.some((entry) => new URL(entry.url).searchParams.get('step') === 'pre'));

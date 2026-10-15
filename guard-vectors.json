@@ -72,7 +72,9 @@
     "cookie": "the name of the cookie the runner planted on {target}",
     "context": "the browser context the control created",
     "beacon": "guard-driver.mjs beacon({log}, {tag})",
-    "probe": "guard-driver.mjs probe({log}, {tag})"
+    "probe": "guard-driver.mjs probe({log}, {tag})",
+    "pageTarget": "the current page target id",
+    "responseOrigin": "the fixture response CORS origin"
   },
   "vectors": [
     {
@@ -131,23 +133,44 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
-        },
-        "hopped": {
-          "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -158,18 +181,59 @@
           "allowedBeacon": true,
           "beacon": true,
           "loaded": true,
-          "detached": false,
-          "hopped": true
+          "detached": false
         }
       },
       "expected": {
         "allowedBeacon": true,
         "beacon": false,
         "loaded": "either",
-        "detached": true,
-        "hopped": true
+        "detached": true
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.chain-301-302-303",
@@ -241,23 +305,66 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         },
         "hopped": {
           "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "hops": [
+              {
+                "origin": "{ordinary}",
+                "code": 301
+              },
+              {
+                "origin": "{cross}",
+                "code": 302
+              },
+              {
+                "origin": "{ordinary}",
+                "code": 303
+              }
+            ],
+            "to": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -282,7 +389,98 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 302
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 303
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 302
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 303
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 302
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 303
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.chain-307-308-302",
@@ -354,23 +552,66 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         },
         "hopped": {
           "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "hops": [
+              {
+                "origin": "{ordinary}",
+                "code": 307
+              },
+              {
+                "origin": "{cross}",
+                "code": 308
+              },
+              {
+                "origin": "{ordinary}",
+                "code": 302
+              }
+            ],
+            "to": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -395,7 +636,98 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.chain-303-301-308",
@@ -467,23 +799,66 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         },
         "hopped": {
           "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "hops": [
+              {
+                "origin": "{cross}",
+                "code": 303
+              },
+              {
+                "origin": "{ordinary}",
+                "code": 301
+              },
+              {
+                "origin": "{cross}",
+                "code": 308
+              }
+            ],
+            "to": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -508,7 +883,98 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 303
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{cross}",
+                            "code": 303
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{cross}",
+                            "code": 303
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.post-307-308",
@@ -576,23 +1042,62 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         },
         "hopped": {
           "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "hops": [
+              {
+                "origin": "{ordinary}",
+                "code": 307
+              },
+              {
+                "origin": "{cross}",
+                "code": 308
+              }
+            ],
+            "to": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -617,7 +1122,86 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.post-308-307",
@@ -685,23 +1269,62 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         },
         "hopped": {
           "means": "every hop in the chain was served",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "hops": [
+              {
+                "origin": "{cross}",
+                "code": 308
+              },
+              {
+                "origin": "{ordinary}",
+                "code": 307
+              }
+            ],
+            "to": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -726,7 +1349,86 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{cross}",
+                            "code": 308
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.through-302",
@@ -794,23 +1496,53 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "protectedHop": {
           "means": "the stand-in served {target}/hop?code=302",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "served": "/hop",
+            "origin": "{target}",
+            "observer": "fixture"
+          }
         },
         "landed": {
           "means": "the stand-in served {cross}/doc?n={tag}-after",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "served": "{cross}/doc?n={tag}-after",
+            "observer": "fixture"
+          }
         },
         "afterBeacon": {
           "means": "a beacon from {cross}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{cross}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -834,6 +1566,98 @@
       },
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": {
+              "hops": [
+                {
+                  "origin": "{ordinary}",
+                  "code": 301
+                },
+                {
+                  "origin": "{target}",
+                  "code": 302
+                }
+              ],
+              "to": "{cross}/doc?n={tag}-after",
+              "index": 1
+            },
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{target}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{cross}/doc?n={tag}-after"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{target}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{cross}/doc?n={tag}-after"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{target}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{cross}/doc?n={tag}-after"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -902,23 +1726,53 @@
       "observe": {
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "protectedHop": {
           "means": "the stand-in served {target}/hop?code=307",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "served": "/hop",
+            "origin": "{target}",
+            "observer": "fixture"
+          }
         },
         "landed": {
           "means": "the stand-in served {cross}/doc?n={tag}-after",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "served": "{cross}/doc?n={tag}-after",
+            "observer": "fixture"
+          }
         },
         "afterBeacon": {
           "means": "a beacon from {cross}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{cross}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the page session was detached",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -942,6 +1796,98 @@
       },
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": {
+              "hops": [
+                {
+                  "origin": "{ordinary}",
+                  "code": 301
+                },
+                {
+                  "origin": "{target}",
+                  "code": 307
+                }
+              ],
+              "to": "{cross}/doc?n={tag}-after",
+              "index": 1
+            },
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{target}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{cross}/doc?n={tag}-after"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{target}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{cross}/doc?n={tag}-after"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{target}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{cross}/doc?n={tag}-after"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -1044,21 +1990,46 @@
         "allowedBeacon": {
           "means": "a beacon from {ordinary}",
           "dependsOn": ["refused.2", "refused.5"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "any": [
+              {
+                "beacon": "{ordinary}",
+                "observer": "fixture"
+              },
+              {
+                "beacon": "{ordinary-same-site}",
+                "observer": "fixture"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
           "dependsOn": ["refused.2", "refused.5"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "detached": {
           "means": "the popup session was detached",
           "dependsOn": ["refused.2", "refused.5", "refused.6"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1078,7 +2049,50 @@
         "loaded": "either",
         "detached": true
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C3.popup-on-redirect-302",
@@ -1176,17 +2190,30 @@
       "observe": {
         "committed": {
           "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "attached": {
           "means": "the client got Target.attachedToTarget for that target",
           "dependsOn": ["refused.2"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
           "dependsOn": ["refused.2", "refused.5"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1206,6 +2233,73 @@
       },
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -1312,17 +2406,30 @@
       "observe": {
         "committed": {
           "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "attached": {
           "means": "the client got Target.attachedToTarget for that target",
           "dependsOn": ["refused.2"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
           "dependsOn": ["refused.2", "refused.5"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1342,6 +2449,97 @@
       },
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 303
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 303
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{ordinary}",
+                            "code": 301
+                          },
+                          {
+                            "origin": "{cross}",
+                            "code": 307
+                          },
+                          {
+                            "origin": "{ordinary}",
+                            "code": 303
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -1441,24 +2639,69 @@
       "observe": {
         "pageBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{ordinary}",
+            "observer": "fixture"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
           "dependsOn": ["refused.7", "refused.8"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "{target}/doc"
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "url": {
+                      "$contains": "{target}/doc"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "result": "frameTree",
+            "path": "result",
+            "equals": {
+              "$regex": "chrome-error://"
+            },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1480,7 +2723,50 @@
         "frameOnDest": false,
         "errorFrame": true
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C4.script-cross-site",
@@ -1582,24 +2868,69 @@
       "observe": {
         "pageBeacon": {
           "means": "a beacon from {ordinary}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{ordinary}",
+            "observer": "fixture"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
           "dependsOn": ["refused.7", "refused.8"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "{target}/doc"
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "url": {
+                      "$contains": "{target}/doc"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "result": "frameTree",
+            "path": "result",
+            "equals": {
+              "$regex": "chrome-error://"
+            },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1621,7 +2952,50 @@
         "frameOnDest": false,
         "errorFrame": true
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C4.static-same-site",
@@ -1720,23 +3094,68 @@
       "observe": {
         "pageBeacon": {
           "means": "a beacon from {ordinary-same-site}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{ordinary-same-site}",
+            "observer": "fixture"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "{target}/doc"
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "url": {
+                      "$contains": "{target}/doc"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "result": "frameTree",
+            "path": "result",
+            "equals": {
+              "$regex": "chrome-error://"
+            },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1762,7 +3181,50 @@
         "target": "vault",
         "reason": "not-applicable: every sliccy.ai host is protected, so no unprotected page is same-site with the vault"
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C4.script-same-site",
@@ -1864,23 +3326,68 @@
       "observe": {
         "pageBeacon": {
           "means": "a beacon from {ordinary-same-site}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{ordinary-same-site}",
+            "observer": "fixture"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "{target}/doc"
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "url": {
+                      "$contains": "{target}/doc"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.8"]
+          "dependsOn": ["refused.8"],
+          "check": {
+            "result": "frameTree",
+            "path": "result",
+            "equals": {
+              "$regex": "chrome-error://"
+            },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1906,7 +3413,50 @@
         "target": "vault",
         "reason": "not-applicable: every sliccy.ai host is protected, so no unprotected page is same-site with the vault"
       },
-      "designDependent": ["loaded"]
+      "designDependent": ["loaded"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C5.document",
@@ -1980,13 +3530,33 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/doc?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "forged": {
-          "means": "title is 'forged'"
+          "means": "title is 'forged'",
+          "check": {
+            "title": "forged",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
         },
         "detached": {
-          "means": "the page session was detached"
+          "means": "the page session was detached",
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2003,6 +3573,45 @@
         "seen": false,
         "forged": false,
         "detached": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2068,13 +3677,32 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/doc?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "rewritten": {
-          "means": "title is 'rewritten'"
+          "means": "title is 'rewritten'",
+          "check": {
+            "observer": "fixture",
+            "served": "/rewritten"
+          }
         },
         "detached": {
-          "means": "the page session was detached"
+          "means": "the page session was detached",
+          "check": {
+            "detached": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2091,6 +3719,45 @@
         "seen": false,
         "rewritten": false,
         "detached": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2124,7 +3791,29 @@
             "cdp": "Fetch.continueResponse",
             "params": {
               "responseCode": 299,
-              "responsePhrase": "Probe"
+              "responsePhrase": "Probe",
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/plain; charset=utf-8"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "{responseOrigin}"
+                },
+                {
+                  "name": "access-control-allow-credentials",
+                  "value": "true"
+                },
+                {
+                  "name": "access-control-allow-headers",
+                  "value": "*"
+                },
+                {
+                  "name": "access-control-allow-methods",
+                  "value": "GET, POST, OPTIONS"
+                }
+              ]
             }
           }
         }
@@ -2140,13 +3829,38 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/data?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "changed": {
-          "means": "body is '299 real-{tag}'"
+          "means": "body is '299 real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": {
+              "$contains": "299 "
+            },
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is '200 real-{tag}'"
+          "means": "body is '200 real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2163,6 +3877,45 @@
         "seen": false,
         "changed": false,
         "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2225,13 +3978,36 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/data?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "fulfilled": {
-          "means": "body is 'fulfilled'"
+          "means": "body is 'fulfilled'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "fulfilled",
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'real-{tag}'"
+          "means": "body is 'real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2248,6 +4024,45 @@
         "seen": false,
         "fulfilled": false,
         "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2310,13 +4125,36 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/data?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "fulfilled": {
-          "means": "body is 'fulfilled'"
+          "means": "body is 'fulfilled'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "fulfilled",
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'real-{tag}'"
+          "means": "body is 'real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2333,6 +4171,45 @@
         "seen": false,
         "fulfilled": false,
         "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2395,13 +4272,36 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.requestPaused for {target}/img?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/img?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/img?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "fulfilled": {
-          "means": "body is 'width 2'"
+          "means": "body is 'width 2'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "width 2",
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'width 1'"
+          "means": "body is 'width 1'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "width 1",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2418,6 +4318,45 @@
         "seen": false,
         "fulfilled": false,
         "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/img?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/img?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/img?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/img?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2427,18 +4366,7 @@
       "scope": "any",
       "setup": [
         {
-          "text": "a plain page whose own Fetch.enable handles auth requests, and answers the probe's challenge with credentials; a second tab without Fetch shows the untouched outcome"
-        },
-        {
-          "page": "tab",
-          "url": "{ordinary}/doc?n=plain-{tag}"
-        },
-        {
-          "page": "fetch",
-          "url": "{target}/auth/{tag}?n={tag}&plain=1",
-          "credentials": "include",
-          "status": true,
-          "as": "plain"
+          "text": "a plain page handles auth requests and answers the probe challenge with credentials"
         },
         {
           "page": "tab",
@@ -2472,46 +4400,111 @@
       "trigger": [
         {
           "page": "fetch",
+          "url": "{ordinary}/data?n=before-{tag}",
+          "as": "before"
+        },
+        {
+          "page": "fetch",
           "url": "{target}/auth/{tag}?n={tag}",
           "credentials": "include",
           "status": true,
-          "as": "body"
+          "as": "body",
+          "background": true
+        },
+        {
+          "wait": 500
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=after-{tag}",
+          "as": "after"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=before-{tag}", "{ordinary}/data?n=after-{tag}"],
+            "cdp": "Fetch.continueWithAuth",
+            "params": {
+              "authChallengeResponse": {
+                "response": "ProvideCredentials",
+                "username": "u",
+                "password": "p"
+              }
+            }
+          },
+          "as": "authAttempts"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "seen": {
-          "means": "a Fetch.authRequired for {target}/auth/{tag}?n={tag} reached the client"
+          "means": "a Fetch.authRequired for {target}/auth/{tag}?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.authRequired",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/auth/{tag}?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "pausedSeen": {
-          "means": "a Fetch.requestPaused for {target}/auth/{tag}?n={tag} reached the client"
+          "means": "a Fetch.requestPaused for {target}/auth/{tag}?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/auth/{tag}?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "authed": {
-          "means": "body is '200 authed'"
+          "means": "the fixture received the client's Authorization on the probe URL",
+          "check": {
+            "header": "authorization",
+            "on": "{target}/auth/{tag}?n={tag}",
+            "value": "Basic dTpw",
+            "observer": "fixture"
+          }
         },
-        "untouched": {
-          "means": "body equals plain"
+        "refused": {
+          "means": "continueWithAuth on the candidate probe ids was refused",
+          "check": {
+            "refused": ["authAttempts"],
+            "refusal": {
+              "match": "^slicc: refused"
+            },
+            "observer": "client"
+          }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the fixture received at least one request for the auth probe URL",
       "control": {
         "origin": "ordinary",
         "via": "guard",
         "expected": {
           "seen": true,
           "pausedSeen": true,
-          "authed": true,
-          "untouched": false
+          "authed": true
         }
       },
       "expected": {
         "seen": false,
-        "pausedSeen": false,
         "authed": false,
-        "untouched": true
+        "refused": true
       },
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "loaded": "{target}/auth/{tag}?n={tag}",
+        "observer": "fixture"
       }
     },
     {
@@ -2588,16 +4581,44 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "candidates": {
-          "means": "attempts is not empty"
+          "means": "attempts is not empty",
+          "check": {
+            "result": "attempts",
+            "path": "result",
+            "equals": {
+              "$some": {}
+            },
+            "observer": "client"
+          }
         },
         "fulfilled": {
-          "means": "body is 'guessed'"
+          "means": "body is 'guessed'",
+          "check": {
+            "result": "attempts",
+            "path": "result",
+            "equals": {
+              "$some": {
+                "ok": true
+              }
+            },
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "every attempt was refused"
+          "means": "every attempt was refused",
+          "check": {
+            "refused": ["attempts"],
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'real-{tag}'"
+          "means": "body is 'real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2616,6 +4637,45 @@
         "fulfilled": false,
         "refused": true,
         "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2681,16 +4741,38 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "candidates": {
-          "means": "attempts is not empty"
-        },
-        "fulfilled": {
-          "means": "body is 'guessed'"
+          "means": "attempts is not empty",
+          "check": {
+            "result": "attempts",
+            "path": "result",
+            "equals": {
+              "$some": {}
+            },
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "every attempt was refused"
+          "means": "every attempt was refused",
+          "check": {
+            "refused": ["attempts"],
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'real-{tag}'"
+          "means": "body is 'real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
+        },
+        "rewritten": {
+          "means": "the fixture received the rewritten URL",
+          "check": {
+            "served": "{ordinary}/data?n=rewritten-{tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2699,16 +4781,55 @@
         "via": "guard",
         "expected": {
           "candidates": true,
-          "fulfilled": true,
           "refused": false,
-          "answered": false
+          "answered": false,
+          "rewritten": true
         }
       },
       "expected": {
         "candidates": true,
-        "fulfilled": false,
         "refused": true,
-        "answered": true
+        "answered": true,
+        "rewritten": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2729,8 +4850,12 @@
           "params": {
             "patterns": [
               {
-                "urlPattern": "*",
+                "urlPattern": "{ordinary}/*",
                 "requestStage": "Request"
+              },
+              {
+                "urlPattern": "{target}/data*",
+                "requestStage": "Response"
               }
             ]
           }
@@ -2738,7 +4863,8 @@
         {
           "answer": {
             "url": "{target}/data?n={tag}",
-            "hold": true
+            "hold": true,
+            "stage": "Response"
           }
         }
       ],
@@ -2751,7 +4877,8 @@
           "page": "fetch",
           "url": "{target}/data?n={tag}",
           "background": true,
-          "as": "body"
+          "as": "body",
+          "status": true
         },
         {
           "wait": 300
@@ -2765,7 +4892,30 @@
             "between": ["{ordinary}/data?n=a-{tag}", "{ordinary}/data?n=b-{tag}"],
             "cdp": "Fetch.continueResponse",
             "params": {
-              "responseCode": 200
+              "responseCode": 299,
+              "responsePhrase": "Probe",
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/plain; charset=utf-8"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "{responseOrigin}"
+                },
+                {
+                  "name": "access-control-allow-credentials",
+                  "value": "true"
+                },
+                {
+                  "name": "access-control-allow-headers",
+                  "value": "*"
+                },
+                {
+                  "name": "access-control-allow-methods",
+                  "value": "GET, POST, OPTIONS"
+                }
+              ]
             }
           },
           "as": "attempts"
@@ -2774,16 +4924,42 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "candidates": {
-          "means": "attempts is not empty"
-        },
-        "fulfilled": {
-          "means": "body is 'guessed'"
+          "means": "attempts is not empty",
+          "check": {
+            "result": "attempts",
+            "path": "result",
+            "equals": {
+              "$some": {}
+            },
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "every attempt was refused"
+          "means": "every attempt was refused",
+          "check": {
+            "refused": ["attempts"],
+            "observer": "client"
+          }
         },
         "answered": {
-          "means": "body is 'real-{tag}'"
+          "means": "body is 'real-{tag}'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "200 real-{tag}",
+            "observer": "client"
+          }
+        },
+        "overridden": {
+          "means": "the fetch reported the overridden response status",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": {
+              "$contains": "299 "
+            },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -2792,16 +4968,55 @@
         "via": "guard",
         "expected": {
           "candidates": true,
-          "fulfilled": true,
           "refused": false,
-          "answered": false
+          "answered": false,
+          "overridden": true
         }
       },
       "expected": {
         "candidates": true,
-        "fulfilled": false,
         "refused": true,
-        "answered": true
+        "answered": true,
+        "overridden": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/data?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/data?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/data?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -2811,7 +5026,7 @@
       "scope": "any",
       "setup": [
         {
-          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+          "text": "a plain page holds the probe auth challenge, then supplies credentials for candidate ids between two ordinary requests"
         },
         {
           "page": "tab",
@@ -2825,12 +5040,14 @@
                 "urlPattern": "*",
                 "requestStage": "Request"
               }
-            ]
+            ],
+            "handleAuthRequests": true
           }
         },
         {
           "answer": {
-            "url": "{target}/data?n={tag}",
+            "url": "{target}/auth/{tag}?n={tag}",
+            "cdp": "Fetch.continueWithAuth",
             "hold": true
           }
         }
@@ -2842,9 +5059,11 @@
         },
         {
           "page": "fetch",
-          "url": "{target}/data?n={tag}",
+          "url": "{target}/auth/{tag}?n={tag}",
           "background": true,
-          "as": "body"
+          "as": "body",
+          "credentials": "include",
+          "status": true
         },
         {
           "wait": 300
@@ -2870,35 +5089,41 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": {
-          "means": "attempts is not empty"
-        },
-        "fulfilled": {
-          "means": "body is 'guessed'"
-        },
         "refused": {
-          "means": "every attempt was refused"
+          "means": "every attempt was refused",
+          "check": {
+            "refused": ["attempts"],
+            "observer": "client",
+            "refusal": {
+              "match": "^slicc: refused"
+            }
+          }
         },
-        "answered": {
-          "means": "body is 'real-{tag}'"
+        "authed": {
+          "means": "the fixture received the supplied authorization header",
+          "check": {
+            "header": "authorization",
+            "on": "{target}/auth/{tag}?n={tag}",
+            "value": "Basic dTpw",
+            "observer": "fixture"
+          }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the fixture received at least one request for the auth probe URL",
       "control": {
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "candidates": true,
-          "fulfilled": true,
-          "refused": false,
-          "answered": false
+          "authed": true
         }
       },
       "expected": {
-        "candidates": true,
-        "fulfilled": false,
         "refused": true,
-        "answered": true
+        "authed": false
+      },
+      "liveCheck": {
+        "loaded": "{target}/auth/{tag}?n={tag}",
+        "observer": "fixture"
       }
     },
     {
@@ -2943,16 +5168,57 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "byURL": {
-          "means": "byURL succeeded and holds {cookie}"
+          "means": "byURL succeeded and holds {cookie}",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "byURL",
+            "observer": "client",
+            "on": "{target}"
+          }
         },
         "mixedURLs": {
-          "means": "mixedURLs succeeded and holds {cookie}"
+          "means": "mixedURLs succeeded and holds {cookie}",
+          "check": {
+            "any": [
+              {
+                "cookie": "{cookie}",
+                "from": "mixedURLs",
+                "on": "{target}",
+                "observer": "client"
+              },
+              {
+                "cookie": "{cookie}",
+                "from": "mixedURLs",
+                "on": "{vault}",
+                "observer": "client"
+              },
+              {
+                "cookie": "{cookie}",
+                "from": "mixedURLs",
+                "on": "{seven}",
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "all": {
-          "means": "all succeeded and holds {cookie}"
+          "means": "all succeeded and holds {cookie}",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "all",
+            "observer": "client",
+            "on": "{target}"
+          }
         },
         "storage": {
-          "means": "storage succeeded and holds {cookie}"
+          "means": "storage succeeded and holds {cookie}",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "storage",
+            "observer": "client",
+            "on": "{target}"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -2971,6 +5237,37 @@
         "mixedURLs": false,
         "all": false,
         "storage": false
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["byURL", "mixedURLs", "all", "storage"],
+                "observer": "client"
+              },
+              {
+                "filtered": {
+                  "from": ["byURL", "mixedURLs", "all", "storage"],
+                  "cookie": "{cookie}",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -3075,25 +5372,96 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "setURL": {
-          "means": "setURL succeeded"
+          "means": "setURL succeeded",
+          "check": {
+            "result": "setURL",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "setDomain": {
-          "means": "setDomain succeeded"
+          "means": "setDomain succeeded",
+          "check": {
+            "result": "setDomain",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "setMany": {
-          "means": "setMany succeeded"
+          "means": "setMany succeeded",
+          "check": {
+            "result": "setMany",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "storageSet": {
-          "means": "storageSet succeeded"
+          "means": "storageSet succeeded",
+          "check": {
+            "result": "storageSet",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "deleted": {
-          "means": "remove and setURL succeeded and read lacks w1-{tag}"
+          "means": "remove and setURL succeeded and read lacks w1-{tag}",
+          "check": {
+            "all": [
+              {
+                "result": "remove",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "not": {
+                  "cookie": "w1-{tag}",
+                  "from": "read",
+                  "observer": "client",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "written": {
-          "means": "read holds w2-{tag}, w3-{tag} and w4-{tag}"
+          "means": "read holds w2-{tag}, w3-{tag} and w4-{tag}",
+          "check": {
+            "all": [
+              {
+                "cookie": "w2-{tag}",
+                "from": "read",
+                "observer": "client",
+                "on": "{target}"
+              },
+              {
+                "cookie": "w3-{tag}",
+                "from": "read",
+                "observer": "client",
+                "on": "{target}"
+              },
+              {
+                "cookie": "w4-{tag}",
+                "from": "read",
+                "observer": "client",
+                "on": "{target}"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "setURL, setDomain, setMany, storageSet and remove were all refused"
+          "means": "setURL, setDomain, setMany, storageSet and remove were all refused",
+          "check": {
+            "refused": ["setURL", "setDomain", "setMany", "storageSet", "remove"],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -3118,6 +5486,37 @@
         "deleted": false,
         "written": false,
         "refused": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["setURL", "setDomain", "setMany", "storageSet", "remove", "read"],
+                "observer": "client"
+              },
+              {
+                "filtered": {
+                  "from": ["read"],
+                  "cookie": "{cookie}",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -3182,13 +5581,29 @@
       "requires": ["browserSession", "browserContexts"],
       "observe": {
         "network": {
-          "means": "network succeeded"
+          "means": "network succeeded",
+          "check": {
+            "result": "network",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "storage": {
-          "means": "storage succeeded"
+          "means": "storage succeeded",
+          "check": {
+            "result": "storage",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "network and storage were both refused"
+          "means": "network and storage were both refused",
+          "check": {
+            "refused": ["network", "storage"],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -3205,6 +5620,29 @@
         "network": false,
         "storage": false,
         "refused": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["network", "storage"],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -3312,10 +5750,40 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "reachedAll": {
-          "means": "no call was refused"
+          "means": "no call was refused",
+          "check": {
+            "reached": [
+              "clearDataForOrigin",
+              "getUsageAndQuota",
+              "clearDataForStorageKey",
+              "domStorageItems",
+              "domStorageByKey",
+              "domStorageSet",
+              "indexedDBNames",
+              "indexedDBByKey",
+              "cacheNames",
+              "cacheByKey"
+            ],
+            "observer": "client"
+          }
         },
         "refusedAll": {
-          "means": "every call was refused"
+          "means": "every call was refused",
+          "check": {
+            "refused": [
+              "clearDataForOrigin",
+              "getUsageAndQuota",
+              "clearDataForStorageKey",
+              "domStorageItems",
+              "domStorageByKey",
+              "domStorageSet",
+              "indexedDBNames",
+              "indexedDBByKey",
+              "cacheNames",
+              "cacheByKey"
+            ],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -3330,6 +5798,40 @@
       "expected": {
         "reachedAll": false,
         "refusedAll": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": true
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": [
+                  "clearDataForOrigin",
+                  "getUsageAndQuota",
+                  "clearDataForStorageKey",
+                  "domStorageItems",
+                  "domStorageByKey",
+                  "domStorageSet",
+                  "indexedDBNames",
+                  "indexedDBByKey",
+                  "cacheNames",
+                  "cacheByKey"
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -3376,19 +5878,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3405,7 +5924,50 @@
         "delivered": false,
         "attached": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C1.replace",
@@ -3451,19 +6013,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3480,7 +6059,50 @@
         "delivered": false,
         "attached": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C1.form",
@@ -3526,19 +6148,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3555,7 +6194,50 @@
         "delivered": false,
         "attached": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.302",
@@ -3607,19 +6289,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3639,7 +6338,74 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{plain}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.307",
@@ -3691,19 +6457,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3723,7 +6506,74 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{plain}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 307
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C2.twohop",
@@ -3779,19 +6629,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3811,7 +6678,86 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{plain}",
+                      "code": 302
+                    },
+                    {
+                      "origin": "{plain}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          },
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": {
+                        "hops": [
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          },
+                          {
+                            "origin": "{plain}",
+                            "code": 302
+                          }
+                        ],
+                        "to": "{target}/doc?n={tag}"
+                      },
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C3.popup",
@@ -3872,21 +6818,61 @@
       "observe": {
         "popup": {
           "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "any": [
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "openerId": "{pageTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "openerId": "{pageTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2", "refused.3"]
+          "dependsOn": ["refused.2", "refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
           "dependsOn": ["refused.3"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "the client got Target.attachedToTarget for that target",
           "dependsOn": ["refused.3"],
-          "requires": ["autoAttach"]
+          "requires": ["autoAttach"],
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3902,6 +6888,49 @@
         "beacon": false,
         "delivered": false,
         "attached": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -3949,15 +6978,28 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -3972,6 +7014,49 @@
         "beacon": false,
         "delivered": false,
         "attached": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4033,13 +7118,33 @@
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
         "fulfilled": {
-          "means": "the fulfilled body renders"
+          "means": "the fulfilled body renders",
+          "check": {
+            "title": "fulfilled",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
         },
         "paused": {
-          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/doc?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "served": {
-          "means": "the stand-in served {target}/doc?n={tag}"
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4054,6 +7159,45 @@
         "paused": false,
         "fulfilled": false,
         "served": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4108,13 +7252,32 @@
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
         "rewritten": {
-          "means": "the rewritten body renders"
+          "means": "the rewritten body renders",
+          "check": {
+            "observer": "fixture",
+            "served": "/rewritten"
+          }
         },
         "paused": {
-          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/doc?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "served": {
-          "means": "the stand-in served {target}/doc?n={tag}"
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4129,6 +7292,45 @@
         "paused": false,
         "rewritten": false,
         "served": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4181,10 +7383,25 @@
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
         "paused": {
-          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/doc?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "served": {
-          "means": "the stand-in served {target}/doc?n={tag}"
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4198,6 +7415,45 @@
       "expected": {
         "paused": false,
         "served": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4244,19 +7500,36 @@
       "observe": {
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4273,7 +7546,50 @@
         "delivered": false,
         "attached": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E2.binding",
@@ -4332,15 +7648,36 @@
       "observe": {
         "binding": {
           "means": "a Runtime.bindingCalled from {target}/doc?n={tag}",
-          "dependsOn": ["refused.3", "refused.4"]
+          "dependsOn": ["refused.3", "refused.4"],
+          "check": {
+            "event": "Runtime.bindingCalled",
+            "where": {
+              "params": {
+                "payload": {
+                  "$encoded": {
+                    "value": "{target}/doc"
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.4"]
+          "dependsOn": ["refused.4"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4356,7 +7693,50 @@
         "beacon": false,
         "served": "either"
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E3.bypass-csp",
@@ -4402,19 +7782,37 @@
       "observe": {
         "inline": {
           "means": "a beacon tagged inline-{tag} from the inline script on {target}",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "title": "inline",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}&csp=1",
+            "observer": "fixture"
+          }
         },
         "delivered": {
           "means": "an event carried the guarded document",
-          "dependsOn": ["refused.2"]
+          "dependsOn": ["refused.2"],
+          "check": {
+            "delivered": "{target}/doc",
+            "observer": "client"
+          }
         },
         "attached": {
           "means": "an attachedToTarget for another target reached the client",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "attached": "{target}",
+            "session": "page",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4431,7 +7829,50 @@
         "delivered": false,
         "attached": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}&csp=1",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}&csp=1",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&csp=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&csp=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E5.console",
@@ -4480,15 +7921,41 @@
       "observe": {
         "console": {
           "means": "a Runtime.consoleAPICalled from {target}/doc?n={tag}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "event": "Runtime.consoleAPICalled",
+            "where": {
+              "params": {
+                "args": {
+                  "$some": {
+                    "value": {
+                      "$encoded": {
+                        "value": "{target}/doc",
+                        "prefix": "probe:"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4504,7 +7971,50 @@
         "beacon": false,
         "served": "either"
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "B2.headers",
@@ -4555,11 +8065,21 @@
       "observe": {
         "header": {
           "means": "the request for {target}/doc?n={tag} carried x-probe",
-          "dependsOn": ["refused.3"]
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "x-probe",
+            "on": "{target}/doc?n={tag}",
+            "value": "{tag}",
+            "observer": "fixture"
+          }
         },
         "served": {
           "means": "the stand-in served {target}/doc?n={tag}",
-          "dependsOn": []
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -4577,7 +8097,50 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["served"]
+      "designDependent": ["served"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "C6.getCookies",
@@ -4608,10 +8171,22 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "read": {
-          "means": "the result holds {plain}'s canary cookie"
+          "means": "the result holds {plain}'s canary cookie",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         },
         "leaked": {
-          "means": "the result holds {target}'s cookies"
+          "means": "the result holds {target}'s cookies",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4624,6 +8199,37 @@
       },
       "expected": {
         "leaked": false
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              },
+              {
+                "filtered": {
+                  "from": ["call"],
+                  "cookie": "{cookie}",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4653,10 +8259,22 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "read": {
-          "means": "the result holds {plain}'s canary cookie"
+          "means": "the result holds {plain}'s canary cookie",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         },
         "leaked": {
-          "means": "the result holds {target}'s cookies"
+          "means": "the result holds {target}'s cookies",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4669,6 +8287,37 @@
       },
       "expected": {
         "leaked": false
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              },
+              {
+                "filtered": {
+                  "from": ["call"],
+                  "cookie": "{cookie}",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4702,10 +8351,20 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "ok": {
-          "means": "the call succeeded"
+          "means": "the call succeeded",
+          "check": {
+            "result": "call",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "the call was refused"
+          "means": "the call was refused",
+          "check": {
+            "refused": ["call"],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4718,6 +8377,29 @@
       },
       "expected": {
         "refused": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4750,10 +8432,20 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "ok": {
-          "means": "the call succeeded"
+          "means": "the call succeeded",
+          "check": {
+            "result": "call",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "the call was refused"
+          "means": "the call was refused",
+          "check": {
+            "refused": ["call"],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4766,6 +8458,29 @@
       },
       "expected": {
         "refused": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4796,10 +8511,22 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "read": {
-          "means": "the result holds {plain}'s canary cookie"
+          "means": "the result holds {plain}'s canary cookie",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         },
         "leaked": {
-          "means": "the result holds {target}'s cookies"
+          "means": "the result holds {target}'s cookies",
+          "check": {
+            "cookie": "{cookie}",
+            "from": "call",
+            "observer": "client",
+            "on": "{target}"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4812,6 +8539,37 @@
       },
       "expected": {
         "leaked": false
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": false
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              },
+              {
+                "filtered": {
+                  "from": ["call"],
+                  "cookie": "{cookie}",
+                  "on": "{target}"
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
@@ -4845,10 +8603,20 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "ok": {
-          "means": "the call succeeded"
+          "means": "the call succeeded",
+          "check": {
+            "result": "call",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
         },
         "refused": {
-          "means": "the call was refused"
+          "means": "the call was refused",
+          "check": {
+            "refused": ["call"],
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
@@ -4861,6 +8629,29 @@
       },
       "expected": {
         "refused": true
+      },
+      "liveCheck": {
+        "all": [
+          {
+            "state": {
+              "origin": "{target}",
+              "cookie": "{cookie}",
+              "value": "{tag}",
+              "storage": true
+            },
+            "observer": "unguarded"
+          },
+          {
+            "any": [
+              {
+                "refused": ["call"],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {

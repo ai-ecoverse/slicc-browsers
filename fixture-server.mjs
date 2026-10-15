@@ -1,0 +1,126 @@
+import { createServer } from 'node:http';
+
+const tall = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64'
+);
+const escape = (value) =>
+  value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+
+function document(url, html) {
+  const p = url.searchParams;
+  const csp = p.has('csp') || url.pathname === '/csp';
+  return html(
+    'doc',
+    `<p>document ${escape(p.get('n') ?? '')}</p>${csp ? '<script>document.title="inline"; document.body.dataset.inline="true"</script>' : ''}`,
+    csp ? { 'content-security-policy': "script-src 'none'" } : {}
+  );
+}
+
+function trigger(p) {
+  const kind = p.get('k') ?? '';
+  const to = p.get('to') ?? '';
+  const frame = kind === 'iframe' ? `<iframe src="${escape(to)}"></iframe>` : '';
+  return `<p>trigger</p><button onclick="go()">Go</button>${frame}<script>const to=${JSON.stringify(to)};function go(){const k=${JSON.stringify(kind)};if(k==='href'||k==='deferred')location.href=to;if(k==='replace')location.replace(to);if(k==='popup')window.open(to);if(k==='form'){const u=new URL(to);const f=document.createElement('form');f.action=u.origin+u.pathname;for(const [name,value] of u.searchParams){const i=document.createElement('input');i.type='hidden';i.name=name;i.value=value;f.append(i);}document.body.append(f);f.submit();}return 'went';}${kind === 'deferred' ? `setTimeout(go,${Number(p.get('defer') ?? 3000)});` : ''}</script>`;
+}
+
+function route(req, url, send, html) {
+  const p = url.searchParams;
+  const routes = {
+    '/beacon': () => send(204, ''),
+    '/hop': () =>
+      send(Number(p.get('code') ?? 302), 'moved', 'text/plain', { location: p.get('to') ?? '/' }),
+    '/data': () => send(200, `real-${p.get('n') ?? ''}`, 'text/plain'),
+    '/live': () => send(200, tall, 'image/png'),
+    '/img': () => send(200, tall, 'image/png'),
+    '/script': () =>
+      send(
+        200,
+        `globalThis.vectorScript=${JSON.stringify(`real-${p.get('n') ?? ''}`)}`,
+        'text/javascript'
+      ),
+    '/page': () => html('trigger', trigger(p)),
+    '/api/cookies': () => send(200, req.headers.cookie ?? 'none', 'text/plain'),
+    '/plant': () =>
+      html('plant', '<script>localStorage.setItem("canary","planted")</script>', {
+        'set-cookie': [`canary=planted-${url.hostname}; Path=/`, 'del=1; Path=/'],
+      }),
+    '/rewritten': () => html('rewritten', '<p>REWRITTEN</p>'),
+    '/framed': () => {
+      const to = p.get('url') ?? 'about:blank';
+      const log = p.get('log') ?? url.origin;
+      const pre = `${log}/live?tag=${encodeURIComponent(p.get('tag') ?? '')}&step=pre&to=${encodeURIComponent(to)}`;
+      return html(
+        'framed',
+        `<script>navigator.sendBeacon(${JSON.stringify(pre)})</script><iframe src="${escape(to)}"></iframe>`
+      );
+    },
+    '/doc': () => document(url, html),
+    '/csp': () => document(url, html),
+  };
+  if (req.method === 'OPTIONS') return send(204, '');
+  if (url.pathname.startsWith('/auth')) {
+    if (req.headers.authorization === 'Basic dTpw') return send(200, 'authed', 'text/plain');
+    return send(401, 'unauthorized', 'text/plain', {
+      'www-authenticate': `Basic realm="${escape(url.pathname)}"`,
+    });
+  }
+  if (url.pathname.startsWith('/canary'))
+    return html(
+      'canary',
+      `<p data-canary="${escape(p.get('value') ?? 'planted')}">canary-marker ${escape(url.host)}</p>`
+    );
+  const handler = routes[url.pathname];
+  if (handler) return handler();
+  return send(404, 'missing', 'text/plain');
+}
+
+export async function fixtureServer({ host = '127.0.0.1', port = 0 } = {}) {
+  let entries = [];
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    entries.push({
+      url: url.href,
+      method: req.method,
+      headers: { ...req.headers },
+      time: Date.now(),
+    });
+    const p = url.searchParams;
+    const cors = {
+      'access-control-allow-origin': req.headers.origin ?? '*',
+      'access-control-allow-credentials': 'true',
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'GET, POST, OPTIONS',
+    };
+    const send = (code, body, type = 'text/html', headers = {}) => {
+      res.writeHead(code, { 'content-type': `${type}; charset=utf-8`, ...cors, ...headers });
+      res.end(body);
+    };
+    const html = (title, body = '', headers = {}) =>
+      send(
+        200,
+        `<!doctype html><meta charset="utf-8"><title>${title}</title>${body}<img hidden src="/live?tag=${encodeURIComponent(p.get('tag') ?? p.get('n') ?? p.get('case') ?? p.get('value') ?? '')}&to=${encodeURIComponent(url.href)}">`,
+        'text/html',
+        headers
+      );
+    route(req, url, send, html);
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, resolve);
+  });
+  const address = server.address();
+  return {
+    port: address.port,
+    origin: `http://${host}:${address.port}`,
+    log: () => structuredClone(entries),
+    reset: () => {
+      entries = [];
+    },
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.closeAllConnections();
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  };
+}

@@ -3,6 +3,9 @@ extends:
 
 pre-commit:
   jobs:
+    - name: guard runner diff coverage
+      glob: "{guard-runner.mjs,fixture-server.mjs}"
+      run: npm run --silent test:unit:guard
     - name: corpus bundle
       glob: "corpus/**"
       run: node scripts/corpus.mjs --check

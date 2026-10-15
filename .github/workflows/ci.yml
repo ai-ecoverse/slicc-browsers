@@ -14,6 +14,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  guard-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      LEFTHOOK: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright-core install --with-deps chromium
+      - run: timeout -k 30 720 npm run test:guard
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15

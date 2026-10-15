@@ -69,6 +69,8 @@ pub struct Vector {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observe: Option<BTreeMap<String, Observation>>,
     pub live: String,
+    #[serde(default, rename = "liveCheck", skip_serializing_if = "Option::is_none")]
+    pub live_check: Option<serde_json::Value>,
     pub control: Control,
     pub expected: Expected,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -89,6 +91,7 @@ pub struct Vector {
 #[serde(deny_unknown_fields)]
 pub struct Observation {
     pub means: String,
+    pub check: serde_json::Value,
     #[serde(default, rename = "dependsOn", skip_serializing_if = "Option::is_none")]
     pub depends_on: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

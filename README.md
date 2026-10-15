@@ -237,6 +237,121 @@ It exports:
 - every `{name}` is in `placeholders`;
 - no URL uses a port from 9222 to 9229.
 
+## Reference runner
+
+`guard-runner.mjs` is dependency-free browser ESM. `run(set, options)` returns
+`{ results, summary(metadata) }`; the module also exports `summary`. Results have
+`id`, `target`, `variant`, `control`, `guarded`, `live`, boolean observations and
+errors. Statuses are `pass`, `fail`, `skip` and `not-run`. Text vectors are reported
+as `not-run`; they are not silently certified. A missing observation check is an
+error before execution.
+
+Supply a CDP client with `send(method, params, sessionId): Promise<object>`,
+`waitEvent(predicate, milliseconds): Promise<event>` and an append-only `events`
+array of `{ method, params, sessionId }`. Rejections should expose the protocol
+error as `error.cdp`, or an error message. `client` carries the guarded leg;
+`unguarded`, when supplied, carries unguarded controls and observation reads.
+There is no fallback from observer reads to the guarded client. A bare client
+means guarded transport only; rows requiring an observer report
+`skip` with `not-supported:unguarded-observer`, counted in `summary().observerSkipped`.
+`clientFactory({ variant, detachDelay, vector, target, slot })` is called per row
+and may return either a client or `{ client, unguarded, close, transportVariant }`.
+The factory can configure the guard's own transport delay from this metadata;
+the runner never reaches into the guard. `transportVariant: true` acknowledges
+that configuration, and every result records that boolean (false by default).
+`slot` allows pooling browsers while keeping each row's clients independent.
+The optional `close` releases the row's clients; release pooled browsers after
+`run` completes. Each parallel slot needs an independent browser for
+browser-wide settings. Without a factory execution is serial. Cookie and storage
+rows use fresh browser contexts when `capabilities.browserContexts` is true;
+otherwise they run serially. `capabilities` is an object of booleans or an array
+of supported names. `capabilities.scope` selects owner-specific rows.
+
+Map `ordinary`, `ordinary-same-site`, `seven`, `vault`, `vault-x`, `apex`, `own`
+and `client` to origins. Optionally map `plain`, `cross` and `log`; their defaults
+are `ordinary`, `client` and `ordinary`. Origins must preserve the site
+relationships of the data. Tags and cookie names are unique per leg. `variant`
+selects one variant or an array; omission selects all. `parallel` defaults to 1.
+`log(row)` receives completed rows. A variant supplies the wait before an
+explicit `Target.detachFromTarget` step and for a `settle.variant` step.
+
+Every runnable vector has a declarative `liveCheck`; every observation has a
+declarative `check`. Each check declares its `observer`: `fixture` reads request
+logs, `client` reads already-delivered transport data, and `unguarded` requires
+an independent CDP observer. `all` needs the observers for every operand; `any`
+can use an available fixture or client alternative without an unguarded observer.
+Unavailable optional observer alternatives are false, never substituted with guarded reads.
+Checks include: `beacon`, `served`, `header` with
+`on`, `event` with `where`, `result` with `path` and `equals`, `cookie` with `from`,
+`compare`, `refused`, `reached`, `attached`, `delivered`, `title`, `expression`,
+`hops` (each exact nested redirect URL), `detached`, `loaded`, `pre`, `blocked`,
+`registration`, `state` and `filtered`. The diagnostic `executed` and `live`
+checks are not valid liveness proofs.
+Compose checks with `all`, `any` or `not`. Predicates support nested partial
+objects, `$contains`, `$regex`, `$some`, nonempty `$every`, and `$encoded` with
+`{ value, prefix }` for a base64-encoded value with an optional prefix. Reads of titles and
+expressions use the unguarded observer. A `refused` check can declare `refusal.match` to match protocol errors. Transport timeouts, timeout sentinel values and evaluation exceptions fail result,
+comparison and observer-read
+observations; they are never comparable values. Registration refusals must match the
+step's declared expression; dependent observations are omitted and reported by
+the existing result evaluator.
+
+`liveCheck` applies only to the guarded leg. Controls are judged by their positive
+observations: a missing or failing effect fails the control. Guarded liveness
+requires the exact target URL in the fixture log or a target-origin `/live`
+heartbeat; alternatively a pre-action `/live?tag=...&step=pre&to=...` request and
+an exact-URL block/error from the client or unguarded frame tree. An error for a
+different URL is not evidence. A declared setup refusal can supply liveness only
+when its `refusal.match` matched. Transport connectivity and command completion
+alone never prove liveness. Cookie and storage rows seed a canary outside the
+guard and read it back outside the guard; refused writes require unchanged
+canary state and a refusal or filtered call response. Their control can clear or
+modify state as required by its positive observations. `C5.auth` and
+`C5.guessed-id.continue-with-auth` use fixture Authorization logs and refusal of
+candidate auth ids; `C5.auth` also checks delivered auth events. Their liveness
+requires an auth request at the fixture, not a completed fetch. Neither uses a
+plain-tab baseline: headless Chromium can leave a credentials-including fetch
+to a Basic 401 pending even without an attached client.
+
+Beacon settlement uses only requests recorded after the page action starts. For
+redirect chains it also requires the exact final destination request in the
+fixture log. A setup beacon on the same origin and tag cannot settle an unfinished
+redirect chain. This does not change the observations used to judge either leg.
+
+The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
+`fixtureServer({ host, port })`, defaulting to a random loopback port. It returns
+`origin`, `port`, `log()`, `reset()` and `close()`. Log entries contain `url`,
+`method`, `headers` and `time`. Mirror that API when using another fixture.
+The server serves document, frame, redirect, CSP, authentication, data, image,
+canary and beacon paths. Configure host resolution in your test browser, not in
+the runner. `npm run test:guard` exercises Chromium twice with no guard, one target per
+invocation: controls must pass and guarded expectations must fail. For a single
+target use `GUARD_TARGET=seven npm run test:guard-target`. The fixture also serves
+`/live` image requests from stand-in documents, independently of injected code.
+
+```js
+import set from '@ai-ecoverse/slicc-browsers/guard-vectors.json' with { type: 'json' };
+import { run } from '@ai-ecoverse/slicc-browsers/guard-runner';
+import { fixtureServer } from '@ai-ecoverse/slicc-browsers/fixture';
+const fixture = await fixtureServer();
+const targets = await configureTestOrigins(fixture.port);
+const capabilities = {
+  autoAttach: true,
+  browserSession: true,
+  browserContexts: true,
+};
+const execution = await run(set, {
+  clientFactory: (metadata) => connectGuardAndObserver(metadata),
+  targets,
+  capabilities,
+  variant: ['prompt', 'lagging'],
+  parallel: 6,
+  fixture,
+});
+console.log(execution.summary({ guard: 'my-guard', sha: 'build-sha' }));
+await fixture.close();
+```
+
 ## The process source
 
 The process scan finds browsers started with a debugging port by something else:

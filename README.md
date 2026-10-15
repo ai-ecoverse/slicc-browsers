@@ -491,8 +491,9 @@ semantic-release cuts one version from `main` for all three packages (`.github/w
 1. The tag `vX.Y.Z` and a GitHub release are the Go module's release. `scripts/major-guard.mjs` fails the release when the major doesn't fit the module path in `go.mod` (no suffix allows v0 and v1, `/vN` only vN). The workflow then asks `proxy.golang.org` for the new version and `pkg.go.dev` to fetch it; both only warn.
 2. **npm:** with the repository variable `SLICC_BROWSERS_NPM_PUBLISH` set to `true`, the package is stamped with the version and published through npm trusted publishing (OIDC, with provenance). A version that is already on npm is skipped.
 3. **crates.io:** with the repository variable `SLICC_BROWSERS_CRATES_PUBLISH` set to `true`, `Cargo.toml` is stamped with the version and `cargo publish` runs with a short-lived token from crates.io trusted publishing (`rust-lang/crates-io-auth-action`). A version that is already on crates.io is skipped.
+4. **Cert line:** after the npm publish, the workflow runs `npm pack @ai-ecoverse/slicc-browsers@X.Y.Z` against the registry and appends `cert: @ai-ecoverse/slicc-browsers@X.Y.Z sha256=<hex> gitHead=<sha>` to the `vX.Y.Z` GitHub release and the job summary, once; the cert lane copies it from there.
 
-A run started by hand publishes what's missing without a new release: `gh workflow run release.yml --ref main` when `main`'s head has its tag, or `gh workflow run release.yml --ref main -f tag=vX.Y.Z` for any existing tag.
+A run started by hand publishes what's missing without a new release: `gh workflow run release.yml --ref main` when `main`'s head has its tag, or `gh workflow run release.yml --ref main -f tag=vX.Y.Z` for any existing tag. `gh workflow run release.yml --ref main -f cert-only=true` only adds the cert line for the latest npm version.
 
 **Go module versions.** A pushed tag is the release: `proxy.golang.org` caches it and `sum.golang.org` records its hash for good. Never move or delete a pushed tag; retract a bad version in `go.mod` and release anew. A `BREAKING CHANGE` needs a `/vN` module path first.
 

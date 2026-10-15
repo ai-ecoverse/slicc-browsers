@@ -126,7 +126,7 @@
     "observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["means"],
+      "required": ["means", "check"],
       "properties": {
         "means": {
           "type": "string",
@@ -142,6 +142,9 @@
         },
         "requires": {
           "$ref": "#/$defs/requires"
+        },
+        "check": {
+          "$ref": "#/$defs/check"
         }
       }
     },
@@ -284,8 +287,61 @@
           "items": {
             "enum": ["href", "iframe", "popup", "redirect"]
           }
+        },
+        "liveCheck": {
+          "$ref": "#/$defs/check"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "cdp"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["liveCheck"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "observe": {
+                "type": "object",
+                "required": ["hopped"]
+              }
+            },
+            "required": ["observe"]
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "setup": {
+                    "type": "array",
+                    "contains": {
+                      "$ref": "#/$defs/hopStep"
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "trigger": {
+                    "type": "array",
+                    "contains": {
+                      "$ref": "#/$defs/hopStep"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
     },
     "steps": {
       "type": "array",
@@ -572,6 +628,408 @@
             },
             "on": {
               "$ref": "#/$defs/on"
+            }
+          }
+        }
+      ]
+    },
+    "check": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["beacon", "observer"],
+          "properties": {
+            "beacon": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "fixture"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["served", "observer"],
+          "properties": {
+            "served": {
+              "type": "string"
+            },
+            "origin": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "fixture"
+            },
+            "tagged": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["header", "on", "observer"],
+          "properties": {
+            "header": {
+              "type": "string"
+            },
+            "on": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "fixture"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["event", "observer"],
+          "properties": {
+            "event": {
+              "type": "string"
+            },
+            "where": {
+              "$ref": "#/$defs/predicate"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["result", "equals", "observer"],
+          "properties": {
+            "result": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "equals": {
+              "$ref": "#/$defs/predicate"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cookie", "from", "observer"],
+          "properties": {
+            "cookie": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "client"
+            },
+            "on": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["compare", "path", "observer"],
+          "properties": {
+            "compare": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "path": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["refused", "observer"],
+          "properties": {
+            "refused": {
+              "$ref": "#/$defs/callNames"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reached", "observer"],
+          "properties": {
+            "reached": {
+              "$ref": "#/$defs/callNames"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["attached", "observer"],
+          "properties": {
+            "attached": {
+              "type": "string"
+            },
+            "session": {
+              "$ref": "#/$defs/session"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["delivered", "observer"],
+          "properties": {
+            "delivered": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["title", "via", "observer"],
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "via": {
+              "const": "unguarded"
+            },
+            "session": {
+              "$ref": "#/$defs/session"
+            },
+            "observer": {
+              "const": "unguarded"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expression", "equals", "via", "observer"],
+          "properties": {
+            "expression": {
+              "type": "string"
+            },
+            "equals": {
+              "$ref": "#/$defs/predicate"
+            },
+            "via": {
+              "const": "unguarded"
+            },
+            "session": {
+              "$ref": "#/$defs/session"
+            },
+            "observer": {
+              "const": "unguarded"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["all", "observer"],
+          "properties": {
+            "all": {
+              "$ref": "#/$defs/checks"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["any", "observer"],
+          "properties": {
+            "any": {
+              "$ref": "#/$defs/checks"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["not", "observer"],
+          "properties": {
+            "not": {
+              "$ref": "#/$defs/check"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["executed", "observer"],
+          "properties": {
+            "executed": {
+              "enum": ["setup", "trigger", "child"]
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["live", "observer"],
+          "properties": {
+            "live": {
+              "const": true
+            },
+            "observer": {
+              "const": "unguarded"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hops", "to", "observer"],
+          "properties": {
+            "hops": {
+              "$ref": "#/$defs/hops"
+            },
+            "to": {
+              "type": "string"
+            },
+            "observer": {
+              "const": "fixture"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["detached", "observer"],
+          "properties": {
+            "detached": {
+              "enum": ["page", "child"]
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        }
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "callNames": {
+      "oneOf": [
+        {
+          "const": "all"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        }
+      ]
+    },
+    "predicate": {
+      "oneOf": [
+        {
+          "type": ["string", "boolean", "number", "null"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "$contains": {
+              "type": "string"
+            },
+            "$regex": {
+              "type": "string"
+            },
+            "$some": {
+              "$ref": "#/$defs/predicate"
+            },
+            "$every": {
+              "$ref": "#/$defs/predicate"
+            },
+            "$encoded": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value"],
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/predicate"
+          }
+        }
+      ]
+    },
+    "hopStep": {
+      "anyOf": [
+        {
+          "type": "object",
+          "required": ["hops"]
+        },
+        {
+          "type": "object",
+          "required": ["children"],
+          "properties": {
+            "children": {
+              "type": "array",
+              "contains": {
+                "$ref": "#/$defs/hopStep"
+              }
             }
           }
         }

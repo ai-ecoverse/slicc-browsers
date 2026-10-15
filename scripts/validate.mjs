@@ -214,11 +214,14 @@ for (const v of guard.vectors ?? []) {
   if (v.control?.origin !== 'ordinary' || blank(v.control.expected))
     gv(`${v.id} has no control on an ordinary origin`);
   if (blank(v.expected)) gv(`${v.id} has no expected`);
+  if (v.kind === 'cdp' && !v.liveCheck) gv(`${v.id} lacks liveCheck`);
   if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
   if (v.skip && !v.targets.includes(v.skip.target))
     gv(`${v.id} skips ${v.skip.target}, which it doesn't target`);
   if (v.skip && v.targets.every((t) => t === v.skip.target)) gv(`${v.id} skips every target`);
   const steps = flat([...(v.setup ?? []), ...(v.trigger ?? [])]);
+  if (v.observe?.hopped && !steps.some((step) => step.hops))
+    gv(`${v.id}: hopped requires a hops step`);
   const runnable = steps.some((st) => st.cdp || st.page);
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);
@@ -240,6 +243,7 @@ for (const v of guard.vectors ?? []) {
   const first = steps.findIndex((st) => st.refusable);
   const before = new Set(first < 0 ? [] : steps.slice(0, first).flatMap((st) => st.as ?? []));
   for (const [name, o] of Object.entries(v.observe ?? {})) {
+    if (!o.check) gv(`${v.id}: ${name} lacks a check`);
     if (first >= 0 && !before.has(name) && !o.dependsOn)
       gv(`${v.id} observes ${name} after a refusable step without dependsOn`);
     for (const d of o.dependsOn ?? []) {
@@ -297,6 +301,19 @@ if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);
   process.exit(1);
 }
+const observerNeeded = (check) =>
+  check?.observer === 'unguarded' ||
+  [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(
+    observerNeeded
+  );
+const observerRows = guard.vectors.filter(
+  (v) =>
+    v.kind === 'cdp' &&
+    (v.control.via === 'unguarded' ||
+      observerNeeded(v.liveCheck) ||
+      Object.values(v.observe ?? {}).some((o) => observerNeeded(o.check)))
+).length;
+process.stdout.write(`guard observers: ${observerRows} runnable vectors require unguarded CDP\n`);
 process.stdout.write(
   `ok: catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases, the protected-origin vectors and ${guardIds.size} guard vectors\n`
 );

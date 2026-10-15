@@ -71,6 +71,7 @@ type GuardVector struct {
 	Requires        []string                    `json:"requires,omitempty"`
 	Observe         map[string]GuardObservation `json:"observe,omitempty"`
 	Live            string                      `json:"live"`
+	LiveCheck       json.RawMessage             `json:"liveCheck,omitempty"`
 	Control         GuardControlRun             `json:"control"`
 	Expected        GuardExpected               `json:"expected"`
 	Skip            *GuardSkip                  `json:"skip,omitempty"`
@@ -80,9 +81,10 @@ type GuardVector struct {
 }
 
 type GuardObservation struct {
-	Means     string   `json:"means"`
-	DependsOn []string `json:"dependsOn,omitzero"`
-	Requires  []string `json:"requires,omitempty"`
+	Means     string          `json:"means"`
+	Check     json.RawMessage `json:"check"`
+	DependsOn []string        `json:"dependsOn,omitzero"`
+	Requires  []string        `json:"requires,omitempty"`
 }
 
 type GuardObservable struct {

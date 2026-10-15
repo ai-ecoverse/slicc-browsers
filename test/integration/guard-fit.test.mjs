@@ -102,8 +102,12 @@ test('unavailable origins skip row targets and dependent rows without browser ef
       }
       assert.deepEqual(fixture.log(), []);
       const after = await browser.client.send('Target.getTargets');
-      const urls = ({ targetInfos }) => targetInfos.map(({ url }) => url).sort();
-      assert.deepEqual(urls(after), urls(before));
+      const pages = ({ targetInfos }) =>
+        targetInfos
+          .filter(({ type }) => type === 'page')
+          .map(({ targetId, url }) => ({ targetId, url }))
+          .sort((a, b) => a.targetId.localeCompare(b.targetId));
+      assert.deepEqual(pages(after), pages(before));
     } finally {
       await browser.close();
     }

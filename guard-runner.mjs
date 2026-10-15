@@ -74,10 +74,10 @@ class Execution {
     );
   }
 
-  async create(url, context = this.vars.context, client = this.client) {
+  async create(url, context = this.vars.context, client = this.client, background = true) {
     const { targetId } = await client.send('Target.createTarget', {
       url: 'about:blank',
-      background: true,
+      background,
       ...(context ? { browserContextId: context } : {}),
     });
     this.targets.push(targetId);
@@ -326,7 +326,12 @@ class Execution {
     this.actionEventStart = this.client.events.length;
     const url = step.hops ? hop(step.hops, step.url) : step.url;
     if (step.page === 'tab') {
-      const tab = await this.create(url, step.context ?? this.vars.context);
+      const tab = await this.create(
+        url,
+        step.context ?? this.vars.context,
+        this.client,
+        step.background ?? true
+      );
       this.sessions.page = tab.sessionId;
       this.pageTarget = tab.targetId;
       return { ok: true, result: tab };

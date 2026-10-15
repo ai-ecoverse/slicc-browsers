@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 
 const tall = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -75,10 +76,11 @@ function route(req, url, send, html) {
   return send(404, 'missing', 'text/plain');
 }
 
-export async function fixtureServer({ host = '127.0.0.1', port = 0 } = {}) {
+export async function fixtureServer({ host = '127.0.0.1', port = 0, tls } = {}) {
   let entries = [];
-  const server = createServer((req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+  const scheme = tls ? 'https' : 'http';
+  const handler = (req, res) => {
+    const url = new URL(req.url, `${scheme}://${req.headers.host}`);
     entries.push({
       url: url.href,
       method: req.method,
@@ -104,7 +106,8 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0 } = {}) {
         headers
       );
     route(req, url, send, html);
-  });
+  };
+  const server = tls ? createSecureServer(tls, handler) : createServer(handler);
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, resolve);
@@ -112,7 +115,7 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0 } = {}) {
   const address = server.address();
   return {
     port: address.port,
-    origin: `http://${host}:${address.port}`,
+    origin: `${scheme}://${host}:${address.port}`,
     log: () => structuredClone(entries),
     reset: () => {
       entries = [];

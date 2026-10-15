@@ -183,7 +183,14 @@ const passed = (r) =>
 
 export function summary({ guard, sha, set, results }) {
   const uniq = (k) => [...new Set(results.map((r) => r[k]))].sort();
-  const pass = results.length > 0 && results.every(passed);
+  const has = new Set(results.map((r) => q([r.id, r.target, r.variant, r.transport])));
+  const missing = set.vectors
+    .filter((v) => v.scope === 'any' || v.scope === guard)
+    .flatMap((v) => v.targets.map((target) => ({ id: v.id, target })))
+    .flatMap((row) => uniq('variant').map((variant) => ({ ...row, variant })))
+    .flatMap((row) => uniq('transport').map((transport) => ({ ...row, transport })))
+    .filter((r) => !has.has(q([r.id, r.target, r.variant, r.transport])));
+  const pass = results.length > 0 && missing.length === 0 && results.every(passed);
   const name = `@ai-ecoverse/slicc-browsers@${set.setVersion}`;
   return {
     set: name,
@@ -198,6 +205,7 @@ export function summary({ guard, sha, set, results }) {
       .filter((r) => r.control === 'skip')
       .map(({ id, target, reason }) => ({ id, target, reason })),
     notRun: [...new Set(results.filter((r) => r.control === 'not-run').map((r) => r.id))],
+    missing,
     pass,
     line: `${pass ? 'GUARD-PASS' : 'GUARD-FAIL'} ${guard}@${sha} (vectors ${name})`,
   };

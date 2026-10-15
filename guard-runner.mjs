@@ -625,6 +625,7 @@ class Execution {
       );
     if (c.refused || c.reached) return this.callCheck(c);
     if (c.detached) {
+      const events = this.client.events.slice(this.eventStart, this.cleanupEventStart);
       const session = this.sessions[c.detached];
       return (
         Boolean(session) &&

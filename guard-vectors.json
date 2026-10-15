@@ -422,23 +422,63 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 302
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 303
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -446,23 +486,63 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 302
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 303
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -669,23 +749,63 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -693,23 +813,63 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -916,23 +1076,63 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{cross}",
-                            "code": 303
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -940,23 +1140,63 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{cross}",
-                            "code": 303
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1151,19 +1391,37 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1171,19 +1429,37 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          },
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1378,19 +1654,37 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1398,19 +1692,37 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{cross}",
-                            "code": 308
-                          },
-                          {
-                            "origin": "{ordinary}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1608,19 +1920,37 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{target}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{cross}/doc?n={tag}-after"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1628,19 +1958,37 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{target}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{cross}/doc?n={tag}-after"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1838,19 +2186,37 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{target}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{cross}/doc?n={tag}-after"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -1858,19 +2224,37 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{ordinary}",
-                            "code": 301
-                          },
-                          {
-                            "origin": "{target}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{cross}/doc?n={tag}-after"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -2027,7 +2411,7 @@
           "dependsOn": ["refused.2", "refused.5", "refused.6"],
           "requires": ["autoAttach"],
           "check": {
-            "detached": "page",
+            "detached": "child",
             "observer": "client"
           }
         }
@@ -3858,7 +4242,7 @@
           "check": {
             "result": "body",
             "path": "result.result.value",
-            "equals": "real-{tag}",
+            "equals": "200 real-{tag}",
             "observer": "client"
           }
         }
@@ -6363,15 +6747,19 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -6379,15 +6767,19 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -6531,15 +6923,19 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -6547,15 +6943,19 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 307
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -6707,19 +7107,37 @@
                 "any": [
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          },
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },
@@ -6727,19 +7145,37 @@
                   },
                   {
                     "blocked": {
-                      "url": {
-                        "hops": [
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          },
-                          {
-                            "origin": "{plain}",
-                            "code": 302
-                          }
-                        ],
-                        "to": "{target}/doc?n={tag}"
-                      },
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
                       "session": "page",
                       "frame": false
                     },

@@ -245,7 +245,7 @@ class Execution {
   }
 
   async blocked(spec, observer) {
-    const url = address(spec.url);
+    const urls = (spec.anyOf ?? [spec.url]).map(address);
     const events = this.client.events.slice(this.eventStart);
     if (observer === 'client') {
       const requests = new Map(
@@ -259,10 +259,10 @@ class Execution {
             (!spec.frame ||
               event.params.frame.parentId ||
               event.sessionId === this.sessions.child) &&
-            event.params.frame.unreachableUrl === url &&
+            urls.includes(event.params.frame.unreachableUrl) &&
             event.params.frame.url.startsWith('chrome-error://')) ||
           (event.method === 'Network.loadingFailed' &&
-            requests.get(event.params.requestId) === url &&
+            urls.includes(requests.get(event.params.requestId)) &&
             (event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT'))
       );
     }
@@ -279,7 +279,8 @@ class Execution {
       const visit = (tree) =>
         Boolean(
           tree &&
-            ((tree.frame.unreachableUrl === url && tree.frame.url.startsWith('chrome-error://')) ||
+            ((urls.includes(tree.frame.unreachableUrl) &&
+              tree.frame.url.startsWith('chrome-error://')) ||
               (tree.childFrames ?? []).some(visit))
         );
       return (
@@ -938,6 +939,27 @@ async function executeRow(job, opts, clients, set, slot, index) {
   return row;
 }
 
+const invalidBlocked = (check) =>
+  Boolean(
+    check?.blocked &&
+      ((check.blocked.url === undefined) === (check.blocked.anyOf === undefined) ||
+        (check.blocked.anyOf !== undefined &&
+          (!Array.isArray(check.blocked.anyOf) || check.blocked.anyOf.length === 0)))
+  ) ||
+  [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(
+    invalidBlocked
+  );
+
+function validateBlocked(vectors) {
+  for (const vector of vectors)
+    if (
+      [vector.liveCheck, ...Object.values(vector.observe ?? {}).map((o) => o.check)].some(
+        invalidBlocked
+      )
+    )
+      throw new TypeError(`${vector.id}: blocked needs exactly one url or nonempty anyOf`);
+}
+
 function validate(set, opts) {
   if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
   for (const vector of set.vectors)
@@ -954,6 +976,7 @@ function validate(set, opts) {
   for (const vector of set.vectors)
     if (vector.kind === 'cdp' && invalidLive(vector.liveCheck))
       throw new TypeError(`${vector.id}: liveCheck needs guarded attempt evidence`);
+  validateBlocked(set.vectors);
   const variants = Array.isArray(opts.variant) ? opts.variant : [opts.variant];
   for (const name of variants)
     if (!(name in set.variants)) throw new TypeError(`Unknown variant: ${name}`);

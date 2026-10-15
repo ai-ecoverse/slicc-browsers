@@ -307,7 +307,13 @@ observations: a missing or failing effect fails the control. Guarded liveness
 requires the exact target URL in the fixture log or a target-origin `/live`
 heartbeat; alternatively a pre-action `/live?tag=...&step=pre&to=...` request and
 an exact-URL block/error from the client or unguarded frame tree. An error for a
-different URL is not evidence. A declared setup refusal can supply liveness only
+different URL is not evidence. `blocked` accepts either `{ url }` for one exact URL
+or `{ anyOf: [url, ...] }` for a nonempty list of exact URLs; each URL can be a
+string or `{ hops, to, index? }`. Both forms allow `session` and `frame`. Redirect
+vectors list every nested hop URL and the final destination because Chromium
+reports the URL intercepted by the guard. A matching block still requires the
+pre-action beacon alongside it; an unrelated error cannot certify the chain.
+A declared setup refusal can supply liveness only
 when its `refusal.match` matched. Transport connectivity and command completion
 alone never prove liveness. Cookie and storage rows seed a canary outside the
 guard and read it back outside the guard; refused writes require unchanged

@@ -246,3 +246,75 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 		t.Fatalf("protected schema: %v", s["$id"])
 	}
 }
+
+func TestTheGuardVectorsParse(t *testing.T) {
+	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.GuardVectorsJSON()))
+	d.DisallowUnknownFields()
+	var raw sliccbrowsers.GuardVectors
+	if err := d.Decode(&raw); err != nil {
+		t.Fatal(err)
+	}
+	v, err := sliccbrowsers.Guard()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*v, raw) || len(v.Vectors) == 0 {
+		t.Fatalf("guard vectors: %d", len(v.Vectors))
+	}
+	back, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decode(t, back), decode(t, sliccbrowsers.GuardVectorsJSON())) {
+		t.Fatal("guard vectors don't round-trip")
+	}
+	targets := []string{sliccbrowsers.GuardTargetSeven, sliccbrowsers.GuardTargetVault, sliccbrowsers.GuardTargetVaultX, sliccbrowsers.GuardTargetApex, sliccbrowsers.GuardTargetOwn}
+	for _, tg := range append([]string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardSameSite}, targets...) {
+		if v.Targets[tg].Description == "" {
+			t.Fatalf("target %s: %+v", tg, v.Targets)
+		}
+	}
+	if v.Variants["prompt"] != 0 || v.Variants["lagging"] != 8000 {
+		t.Fatalf("variants: %v", v.Variants)
+	}
+	ids := map[string]bool{}
+	for _, g := range v.Vectors {
+		kind := g.Kind == sliccbrowsers.GuardKindCDP || g.Kind == sliccbrowsers.GuardKindText
+		via := g.Control.Via == sliccbrowsers.GuardViaGuard || g.Control.Via == sliccbrowsers.GuardViaUnguarded
+		if ids[g.ID] || g.Control.Origin != sliccbrowsers.GuardOrdinary || !kind || !via {
+			t.Fatalf("vector %s", g.ID)
+		}
+		ids[g.ID] = true
+		for _, tg := range g.Targets {
+			if !slices.Contains(targets, tg) {
+				t.Fatalf("vector %s targets %s", g.ID, tg)
+			}
+		}
+	}
+	for _, id := range []string{"C1.script-nav", "C5.guessed-id", "C6.storage", "C1.href", "C6.clearDataForOrigin", "E6.headers", "E6.locale", "C5.guessed-id.continue-with-auth", "B7"} {
+		if !ids[id] {
+			t.Fatalf("no vector %s", id)
+		}
+	}
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts} {
+		if v.Capabilities[c] == "" {
+			t.Fatalf("capability %s: %v", c, v.Capabilities)
+		}
+	}
+	for _, g := range v.Vectors {
+		switch g.ID {
+		case "C3.popup":
+			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapAutoAttach) || !slices.Contains(g.Observe["attached"].Requires, sliccbrowsers.GuardCapAutoAttach) {
+				t.Fatalf("C3.popup requires %v", g.Requires)
+			}
+		case "E3.bypass-csp":
+			if !slices.Equal(g.Observe["inline"].DependsOn, []string{"refused.2"}) || g.Observe["served"].DependsOn == nil {
+				t.Fatalf("E3.bypass-csp observes %+v", g.Observe)
+			}
+		}
+	}
+	s, ok := decode(t, sliccbrowsers.GuardVectorsSchemaJSON()).(map[string]any)
+	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/guard-vectors.schema.json") {
+		t.Fatalf("guard schema: %v", s["$id"])
+	}
+}

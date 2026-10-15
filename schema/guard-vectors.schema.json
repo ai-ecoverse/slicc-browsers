@@ -1,0 +1,581 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ai-ecoverse/slicc-browsers/schema/guard-vectors.schema.json",
+  "title": "slicc-browsers guard vectors, schema 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "setVersion",
+    "sources",
+    "targets",
+    "variants",
+    "capabilities",
+    "placeholders",
+    "vectors"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "setVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repo", "ref", "path"],
+        "properties": {
+          "repo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "targets": {
+      "type": "object",
+      "required": ["seven", "vault", "vault-x", "apex", "own", "ordinary", "ordinary-same-site"],
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description"],
+        "properties": {
+          "host": {
+            "type": "string",
+            "pattern": "^[a-z0-9.-]+$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "variants": {
+      "type": "object",
+      "required": ["prompt", "lagging"],
+      "propertyNames": {
+        "pattern": "^[a-z0-9-]+$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["autoAttach", "browserSession", "browserContexts"],
+      "properties": {
+        "autoAttach": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browserSession": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browserContexts": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "placeholders": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "vectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/vector"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "enum": ["autoAttach", "browserSession", "browserContexts"]
+    },
+    "requires": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["means"],
+      "properties": {
+        "means": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(refused\\.[0-9]+|[A-Za-z][A-Za-z0-9]*)$"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        }
+      }
+    },
+    "target": {
+      "enum": ["seven", "vault", "vault-x", "apex", "own"]
+    },
+    "expected": {
+      "oneOf": [
+        {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "either"
+              }
+            ]
+          }
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
+      ]
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "family",
+        "kind",
+        "scope",
+        "setup",
+        "trigger",
+        "targets",
+        "live",
+        "control",
+        "expected"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[CEB][1-9](\\.[A-Za-z0-9-]+)*$"
+        },
+        "family": {
+          "enum": ["C", "E", "B"]
+        },
+        "kind": {
+          "enum": ["cdp", "text"]
+        },
+        "scope": {
+          "type": "string",
+          "pattern": "^(any|[a-z][a-z0-9-]*)$"
+        },
+        "setup": {
+          "$ref": "#/$defs/steps"
+        },
+        "trigger": {
+          "$ref": "#/$defs/steps"
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/target"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        },
+        "observe": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/observation"
+          }
+        },
+        "live": {
+          "type": "string",
+          "minLength": 1
+        },
+        "control": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["origin", "via", "expected"],
+          "properties": {
+            "origin": {
+              "const": "ordinary"
+            },
+            "via": {
+              "enum": ["guard", "unguarded"]
+            },
+            "expected": {
+              "$ref": "#/$defs/expected"
+            }
+          }
+        },
+        "expected": {
+          "$ref": "#/$defs/expected"
+        },
+        "skip": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target", "reason"],
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/target"
+            },
+            "reason": {
+              "type": "string",
+              "pattern": "^[a-z][a-z-]*: .+"
+            }
+          }
+        },
+        "designDependent": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "observable": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "own": {
+              "type": "boolean"
+            }
+          }
+        },
+        "appliesTo": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "enum": ["href", "iframe", "popup", "redirect"]
+          }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "on": {
+      "enum": ["control", "guarded"]
+    },
+    "session": {
+      "enum": ["page", "browser", "page-or-browser", "child"]
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+    },
+    "method": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z]*\\.[a-z][A-Za-z]*$"
+    },
+    "hops": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["origin", "code"],
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "code": {
+            "type": "integer",
+            "minimum": 300,
+            "maximum": 399
+          }
+        }
+      }
+    },
+    "step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cdp"],
+          "properties": {
+            "cdp": {
+              "$ref": "#/$defs/method"
+            },
+            "params": {
+              "type": "object"
+            },
+            "session": {
+              "$ref": "#/$defs/session"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            },
+            "refusable": {
+              "const": true
+            },
+            "refusal": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["match"],
+              "properties": {
+                "match": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "dependentRequired": {
+            "refusable": ["refusal"],
+            "refusal": ["refusable"]
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["page"],
+          "properties": {
+            "page": {
+              "enum": [
+                "tab",
+                "navigate",
+                "href",
+                "replace",
+                "form",
+                "post",
+                "open",
+                "iframe",
+                "framed",
+                "fetch",
+                "xhr",
+                "image",
+                "eval"
+              ]
+            },
+            "url": {
+              "type": "string"
+            },
+            "hops": {
+              "$ref": "#/$defs/hops"
+            },
+            "from": {
+              "type": "string"
+            },
+            "context": {
+              "type": "string"
+            },
+            "expression": {
+              "type": "string"
+            },
+            "credentials": {
+              "const": "include"
+            },
+            "status": {
+              "type": "boolean"
+            },
+            "background": {
+              "type": "boolean"
+            },
+            "session": {
+              "$ref": "#/$defs/session"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["answer"],
+          "properties": {
+            "answer": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url"],
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "stage": {
+                  "enum": ["Request", "Response"]
+                },
+                "cdp": {
+                  "$ref": "#/$defs/method"
+                },
+                "params": {
+                  "type": "object"
+                },
+                "hold": {
+                  "const": true
+                }
+              }
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["children"],
+          "properties": {
+            "children": {
+              "$ref": "#/$defs/steps"
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["settle"],
+          "properties": {
+            "settle": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "beacon": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "variant": {
+                  "const": true
+                },
+                "session": {
+                  "$ref": "#/$defs/session"
+                }
+              }
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["wait"],
+          "properties": {
+            "wait": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["guess", "as"],
+          "properties": {
+            "guess": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["between", "cdp", "params"],
+              "properties": {
+                "between": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "cdp": {
+                  "$ref": "#/$defs/method"
+                },
+                "params": {
+                  "type": "object"
+                }
+              }
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

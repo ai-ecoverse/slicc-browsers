@@ -12,11 +12,16 @@ pub const CORPUS_SCHEMA: &str = include_str!("../schema/corpus.schema.json");
 
 pub const PROTECTED_SCHEMA: &str = include_str!("../schema/protected.schema.json");
 
+pub const GUARD_VECTORS_SCHEMA: &str = include_str!("../schema/guard-vectors.schema.json");
+
 #[cfg(feature = "corpus")]
 pub const CORPUS: &str = include_str!("../corpus.json");
 
 #[cfg(feature = "corpus")]
 pub const PROTECTED: &str = include_str!("../protected.json");
+
+#[cfg(feature = "corpus")]
+pub const GUARD_VECTORS: &str = include_str!("../guard-vectors.json");
 
 #[cfg(feature = "serde")]
 mod catalog;
@@ -29,3 +34,6 @@ pub mod corpus;
 
 #[cfg(feature = "corpus")]
 pub mod protected;
+
+#[cfg(feature = "corpus")]
+pub mod guard;

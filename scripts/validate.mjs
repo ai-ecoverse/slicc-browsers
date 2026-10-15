@@ -20,7 +20,7 @@ const ajv = new Ajv2020({
   allowUnionTypes: true,
 });
 addFormats(ajv);
-for (const name of ['catalog', 'browsers', 'corpus', 'protected'])
+for (const name of ['catalog', 'browsers', 'corpus', 'protected', 'guard-vectors'])
   ajv.addSchema(read(`schema/${name}.schema.json`));
 const schemaURL = (name) =>
   `https://github.com/ai-ecoverse/slicc-browsers/schema/${name}.schema.json`;
@@ -186,10 +186,117 @@ for (const [field, run, label] of vectorChecks) {
 }
 if (reserved.test(JSON.stringify(vectors))) fail('protected.json: never use ports 9222-9229');
 
+const guard = read('guard-vectors.json');
+check('guard-vectors', guard, 'guard-vectors.json');
+const gv = (message) => fail(`guard-vectors.json: ${message}`);
+const flat = (list) => (list ?? []).flatMap((st) => [st, ...flat(st.children)]);
+const methods = (list, side) =>
+  flat(list)
+    .filter((st) => st.cdp && (!st.on || st.on === side))
+    .map((st) => st.cdp);
+const placeholders = new Set(Object.keys(guard.placeholders ?? {}));
+const strings = (value) =>
+  typeof value === 'string'
+    ? [value]
+    : value && typeof value === 'object'
+      ? Object.values(value).flatMap(strings)
+      : [];
+const guardIds = new Set();
+for (const v of guard.vectors ?? []) {
+  if (guardIds.has(v.id)) gv(`duplicate id ${v.id}`);
+  guardIds.add(v.id);
+  for (const [key, value] of Object.entries(typeof v.expected === 'object' ? v.expected : {})) {
+    if (value === 'either' && !(v.designDependent ?? []).includes(key))
+      gv(`${v.id} expects either for ${key}, which isn't in designDependent`);
+  }
+  const blank = (e) =>
+    e === undefined || e === '' || (typeof e === 'object' && Object.keys(e).length === 0);
+  if (v.control?.origin !== 'ordinary' || blank(v.control.expected))
+    gv(`${v.id} has no control on an ordinary origin`);
+  if (blank(v.expected)) gv(`${v.id} has no expected`);
+  if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
+  if (v.skip && !v.targets.includes(v.skip.target))
+    gv(`${v.id} skips ${v.skip.target}, which it doesn't target`);
+  if (v.skip && v.targets.every((t) => t === v.skip.target)) gv(`${v.id} skips every target`);
+  const steps = flat([...(v.setup ?? []), ...(v.trigger ?? [])]);
+  const runnable = steps.some((st) => st.cdp || st.page);
+  if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
+  if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);
+  const all = [...(v.setup ?? []), ...(v.trigger ?? [])];
+  const control = methods(all, 'control');
+  for (const m of new Set(methods(all, 'guarded'))) {
+    if (!control.includes(m)) gv(`${v.id} calls ${m} on the guarded leg but not on the control`);
+  }
+  for (const st of steps) {
+    if (st.refusal) {
+      try {
+        new RegExp(st.refusal.match);
+      } catch {
+        gv(`${v.id}: refusal.match ${st.refusal.match} doesn't compile`);
+      }
+    }
+  }
+  const refusals = steps.flatMap((st, i) => (st.refusable ? [st.as ?? `refused.${i}`] : []));
+  const first = steps.findIndex((st) => st.refusable);
+  const before = new Set(first < 0 ? [] : steps.slice(0, first).flatMap((st) => st.as ?? []));
+  for (const [name, o] of Object.entries(v.observe ?? {})) {
+    if (first >= 0 && !before.has(name) && !o.dependsOn)
+      gv(`${v.id} observes ${name} after a refusable step without dependsOn`);
+    for (const d of o.dependsOn ?? []) {
+      if (!refusals.includes(d))
+        gv(`${v.id}: ${name} depends on ${d}, which isn't a refusable step`);
+    }
+  }
+  const needs = new Set(Object.values(v.observe ?? {}).flatMap((o) => o.requires ?? []));
+  const top = [...(v.setup ?? []), ...(v.trigger ?? [])];
+  for (const st of flat(top)) {
+    const want = [];
+    if (
+      top.includes(st) &&
+      (st.cdp === 'Target.setAutoAttach' || st.children || st.session === 'child')
+    )
+      want.push('autoAttach');
+    if (st.session === 'browser') want.push('browserSession');
+    if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
+      want.push('browserContexts');
+    for (const c of want) {
+      if (!(st.requires ?? []).includes(c))
+        gv(`${v.id}: a ${st.cdp ?? st.page ?? 'children'} step doesn't require ${c}`);
+    }
+    for (const c of st.requires ?? []) needs.add(c);
+  }
+  const requires = new Set(v.requires ?? []);
+  if (requires.size !== needs.size || [...needs].some((c) => !requires.has(c)))
+    gv(
+      `${v.id} requires ${[...requires].join(', ') || 'nothing'}, not ${[...needs].join(', ') || 'nothing'}`
+    );
+  if (v.observe) {
+    for (const want of [v.control?.expected, v.expected]) {
+      for (const k of typeof want === 'object' ? Object.keys(want) : []) {
+        if (!Object.hasOwn(v.observe, k)) gv(`${v.id} doesn't define ${k} in observe`);
+      }
+    }
+  }
+  for (const text of strings(v)) {
+    for (const [, name] of text.matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)) {
+      if (!placeholders.has(name)) gv(`${v.id} uses {${name}}, which placeholders doesn't list`);
+    }
+  }
+}
+for (const text of strings(guard.placeholders)) {
+  for (const [, name] of text.matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)) {
+    if (!placeholders.has(name)) gv(`placeholders uses {${name}}, which it doesn't list`);
+  }
+}
+const ports = /:922[2-9](?!\d)/;
+for (const u of strings(guard)) {
+  if (reserved.test(u) || ports.test(u)) gv(`never use ports 9222-9229 (${u})`);
+}
+
 if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);
   process.exit(1);
 }
 process.stdout.write(
-  `ok: catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases and the protected-origin vectors\n`
+  `ok: catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases, the protected-origin vectors and ${guardIds.size} guard vectors\n`
 );

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
@@ -58,9 +59,15 @@ for (const expression of [
 test('auth observations use request evidence without a plain baseline', async () => {
   const fixture = await fixtureServer();
   try {
-    const vector = set.vectors.find(({ id }) => id === 'C5.auth');
+    const vectors = set.vectors.filter(({ id }) =>
+      ['C5.auth', 'C5.guessed-id.continue-with-auth'].includes(id)
+    );
     const execution = await run(
-      { ...set, vectors: [{ ...vector, targets: ['seven', 'vault'] }], variants: { prompt: 0 } },
+      {
+        ...set,
+        vectors: vectors.map((v) => ({ ...v, targets: ['seven', 'vault'] })),
+        variants: { prompt: 0 },
+      },
       {
         clientFactory: async () => {
           const browser = await launch(fixture);
@@ -80,6 +87,73 @@ test('auth observations use request evidence without a plain baseline', async ()
     const requests = await fixture.log();
     assert(!requests.some(({ url }) => new URL(url).searchParams.has('plain')));
   } finally {
+    await fixture.close();
+  }
+});
+
+test('redirect settlement waits for the final hop instead of a setup beacon', async () => {
+  const entries = [];
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    entries.push({ url: url.href, headers: req.headers });
+    if (url.pathname === '/hop') {
+      setTimeout(() => {
+        res.writeHead(Number(url.searchParams.get('code')), {
+          location: url.searchParams.get('to'),
+        });
+        res.end();
+      }, 100);
+    } else {
+      res.writeHead(url.pathname === '/beacon' ? 204 : 200, {
+        'content-type': 'text/html',
+      });
+      res.end('<!doctype html><title>redirect fixture</title>');
+    }
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const fixture = {
+    port: server.address().port,
+    log: () => structuredClone(entries),
+  };
+  const browser = await launch(fixture);
+  try {
+    const vector = structuredClone(set.vectors.find(({ id }) => id === 'C2.chain-301-302-303'));
+    vector.targets = ['seven'];
+    vector.expected = { ...vector.control.expected };
+    vector.liveCheck = { loaded: '{target}/doc?n={tag}', observer: 'fixture' };
+    const execution = await run(
+      { ...set, vectors: [vector], variants: { prompt: 0 } },
+      {
+        client: browser.client,
+        unguarded: browser.client,
+        targets: origins(fixture),
+        fixture,
+      }
+    );
+    const row = execution.results[0];
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass');
+    for (const side of ['control', 'guarded']) {
+      assert.equal(row.observations[side].loaded, true);
+      assert.equal(row.observations[side].hopped, true);
+    }
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('concurrent Chromium close waits for exit and removes profiles once', async () => {
+  const fixture = await fixtureServer();
+  const browsers = await Promise.all(Array.from({ length: 3 }, () => launch(fixture)));
+  try {
+    await Promise.all(browsers.flatMap((browser) => [browser.close(), browser.close()]));
+    for (const browser of browsers)
+      await assert.rejects(access(browser.directory), { code: 'ENOENT' });
+  } finally {
+    await Promise.all(browsers.map((browser) => browser.close()));
     await fixture.close();
   }
 });

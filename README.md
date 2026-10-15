@@ -306,11 +306,17 @@ when its `refusal.match` matched. Transport connectivity and command completion
 alone never prove liveness. Cookie and storage rows seed a canary outside the
 guard and read it back outside the guard; refused writes require unchanged
 canary state and a refusal or filtered call response. Their control can clear or
-modify state as required by its positive observations. `C5.auth` uses fixture
-Authorization logs, delivered auth events and refusal of candidate auth ids. Its
-liveness requires an auth request at the fixture, not a completed fetch. There is
-no plain-tab baseline: headless Chromium can leave a credentials-including fetch
+modify state as required by its positive observations. `C5.auth` and
+`C5.guessed-id.continue-with-auth` use fixture Authorization logs and refusal of
+candidate auth ids; `C5.auth` also checks delivered auth events. Their liveness
+requires an auth request at the fixture, not a completed fetch. Neither uses a
+plain-tab baseline: headless Chromium can leave a credentials-including fetch
 to a Basic 401 pending even without an attached client.
+
+Beacon settlement uses only requests recorded after the page action starts. For
+redirect chains it also requires the exact final destination request in the
+fixture log. A setup beacon on the same origin and tag cannot settle an unfinished
+redirect chain. This does not change the observations used to judge either leg.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
 `fixtureServer({ host, port })`, defaulting to a random loopback port. It returns

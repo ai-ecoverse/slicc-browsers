@@ -29,16 +29,22 @@ export async function launch(fixture) {
   child.on('error', (error) => {
     failure = error;
   });
-  const close = async () => {
-    if (child.pid && child.exitCode === null && child.signalCode === null) {
-      const exited = new Promise((resolve) => child.once('exit', resolve));
-      child.kill('SIGTERM');
-      const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
-      await exited;
-      clearTimeout(timer);
-    }
-    await rm(directory, { recursive: true, force: true });
-  };
+  let closing;
+  const close = () =>
+    (closing ??= (async () => {
+      if (child.pid && child.exitCode === null) {
+        const exited = new Promise((resolve) => child.once('exit', resolve));
+        child.kill('SIGTERM');
+        const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+        await exited;
+        clearTimeout(timer);
+      }
+      try {
+        await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      } catch (error) {
+        process.stderr.write(`Warning: Chromium profile cleanup ${directory}: ${error.message}\n`);
+      }
+    })());
   try {
     const deadline = Date.now() + 15000;
     let endpoint;
@@ -60,6 +66,7 @@ export async function launch(fixture) {
       client,
       unguarded,
       ws: endpoint,
+      directory,
       close: async () => {
         client.close();
         unguarded.close();

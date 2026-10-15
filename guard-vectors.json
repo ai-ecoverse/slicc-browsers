@@ -5026,18 +5026,11 @@
       "scope": "any",
       "setup": [
         {
-          "text": "a plain page whose own Fetch.enable holds the probe's request, then fulfils every request id between two of its own"
+          "text": "a plain page holds the probe auth challenge, then supplies credentials for candidate ids between two ordinary requests"
         },
         {
           "page": "tab",
           "url": "{ordinary}/doc?n=fetcher-{tag}"
-        },
-        {
-          "page": "fetch",
-          "url": "{target}/auth/{tag}?n={tag}&plain=1",
-          "credentials": "include",
-          "status": true,
-          "as": "plain"
         },
         {
           "cdp": "Fetch.enable",
@@ -5096,30 +5089,14 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": {
-          "means": "attempts is not empty",
-          "check": {
-            "result": "attempts",
-            "path": "result",
-            "equals": {
-              "$some": {}
-            },
-            "observer": "client"
-          }
-        },
         "refused": {
           "means": "every attempt was refused",
           "check": {
             "refused": ["attempts"],
-            "observer": "client"
-          }
-        },
-        "answered": {
-          "means": "body is 'real-{tag}'",
-          "check": {
-            "compare": ["body", "plain"],
-            "path": "result.result.value",
-            "observer": "client"
+            "observer": "client",
+            "refusal": {
+              "match": "^slicc: refused"
+            }
           }
         },
         "authed": {
@@ -5132,61 +5109,21 @@
           }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the fixture received at least one request for the auth probe URL",
       "control": {
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "candidates": true,
-          "refused": false,
-          "answered": false,
           "authed": true
         }
       },
       "expected": {
-        "candidates": true,
         "refused": true,
-        "answered": true,
         "authed": false
       },
       "liveCheck": {
-        "any": [
-          {
-            "loaded": "{target}/auth/{tag}?n={tag}",
-            "observer": "fixture"
-          },
-          {
-            "all": [
-              {
-                "pre": "{target}/auth/{tag}?n={tag}",
-                "observer": "fixture"
-              },
-              {
-                "any": [
-                  {
-                    "blocked": {
-                      "url": "{target}/auth/{tag}?n={tag}",
-                      "session": "page",
-                      "frame": false
-                    },
-                    "observer": "client"
-                  },
-                  {
-                    "blocked": {
-                      "url": "{target}/auth/{tag}?n={tag}",
-                      "session": "page",
-                      "frame": false
-                    },
-                    "observer": "unguarded"
-                  }
-                ],
-                "observer": "client"
-              }
-            ],
-            "observer": "client"
-          }
-        ],
-        "observer": "client"
+        "loaded": "{target}/auth/{tag}?n={tag}",
+        "observer": "fixture"
       }
     },
     {

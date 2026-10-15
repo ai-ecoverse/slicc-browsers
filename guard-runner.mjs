@@ -462,7 +462,12 @@ class Execution {
       return;
     }
     await this.poll(async () => {
-      if (settle.beacon) return this.check({ beacon: settle.beacon });
+      if (settle.beacon)
+        return (
+          (await this.requestCheck({ beacon: settle.beacon }, this.actionRequestStart)) &&
+          (!this.actionDestination ||
+            (await this.requestCheck({ served: this.actionDestination }, this.actionRequestStart)))
+        );
       if (settle.title) return this.check({ title: settle.title, session: settle.session });
       return this.client.events
         .slice(this.actionEventStart)
@@ -530,6 +535,8 @@ class Execution {
 
   async page(step, session, phase) {
     this.actionEventStart = this.client.events.length;
+    this.actionRequestStart = (await this.options.fixture.log()).length;
+    this.actionDestination = step.hops ? step.url : undefined;
     const url = step.hops ? hop(step.hops, step.url) : step.url;
     const pre =
       phase === 'trigger' && url
@@ -719,8 +726,8 @@ class Execution {
     );
   }
 
-  async requestCheck(c) {
-    const logs = (await this.options.fixture.log()).slice(this.requestStart);
+  async requestCheck(c, start = this.requestStart) {
+    const logs = (await this.options.fixture.log()).slice(start);
     if (c.hops)
       return c.hops.every((_, i) => logs.some((entry) => entry.url === hop(c.hops.slice(i), c.to)));
     return logs.some((entry) => {

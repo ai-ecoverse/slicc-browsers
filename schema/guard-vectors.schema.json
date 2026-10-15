@@ -10,6 +10,7 @@
     "sources",
     "targets",
     "variants",
+    "capabilities",
     "placeholders",
     "vectors"
   ],
@@ -73,6 +74,25 @@
         "minimum": 0
       }
     },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["autoAttach", "browserSession", "browserContexts"],
+      "properties": {
+        "autoAttach": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browserSession": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browserContexts": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "placeholders": {
       "type": "object",
       "propertyNames": {
@@ -92,6 +112,39 @@
     }
   },
   "$defs": {
+    "capability": {
+      "enum": ["autoAttach", "browserSession", "browserContexts"]
+    },
+    "requires": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["means"],
+      "properties": {
+        "means": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(refused\\.[0-9]+|[A-Za-z][A-Za-z0-9]*)$"
+          }
+        },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        }
+      }
+    },
     "target": {
       "enum": ["seven", "vault", "vault-x", "apex", "own"]
     },
@@ -161,11 +214,13 @@
             "$ref": "#/$defs/target"
           }
         },
+        "requires": {
+          "$ref": "#/$defs/requires"
+        },
         "observe": {
           "type": "object",
           "additionalProperties": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/observation"
           }
         },
         "live": {
@@ -243,7 +298,7 @@
       "enum": ["control", "guarded"]
     },
     "session": {
-      "enum": ["page", "browser", "child"]
+      "enum": ["page", "browser", "page-or-browser", "child"]
     },
     "name": {
       "type": "string",
@@ -307,6 +362,9 @@
             },
             "on": {
               "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             },
             "refusable": {
               "const": true
@@ -372,7 +430,7 @@
               "type": "boolean"
             },
             "background": {
-              "const": true
+              "type": "boolean"
             },
             "session": {
               "$ref": "#/$defs/session"
@@ -382,6 +440,9 @@
             },
             "on": {
               "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             }
           }
         },
@@ -427,6 +488,9 @@
             },
             "on": {
               "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             }
           }
         },

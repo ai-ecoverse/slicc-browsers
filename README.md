@@ -40,7 +40,7 @@ b, ok := c.Browser("chrome")
 - `(*Catalog).Browser(id)` and `(*Catalog).Priority(id)`, the index in `browsers` (its length for an unknown id).
 - `CatalogJSON()`, `CatalogSchemaJSON()`, `BrowsersSchemaJSON()`, `CorpusJSON()`, `ProtectedJSON()` and `ProtectedSchemaJSON()` return copies of the embedded files.
 - `(*Catalog).ProtectedOrigins` is `catalog.json`'s `protectedOrigins`. `Protected() (*ProtectedVectors, error)` parses `protected.json` (`Origins`, `URLs`, `Targets`, `CookieDomains`, `StorageKeys`; a target's `Opener` is `""`, `OpenerProtected`, `OpenerUnprotected` or `OpenerUnknown`).
-- `Guard() (*GuardVectors, error)` parses `guard-vectors.json`; `GuardVectorsJSON()` and `GuardVectorsSchemaJSON()` return copies of the files. `Guard()` parses it into `SchemaVersion`, `SetVersion`, `Targets`, `Variants`, `Placeholders` and `Vectors`. A `GuardExpected` is `Checks` (names to booleans) or `Text`. The `GuardTarget*`, `GuardOrdinary`, `GuardSameSite`, `GuardKind*`, `GuardVia*`, `GuardScopeAny`, `GuardControl` and `GuardGuarded` constants name the values.
+- `Guard() (*GuardVectors, error)` parses `guard-vectors.json`; `GuardVectorsJSON()` and `GuardVectorsSchemaJSON()` return copies of the files. `Guard()` parses it into `SchemaVersion`, `SetVersion`, `Targets`, `Variants`, `Capabilities`, `Placeholders` and `Vectors`. A `GuardExpected` is `Checks` (names to booleans) or `Text`, and a `GuardObservation` is `Means`, `DependsOn` and `Requires`. The `GuardTarget*`, `GuardOrdinary`, `GuardSameSite`, `GuardKind*`, `GuardVia*`, `GuardScopeAny`, `GuardControl`, `GuardGuarded`, `GuardCap*` and `GuardSession*` constants name the values.
 - `Corpus() ([]Case, error)` returns the cases. See [Running the corpus](#running-the-corpus) for the helpers.
 
 ## Rust
@@ -55,7 +55,7 @@ slicc-browsers = { version = "1", features = ["corpus"] }
 
 - Always: `CATALOG`, `CATALOG_SCHEMA`, `BROWSERS_SCHEMA`, `CORPUS_SCHEMA`, `PROTECTED_SCHEMA` and `GUARD_VECTORS_SCHEMA`, each the file's text via `include_str!`, and `SCHEMA` (1). No dependencies.
 - Feature `serde`: `Catalog` and the other types (`protected_origins` is a `ProtectedOrigins`), `Catalog::parse(&str)`, `catalog()` (parses `CATALOG`), `Catalog::browser` and `Catalog::priority`. It pulls in `serde` and `serde_json`.
-- Feature `corpus` (implies `serde`): `CORPUS`, `PROTECTED` and `GUARD_VECTORS`, the text of `corpus.json`, `protected.json` and `guard-vectors.json`; the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below; the module `protected` with `vectors()`, `Vectors` and the `OPENER_*` constants; and the module `guard` with `vectors()`, `Vectors`, `Vector`, `Step`, `Expected` (`Checks` or `Text`), and the `TARGET_*`, `ORDINARY*`, `KIND_*`, `VIA_*`, `SCOPE_ANY`, `CONTROL` and `GUARDED` constants. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
+- Feature `corpus` (implies `serde`): `CORPUS`, `PROTECTED` and `GUARD_VECTORS`, the text of `corpus.json`, `protected.json` and `guard-vectors.json`; the module `corpus` with `corpus()`, `Case`, `Layout` and the helpers below; the module `protected` with `vectors()`, `Vectors` and the `OPENER_*` constants; and the module `guard` with `vectors()`, `Vectors`, `Vector`, `Step`, `Observation`, `Expected` (`Checks` or `Text`), and the `TARGET_*`, `ORDINARY*`, `KIND_*`, `VIA_*`, `SCOPE_ANY`, `CONTROL`, `GUARDED`, `CAP_*` and `SESSION_*` constants. Use it from `[dev-dependencies]` only; with resolver 2 it stays out of normal builds.
 
 Every feature builds for `wasm32-wasip1`.
 
@@ -139,9 +139,10 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 **Top level.**
 - `schemaVersion` (1): guards pin it.
 - `setVersion`: the package version. The release flow stamps it into the npm package and the crate (`scripts/set-crate-version.mjs`). In git, and so in the Go module, it reads `0.0.0`; Go code gets the version from the module.
-- `targets`: the names a runner maps to a scheme, host and port: `seven`, `vault`, `vault-x` (a vault branch preview), `apex`, `own` (the guard host's own page origin), `ordinary` and `ordinary-same-site`. Each has a `description` and, for the protected ones, a default `host`. Nothing in the file is a URL a runner must use.
+- `targets`: the names a runner maps to a scheme, host and port: `seven`, `vault`, `vault-x` (a vault branch preview), `apex`, `own` (the client page's origin, `{client}`), `ordinary` and `ordinary-same-site`. Each has a `description` and, for the protected ones, a default `host`. Nothing in the file is a URL a runner must use.
 - `variants`: the detach variants in ms. `prompt` and `lagging` are documented; a runner may add others, such as `lagging-8s`, and reports the name it ran.
-- `placeholders`: every `{name}` used in the vectors, with what it stands for.
+- `capabilities`: what a transport may lack. `autoAttach` covers `Target.setAutoAttach`, `children` steps and child sessions; `browserSession` covers calls on the browser session; `browserContexts` covers `Target.createBrowserContext` and `Target.disposeBrowserContext`.
+- `placeholders`: every `{name}` used in the vectors, with what it stands for. `{client}` is the client page's origin, which the runner maps.
 
 **A vector** has:
 - `id`, and `family` (`C`, `E` or `B`, the id's first letter);
@@ -149,15 +150,17 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 - `scope`: `any`, or the one guard the vector is for;
 - `setup` and `trigger`, both lists of steps;
 - `targets`: the protected targets it runs against;
-- `observe?`: what each observed name means;
+- `requires?`: the capabilities it needs, the union of its steps' and observations' `requires`. A runner whose transport lacks one reports the vector as `skip` with the reason `not-supported:<capability>`;
+- `observe?`: each observed name, as `{ "means", "dependsOn"?, "requires"? }`. `dependsOn` lists the refusals the observation depends on (see Refusals);
 - `live`: the liveness check;
 - `control` (`origin: "ordinary"`, `via`, `expected`) and `expected`: an object of names and booleans, or text;
 - `skip?` (`target`, `reason`): `reason` starts with a code, as in `not-applicable: …`.
 
 **Steps** are declarative and transport-neutral. Any step can take `on` (`control` or `guarded`), which runs it on that leg only.
-- `{ "cdp": method, "params"?, "session"?, "as"?, "refusable"?, "refusal"? }`: a CDP call. It runs on the page session by default, on the browser with `browser`, or on the current auto-attached target with `child`. `as` names its outcome. `refusable: true` with `refusal: { "match" }` (a regular expression for the error message or code) marks a call that a guard may refuse at registration.
+Any `cdp`, `page` or `children` step can take `requires`, the capabilities it needs: `autoAttach` for `Target.setAutoAttach`, `children` and `session: "child"`, `browserSession` for `session: "browser"`, and `browserContexts` for `Target.createBrowserContext` and `Target.disposeBrowserContext`.
+- `{ "cdp": method, "params"?, "session"?, "as"?, "refusable"?, "refusal"? }`: a CDP call. It runs on the page session by default, on the browser with `browser`, on either with `page-or-browser` (the driver uses the page session), or on the current auto-attached target with `child`. `as` names its outcome. `refusable: true` with `refusal: { "match" }` (a regular expression for the error message or code) marks a call that a guard may refuse at registration.
 - `{ "page": action, … }`:
-  - `tab`: a new tab at `url`, in `context`, which becomes the page;
+  - `tab`: a new tab at `url`, in `context`, which becomes the page. `background` defaults to `true`;
   - `navigate`: go to `url` and wait for the load;
   - `href`, `replace`, `form`, `post`: navigate from the page, 50 ms later;
   - `open`: `window.open` with a user gesture;
@@ -176,7 +179,7 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 Popups are observed by `Target.targetCreated` with the opener's `openerId`, or by the child's `Target.attachedToTarget`, never by the URL: a popup waiting for the debugger can still be `about:blank`.
 
 **The stand-in** serves these routes on every origin. It never listens on 9222 to 9229.
-- `/doc?n=`: an HTML page with the `data-canary` marker; `csp=1` adds a CSP;
+- `/doc?n=`: an HTML page with the `data-canary` marker; `csp=1` adds `Content-Security-Policy: script-src 'none'` and an inline script that sends a beacon tagged `inline-<n>` to the log, which the CSP blocks unless it is bypassed;
 - `/hop?code=&to=` and `/framed?src=`;
 - `/data?n=`: `real-<n>`, with CORS;
 - `/img`: a 1×1 PNG;
@@ -187,11 +190,11 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 
 **The control rule.** Every vector has a control on an ordinary origin: the same setup and trigger against an unprotected origin must succeed. A missing or failing control fails the id. With `via: "guard"`, the control runs through the guard. With `via: "unguarded"`, the runner runs setup and trigger through its own CDP against the ordinary origin and against the protected stand-in, and both must show the effect. The runner reports the control's transport as `via`.
 
-**Refusals.** When a guard refuses a `refusable` step and the error matches `refusal.match`, the runner records `refused: true` and skips the observations that depend on the step. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. A guard that allows the step must pass its control through the guard. A refusal on the protected target only fails.
+**Refusals.** Each refusable step has a refusal name: its `as`, or `refused.<i>`, where `i` is its index in the vector's steps, setup then trigger, with each `children` step's steps right after it, counted from 0 before `on` is applied. When a guard refuses the step and the error matches `refusal.match`, the runner sets that name to `true` in the leg's observations. On that leg, an observation whose `dependsOn` lists the name is skipped; every other observation is checked as usual. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. With `via: "guard"`, a refusal on one leg only fails that leg. A guard that allows the step must pass its control through the guard.
 
 **Liveness.** A runner checks `live` through its own CDP, never through the guard path: either the protected document loaded (title, marker or URL), or the guard returned its own refusal for a refusable step. A failing `live` fails the id.
 
-**Design-dependent outcomes.** A key listed in `designDependent` may expect `"either"`: a guard that refuses a setup step lets the real document load, and one that blocks before commit doesn't. The hard negatives stay required.
+**Design-dependent outcomes.** A key listed in `designDependent` may expect `"either"`, which `true` and `false` both match: a guard that refuses a setup step lets the real document load, and one that blocks before commit doesn't. The hard negatives stay required.
 
 **Observability.** `observable.own: false` marks a vector the guard host's own origin can't show (headers, auth, redirects); a runner whose `own` is a static server reports it as `skip` with `not-observable`.
 
@@ -213,11 +216,12 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 It exports:
 - `beacon(log, tag)` and `probe(log, tag)`: the sources for `{beacon}` and `{probe}`;
 - `canary.plant(value)`, `canary.read()` and `canary.untouched(value, read)`: the canary in `localStorage`, IndexedDB and the stand-in's marker;
-- `hop`, `expand(value, vars)`, and `steps(vector, side, vars)`, a leg's expanded steps;
+- `hop`, `expand(value, vars)`, and `steps(vector, side, vars)`, a leg's expanded steps, with `refusal.name` on each refusable step and `background` set on each `tab` step;
+- `refusals(vector)`: the vector's refusal names;
 - `outcome`, `call(client, step, sessionId)` and `isRefusal(outcome, step)`;
 - `instrument(client, sessionId, log, tag)`, `load(client, sessionId, url)` and `popup(client, openerId)`;
-- `judge(vector, side, observed)`;
-- `result(vector, run)`: a report row from `{ target, variant, transport, via?, control, guarded, live }`;
+- `judge(vector, side, observed)`: `{ pass, refused, skipped, mismatches }`, where `refused` lists the leg's refusals and `skipped` the observations that depend on them;
+- `result(vector, run)`: a report row from `{ target, variant, transport, via?, capabilities?, control, guarded, live }`. `capabilities` is the transport's; without it, the transport has them all;
 - `summary({ guard, sha, set, results })`: `set` is the parsed `guard-vectors.json`. It returns `{ set, schemaVersion, guard, sha, variants, targets, transports, results, skipped, notRun, pass, line }`, where `line` is `GUARD-PASS <guard>@<sha> (vectors @ai-ecoverse/slicc-browsers@X.Y.Z)` or `GUARD-FAIL …`.
 
 **`npm run validate`** checks that:
@@ -227,7 +231,9 @@ It exports:
 - a `cdp` vector has a `cdp` or `page` step, and a `text` vector has neither;
 - every CDP method on the guarded leg also runs on the control;
 - a skip names one of the vector's targets;
-- `observe` defines every expected name, and `refused` for any vector with a refusable step;
+- `observe` defines every expected name;
+- in a vector with a refusable step, every observation, except an `as` of a step before the first refusable one, has `dependsOn`, and each name in it is a refusable step's refusal name;
+- every `Target.setAutoAttach`, `children`, child-session, browser-session and browser-context step has the matching `requires`, and a vector's `requires` is the union of its steps' and observations';
 - every `{name}` is in `placeholders`;
 - no URL uses a port from 9222 to 9229.
 

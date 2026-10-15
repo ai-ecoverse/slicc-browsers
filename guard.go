@@ -28,6 +28,14 @@ const (
 	GuardScopeAny     = "any"
 	GuardControl      = "control"
 	GuardGuarded      = "guarded"
+
+	GuardCapAutoAttach      = "autoAttach"
+	GuardCapBrowserSession  = "browserSession"
+	GuardCapBrowserContexts = "browserContexts"
+	GuardSessionPage        = "page"
+	GuardSessionBrowser     = "browser"
+	GuardSessionEither      = "page-or-browser"
+	GuardSessionChild       = "child"
 )
 
 type GuardVectors struct {
@@ -36,6 +44,7 @@ type GuardVectors struct {
 	Sources       []GuardSource          `json:"sources"`
 	Targets       map[string]GuardTarget `json:"targets"`
 	Variants      map[string]int         `json:"variants"`
+	Capabilities  map[string]string      `json:"capabilities"`
 	Placeholders  map[string]string      `json:"placeholders"`
 	Vectors       []GuardVector          `json:"vectors"`
 }
@@ -52,21 +61,28 @@ type GuardSource struct {
 }
 
 type GuardVector struct {
-	ID              string            `json:"id"`
-	Family          string            `json:"family"`
-	Kind            string            `json:"kind"`
-	Scope           string            `json:"scope"`
-	Setup           []GuardStep       `json:"setup"`
-	Trigger         []GuardStep       `json:"trigger"`
-	Targets         []string          `json:"targets"`
-	Observe         map[string]string `json:"observe,omitempty"`
-	Live            string            `json:"live"`
-	Control         GuardControlRun   `json:"control"`
-	Expected        GuardExpected     `json:"expected"`
-	Skip            *GuardSkip        `json:"skip,omitempty"`
-	DesignDependent []string          `json:"designDependent,omitempty"`
-	Observable      *GuardObservable  `json:"observable,omitempty"`
-	AppliesTo       []string          `json:"appliesTo,omitempty"`
+	ID              string                      `json:"id"`
+	Family          string                      `json:"family"`
+	Kind            string                      `json:"kind"`
+	Scope           string                      `json:"scope"`
+	Setup           []GuardStep                 `json:"setup"`
+	Trigger         []GuardStep                 `json:"trigger"`
+	Targets         []string                    `json:"targets"`
+	Requires        []string                    `json:"requires,omitempty"`
+	Observe         map[string]GuardObservation `json:"observe,omitempty"`
+	Live            string                      `json:"live"`
+	Control         GuardControlRun             `json:"control"`
+	Expected        GuardExpected               `json:"expected"`
+	Skip            *GuardSkip                  `json:"skip,omitempty"`
+	DesignDependent []string                    `json:"designDependent,omitempty"`
+	Observable      *GuardObservable            `json:"observable,omitempty"`
+	AppliesTo       []string                    `json:"appliesTo,omitempty"`
+}
+
+type GuardObservation struct {
+	Means     string   `json:"means"`
+	DependsOn []string `json:"dependsOn,omitzero"`
+	Requires  []string `json:"requires,omitempty"`
 }
 
 type GuardObservable struct {
@@ -144,7 +160,7 @@ type GuardStep struct {
 	Expression  string          `json:"expression,omitempty"`
 	Credentials string          `json:"credentials,omitempty"`
 	Status      bool            `json:"status,omitempty"`
-	Background  bool            `json:"background,omitempty"`
+	Background  *bool           `json:"background,omitempty"`
 	Answer      *GuardAnswer    `json:"answer,omitempty"`
 	Children    []GuardStep     `json:"children,omitempty"`
 	Settle      *GuardSettle    `json:"settle,omitempty"`
@@ -153,6 +169,7 @@ type GuardStep struct {
 	Session     string          `json:"session,omitempty"`
 	As          string          `json:"as,omitempty"`
 	On          string          `json:"on,omitempty"`
+	Requires    []string        `json:"requires,omitempty"`
 }
 
 type GuardRefusal struct {

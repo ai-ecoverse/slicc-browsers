@@ -236,8 +236,40 @@ for (const v of guard.vectors ?? []) {
       }
     }
   }
-  if (steps.some((st) => st.refusable) && !Object.hasOwn(v.observe ?? {}, 'refused'))
-    gv(`${v.id} has a refusable step but doesn't define refused in observe`);
+  const refusals = steps.flatMap((st, i) => (st.refusable ? [st.as ?? `refused.${i}`] : []));
+  const first = steps.findIndex((st) => st.refusable);
+  const before = new Set(first < 0 ? [] : steps.slice(0, first).flatMap((st) => st.as ?? []));
+  for (const [name, o] of Object.entries(v.observe ?? {})) {
+    if (first >= 0 && !before.has(name) && !o.dependsOn)
+      gv(`${v.id} observes ${name} after a refusable step without dependsOn`);
+    for (const d of o.dependsOn ?? []) {
+      if (!refusals.includes(d))
+        gv(`${v.id}: ${name} depends on ${d}, which isn't a refusable step`);
+    }
+  }
+  const needs = new Set(Object.values(v.observe ?? {}).flatMap((o) => o.requires ?? []));
+  const top = [...(v.setup ?? []), ...(v.trigger ?? [])];
+  for (const st of flat(top)) {
+    const want = [];
+    if (
+      top.includes(st) &&
+      (st.cdp === 'Target.setAutoAttach' || st.children || st.session === 'child')
+    )
+      want.push('autoAttach');
+    if (st.session === 'browser') want.push('browserSession');
+    if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
+      want.push('browserContexts');
+    for (const c of want) {
+      if (!(st.requires ?? []).includes(c))
+        gv(`${v.id}: a ${st.cdp ?? st.page ?? 'children'} step doesn't require ${c}`);
+    }
+    for (const c of st.requires ?? []) needs.add(c);
+  }
+  const requires = new Set(v.requires ?? []);
+  if (requires.size !== needs.size || [...needs].some((c) => !requires.has(c)))
+    gv(
+      `${v.id} requires ${[...requires].join(', ') || 'nothing'}, not ${[...needs].join(', ') || 'nothing'}`
+    );
   if (v.observe) {
     for (const want of [v.control?.expected, v.expected]) {
       for (const k of typeof want === 'object' ? Object.keys(want) : []) {

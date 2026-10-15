@@ -220,5 +220,23 @@ fn the_guard_vectors_parse_and_round_trip() {
         .find(|x| x.id == "C4.static-same-site")
         .unwrap();
     assert_eq!(skip.skip.as_ref().unwrap().target, guard::TARGET_VAULT);
+    for c in [
+        guard::CAP_AUTO_ATTACH,
+        guard::CAP_BROWSER_SESSION,
+        guard::CAP_BROWSER_CONTEXTS,
+    ] {
+        assert!(v.capabilities.contains_key(c));
+    }
+    let popup = v.vectors.iter().find(|x| x.id == "C3.popup").unwrap();
+    assert!(popup.requires.contains(&guard::CAP_AUTO_ATTACH.to_string()));
+    let e3 = v.vectors.iter().find(|x| x.id == "E3.bypass-csp").unwrap();
+    let inline = &e3.observe.as_ref().unwrap()["inline"];
+    assert_eq!(inline.depends_on, Some(vec!["refused.2".to_string()]));
+    let storage = v.vectors.iter().find(|x| x.id == "C6.storage").unwrap();
+    assert!(storage
+        .trigger
+        .iter()
+        .filter(|s| s.cdp.as_deref().is_some_and(|m| m.starts_with("Storage.")))
+        .all(|s| s.session.as_deref() == Some(guard::SESSION_PAGE_OR_BROWSER)));
     assert!(slicc_browsers::GUARD_VECTORS_SCHEMA.contains("/schema/guard-vectors.schema.json"));
 }

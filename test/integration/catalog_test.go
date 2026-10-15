@@ -296,6 +296,23 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts} {
+		if v.Capabilities[c] == "" {
+			t.Fatalf("capability %s: %v", c, v.Capabilities)
+		}
+	}
+	for _, g := range v.Vectors {
+		switch g.ID {
+		case "C3.popup":
+			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapAutoAttach) || !slices.Contains(g.Observe["attached"].Requires, sliccbrowsers.GuardCapAutoAttach) {
+				t.Fatalf("C3.popup requires %v", g.Requires)
+			}
+		case "E3.bypass-csp":
+			if !slices.Equal(g.Observe["inline"].DependsOn, []string{"refused.2"}) || g.Observe["served"].DependsOn == nil {
+				t.Fatalf("E3.bypass-csp observes %+v", g.Observe)
+			}
+		}
+	}
 	s, ok := decode(t, sliccbrowsers.GuardVectorsSchemaJSON()).(map[string]any)
 	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/guard-vectors.schema.json") {
 		t.Fatalf("guard schema: %v", s["$id"])

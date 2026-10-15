@@ -36,7 +36,7 @@
       "description": "the apex"
     },
     "own": {
-      "description": "the guard host's own page origin"
+      "description": "the client page's origin"
     },
     "ordinary": {
       "description": "an unprotected origin"
@@ -49,6 +49,11 @@
     "prompt": 0,
     "lagging": 8000
   },
+  "capabilities": {
+    "autoAttach": "Target.setAutoAttach, the children steps and child sessions",
+    "browserSession": "CDP calls on the browser session",
+    "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext"
+  },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
     "targetHost": "{target}'s host",
@@ -56,9 +61,10 @@
     "vault": "the vault target's origin",
     "vault-x": "the vault-x target's origin",
     "apex": "the apex target's origin",
-    "own": "the own target's origin",
+    "own": "the own target's origin, which is {client}",
     "ordinary": "the ordinary origin the run starts from",
     "ordinary-same-site": "the ordinary-same-site origin",
+    "client": "the client page's origin, which the runner maps",
     "cross": "another ordinary origin, cross-site with {ordinary}",
     "plain": "an ordinary destination origin, the control target",
     "log": "the stand-in's log origin",
@@ -123,12 +129,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -219,12 +239,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -318,12 +352,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -417,12 +465,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -512,12 +574,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -607,12 +683,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the page session was detached",
-        "hopped": "every hop in the chain was served",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "hopped": {
+          "means": "every hop in the chain was served",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -702,12 +792,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "protectedHop": "the stand-in served {target}/hop?code=302",
-        "landed": "the stand-in served {cross}/doc?n={tag}-after",
-        "afterBeacon": "a beacon from {cross}",
-        "detached": "the page session was detached",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "protectedHop": {
+          "means": "the stand-in served {target}/hop?code=302",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "landed": {
+          "means": "the stand-in served {cross}/doc?n={tag}-after",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "afterBeacon": {
+          "means": "a beacon from {cross}",
+          "dependsOn": ["refused.3"]
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -796,12 +900,26 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "protectedHop": "the stand-in served {target}/hop?code=307",
-        "landed": "the stand-in served {cross}/doc?n={tag}-after",
-        "afterBeacon": "a beacon from {cross}",
-        "detached": "the page session was detached",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "protectedHop": {
+          "means": "the stand-in served {target}/hop?code=307",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "landed": {
+          "means": "the stand-in served {cross}/doc?n={tag}-after",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "afterBeacon": {
+          "means": "a beacon from {cross}",
+          "dependsOn": ["refused.3"]
+        },
+        "detached": {
+          "means": "the page session was detached",
+          "dependsOn": ["refused.3", "refused.4"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -850,7 +968,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         },
         {
           "children": [
@@ -877,7 +996,8 @@
                 "match": "refused"
               }
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         },
         {
           "page": "open",
@@ -886,14 +1006,16 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=popup-{tag}&again=1",
-          "session": "child"
+          "session": "child",
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
         {
           "page": "href",
           "url": "{target}/doc?n={tag}",
-          "session": "child"
+          "session": "child",
+          "requires": ["autoAttach"]
         },
         {
           "settle": {
@@ -912,16 +1034,32 @@
           "refusable": true,
           "refusal": {
             "match": "refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "allowedBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "detached": "the popup session was detached",
-        "refused": "a refusable step was refused at registration"
+        "allowedBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.2", "refused.5"],
+          "requires": ["autoAttach"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2", "refused.5"],
+          "requires": ["autoAttach"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "detached": {
+          "means": "the popup session was detached",
+          "dependsOn": ["refused.2", "refused.5", "refused.6"],
+          "requires": ["autoAttach"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -966,7 +1104,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         },
         {
           "children": [
@@ -996,7 +1135,8 @@
             {
               "cdp": "Page.reload"
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1027,15 +1167,27 @@
           "refusable": true,
           "refusal": {
             "match": "refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "committed": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-        "attached": "the client got Target.attachedToTarget for that target",
-        "beacon": "a beacon from {target}",
-        "refused": "a refusable step was refused at registration"
+        "committed": {
+          "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+          "dependsOn": []
+        },
+        "attached": {
+          "means": "the client got Target.attachedToTarget for that target",
+          "dependsOn": ["refused.2"],
+          "requires": ["autoAttach"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2", "refused.5"],
+          "requires": ["autoAttach"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1080,7 +1232,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         },
         {
           "children": [
@@ -1110,7 +1263,8 @@
             {
               "cdp": "Page.reload"
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1149,15 +1303,27 @@
           "refusable": true,
           "refusal": {
             "match": "refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "committed": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-        "attached": "the client got Target.attachedToTarget for that target",
-        "beacon": "a beacon from {target}",
-        "refused": "a refusable step was refused at registration"
+        "committed": {
+          "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+          "dependsOn": []
+        },
+        "attached": {
+          "means": "the client got Target.attachedToTarget for that target",
+          "dependsOn": ["refused.2"],
+          "requires": ["autoAttach"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2", "refused.5"],
+          "requires": ["autoAttach"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1229,7 +1395,8 @@
                 "match": "refused"
               }
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         },
         {
           "cdp": "Target.setAutoAttach",
@@ -1242,7 +1409,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1264,17 +1432,34 @@
         {
           "cdp": "Target.getTargets",
           "session": "browser",
-          "as": "targets"
+          "as": "targets",
+          "requires": ["browserSession"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "pageBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "frameOnDest": "a child frame or iframe target is on {target}",
-        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-        "refused": "a refusable step was refused at registration"
+        "pageBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.7", "refused.8"],
+          "requires": ["autoAttach"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "frameOnDest": {
+          "means": "a child frame or iframe target is on {target}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        },
+        "errorFrame": {
+          "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1348,7 +1533,8 @@
                 "match": "refused"
               }
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         },
         {
           "cdp": "Target.setAutoAttach",
@@ -1361,7 +1547,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1386,17 +1573,34 @@
         {
           "cdp": "Target.getTargets",
           "session": "browser",
-          "as": "targets"
+          "as": "targets",
+          "requires": ["browserSession"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "pageBeacon": "a beacon from {ordinary}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "frameOnDest": "a child frame or iframe target is on {target}",
-        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-        "refused": "a refusable step was refused at registration"
+        "pageBeacon": {
+          "means": "a beacon from {ordinary}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.7", "refused.8"],
+          "requires": ["autoAttach"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "frameOnDest": {
+          "means": "a child frame or iframe target is on {target}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        },
+        "errorFrame": {
+          "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1470,7 +1674,8 @@
                 "match": "refused"
               }
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         },
         {
           "cdp": "Target.setAutoAttach",
@@ -1483,7 +1688,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1505,17 +1711,33 @@
         {
           "cdp": "Target.getTargets",
           "session": "browser",
-          "as": "targets"
+          "as": "targets",
+          "requires": ["browserSession"]
         }
       ],
       "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "pageBeacon": "a beacon from {ordinary-same-site}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "frameOnDest": "a child frame or iframe target is on {target}",
-        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-        "refused": "a refusable step was refused at registration"
+        "pageBeacon": {
+          "means": "a beacon from {ordinary-same-site}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "frameOnDest": {
+          "means": "a child frame or iframe target is on {target}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        },
+        "errorFrame": {
+          "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1593,7 +1815,8 @@
                 "match": "refused"
               }
             }
-          ]
+          ],
+          "requires": ["autoAttach"]
         },
         {
           "cdp": "Target.setAutoAttach",
@@ -1606,7 +1829,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach"]
         }
       ],
       "trigger": [
@@ -1631,17 +1855,33 @@
         {
           "cdp": "Target.getTargets",
           "session": "browser",
-          "as": "targets"
+          "as": "targets",
+          "requires": ["browserSession"]
         }
       ],
       "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "pageBeacon": "a beacon from {ordinary-same-site}",
-        "beacon": "a beacon from {target}",
-        "loaded": "the stand-in served {target}/doc?n={tag}",
-        "frameOnDest": "a child frame or iframe target is on {target}",
-        "errorFrame": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-        "refused": "a refusable step was refused at registration"
+        "pageBeacon": {
+          "means": "a beacon from {ordinary-same-site}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "frameOnDest": {
+          "means": "a child frame or iframe target is on {target}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        },
+        "errorFrame": {
+          "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
+          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1739,9 +1979,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
-        "forged": "title is 'forged'",
-        "detached": "the page session was detached"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client"
+        },
+        "forged": {
+          "means": "title is 'forged'"
+        },
+        "detached": {
+          "means": "the page session was detached"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1821,9 +2067,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client",
-        "rewritten": "title is 'rewritten'",
-        "detached": "the page session was detached"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/doc?n={tag} reached the client"
+        },
+        "rewritten": {
+          "means": "title is 'rewritten'"
+        },
+        "detached": {
+          "means": "the page session was detached"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1887,9 +2139,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
-        "changed": "body is '299 real-{tag}'",
-        "answered": "body is '200 real-{tag}'"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+        },
+        "changed": {
+          "means": "body is '299 real-{tag}'"
+        },
+        "answered": {
+          "means": "body is '200 real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -1966,9 +2224,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
-        "fulfilled": "body is 'fulfilled'",
-        "answered": "body is 'real-{tag}'"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+        },
+        "fulfilled": {
+          "means": "body is 'fulfilled'"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2045,9 +2309,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/data?n={tag} reached the client",
-        "fulfilled": "body is 'fulfilled'",
-        "answered": "body is 'real-{tag}'"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/data?n={tag} reached the client"
+        },
+        "fulfilled": {
+          "means": "body is 'fulfilled'"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2124,9 +2394,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.requestPaused for {target}/img?n={tag} reached the client",
-        "fulfilled": "body is 'width 2'",
-        "answered": "body is 'width 1'"
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/img?n={tag} reached the client"
+        },
+        "fulfilled": {
+          "means": "body is 'width 2'"
+        },
+        "answered": {
+          "means": "body is 'width 1'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2204,10 +2480,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "seen": "a Fetch.authRequired for {target}/auth/{tag}?n={tag} reached the client",
-        "pausedSeen": "a Fetch.requestPaused for {target}/auth/{tag}?n={tag} reached the client",
-        "authed": "body is '200 authed'",
-        "untouched": "body equals plain"
+        "seen": {
+          "means": "a Fetch.authRequired for {target}/auth/{tag}?n={tag} reached the client"
+        },
+        "pausedSeen": {
+          "means": "a Fetch.requestPaused for {target}/auth/{tag}?n={tag} reached the client"
+        },
+        "authed": {
+          "means": "body is '200 authed'"
+        },
+        "untouched": {
+          "means": "body equals plain"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2303,10 +2587,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": "attempts is not empty",
-        "fulfilled": "body is 'guessed'",
-        "refused": "every attempt was refused",
-        "answered": "body is 'real-{tag}'"
+        "candidates": {
+          "means": "attempts is not empty"
+        },
+        "fulfilled": {
+          "means": "body is 'guessed'"
+        },
+        "refused": {
+          "means": "every attempt was refused"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2388,10 +2680,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": "attempts is not empty",
-        "fulfilled": "body is 'guessed'",
-        "refused": "every attempt was refused",
-        "answered": "body is 'real-{tag}'"
+        "candidates": {
+          "means": "attempts is not empty"
+        },
+        "fulfilled": {
+          "means": "body is 'guessed'"
+        },
+        "refused": {
+          "means": "every attempt was refused"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2473,10 +2773,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": "attempts is not empty",
-        "fulfilled": "body is 'guessed'",
-        "refused": "every attempt was refused",
-        "answered": "body is 'real-{tag}'"
+        "candidates": {
+          "means": "attempts is not empty"
+        },
+        "fulfilled": {
+          "means": "body is 'guessed'"
+        },
+        "refused": {
+          "means": "every attempt was refused"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2562,10 +2870,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "candidates": "attempts is not empty",
-        "fulfilled": "body is 'guessed'",
-        "refused": "every attempt was refused",
-        "answered": "body is 'real-{tag}'"
+        "candidates": {
+          "means": "attempts is not empty"
+        },
+        "fulfilled": {
+          "means": "body is 'guessed'"
+        },
+        "refused": {
+          "means": "every attempt was refused"
+        },
+        "answered": {
+          "means": "body is 'real-{tag}'"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -2620,16 +2936,24 @@
         },
         {
           "cdp": "Storage.getCookies",
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "storage"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "byURL": "byURL succeeded and holds {cookie}",
-        "mixedURLs": "mixedURLs succeeded and holds {cookie}",
-        "all": "all succeeded and holds {cookie}",
-        "storage": "storage succeeded and holds {cookie}"
+        "byURL": {
+          "means": "byURL succeeded and holds {cookie}"
+        },
+        "mixedURLs": {
+          "means": "mixedURLs succeeded and holds {cookie}"
+        },
+        "all": {
+          "means": "all succeeded and holds {cookie}"
+        },
+        "storage": {
+          "means": "storage succeeded and holds {cookie}"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -2708,7 +3032,7 @@
               }
             ]
           },
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "storageSet"
         },
         {
@@ -2750,13 +3074,27 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "setURL": "setURL succeeded",
-        "setDomain": "setDomain succeeded",
-        "setMany": "setMany succeeded",
-        "storageSet": "storageSet succeeded",
-        "deleted": "remove and setURL succeeded and read lacks w1-{tag}",
-        "written": "read holds w2-{tag}, w3-{tag} and w4-{tag}",
-        "refused": "setURL, setDomain, setMany, storageSet and remove were all refused"
+        "setURL": {
+          "means": "setURL succeeded"
+        },
+        "setDomain": {
+          "means": "setDomain succeeded"
+        },
+        "setMany": {
+          "means": "setMany succeeded"
+        },
+        "storageSet": {
+          "means": "storageSet succeeded"
+        },
+        "deleted": {
+          "means": "remove and setURL succeeded and read lacks w1-{tag}"
+        },
+        "written": {
+          "means": "read holds w2-{tag}, w3-{tag} and w4-{tag}"
+        },
+        "refused": {
+          "means": "setURL, setDomain, setMany, storageSet and remove were all refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -2795,7 +3133,8 @@
           "cdp": "Target.createBrowserContext",
           "session": "browser",
           "as": "context",
-          "on": "control"
+          "on": "control",
+          "requires": ["browserSession", "browserContexts"]
         },
         {
           "page": "tab",
@@ -2819,13 +3158,13 @@
           "params": {
             "browserContextId": "{context}"
           },
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "storage",
           "on": "control"
         },
         {
           "cdp": "Storage.clearCookies",
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "storage",
           "on": "guarded"
         },
@@ -2835,14 +3174,22 @@
             "browserContextId": "{context}"
           },
           "session": "browser",
-          "on": "control"
+          "on": "control",
+          "requires": ["browserSession", "browserContexts"]
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "requires": ["browserSession", "browserContexts"],
       "observe": {
-        "network": "network succeeded",
-        "storage": "storage succeeded",
-        "refused": "network and storage were both refused"
+        "network": {
+          "means": "network succeeded"
+        },
+        "storage": {
+          "means": "storage succeeded"
+        },
+        "refused": {
+          "means": "network and storage were both refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -2881,7 +3228,7 @@
             "origin": "{target}",
             "storageTypes": "local_storage"
           },
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "clearDataForOrigin"
         },
         {
@@ -2889,7 +3236,7 @@
           "params": {
             "origin": "{target}"
           },
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "getUsageAndQuota"
         },
         {
@@ -2898,7 +3245,7 @@
             "storageKey": "{target}/",
             "storageTypes": "local_storage"
           },
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "clearDataForStorageKey"
         },
         {
@@ -2964,8 +3311,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "reachedAll": "no call was refused",
-        "refusedAll": "every call was refused"
+        "reachedAll": {
+          "means": "no call was refused"
+        },
+        "refusedAll": {
+          "means": "every call was refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -3023,11 +3374,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3087,11 +3449,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3151,11 +3524,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3221,11 +3605,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3294,11 +3689,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3371,11 +3777,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3430,7 +3847,8 @@
           "refusable": true,
           "refusal": {
             "match": "^slicc: refused"
-          }
+          },
+          "requires": ["autoAttach", "browserSession"]
         }
       ],
       "trigger": [
@@ -3450,12 +3868,26 @@
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
+      "requires": ["autoAttach", "browserSession"],
       "observe": {
-        "popup": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
-        "beacon": "a beacon from {target}",
-        "delivered": "an event carried the guarded document",
-        "attached": "the client got Target.attachedToTarget for that target",
-        "refused": "a refusable step was refused at registration"
+        "popup": {
+          "means": "the runner's own CDP sees a Target.targetCreated whose openerId is the page's target",
+          "dependsOn": []
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2", "refused.3"]
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.3"],
+          "requires": ["autoAttach"]
+        },
+        "attached": {
+          "means": "the client got Target.attachedToTarget for that target",
+          "dependsOn": ["refused.3"],
+          "requires": ["autoAttach"]
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3514,10 +3946,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3591,9 +4031,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "fulfilled": "the fulfilled body renders",
-        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
-        "served": "the stand-in served {target}/doc?n={tag}"
+        "fulfilled": {
+          "means": "the fulfilled body renders"
+        },
+        "paused": {
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3660,9 +4106,15 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "rewritten": "the rewritten body renders",
-        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
-        "served": "the stand-in served {target}/doc?n={tag}"
+        "rewritten": {
+          "means": "the rewritten body renders"
+        },
+        "paused": {
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3727,8 +4179,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "paused": "a Fetch event for {target}/doc?n={tag} reached the client",
-        "served": "the stand-in served {target}/doc?n={tag}"
+        "paused": {
+          "means": "a Fetch event for {target}/doc?n={tag} reached the client"
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}"
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3785,11 +4241,22 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3862,10 +4329,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "binding": "a Runtime.bindingCalled from {target}/doc?n={tag}",
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "binding": {
+          "means": "a Runtime.bindingCalled from {target}/doc?n={tag}",
+          "dependsOn": ["refused.3", "refused.4"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.4"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -3904,16 +4379,6 @@
           "refusal": {
             "match": "refused"
           }
-        },
-        {
-          "cdp": "Page.addScriptToEvaluateOnNewDocument",
-          "params": {
-            "source": "{probe}"
-          },
-          "refusable": true,
-          "refusal": {
-            "match": "refused"
-          }
         }
       ],
       "trigger": [
@@ -3934,22 +4399,33 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "delivered": "an event carried the guarded document",
-        "attached": "an attachedToTarget for another target reached the client",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "inline": {
+          "means": "a beacon tagged inline-{tag} from the inline script on {target}",
+          "dependsOn": ["refused.2"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        },
+        "delivered": {
+          "means": "an event carried the guarded document",
+          "dependsOn": ["refused.2"]
+        },
+        "attached": {
+          "means": "an attachedToTarget for another target reached the client",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "beacon": true
+          "inline": true
         }
       },
       "expected": {
-        "beacon": false,
+        "inline": false,
         "served": "either",
         "delivered": false,
         "attached": false
@@ -4001,10 +4477,18 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "console": "a Runtime.consoleAPICalled from {target}/doc?n={tag}",
-        "beacon": "a beacon from {target}",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "console": {
+          "means": "a Runtime.consoleAPICalled from {target}/doc?n={tag}",
+          "dependsOn": ["refused.3"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "dependsOn": ["refused.3"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -4068,9 +4552,14 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex", "own"],
       "observe": {
-        "header": "the request for {target}/doc?n={tag} carried x-probe",
-        "served": "the stand-in served {target}/doc?n={tag}",
-        "refused": "the guard refused a refusable setup step with its own refusal"
+        "header": {
+          "means": "the request for {target}/doc?n={tag} carried x-probe",
+          "dependsOn": ["refused.3"]
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": []
+        }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
@@ -4117,8 +4606,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "read": "the result holds {plain}'s canary cookie",
-        "leaked": "the result holds {target}'s cookies"
+        "read": {
+          "means": "the result holds {plain}'s canary cookie"
+        },
+        "leaked": {
+          "means": "the result holds {target}'s cookies"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -4158,8 +4651,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "read": "the result holds {plain}'s canary cookie",
-        "leaked": "the result holds {target}'s cookies"
+        "read": {
+          "means": "the result holds {plain}'s canary cookie"
+        },
+        "leaked": {
+          "means": "the result holds {target}'s cookies"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -4203,8 +4700,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "ok": "the call succeeded",
-        "refused": "the call was refused"
+        "ok": {
+          "means": "the call succeeded"
+        },
+        "refused": {
+          "means": "the call was refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -4247,8 +4748,12 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "ok": "the call succeeded",
-        "refused": "the call was refused"
+        "ok": {
+          "means": "the call succeeded"
+        },
+        "refused": {
+          "means": "the call was refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -4283,14 +4788,18 @@
         {
           "cdp": "Storage.getCookies",
           "params": {},
-          "session": "browser",
+          "session": "page-or-browser",
           "as": "call"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "read": "the result holds {plain}'s canary cookie",
-        "leaked": "the result holds {target}'s cookies"
+        "read": {
+          "means": "the result holds {plain}'s canary cookie"
+        },
+        "leaked": {
+          "means": "the result holds {target}'s cookies"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {
@@ -4328,13 +4837,18 @@
             "origin": "{target}",
             "storageTypes": "cookies,local_storage"
           },
-          "as": "call"
+          "as": "call",
+          "session": "page-or-browser"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
-        "ok": "the call succeeded",
-        "refused": "the call was refused"
+        "ok": {
+          "means": "the call succeeded"
+        },
+        "refused": {
+          "means": "the call was refused"
+        }
       },
       "live": "the runner's own CDP reads {cookie} on {target}",
       "control": {

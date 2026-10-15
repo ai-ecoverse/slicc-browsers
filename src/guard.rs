@@ -15,6 +15,13 @@ pub const VIA_UNGUARDED: &str = "unguarded";
 pub const SCOPE_ANY: &str = "any";
 pub const CONTROL: &str = "control";
 pub const GUARDED: &str = "guarded";
+pub const CAP_AUTO_ATTACH: &str = "autoAttach";
+pub const CAP_BROWSER_SESSION: &str = "browserSession";
+pub const CAP_BROWSER_CONTEXTS: &str = "browserContexts";
+pub const SESSION_PAGE: &str = "page";
+pub const SESSION_BROWSER: &str = "browser";
+pub const SESSION_PAGE_OR_BROWSER: &str = "page-or-browser";
+pub const SESSION_CHILD: &str = "child";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +32,7 @@ pub struct Vectors {
     pub sources: Vec<Source>,
     pub targets: BTreeMap<String, Target>,
     pub variants: BTreeMap<String, u64>,
+    pub capabilities: BTreeMap<String, String>,
     pub placeholders: BTreeMap<String, String>,
     pub vectors: Vec<Vector>,
 }
@@ -56,19 +64,35 @@ pub struct Vector {
     pub setup: Vec<Step>,
     pub trigger: Vec<Step>,
     pub targets: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub observe: Option<BTreeMap<String, String>>,
+    pub observe: Option<BTreeMap<String, Observation>>,
     pub live: String,
     pub control: Control,
     pub expected: Expected,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip: Option<Skip>,
-    #[serde(default, rename = "designDependent", skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        rename = "designDependent",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub design_dependent: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observable: Option<Observable>,
     #[serde(default, rename = "appliesTo", skip_serializing_if = "Vec::is_empty")]
     pub applies_to: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Observation {
+    pub means: String,
+    #[serde(default, rename = "dependsOn", skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -142,8 +166,8 @@ pub struct Step {
     pub credentials: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub status: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub background: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<Answer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -160,6 +184,8 @@ pub struct Step {
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

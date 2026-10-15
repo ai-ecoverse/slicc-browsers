@@ -32,13 +32,33 @@ export function expand(value, vars) {
   return value;
 }
 
+function named(list, n = { i: 0 }) {
+  return list.map((s) => {
+    const i = n.i++;
+    const step = s.children ? { ...s, children: named(s.children, n) } : { ...s };
+    if (s.refusable) step.refusal = { ...s.refusal, name: s.as ?? `refused.${i}` };
+    if (s.page === 'tab') step.background = s.background ?? true;
+    return step;
+  });
+}
+
+const flatten = (list) => list.flatMap((s) => [s, ...flatten(s.children ?? [])]);
+
+export const refusals = (vector) =>
+  flatten(named([...(vector.setup ?? []), ...(vector.trigger ?? [])]))
+    .filter((s) => s.refusable)
+    .map((s) => s.refusal.name);
+
 export function steps(vector, side, vars) {
   const pick = (list) =>
     list
       .filter((s) => !s.on || s.on === side)
       .map(({ on: _, ...s }) => (s.children ? { ...s, children: pick(s.children) } : s));
   const all = { ...vars, beacon: beacon(vars.log, vars.tag), probe: probe(vars.log, vars.tag) };
-  return { setup: expand(pick(vector.setup), all), trigger: expand(pick(vector.trigger), all) };
+  const [setup, trigger] = [vector.setup, vector.trigger].map((list, k, both) =>
+    named(list, { i: k === 0 ? 0 : flatten(both[0]).length })
+  );
+  return { setup: expand(pick(setup), all), trigger: expand(pick(trigger), all) };
 }
 
 export async function outcome(promise) {
@@ -90,20 +110,22 @@ export function popup(client, openerId, ms = 10000) {
   );
 }
 
-function check(want, observed) {
-  if (typeof want === 'string') return observed === true ? [] : [want];
-  return Object.entries(want)
-    .filter(([k, v]) => observed?.[k] !== v)
-    .map(([k, v]) => `${k}: got ${q(observed?.[k])}, want ${q(v)}`);
-}
+const matches = (want, got) => (want === 'either' ? typeof got === 'boolean' : got === want);
 
 export function judge(vector, side, observed) {
-  if (observed?.refused === true) return { pass: true, refused: true, mismatches: [] };
-  const mismatches = check(
-    side === 'control' ? vector.control.expected : vector.expected,
-    observed
+  const want = side === 'control' ? vector.control.expected : vector.expected;
+  const refused = refusals(vector).filter((name) => observed?.[name] === true);
+  if (typeof want === 'string') {
+    const mismatches = observed === true ? [] : [want];
+    return { pass: mismatches.length === 0, refused, skipped: [], mismatches };
+  }
+  const skipped = Object.keys(want).filter((k) =>
+    (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
-  return { pass: mismatches.length === 0, refused: false, mismatches };
+  const mismatches = Object.entries(want)
+    .filter(([k, v]) => !skipped.includes(k) && !matches(v, observed?.[k]))
+    .map(([k, v]) => `${k}: got ${q(observed?.[k])}, want ${q(v)}`);
+  return { pass: mismatches.length === 0, refused, skipped, mismatches };
 }
 
 export function result(vector, run) {
@@ -118,20 +140,34 @@ export function result(vector, run) {
     return { ...row, control: 'not-run', guarded: 'not-run', live: 'not-run' };
   if (vector.skip?.target === run.target)
     return { ...row, control: 'skip', guarded: 'skip', live: 'skip', reason: vector.skip.reason };
+  const missing = (vector.requires ?? []).find(
+    (cap) => Array.isArray(run.capabilities) && !run.capabilities.includes(cap)
+  );
+  if (missing) {
+    const reason = `not-supported:${missing}`;
+    return { ...row, control: 'skip', guarded: 'skip', live: 'skip', reason };
+  }
   const c = run.control ? judge(vector, 'control', run.control) : null;
   const g = run.guarded ? judge(vector, 'guarded', run.guarded) : null;
+  const only = (a, b) => (a?.refused ?? []).filter((name) => !(b?.refused ?? []).includes(name));
   const why = [];
   let control = c?.pass ? 'pass' : 'fail';
   if (!c) why.push('no control');
-  else if (c.refused && row.via !== 'guard') {
+  else if (c.refused.length > 0 && row.via !== 'guard') {
     control = 'fail';
     why.push('an unguarded control was refused');
+  } else if (row.via === 'guard' && g && only(c, g).length > 0) {
+    control = 'fail';
+    why.push(`refused only on the control: ${only(c, g).join(', ')}`);
   } else why.push(...c.mismatches.map((m) => `control ${m}`));
   let guarded = g?.pass ? 'pass' : 'fail';
   if (!g) why.push('no guarded run');
-  else if (g.refused && !(c?.refused || (row.via === 'unguarded' && c?.pass))) {
+  else if (row.via === 'guard' && only(g, c).length > 0) {
     guarded = 'fail';
-    why.push('refused only on the protected target');
+    why.push(`refused only on the protected target: ${only(g, c).join(', ')}`);
+  } else if (row.via === 'unguarded' && g.refused.length > 0 && !c?.pass) {
+    guarded = 'fail';
+    why.push('refused on the protected target without a passing control');
   } else why.push(...g.mismatches);
   const live = run.live === true ? 'pass' : 'fail';
   if (live === 'fail') why.push('not live');

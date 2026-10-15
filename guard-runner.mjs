@@ -35,6 +35,17 @@ const matches = (value, predicate) => {
   });
 };
 
+const observedValue = (out, path) => {
+  const value = at(out, path);
+  if (
+    /timeout|timed out/i.test(String(out?.error?.message ?? out?.error ?? '')) ||
+    out?.result?.exceptionDetails ||
+    value === 'timeout'
+  )
+    throw new Error('Observation did not complete');
+  return value;
+};
+
 const address = (value) =>
   typeof value === 'string' ? value : hop(value.hops.slice(value.index ?? 0), value.to);
 const stateCheck = (check) =>
@@ -588,11 +599,12 @@ class Execution {
       );
     if (c.compare)
       return (
-        c.compare.every((name) => at(this.calls[name], c.path) !== undefined) &&
-        at(this.calls[c.compare[0]], c.path) === at(this.calls[c.compare[1]], c.path)
+        c.compare.every((name) => observedValue(this.calls[name], c.path) !== undefined) &&
+        observedValue(this.calls[c.compare[0]], c.path) ===
+          observedValue(this.calls[c.compare[1]], c.path)
       );
     if (c.result) {
-      const value = at(this.calls[c.result], c.path);
+      const value = observedValue(this.calls[c.result], c.path);
       return matches(value, c.equals);
     }
     if (c.cookie)
@@ -663,13 +675,17 @@ class Execution {
               ? this.calls[name].result
               : [this.calls[name]]
           );
+    for (const out of calls) observedValue(out, 'ok');
     return (
       calls.length > 0 &&
       calls.every(
         (out) =>
           out &&
           (c.refused
-            ? !out.ok && /refused/.test(String(out.error?.message ?? out.error))
+            ? !out.ok &&
+              new RegExp(c.refusal?.match ?? 'refused').test(
+                String(out.error?.message ?? out.error)
+              )
             : out.ok || !/refused/.test(String(out.error?.message ?? out.error)))
       )
     );
@@ -735,7 +751,7 @@ class Execution {
     });
     try {
       const out = await this.evaluate(c.expression ?? 'document.title', sessionId, this.reader);
-      return out.ok && matches(out.result?.result?.value, c.title ?? c.equals);
+      return matches(observedValue(out, 'result.result.value'), c.title ?? c.equals);
     } finally {
       await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
     }

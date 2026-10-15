@@ -290,7 +290,9 @@ checks are not valid liveness proofs.
 Compose checks with `all`, `any` or `not`. Predicates support nested partial
 objects, `$contains`, `$regex`, `$some`, nonempty `$every`, and `$encoded` with
 `{ value, prefix }` for a base64-encoded value with an optional prefix. Reads of titles and
-expressions use the unguarded observer. Registration refusals must match the
+expressions use the unguarded observer. A `refused` check can declare `refusal.match` to match protocol errors. Transport timeouts, timeout sentinel values and evaluation exceptions fail result,
+comparison and observer-read
+observations; they are never comparable values. Registration refusals must match the
 step's declared expression; dependent observations are omitted and reported by
 the existing result evaluator.
 
@@ -304,7 +306,11 @@ when its `refusal.match` matched. Transport connectivity and command completion
 alone never prove liveness. Cookie and storage rows seed a canary outside the
 guard and read it back outside the guard; refused writes require unchanged
 canary state and a refusal or filtered call response. Their control can clear or
-modify state as required by its positive observations.
+modify state as required by its positive observations. `C5.auth` uses fixture
+Authorization logs, delivered auth events and refusal of candidate auth ids. Its
+liveness requires an auth request at the fixture, not a completed fetch. There is
+no plain-tab baseline: headless Chromium can leave a credentials-including fetch
+to a Basic 401 pending even without an attached client.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
 `fixtureServer({ host, port })`, defaulting to a random loopback port. It returns

@@ -769,6 +769,17 @@
             "refused": {
               "$ref": "#/$defs/callNames"
             },
+            "refusal": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["match"],
+              "properties": {
+                "match": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
             "observer": {
               "const": "client"
             }
@@ -1341,6 +1352,17 @@
           "properties": {
             "refused": {
               "$ref": "#/$defs/callNames"
+            },
+            "refusal": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["match"],
+              "properties": {
+                "match": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             },
             "observer": {
               "const": "client"

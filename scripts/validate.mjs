@@ -201,6 +201,21 @@ const strings = (value) =>
     : value && typeof value === 'object'
       ? Object.values(value).flatMap(strings)
       : [];
+const checkRefusals = (check, id) => {
+  if (check?.refusal) {
+    try {
+      new RegExp(check.refusal.match);
+    } catch {
+      gv(`${id}: observation refusal.match does not compile`);
+    }
+  }
+  for (const child of [
+    ...(check?.all ?? []),
+    ...(check?.any ?? []),
+    ...(check?.not ? [check.not] : []),
+  ])
+    checkRefusals(child, id);
+};
 const guardIds = new Set();
 for (const v of guard.vectors ?? []) {
   if (guardIds.has(v.id)) gv(`duplicate id ${v.id}`);
@@ -216,6 +231,7 @@ for (const v of guard.vectors ?? []) {
   if (v.liveCheck?.on === 'control') gv(`${v.id}: liveCheck applies only to the guarded leg`);
   if (blank(v.expected)) gv(`${v.id} has no expected`);
   if (v.kind === 'cdp' && !v.liveCheck) gv(`${v.id} lacks liveCheck`);
+  checkRefusals(v.liveCheck, v.id);
   if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
   if (v.skip && !v.targets.includes(v.skip.target))
     gv(`${v.id} skips ${v.skip.target}, which it doesn't target`);
@@ -245,6 +261,7 @@ for (const v of guard.vectors ?? []) {
   const before = new Set(first < 0 ? [] : steps.slice(0, first).flatMap((st) => st.as ?? []));
   for (const [name, o] of Object.entries(v.observe ?? {})) {
     if (!o.check) gv(`${v.id}: ${name} lacks a check`);
+    checkRefusals(o.check, v.id);
     if (first >= 0 && !before.has(name) && !o.dependsOn)
       gv(`${v.id} observes ${name} after a refusable step without dependsOn`);
     for (const d of o.dependsOn ?? []) {

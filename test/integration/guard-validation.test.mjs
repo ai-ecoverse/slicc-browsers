@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { cp, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { run } from '../../guard-runner.mjs';
 
@@ -56,6 +60,39 @@ test('the exported schema requires observations, live checks and their observer 
     const copy = structuredClone(vectors);
     mutate(copy.vectors.find((v) => v.id === row.id));
     assert.equal(validate(copy), false);
+  }
+});
+
+test('auth refusal patterns are declared and malformed observation patterns fail validation', async () => {
+  const auth = vectors.vectors.find((v) => v.id === 'C5.auth');
+  assert.equal(auth.observe.refused.check.refusal.match, '^slicc: refused');
+  const invalid = structuredClone(vectors);
+  invalid.vectors.find((v) => v.id === auth.id).observe.refused.check.refusal = {};
+  assert.equal(validate(invalid), false);
+  const root = new URL('../../', import.meta.url);
+  const directory = await mkdtemp(join(tmpdir(), 'guard-validation-'));
+  try {
+    await cp(new URL('scripts/', root), join(directory, 'scripts'), { recursive: true });
+    for (const name of [
+      'schema',
+      'corpus',
+      'node_modules',
+      'catalog.json',
+      'corpus.json',
+      'protected.json',
+      'protected.mjs',
+      'seven.mjs',
+    ])
+      await symlink(new URL(name, root).pathname, join(directory, name));
+    const malformed = structuredClone(vectors);
+    malformed.vectors.find((v) => v.id === auth.id).observe.refused.check.refusal.match = '[';
+    await writeFile(join(directory, 'guard-vectors.json'), JSON.stringify(malformed));
+    await assert.rejects(
+      promisify(execFile)(process.execPath, [join(directory, 'scripts/validate.mjs')]),
+      (error) => error.stderr.includes('C5.auth: observation refusal.match does not compile')
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

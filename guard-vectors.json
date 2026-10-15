@@ -4366,18 +4366,7 @@
       "scope": "any",
       "setup": [
         {
-          "text": "a plain page whose own Fetch.enable handles auth requests, and answers the probe's challenge with credentials; a second tab without Fetch shows the untouched outcome"
-        },
-        {
-          "page": "tab",
-          "url": "{ordinary}/doc?n=plain-{tag}"
-        },
-        {
-          "page": "fetch",
-          "url": "{target}/auth/{tag}?n={tag}&plain=1",
-          "credentials": "include",
-          "status": true,
-          "as": "plain"
+          "text": "a plain page handles auth requests and answers the probe challenge with credentials"
         },
         {
           "page": "tab",
@@ -4411,10 +4400,38 @@
       "trigger": [
         {
           "page": "fetch",
+          "url": "{ordinary}/data?n=before-{tag}",
+          "as": "before"
+        },
+        {
+          "page": "fetch",
           "url": "{target}/auth/{tag}?n={tag}",
           "credentials": "include",
           "status": true,
-          "as": "body"
+          "as": "body",
+          "background": true
+        },
+        {
+          "wait": 500
+        },
+        {
+          "page": "fetch",
+          "url": "{ordinary}/data?n=after-{tag}",
+          "as": "after"
+        },
+        {
+          "guess": {
+            "between": ["{ordinary}/data?n=before-{tag}", "{ordinary}/data?n=after-{tag}"],
+            "cdp": "Fetch.continueWithAuth",
+            "params": {
+              "authChallengeResponse": {
+                "response": "ProvideCredentials",
+                "username": "u",
+                "password": "p"
+              }
+            }
+          },
+          "as": "authAttempts"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
@@ -4448,81 +4465,46 @@
           }
         },
         "authed": {
-          "means": "body is '200 authed'",
+          "means": "the fixture received the client's Authorization on the probe URL",
           "check": {
-            "result": "body",
-            "path": "result.result.value",
-            "equals": "200 authed",
-            "observer": "client"
+            "header": "authorization",
+            "on": "{target}/auth/{tag}?n={tag}",
+            "value": "Basic dTpw",
+            "observer": "fixture"
           }
         },
-        "untouched": {
-          "means": "body equals plain",
+        "refused": {
+          "means": "continueWithAuth on the candidate probe ids was refused",
           "check": {
-            "compare": ["body", "plain"],
-            "path": "result.result.value",
+            "refused": ["authAttempts"],
+            "refusal": {
+              "match": "^slicc: refused"
+            },
             "observer": "client"
           }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the fixture received at least one request for the auth probe URL",
       "control": {
         "origin": "ordinary",
         "via": "guard",
         "expected": {
           "seen": true,
           "pausedSeen": true,
-          "authed": true,
-          "untouched": false
+          "authed": true
         }
       },
       "expected": {
         "seen": false,
-        "pausedSeen": false,
         "authed": false,
-        "untouched": true
+        "refused": true
       },
       "observable": {
         "own": false
       },
       "liveCheck": {
-        "any": [
-          {
-            "loaded": "{target}/auth/{tag}?n={tag}",
-            "observer": "fixture"
-          },
-          {
-            "all": [
-              {
-                "pre": "{target}/auth/{tag}?n={tag}",
-                "observer": "fixture"
-              },
-              {
-                "any": [
-                  {
-                    "blocked": {
-                      "url": "{target}/auth/{tag}?n={tag}",
-                      "session": "page",
-                      "frame": false
-                    },
-                    "observer": "client"
-                  },
-                  {
-                    "blocked": {
-                      "url": "{target}/auth/{tag}?n={tag}",
-                      "session": "page",
-                      "frame": false
-                    },
-                    "observer": "unguarded"
-                  }
-                ],
-                "observer": "client"
-              }
-            ],
-            "observer": "client"
-          }
-        ],
-        "observer": "client"
+        "loaded": "{target}/auth/{tag}?n={tag}",
+        "observer": "fixture"
       }
     },
     {

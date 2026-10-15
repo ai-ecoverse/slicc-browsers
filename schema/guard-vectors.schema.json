@@ -1062,20 +1062,7 @@
           "required": ["blocked", "observer"],
           "properties": {
             "blocked": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["url"],
-              "properties": {
-                "url": {
-                  "$ref": "#/$defs/url"
-                },
-                "session": {
-                  "enum": ["page", "child"]
-                },
-                "frame": {
-                  "type": "boolean"
-                }
-              }
+              "$ref": "#/$defs/blocked"
             },
             "observer": {
               "const": "client"
@@ -1088,20 +1075,7 @@
           "required": ["blocked", "observer"],
           "properties": {
             "blocked": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["url"],
-              "properties": {
-                "url": {
-                  "$ref": "#/$defs/url"
-                },
-                "session": {
-                  "enum": ["page", "child"]
-                },
-                "frame": {
-                  "type": "boolean"
-                }
-              }
+              "$ref": "#/$defs/blocked"
             },
             "observer": {
               "const": "unguarded"
@@ -1215,6 +1189,21 @@
           }
         }
       ]
+    },
+    "blocked": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [{ "required": ["url"] }, { "required": ["anyOf"] }],
+      "properties": {
+        "url": { "$ref": "#/$defs/url" },
+        "anyOf": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/url" }
+        },
+        "session": { "enum": ["page", "child"] },
+        "frame": { "type": "boolean" }
+      }
     },
     "liveCheck": {
       "type": "object",
@@ -1620,20 +1609,7 @@
           "required": ["blocked", "observer"],
           "properties": {
             "blocked": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["url"],
-              "properties": {
-                "url": {
-                  "$ref": "#/$defs/url"
-                },
-                "session": {
-                  "enum": ["page", "child"]
-                },
-                "frame": {
-                  "type": "boolean"
-                }
-              }
+              "$ref": "#/$defs/blocked"
             },
             "observer": {
               "const": "client"
@@ -1646,20 +1622,7 @@
           "required": ["blocked", "observer"],
           "properties": {
             "blocked": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["url"],
-              "properties": {
-                "url": {
-                  "$ref": "#/$defs/url"
-                },
-                "session": {
-                  "enum": ["page", "child"]
-                },
-                "frame": {
-                  "type": "boolean"
-                }
-              }
+              "$ref": "#/$defs/blocked"
             },
             "observer": {
               "const": "unguarded"

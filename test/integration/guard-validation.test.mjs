@@ -107,3 +107,33 @@ test('a caller without the declared observer cannot obtain passing results', asy
   assert.equal(execution.summary().observerSkipped, execution.results.length);
   assert(execution.results.every((row) => row.reason === 'not-supported:unguarded-observer'));
 });
+
+test('the exported schema and runner validate exact and alternative blocked URLs', async () => {
+  for (const observer of ['client', 'unguarded']) {
+    for (const blocked of [
+      { url: '{target}/doc?n={tag}' },
+      {
+        url: { hops: [{ origin: '{ordinary}', code: 302 }], to: '{target}/doc?n={tag}', index: 0 },
+      },
+      {
+        anyOf: [
+          { hops: [{ origin: '{ordinary}', code: 302 }], to: '{target}/doc?n={tag}' },
+          '{target}/doc?n={tag}',
+        ],
+      },
+    ]) {
+      const copy = structuredClone(vectors);
+      copy.vectors[0].liveCheck = { blocked, observer };
+      assert.equal(validate(copy), true, JSON.stringify(validate.errors));
+    }
+    for (const blocked of [{}, { anyOf: [] }, { anyOf: 'url' }, { url: 'url', anyOf: ['url'] }]) {
+      const copy = structuredClone(vectors);
+      copy.vectors[0].liveCheck = { blocked, observer };
+      assert.equal(validate(copy), false);
+      await assert.rejects(
+        run(copy, { fixture: { log: () => [] } }),
+        /blocked needs exactly one url or nonempty anyOf/
+      );
+    }
+  }
+});

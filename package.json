@@ -69,7 +69,7 @@
     "test:unit:guard": "node --experimental-test-coverage --test --test-coverage-include=guard-runner.mjs --test-coverage-include=fixture-server.mjs --test-coverage-lines=100 test/unit/guard-*.test.mjs"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-shared-web": "1.19.0",
+    "@ai-ecoverse/slicc-shared-web": "1.20.0",
     "@biomejs/biome": "2.5.15",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import test from 'node:test';
+import { promisify } from 'node:util';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
@@ -143,6 +145,34 @@ test('redirect settlement waits for the final hop instead of a setup beacon', as
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('a profile removal error is a warning rather than a failed browser close', {
+  skip: process.platform === 'win32' || process.getuid?.() === 0,
+}, async () => {
+  const script = `
+    import { chmod, rm } from 'node:fs/promises';
+    import { fixtureServer } from ${JSON.stringify(new URL('../../fixture-server.mjs', import.meta.url).href)};
+    import { launch } from ${JSON.stringify(new URL('./cdp-client.mjs', import.meta.url).href)};
+    const fixture = await fixtureServer();
+    const browser = await launch(fixture);
+    try {
+      await chmod(browser.directory, 0o500);
+      await browser.close();
+      console.log('closed');
+    } finally {
+      await chmod(browser.directory, 0o700);
+      await rm(browser.directory, { recursive: true, force: true });
+      await fixture.close();
+    }
+  `;
+  const { stdout, stderr } = await promisify(execFile)(process.execPath, [
+    '--input-type=module',
+    '-e',
+    script,
+  ]);
+  assert.equal(stdout.trim(), 'closed');
+  assert.match(stderr, /Warning: Chromium profile cleanup/);
 });
 
 test('concurrent Chromium close waits for exit and removes profiles once', async () => {

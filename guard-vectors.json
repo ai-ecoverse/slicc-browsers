@@ -1454,11 +1454,11 @@
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1595,11 +1595,11 @@
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1732,11 +1732,11 @@
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -1876,11 +1876,11 @@
         },
         "frameOnDest": {
           "means": "a child frame or iframe target is on {target}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         },
         "errorFrame": {
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
-          "dependsOn": ["refused.3", "refused.4", "refused.7", "refused.8"]
+          "dependsOn": ["refused.8"]
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",

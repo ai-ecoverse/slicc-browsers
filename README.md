@@ -222,7 +222,7 @@ It exports:
 - `instrument(client, sessionId, log, tag)`, `load(client, sessionId, url)` and `popup(client, openerId)`;
 - `judge(vector, side, observed)`: `{ pass, refused, skipped, mismatches }`, where `refused` lists the leg's refusals and `skipped` the observations that depend on them;
 - `result(vector, run)`: a report row from `{ target, variant, transport, via?, capabilities?, control, guarded, live }`. `capabilities` is the transport's; without it, the transport has them all;
-- `summary({ guard, sha, set, results })`: `set` is the parsed `guard-vectors.json`. It returns `{ set, schemaVersion, guard, sha, variants, targets, transports, results, skipped, notRun, missing, pass, line }`. `missing` lists each `{ id, target, variant, transport }` without a row, for every vector whose `scope` is `any` or the guard, every target it lists, and every variant and transport in `results`; `pass` needs it empty, where `line` is `GUARD-PASS <guard>@<sha> (vectors @ai-ecoverse/slicc-browsers@X.Y.Z)` or `GUARD-FAIL …`.
+- `summary({ guard, sha, set, results })`: `set` is the parsed `guard-vectors.json`. It returns `{ set, schemaVersion, guard, sha, variants, targets, transports, results, skipped, notRun, missing, pass, line }`. `missing` lists each `{ id, target, variant, transport }` without a row, for every vector whose `scope` is `any` or the guard, every target it lists, every variant in `variants` or `results`, and every transport in `results`; `pass` needs it empty, where `line` is `GUARD-PASS <guard>@<sha> (vectors @ai-ecoverse/slicc-browsers@X.Y.Z)` or `GUARD-FAIL …`.
 
 **`npm run validate`** checks that:
 - the file matches the schema, and ids are unique;

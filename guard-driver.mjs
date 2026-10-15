@@ -72,7 +72,9 @@ export async function outcome(promise) {
 export const isRefusal = (out, step) =>
   Boolean(step?.refusal) &&
   !out.ok &&
-  new RegExp(step.refusal.match).test(out.error?.message ?? String(out.error?.code ?? ''));
+  [out.error?.message, out.error?.code]
+    .filter((v) => v !== undefined && v !== null)
+    .some((v) => new RegExp(step.refusal.match).test(String(v)));
 
 export function call(client, step, sessionId) {
   const target = step.session === 'browser' ? undefined : sessionId;

@@ -3894,7 +3894,8 @@
         "origin": "ordinary",
         "via": "unguarded",
         "expected": {
-          "popup": true
+          "popup": true,
+          "attached": true
         }
       },
       "expected": {

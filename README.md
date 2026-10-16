@@ -151,7 +151,7 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 - `setup` and `trigger`, both lists of steps;
 - `targets`: the protected targets it runs against;
 - `requires?`: the capabilities it needs, the union of its steps' and observations' `requires`. A runner whose transport lacks one reports the vector as `skip` with the reason `not-supported:<capability>`;
-- `observe?`: each observed name, as `{ "means", "dependsOn"?, "requires"? }`. `dependsOn` lists the refusals the observation depends on (see Refusals);
+- `observe?`: each observed name, as `{ "means", "dependsOn"?, "requires"?, "eitherWhen"? }`. `dependsOn` lists the refusals the observation depends on (see Refusals). `eitherWhen` is a check: when it holds on the guarded leg, that observation's expectation becomes `"either"` there (see Design-dependent outcomes);
 - `live`: the liveness check;
 - `control` (`origin: "ordinary"`, `via`, `expected`) and `expected`: an object of names and booleans, or text;
 - `skip?` (`target`, `reason`): `reason` starts with a code, as in `not-applicable: …`.
@@ -194,7 +194,7 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 
 **Liveness.** A runner checks `live` through its own CDP, never through the guard path: either the protected document loaded (title, marker or URL), or the guard returned its own refusal for a refusable step. A failing `live` fails the id.
 
-**Design-dependent outcomes.** A key listed in `designDependent` may expect `"either"`, which `true` and `false` both match: a guard that refuses a setup step lets the real document load, and one that blocks before commit doesn't. The hard negatives stay required.
+**Design-dependent outcomes.** A key listed in `designDependent` may expect `"either"`, which `true` and `false` both match: a guard that refuses a setup step lets the real document load, and one that blocks before commit doesn't. `detached` is design-dependent on the rows whose guarded leg proves the block (the pre-action beacon plus an exact-URL block or the history form): its `eitherWhen` holds the same proof, so a guard that blocks without detaching passes, and one that neither blocks nor detaches still fails. The hard negatives stay required.
 
 **Observability.** `observable.own: false` marks a vector the guard host's own origin can't show (headers, auth, redirects); a runner whose `own` is a static server reports it as `skip` with `not-observable`.
 
@@ -291,7 +291,7 @@ Checks include: `beacon`, `served`, `header` with
 `on`, `event` with `where`, `result` with `path` and `equals`, `cookie` with `from`,
 `compare`, `refused`, `reached`, `attached`, `delivered`, `title`, `expression`,
 `hops` (each exact nested redirect URL), `detached`, `loaded`, `pre`, `blocked`,
-`registration`, `state` and `filtered`. The diagnostic `executed` and `live`
+`history`, `frameBlocked`, `registration`, `state` and `filtered`. The diagnostic `executed` and `live`
 checks are not valid liveness proofs.
 Compose checks with `all`, `any` or `not`. Predicates support nested partial
 objects, `$contains`, `$regex`, `$some`, nonempty `$every`, and `$encoded` with
@@ -309,7 +309,20 @@ heartbeat; alternatively a pre-action `/live?tag=...&step=pre&to=...` request an
 an exact-URL block/error from the client or unguarded frame tree. An error for a
 different URL is not evidence. `blocked` accepts either `{ url }` for one exact URL
 or `{ anyOf: [url, ...] }` for a nonempty list of exact URLs; each URL can be a
-string or `{ hops, to, index? }`. Both forms allow `session` and `frame`. Redirect
+string or `{ hops, to, index? }`. Both forms allow `session` and `frame`. With `frame`,
+the unguarded observer also reads the page's out-of-process iframe targets (matched by
+their parent frame): a site-isolated iframe isn't in the parent's frame tree, so its
+chrome-error main frame with the exact `unreachableUrl` is the block. `history` (unguarded,
+same URL forms) is for guards that replace the error page, such as with `about:blank#blocked`: it
+needs the pre-action beacon, an entry with the exact URL in the observer's
+`Page.getNavigationHistory` of the page or child, and no fixture request for that URL.
+`frameBlocked` (unguarded) is that out-of-process chrome-error iframe target, and the
+client must be unable to attach to it; the cross-site `C4` rows accept it as `errorFrame`.
+A step that the guard refuses in every context, such as `Network.clearBrowserCookies`
+in `C6.clear-cookies`, is refusable, so refusing it on both legs passes and allowing it
+is judged on its effect. A child step that fails after its child session detached is
+recorded as detached, not as a refusal, and the runner awaits a child's started
+`children` steps before any later `session: "child"` step and before the trigger. Redirect
 vectors list every nested hop URL and the final destination because Chromium
 reports the URL intercepted by the guard. A matching block still requires the
 pre-action beacon alongside it; an unrelated error cannot certify the chain.

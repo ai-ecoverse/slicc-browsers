@@ -5,6 +5,7 @@ export function emulatedGuard(browser, options = {}) {
   const hosts = options.protectedHosts ?? [];
   const pages = new Set();
   const shielded = new Set();
+  const foreign = new Set();
   const children = new Set();
   const closed = new Set();
   const shields = new Map();
@@ -34,6 +35,7 @@ export function emulatedGuard(browser, options = {}) {
     if (!owner) return;
     const { requestId, request } = event.params;
     if (!hosts.includes(new URL(request.url).host)) {
+      await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
       return;
     }
@@ -54,6 +56,7 @@ export function emulatedGuard(browser, options = {}) {
     while (!stopped) {
       for (const event of client.events.slice(cursor)) {
         cursor++;
+        options.trace?.push({ at: Date.now(), event });
         if (!mentions(event)) {
           events.push(event);
           for (const waiter of waiters)
@@ -64,10 +67,15 @@ export function emulatedGuard(browser, options = {}) {
         }
         if (event.method !== 'Target.attachedToTarget') continue;
         const info = event.params.targetInfo;
+        if (event.params.waitingForDebugger) children.add(event.params.sessionId);
+        if (!pages.has(info.targetId) && !pages.has(info.openerId))
+          foreign.add(event.params.sessionId);
         if (info.type !== 'page' || shielded.has(info.targetId)) continue;
         shielded.add(info.targetId);
         pages.add(info.targetId);
         if (event.params.waitingForDebugger) children.add(event.params.sessionId);
+        if (!pages.has(info.targetId) && !pages.has(info.openerId))
+          foreign.add(event.params.sessionId);
         await shield(
           info.targetId,
           event.params.waitingForDebugger ? event.params.sessionId : undefined,
@@ -96,7 +104,8 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
-        if (options.refuse?.(method, params ?? {}, sessionId)) throw refusal('browser-wide call');
+        if (options.refuse?.(method, params ?? {}, children.has(sessionId)))
+          throw refusal('browser-wide call');
         if (
           options.refuseFrameAttach &&
           method === 'Target.attachToTarget' &&
@@ -111,13 +120,25 @@ export function emulatedGuard(browser, options = {}) {
         )
           await pause(options.childPageLatencyMs);
         if (sessionId && closed.has(sessionId)) throw refusal("target is on seven's origin");
+        if (options.refuseForeign && sessionId && foreign.has(sessionId)) {
+          await pause(options.foreignLatencyMs ?? 0);
+          throw refusal('slicc only drives the tabs it opened');
+        }
         if (
           options.ownContextsOnly &&
           method === 'Storage.clearCookies' &&
           !contexts.has(params?.browserContextId)
         )
           throw refusal('cookies in a context slicc did not create');
+        options.trace?.push({ at: Date.now(), method, params, sessionId });
         const result = await client.send(method, params, sessionId);
+        await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
+        if (
+          method === 'Page.navigate' &&
+          sessionId &&
+          options.staleLoad?.(sessionId, children.has(sessionId))
+        )
+          events.push({ method: 'Page.loadEventFired', sessionId, params: { timestamp: 0 } });
         if (method === 'Target.createTarget' && result?.targetId) pages.add(result.targetId);
         if (method === 'Target.createBrowserContext' && result?.browserContextId)
           contexts.add(result.browserContextId);

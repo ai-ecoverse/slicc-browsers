@@ -166,6 +166,7 @@ type GuardStep struct {
 	Background  *bool           `json:"background,omitempty"`
 	Answer      *GuardAnswer    `json:"answer,omitempty"`
 	Children    []GuardStep     `json:"children,omitempty"`
+	Where       *GuardWhere     `json:"where,omitempty"`
 	Settle      *GuardSettle    `json:"settle,omitempty"`
 	Wait        *int            `json:"wait,omitempty"`
 	Guess       *GuardGuess     `json:"guess,omitempty"`
@@ -173,6 +174,11 @@ type GuardStep struct {
 	As          string          `json:"as,omitempty"`
 	On          string          `json:"on,omitempty"`
 	Requires    []string        `json:"requires,omitempty"`
+}
+
+type GuardWhere struct {
+	OpenerID  string `json:"openerId,omitempty"`
+	URLPrefix string `json:"urlPrefix,omitempty"`
 }
 
 type GuardRefusal struct {

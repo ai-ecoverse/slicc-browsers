@@ -4180,6 +4180,9 @@
               "cdp": "Page.reload"
             }
           ],
+          "where": {
+            "openerId": "page"
+          },
           "requires": ["autoAttach"]
         }
       ],
@@ -4415,6 +4418,9 @@
               "cdp": "Page.reload"
             }
           ],
+          "where": {
+            "openerId": "page"
+          },
           "requires": ["autoAttach"]
         }
       ],
@@ -4847,7 +4853,7 @@
         },
         "beacon": {
           "means": "a beacon from {target}",
-          "dependsOn": ["refused.7", "refused.8"],
+          "dependsOn": ["refused.3", "refused.7", "refused.8"],
           "requires": ["autoAttach"],
           "check": {
             "beacon": "{target}",

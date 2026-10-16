@@ -146,6 +146,15 @@ pub enum Expected {
     Text(String),
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Where {
+    #[serde(default, rename = "openerId", skip_serializing_if = "Option::is_none")]
+    pub opener_id: Option<String>,
+    #[serde(default, rename = "urlPrefix", skip_serializing_if = "Option::is_none")]
+    pub url_prefix: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
@@ -181,6 +190,8 @@ pub struct Step {
     pub answer: Option<Answer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<Step>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#where: Option<Where>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<Settle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

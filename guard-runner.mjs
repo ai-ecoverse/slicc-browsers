@@ -4,6 +4,7 @@ import {
   expand,
   hop,
   isRefusal,
+  loadedAfter,
   outcome,
   summary as report,
   result,
@@ -11,6 +12,7 @@ import {
 } from './guard-driver.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const namedResultMs = 10000;
 const q = JSON.stringify;
 const at = (value, path = '') =>
   path
@@ -109,6 +111,7 @@ class Execution {
     this.attachSettings = new Map();
     this.childSteps = [];
     this.childRuns = new Map();
+    this.named = new Map();
     this.processed = new Set();
     this.eventStart = this.client.events.length;
     this.actionEventStart = this.eventStart;
@@ -151,12 +154,9 @@ class Execution {
   async navigate(client, session, url) {
     const start = client.events.length;
     const out = await outcome(client.send('Page.navigate', { url }, session));
-    if (out.ok && !out.result.errorText)
+    if (out.ok && !out.result.errorText && out.result.loaderId)
       await this.poll(
-        () =>
-          client.events
-            .slice(start)
-            .some((event) => event.method === 'Page.loadEventFired' && event.sessionId === session),
+        () => loadedAfter(client.events.slice(start), session, out.result.loaderId),
         3000
       );
     return out;
@@ -427,48 +427,45 @@ class Execution {
           event.params.targetInfo?.targetId !== this.pageTarget &&
           event.params.targetInfo?.targetId !== this.canaryTarget &&
           event.params.sessionId !== this.sessions.page
-        ) {
-          const info = event.params.targetInfo;
-          if (
-            info?.browserContextId &&
-            this.vars.context &&
-            info.browserContextId !== this.vars.context
-          )
-            continue;
-          this.sessions.child = event.params.sessionId;
-          if (info?.targetId) this.targets.push(info.targetId);
-          const child = event.params.sessionId;
-          const started = (async () => {
-            const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
-            if (reload < 0) await this.execute(this.childSteps, event.params.sessionId);
-            else {
-              await this.execute(this.childSteps.slice(0, reload), event.params.sessionId);
-              const start = this.client.events.length;
-              await outcome(
-                this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
-              );
-              await this.poll(
-                () =>
-                  this.client.events
-                    .slice(start)
-                    .some(
-                      (e) =>
-                        e.method === 'Page.loadEventFired' && e.sessionId === event.params.sessionId
-                    ),
-                1500
-              );
-              await this.execute(this.childSteps.slice(reload), event.params.sessionId);
-            }
-            await outcome(
-              this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
-            );
-          })().catch((error) => this.errors.push(String(error.message ?? error)));
-          this.childRuns.set(child, started);
-          this.pending.push(started);
-        }
+        )
+          this.adopt(event);
       }
       await sleep(10);
     }
+  }
+
+  adopt(event) {
+    const info = event.params.targetInfo;
+    const child = event.params.sessionId;
+    if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
+      return;
+    if (this.childWhere && !this.childMatches(info)) {
+      if (event.params.waitingForDebugger)
+        this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
+      return;
+    }
+    this.sessions.child = child;
+    if (info?.targetId) this.targets.push(info.targetId);
+    const started = (async () => {
+      const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
+      if (reload < 0) await this.execute(this.childSteps, child);
+      else {
+        await this.execute(this.childSteps.slice(0, reload), child);
+        const start = this.client.events.length;
+        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+        await this.poll(
+          () =>
+            this.client.events
+              .slice(start)
+              .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === child),
+          1500
+        );
+        await this.execute(this.childSteps.slice(reload), child);
+      }
+      await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+    })().catch((error) => this.errors.push(String(error.message ?? error)));
+    this.childRuns.set(child, started);
+    this.pending.push(started);
   }
 
   async answer(event) {
@@ -496,6 +493,11 @@ class Execution {
       this.client.send(method, { ...params, requestId: p.requestId }, event.sessionId)
     );
     this.calls[`answer.${p.requestId}.${event.method}`] = out;
+  }
+
+  childMatches(info) {
+    if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
+    return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
   }
 
   async childrenSettled() {
@@ -541,6 +543,7 @@ class Execution {
   async operation(step, session, phase) {
     if (step.children) {
       this.childSteps = step.children;
+      this.childWhere = step.where;
       return;
     }
     if (step.answer) {
@@ -575,9 +578,15 @@ class Execution {
             (await this.requestCheck({ served: this.actionDestination }, this.actionRequestStart)))
         );
       if (settle.title) return this.check({ title: settle.title, session: settle.session });
-      return this.client.events
-        .slice(this.actionEventStart)
-        .some((event) => event.method === 'Page.loadEventFired');
+      const events = this.client.events.slice(this.actionEventStart);
+      return events.some(
+        (event, index) =>
+          event.method === 'Page.frameNavigated' &&
+          !event.params?.frame?.parentId &&
+          events
+            .slice(index + 1)
+            .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === event.sessionId)
+      );
     }, settle.ms ?? 1500);
   }
 
@@ -607,18 +616,19 @@ class Execution {
     if (step.cdp === 'Target.setAutoAttach' && step.params?.autoAttach === false)
       this.cleanupEventStart = this.client.events.length;
     const params = { ...step.params };
-    if (
-      /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp) &&
-      this.vars.context &&
-      !params.browserContextId
-    )
-      params.browserContextId = this.vars.context;
     const session =
       step.session === 'page-or-browser' &&
       supported(['browserSession'], this.options.capabilities) &&
       /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp)
         ? undefined
         : sessionId;
+    if (
+      /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp) &&
+      this.vars.context &&
+      !params.browserContextId &&
+      session === undefined
+    )
+      params.browserContextId = this.vars.context;
     const out = await outcome(this.client.send(step.cdp, params, session));
     if (step.cdp === 'Target.setAutoAttach' && out.ok) {
       if (params.autoAttach) this.attachSettings.set(session, true);
@@ -673,11 +683,11 @@ class Execution {
     if (pre) expression = `(() => { ${pre} return (${expression}); })()`;
     const promise = this.evaluate(expression, session);
     if (step.background) {
-      this.pending.push(
-        promise.then((out) => {
-          if (typeof step.as === 'string') this.calls[step.as] = out;
-        })
-      );
+      const done = promise.then((out) => {
+        if (typeof step.as === 'string') this.calls[step.as] = out;
+      });
+      this.pending.push(done);
+      if (typeof step.as === 'string') this.named.set(step.as, done);
       return { ok: true, result: { pending: true } };
     }
     const out = await promise;
@@ -689,9 +699,37 @@ class Execution {
     return out;
   }
 
+  async namedSettled(names) {
+    const waits = names.map((name) => this.named.get(name)).filter(Boolean);
+    if (!waits.length) return true;
+    let timer;
+    const expired = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(false), this.options.namedResultMs ?? namedResultMs);
+    });
+    const done = await Promise.race([Promise.all(waits).then(() => true), expired]);
+    clearTimeout(timer);
+    return done;
+  }
+
+  async ready(c) {
+    if (c.observer === 'unguarded' && !this.reader) return false;
+    return this.namedReady(c);
+  }
+
+  async namedReady(c) {
+    const names = [c.result, ...(c.compare ?? []), c.refused, c.reached]
+      .flat()
+      .filter((name) => typeof name === 'string' && this.named.has(name));
+    if (!names.length || (await this.namedSettled(names))) return true;
+    this.errors.push(
+      `${names.join(', ')} did not complete within ${this.options.namedResultMs ?? namedResultMs}ms`
+    );
+    return false;
+  }
+
   async check(check) {
     const c = expand(check, this.vars);
-    if (c.observer === 'unguarded' && !this.reader) return false;
+    if (!(await this.ready(c))) return false;
     const events = this.client.events.slice(this.eventStart);
     const evidence = await this.evidence(c);
     if (evidence !== undefined) return evidence;
@@ -945,16 +983,74 @@ const inactive = (vector, target, capabilities) =>
   !supported(vector.requires, capabilities) ||
   (vector.scope !== 'any' && vector.scope !== capabilities.scope);
 
-function unavailableOrigin(vector, target, targets = {}) {
-  const defaults = { plain: 'ordinary', cross: 'client', log: 'ordinary', own: 'client' };
-  const references = [target, 'plain', vector.control.origin];
-  for (const match of q([vector.setup, vector.trigger, vector.observe, vector.liveCheck]).matchAll(
-    /\{([A-Za-z][A-Za-z-]*)\}/g
-  ))
-    references.push(match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]);
-  return references
-    .map((name) => (targets[name] === undefined ? (defaults[name] ?? name) : name))
-    .find((name) => targets[name] === null);
+const allSteps = (list) => list.flatMap((step) => [step, ...allSteps(step.children ?? [])]);
+const browserContextStep = (vector, capabilities) =>
+  allSteps([...vector.setup, ...vector.trigger]).some(
+    (step) =>
+      step.params?.browserContextId !== undefined ||
+      (step.session === 'page-or-browser' &&
+        /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp ?? '') &&
+        supported(['browserContexts'], capabilities))
+  );
+
+const originDefaults = { plain: 'ordinary', cross: 'client', log: 'ordinary', own: 'client' };
+
+function nullOrigins(value, targets) {
+  return [...q(value).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)]
+    .map((match) => (match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]))
+    .map((name) => (targets[name] === undefined ? (originDefaults[name] ?? name) : name))
+    .filter((name) => targets[name] === null);
+}
+
+function prune(check, targets) {
+  if (!check || typeof check !== 'object') return { check };
+  if (check.any) {
+    const parts = check.any.map((item) => prune(item, targets));
+    const kept = parts.filter((part) => !part.missing).map((part) => part.check);
+    return kept.length ? { check: { ...check, any: kept } } : { missing: parts[0]?.missing };
+  }
+  if (check.all || check.not) {
+    const parts = (check.all ?? [check.not]).map((item) => prune(item, targets));
+    const missing = parts.find((part) => part.missing)?.missing;
+    if (missing) return { missing };
+    return {
+      check: check.all
+        ? { ...check, all: parts.map((part) => part.check) }
+        : { ...check, not: parts[0].check },
+    };
+  }
+  const missing = nullOrigins(check, targets)[0];
+  return missing ? { missing } : { check };
+}
+
+function available(vector, target, targets = {}) {
+  const fixed = nullOrigins(
+    [target, '{plain}', vector.control.origin, vector.setup, vector.trigger].map((value) =>
+      typeof value === 'string' && !value.startsWith('{') ? `{${value}}` : value
+    ),
+    targets
+  )[0];
+  if (fixed) return { missing: fixed };
+  const live = prune(vector.liveCheck, targets);
+  if (live.missing) return { missing: live.missing };
+  const observe = {};
+  for (const [name, observation] of Object.entries(vector.observe ?? {})) {
+    const pruned = prune(observation.check, targets);
+    if (pruned.missing) return { missing: pruned.missing };
+    const either = observation.eitherWhen ? prune(observation.eitherWhen, targets) : undefined;
+    observe[name] = {
+      ...observation,
+      check: pruned.check,
+      ...(observation.eitherWhen ? { eitherWhen: either.missing ? undefined : either.check } : {}),
+    };
+  }
+  return {
+    vector: {
+      ...vector,
+      ...(vector.liveCheck ? { liveCheck: live.check } : {}),
+      ...(vector.observe ? { observe } : {}),
+    },
+  };
 }
 
 function variables(targets, target, side, slot, index) {
@@ -976,7 +1072,9 @@ function variables(targets, target, side, slot, index) {
 }
 
 async function executeRow(job, opts, clients, set, slot, index) {
-  const { vector, target, variant } = job;
+  const { target, variant } = job;
+  const scoped = available(job.vector, target, opts.targets);
+  const vector = scoped.vector ?? job.vector;
   const base = {
     id: vector.id,
     target,
@@ -985,7 +1083,7 @@ async function executeRow(job, opts, clients, set, slot, index) {
     via: vector.control.via,
     transportVariant: clients.transportVariant === true,
   };
-  const unavailable = unavailableOrigin(vector, target, opts.targets);
+  const unavailable = scoped.missing;
   if (unavailable)
     return {
       ...base,
@@ -1002,8 +1100,27 @@ async function executeRow(job, opts, clients, set, slot, index) {
       live: 'not-run',
       appliesTo: vector.appliesTo ?? [],
     };
-  if (inactive(vector, target, opts.capabilities))
-    return { ...base, control: 'skip', guarded: 'skip', live: 'skip', reason: 'not-applicable' };
+  if (inactive(vector, target, opts.capabilities)) {
+    const missing = (vector.requires ?? []).find((cap) => !supported([cap], opts.capabilities));
+    return {
+      ...base,
+      control: 'skip',
+      guarded: 'skip',
+      live: 'skip',
+      reason: missing ? `not-supported:${missing}` : 'not-applicable',
+    };
+  }
+  if (
+    !supported(['browserSession'], opts.capabilities) &&
+    browserContextStep(vector, opts.capabilities)
+  )
+    return {
+      ...base,
+      control: 'skip',
+      guarded: 'skip',
+      live: 'skip',
+      reason: 'not-supported:browserSession',
+    };
   if (needsObserver(vector) && !clients.unguarded)
     return {
       ...base,
@@ -1172,10 +1289,22 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown' }) 
   const observerSkipped = results.filter(
     (row) => row.reason === 'not-supported:unguarded-observer'
   ).length;
+  const skips = {};
+  for (const row of results)
+    if (row.control === 'skip')
+      skips[row.reason ?? 'unknown'] = (skips[row.reason ?? 'unknown'] ?? 0) + 1;
+  const skipped = Object.values(skips).reduce((sum, count) => sum + count, 0);
+  const line = observerSkipped ? value.line.replace('GUARD-PASS', 'GUARD-FAIL') : value.line;
   return {
     ...value,
     pass: value.pass && observerSkipped === 0,
-    line: observerSkipped ? value.line.replace('GUARD-PASS', 'GUARD-FAIL') : value.line,
+    line: skipped
+      ? `${line} skips ${skipped} (${Object.entries(skips)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([reason, count]) => `${reason}=${count}`)
+          .join(', ')})`
+      : line,
+    skips,
     observerSkipped,
     counts: Object.fromEntries(
       ['control', 'guarded', 'live'].map((side) => [

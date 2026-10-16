@@ -545,6 +545,22 @@
             "children": {
               "$ref": "#/$defs/steps"
             },
+            "where": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["openerId"],
+                  "properties": { "openerId": { "const": "page" } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["urlPrefix"],
+                  "properties": { "urlPrefix": { "type": "string", "minLength": 1 } }
+                }
+              ]
+            },
             "on": {
               "$ref": "#/$defs/on"
             },

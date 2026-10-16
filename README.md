@@ -150,7 +150,7 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 - `scope`: `any`, or the one guard the vector is for;
 - `setup` and `trigger`, both lists of steps;
 - `targets`: the protected targets it runs against;
-- `requires?`: the capabilities it needs, the union of its steps' and observations' `requires`. A runner whose transport lacks one reports the vector as `skip` with the reason `not-supported:<capability>`;
+- `requires?`: the capabilities it needs, the union of its steps' and observations' `requires`. A runner whose transport lacks one reports the vector as `skip` with the reason `not-supported:<capability>`. A row with a `page-or-browser` cookie step that would carry a `browserContextId` reports `not-supported:browserSession` without a browser session, because that parameter is only allowed on the browser target;
 - `observe?`: each observed name, as `{ "means", "dependsOn"?, "requires"?, "eitherWhen"? }`. `dependsOn` lists the refusals the observation depends on (see Refusals). `eitherWhen` is a check: when it holds on the guarded leg, that observation's expectation becomes `"either"` there (see Design-dependent outcomes);
 - `live`: the liveness check;
 - `control` (`origin: "ordinary"`, `via`, `expected`) and `expected`: an object of names and booleans, or text;
@@ -170,7 +170,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
   - `eval`: evaluate `expression`.
   `hops` routes `url` through `/hop` on each `origin`, with its `code`.
 - `{ "answer": { "url", "stage"?, "cdp"?, "params"?, "hold"? } }`: answer each paused request or auth challenge for `url` with that call; `hold` leaves it paused. Every other paused request continues unchanged.
-- `{ "children": steps }`: run these steps on each target auto-attached from then on, then resume it.
+- `{ "children": steps, "where"? }`: run these steps on each target auto-attached from then on, then resume it. `where` scopes them to the row's own target: `{ "openerId": "page" }` (opened by the row's page) or `{ "urlPrefix": url }`; other attached targets are resumed and otherwise left alone.
 - `{ "settle": { "beacon"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
 - `{ "wait": ms }`.
 - `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.
@@ -253,7 +253,10 @@ error as `error.cdp`, or an error message. `client` carries the guarded leg;
 `unguarded`, when supplied, carries unguarded controls and observation reads.
 There is no fallback from observer reads to the guarded client. A bare client
 means guarded transport only; rows requiring an observer report
-`skip` with `not-supported:unguarded-observer`, counted in `summary().observerSkipped`.
+`skip` with `not-supported:unguarded-observer`, counted in `summary().observerSkipped`. The run's `summary()` also reports
+`skips`, the number of skipped rows per reason, and appends
+`skips <n> (<reason>=<count>, ...)` to `line` whenever any row was skipped, so a
+certification line never reads skipped rows as coverage.
 `clientFactory({ variant, detachDelay, vector, target, slot })` is called per row
 and may return either a client or `{ client, unguarded, close, transportVariant }`.
 The factory can configure the guard's own transport delay from this metadata;
@@ -275,8 +278,10 @@ row needing that origin is reported as `skip` for control, guarded and live, wit
 reason `not-applicable:no-<target>-origin`; no substitute origin is used and the
 row never passes. A guard whose whole site is protected, such as the extension
 where every `sliccy.ai` host is protected, passes `ordinary-same-site: null`.
-This also applies to origins referenced in setup, triggers, observations and
-liveness checks, not only the row target. Tags and cookie names are unique per leg. `variant`
+This also applies to origins referenced in setup and triggers, not only the row
+target. In observations and liveness checks, an `any` alternative that references
+a `null` origin is dropped and the rest are evaluated; the row skips only when
+every alternative of an `any`, or a required (`all`, `not` or plain) check, needs it. Tags and cookie names are unique per leg. `variant`
 selects one variant or an array; omission selects all. `parallel` defaults to 1.
 `log(row)` receives completed rows. A variant supplies the wait before an
 explicit `Target.detachFromTarget` step and for a `settle.variant` step.
@@ -322,7 +327,11 @@ A step that the guard refuses in every context, such as `Network.clearBrowserCoo
 in `C6.clear-cookies`, is refusable, so refusing it on both legs passes and allowing it
 is judged on its effect. A child step that fails after its child session detached is
 recorded as detached, not as a refusal, and the runner awaits a child's started
-`children` steps before any later `session: "child"` step and before the trigger. Redirect
+`children` steps before any later `session: "child"` step and before the trigger. A page
+navigation waits for the load of its own `loaderId` (its `Page.frameNavigated` and then a
+load event), and a settle waits for a main-frame commit followed by its load, so a stale
+load event never ends a wait. An observation that reads a background step's `as` result
+waits for that step, up to 10 s, and fails with `<as> did not complete within …` past it. Redirect
 vectors list every nested hop URL and the final destination because Chromium
 reports the URL intercepted by the guard. A matching block still requires the
 pre-action beacon alongside it; an unrelated error cannot certify the chain.

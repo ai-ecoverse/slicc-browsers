@@ -125,7 +125,11 @@ export function judge(vector, side, observed) {
     (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const mismatches = Object.entries(want)
-    .filter(([k, v]) => !skipped.includes(k) && !matches(v, observed?.[k]))
+    .filter(
+      ([k, v]) =>
+        !skipped.includes(k) &&
+        !matches(observed?.[`${k}.either`] === true ? 'either' : v, observed?.[k])
+    )
     .map(([k, v]) => `${k}: got ${q(observed?.[k])}, want ${q(v)}`);
   return { pass: mismatches.length === 0, refused, skipped, mismatches };
 }

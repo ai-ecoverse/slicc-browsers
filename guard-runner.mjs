@@ -284,12 +284,97 @@ class Execution {
               tree.frame.url.startsWith('chrome-error://')) ||
               (tree.childFrames ?? []).some(visit))
         );
-      return (
+      if (
         read.ok &&
         (spec.frame
           ? (read.result.frameTree.childFrames ?? []).some(visit)
           : visit(read.result.frameTree))
+      )
+        return true;
+      return spec.frame ? Boolean(await this.blockedFrameTarget(urls, targetId)) : false;
+    } finally {
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
       );
+    }
+  }
+
+  async frameIds(targetId) {
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return [];
+    try {
+      const read = await outcome(
+        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
+      );
+      const ids = (tree) => [tree.frame.id, ...(tree.childFrames ?? []).flatMap(ids)];
+      return read.ok ? ids(read.result.frameTree) : [];
+    } finally {
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+      );
+    }
+  }
+
+  async blockedFrameTarget(urls, parentTarget) {
+    const parents = await this.frameIds(parentTarget);
+    const listed = await outcome(this.reader.send('Target.getTargets', {}));
+    if (!listed.ok) return undefined;
+    for (const info of listed.result.targetInfos) {
+      if (info.type !== 'iframe' || !parents.includes(info.parentFrameId)) continue;
+      const attached = await outcome(
+        this.reader.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
+      );
+      if (!attached.ok) continue;
+      try {
+        const read = await outcome(
+          this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
+        );
+        const frame = read.result?.frameTree?.frame;
+        if (frame?.url.startsWith('chrome-error://') && urls.includes(frame.unreachableUrl))
+          return info.targetId;
+      } finally {
+        await outcome(
+          this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+        );
+      }
+    }
+    return undefined;
+  }
+
+  async frameBlocked(spec) {
+    const urls = (spec.anyOf ?? [spec.url]).map(address);
+    const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    if (!targetId) return false;
+    const frame = await this.blockedFrameTarget(urls, targetId);
+    if (!frame) return false;
+    const attached = await outcome(
+      this.client.send('Target.attachToTarget', { targetId: frame, flatten: true })
+    );
+    if (attached.ok)
+      await outcome(
+        this.client.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+      );
+    return !attached.ok;
+  }
+
+  async history(spec) {
+    const urls = (spec.anyOf ?? [spec.url]).map(address);
+    const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    if (!targetId) return false;
+    const pre = await Promise.all(urls.map((url) => this.attemptCheck({ pre: url })));
+    const loaded = await Promise.all(urls.map((url) => this.attemptCheck({ loaded: url })));
+    if (!pre.some(Boolean) || loaded.some(Boolean)) return false;
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return false;
+    try {
+      const read = await outcome(
+        this.reader.send('Page.getNavigationHistory', {}, attached.result.sessionId)
+      );
+      return read.ok && read.result.entries.some((entry) => urls.includes(entry.url));
     } finally {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
@@ -689,6 +774,8 @@ class Execution {
       );
     if (c.state) return this.readState(c.state);
     if (c.blocked) return this.blocked(c.blocked, c.observer);
+    if (c.history) return this.history(c.history);
+    if (c.frameBlocked) return this.frameBlocked(c.frameBlocked);
     if (c.pre || c.loaded) return this.attemptCheck(c);
   }
 
@@ -804,6 +891,8 @@ class Execution {
         if (!supported(observation.requires, this.options.capabilities)) continue;
         if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
         observed[name] = await this.check(observation.check);
+        if (observation.eitherWhen && this.side === 'guarded')
+          observed[`${name}.either`] = await this.check(observation.eitherWhen);
       }
       this.options.debug?.({
         events: this.client.events.slice(this.eventStart),

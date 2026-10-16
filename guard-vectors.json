@@ -170,6 +170,43 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         }
       },
@@ -190,7 +227,7 @@
         "loaded": "either",
         "detached": true
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -218,6 +255,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -342,6 +386,227 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 302
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 303
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         },
         "hopped": {
@@ -389,7 +654,7 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -545,6 +810,69 @@
                       ],
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -669,6 +997,227 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         },
         "hopped": {
@@ -716,7 +1265,7 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -874,6 +1423,69 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -996,6 +1608,227 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 303
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         },
         "hopped": {
@@ -1043,7 +1876,7 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -1201,6 +2034,69 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 303
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -1319,6 +2215,145 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         },
         "hopped": {
@@ -1362,7 +2397,7 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -1462,6 +2497,43 @@
                       ],
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -1582,6 +2654,145 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         },
         "hopped": {
@@ -1625,7 +2836,7 @@
       "observable": {
         "own": false
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -1725,6 +2936,43 @@
                       ],
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{cross}",
+                              "code": 308
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -1853,6 +3101,145 @@
           "dependsOn": ["refused.3", "refused.4"],
           "check": {
             "detached": "page",
+            "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{target}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{cross}/doc?n={tag}-after"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -1993,6 +3380,43 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -2006,7 +3430,8 @@
           }
         ],
         "observer": "client"
-      }
+      },
+      "designDependent": ["detached"]
     },
     {
       "id": "C2.through-307",
@@ -2119,6 +3544,145 @@
           "dependsOn": ["refused.3", "refused.4"],
           "check": {
             "detached": "page",
+            "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{target}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{cross}/doc?n={tag}-after"
+                },
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -2259,6 +3823,43 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{target}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{cross}/doc?n={tag}-after",
+                          "index": 1
+                        },
+                        "{cross}/doc?n={tag}-after"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -2272,7 +3873,8 @@
           }
         ],
         "observer": "client"
-      }
+      },
+      "designDependent": ["detached"]
     },
     {
       "id": "C3.popup-self-nav",
@@ -2413,6 +4015,43 @@
           "check": {
             "detached": "child",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         }
       },
@@ -2433,7 +4072,7 @@
         "loaded": "either",
         "detached": true
       },
-      "designDependent": ["loaded"],
+      "designDependent": ["loaded", "detached"],
       "liveCheck": {
         "any": [
           {
@@ -2461,6 +4100,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "child",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child"
                     },
                     "observer": "unguarded"
                   }
@@ -2677,6 +4323,25 @@
                       ],
                       "session": "child",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "child"
                     },
                     "observer": "unguarded"
                   }
@@ -2999,6 +4664,69 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{ordinary}",
+                              "code": 301
+                            },
+                            {
+                              "origin": "{cross}",
+                              "code": 307
+                            },
+                            {
+                              "origin": "{ordinary}",
+                              "code": 303
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 2
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "child"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -3167,11 +4895,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -3396,11 +5137,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -4028,6 +5782,43 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         }
       },
@@ -4075,6 +5866,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -4084,7 +5882,8 @@
           }
         ],
         "observer": "client"
-      }
+      },
+      "designDependent": ["detached"]
     },
     {
       "id": "C5.continue-request",
@@ -4174,6 +5973,43 @@
           "check": {
             "detached": "page",
             "observer": "client"
+          },
+          "eitherWhen": {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           }
         }
       },
@@ -4221,6 +6057,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -4230,7 +6073,8 @@
           }
         ],
         "observer": "client"
-      }
+      },
+      "designDependent": ["detached"]
     },
     {
       "id": "C5.continue-response",
@@ -6022,7 +7866,11 @@
       "trigger": [
         {
           "cdp": "Network.clearBrowserCookies",
-          "as": "network"
+          "as": "network",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "Storage.clearCookies",
@@ -6054,6 +7902,7 @@
       "observe": {
         "network": {
           "means": "network succeeded",
+          "dependsOn": ["network"],
           "check": {
             "result": "network",
             "path": "ok",
@@ -6063,6 +7912,7 @@
         },
         "storage": {
           "means": "storage succeeded",
+          "dependsOn": [],
           "check": {
             "result": "storage",
             "path": "ok",
@@ -6072,6 +7922,7 @@
         },
         "refused": {
           "means": "network and storage were both refused",
+          "dependsOn": [],
           "check": {
             "refused": ["network", "storage"],
             "observer": "client"
@@ -6426,6 +8277,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -6561,6 +8419,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -6694,6 +8559,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -6872,6 +8744,25 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -7046,6 +8937,25 @@
                       ],
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 307
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -7268,6 +9178,43 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "anyOf": [
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 0
+                        },
+                        {
+                          "hops": [
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            },
+                            {
+                              "origin": "{plain}",
+                              "code": 302
+                            }
+                          ],
+                          "to": "{target}/doc?n={tag}",
+                          "index": 1
+                        },
+                        "{target}/doc?n={tag}"
+                      ],
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -7440,6 +9387,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "child",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "child"
                     },
                     "observer": "unguarded"
                   }
@@ -7713,6 +9667,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -7846,6 +9807,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -7967,6 +9935,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -8098,6 +10073,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -8247,6 +10229,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -8381,6 +10370,13 @@
                       "url": "{target}/doc?n={tag}&csp=1",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}&csp=1",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -8525,6 +10521,13 @@
                       "frame": false
                     },
                     "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
                   }
                 ],
                 "observer": "client"
@@ -8649,6 +10652,13 @@
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
                       "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }

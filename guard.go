@@ -81,10 +81,11 @@ type GuardVector struct {
 }
 
 type GuardObservation struct {
-	Means     string          `json:"means"`
-	Check     json.RawMessage `json:"check"`
-	DependsOn []string        `json:"dependsOn,omitzero"`
-	Requires  []string        `json:"requires,omitempty"`
+	Means      string          `json:"means"`
+	Check      json.RawMessage `json:"check"`
+	DependsOn  []string        `json:"dependsOn,omitzero"`
+	Requires   []string        `json:"requires,omitempty"`
+	EitherWhen json.RawMessage `json:"eitherWhen,omitempty"`
 }
 
 type GuardObservable struct {

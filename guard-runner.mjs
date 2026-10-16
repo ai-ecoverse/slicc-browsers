@@ -364,8 +364,10 @@ class Execution {
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
     const pre = await Promise.all(urls.map((url) => this.attemptCheck({ pre: url })));
+    if (!pre.some(Boolean)) return false;
     const loaded = await Promise.all(urls.map((url) => this.attemptCheck({ loaded: url })));
-    if (!pre.some(Boolean) || loaded.some(Boolean)) return false;
+    const unloaded = urls.filter((_, index) => !loaded[index]);
+    if (!unloaded.length) return false;
     const attached = await outcome(
       this.reader.send('Target.attachToTarget', { targetId, flatten: true })
     );
@@ -374,7 +376,7 @@ class Execution {
       const read = await outcome(
         this.reader.send('Page.getNavigationHistory', {}, attached.result.sessionId)
       );
-      return read.ok && read.result.entries.some((entry) => urls.includes(entry.url));
+      return read.ok && read.result.entries.some((entry) => unloaded.includes(entry.url));
     } finally {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
@@ -933,7 +935,9 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
-  Object.values(vector.observe ?? {}).some((observation) => observerRequired(observation.check));
+  Object.values(vector.observe ?? {}).some(
+    (observation) => observerRequired(observation.check) || observerRequired(observation.eitherWhen)
+  );
 
 const inactive = (vector, target, capabilities) =>
   vector.skip?.target === target ||
@@ -1061,9 +1065,10 @@ const invalidBlocked = (check) =>
 function validateBlocked(vectors) {
   for (const vector of vectors)
     if (
-      [vector.liveCheck, ...Object.values(vector.observe ?? {}).map((o) => o.check)].some(
-        invalidBlocked
-      )
+      [
+        vector.liveCheck,
+        ...Object.values(vector.observe ?? {}).flatMap((o) => [o.check, o.eitherWhen]),
+      ].some(invalidBlocked)
     )
       throw new TypeError(`${vector.id}: blocked needs exactly one url or nonempty anyOf`);
 }

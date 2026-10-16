@@ -96,6 +96,12 @@ pub struct Observation {
     pub depends_on: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    #[serde(
+        default,
+        rename = "eitherWhen",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub either_when: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

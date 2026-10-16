@@ -169,6 +169,7 @@ type GuardStep struct {
 	Where       *GuardWhere     `json:"where,omitempty"`
 	Settle      *GuardSettle    `json:"settle,omitempty"`
 	Wait        *int            `json:"wait,omitempty"`
+	Paused      *GuardPaused    `json:"paused,omitempty"`
 	Guess       *GuardGuess     `json:"guess,omitempty"`
 	Session     string          `json:"session,omitempty"`
 	As          string          `json:"as,omitempty"`
@@ -206,6 +207,11 @@ type GuardSettle struct {
 	Session   string   `json:"session,omitempty"`
 	Required  bool     `json:"required,omitempty"`
 	DependsOn []string `json:"dependsOn,omitempty"`
+}
+
+type GuardPaused struct {
+	URL string `json:"url"`
+	MS  int    `json:"ms"`
 }
 
 type GuardGuess struct {

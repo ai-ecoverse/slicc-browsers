@@ -197,6 +197,8 @@ pub struct Step {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paused: Option<Paused>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub guess: Option<Guess>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
@@ -234,6 +236,13 @@ pub struct Answer {
     pub params: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hold: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Paused {
+    pub url: String,
+    pub ms: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

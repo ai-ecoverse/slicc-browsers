@@ -619,6 +619,30 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["paused"],
+          "properties": {
+            "paused": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "ms"],
+              "properties": {
+                "url": {
+                  "type": "string"
+                },
+                "ms": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["wait"],
           "properties": {
             "wait": {

@@ -101,7 +101,12 @@ test('a caller without the declared observer cannot obtain passing results', asy
     ...vectors,
     vectors: vectors.vectors.filter((v) => ['C5.document', 'C6.getCookies'].includes(v.id)),
   };
-  const execution = await run(selected, { fixture: { log: () => [] }, variant: 'prompt' });
+  const targets = Object.fromEntries(
+    ['ordinary', 'ordinary-same-site', 'seven', 'vault', 'vault-x', 'apex', 'own', 'client'].map(
+      (name) => [name, `http://${name}.test`]
+    )
+  );
+  const execution = await run(selected, { fixture: { log: () => [] }, variant: 'prompt', targets });
   assert(execution.results.every((row) => row.control === 'skip' && row.guarded === 'skip'));
   assert.equal(execution.summary().pass, false);
   assert.equal(execution.summary().observerSkipped, execution.results.length);

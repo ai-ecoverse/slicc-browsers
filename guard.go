@@ -199,11 +199,13 @@ type GuardAnswer struct {
 }
 
 type GuardSettle struct {
-	Beacon  string `json:"beacon,omitempty"`
-	Title   string `json:"title,omitempty"`
-	MS      int    `json:"ms,omitempty"`
-	Variant bool   `json:"variant,omitempty"`
-	Session string `json:"session,omitempty"`
+	Beacon    string   `json:"beacon,omitempty"`
+	Title     string   `json:"title,omitempty"`
+	MS        int      `json:"ms,omitempty"`
+	Variant   bool     `json:"variant,omitempty"`
+	Session   string   `json:"session,omitempty"`
+	Required  bool     `json:"required,omitempty"`
+	DependsOn []string `json:"dependsOn,omitempty"`
 }
 
 type GuardGuess struct {

@@ -462,7 +462,10 @@ class Execution {
         );
         await this.execute(this.childSteps.slice(reload), child);
       }
+      const resumed = this.client.events.length;
       await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+      if (this.childSteps.some((step) => step.cdp === 'Page.enable'))
+        await this.poll(() => this.firstLoad(child, resumed), 5000);
     })().catch((error) => this.errors.push(String(error.message ?? error)));
     this.childRuns.set(child, started);
     this.pending.push(started);
@@ -493,6 +496,19 @@ class Execution {
       this.client.send(method, { ...params, requestId: p.requestId }, event.sessionId)
     );
     this.calls[`answer.${p.requestId}.${event.method}`] = out;
+  }
+
+  firstLoad(session, from) {
+    const events = this.client.events.slice(from);
+    return events.some(
+      (event, index) =>
+        event.method === 'Page.frameNavigated' &&
+        event.sessionId === session &&
+        !event.params?.frame?.parentId &&
+        events
+          .slice(index + 1)
+          .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === session)
+    );
   }
 
   childMatches(info) {
@@ -565,12 +581,13 @@ class Execution {
   }
 
   async settle(settle) {
+    if ((settle.dependsOn ?? []).some((name) => this.refused[name])) return;
     if (settle.variant) await sleep(this.delay);
     if (settle.title && !this.reader) {
       await sleep(settle.ms ?? 1500);
       return;
     }
-    await this.poll(async () => {
+    const met = await this.poll(async () => {
       if (settle.beacon)
         return (
           (await this.requestCheck({ beacon: settle.beacon }, this.actionRequestStart)) &&
@@ -588,6 +605,10 @@ class Execution {
             .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === event.sessionId)
       );
     }, settle.ms ?? 1500);
+    if (settle.required && !met)
+      this.errors.push(
+        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`
+      );
   }
 
   async guess(guess, session) {
@@ -708,6 +729,7 @@ class Execution {
     });
     const done = await Promise.race([Promise.all(waits).then(() => true), expired]);
     clearTimeout(timer);
+    if (!done) this.pending = this.pending.filter((work) => !waits.includes(work));
     return done;
   }
 
@@ -994,12 +1016,25 @@ const browserContextStep = (vector, capabilities) =>
   );
 
 const originDefaults = { plain: 'ordinary', cross: 'client', log: 'ordinary', own: 'client' };
+const knownOrigins = [
+  'ordinary',
+  'ordinary-same-site',
+  'seven',
+  'vault',
+  'vault-x',
+  'apex',
+  'own',
+  'client',
+  'plain',
+  'cross',
+  'log',
+];
 
 function nullOrigins(value, targets) {
   return [...q(value).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)]
     .map((match) => (match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]))
     .map((name) => (targets[name] === undefined ? (originDefaults[name] ?? name) : name))
-    .filter((name) => targets[name] === null);
+    .filter((name) => knownOrigins.includes(name) && (targets[name] ?? null) === null);
 }
 
 function prune(check, targets) {

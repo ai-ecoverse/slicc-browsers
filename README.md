@@ -273,7 +273,8 @@ of supported names. `capabilities.scope` selects owner-specific rows.
 Map `ordinary`, `ordinary-same-site`, `seven`, `vault`, `vault-x`, `apex`, `own`
 and `client` to origins. Optionally map `plain`, `cross` and `log`; their defaults
 are `ordinary`, `client` and `ordinary`. Origins must preserve the site
-relationships of the data. Explicitly map an unavailable target to `null`: every
+relationships of the data. Map an unavailable target to `null`, or leave it out; a
+missing or `undefined` origin is treated exactly like `null`: every
 row needing that origin is reported as `skip` for control, guarded and live, with
 reason `not-applicable:no-<target>-origin`; no substitute origin is used and the
 row never passes. A guard whose whole site is protected, such as the extension
@@ -330,7 +331,13 @@ recorded as detached, not as a refusal, and the runner awaits a child's started
 `children` steps before any later `session: "child"` step and before the trigger. A page
 navigation waits for the load of its own `loaderId` (its `Page.frameNavigated` and then a
 load event), and a settle waits for a main-frame commit followed by its load, so a stale
-load event never ends a wait. An observation that reads a background step's `as` result
+load event never ends a wait. After a child's `children` steps that include `Page.enable`,
+the runner waits, bounded at 5 s, for the child's first document to commit and load before
+any later child step. `{ "settle": { "beacon", "required": true, "dependsOn"? } }` waits
+for that beacon at the fixture and fails the row with `settle: no beacon from <origin>
+within <ms>ms` when it never arrives, unless a refusal it `dependsOn` was recorded; the rows
+whose `allowedBeacon` comes from an earlier document settle on it before their trigger.
+Beacons use `navigator.sendBeacon`, with a `fetch(…, { keepalive: true })` fallback. An observation that reads a background step's `as` result
 waits for that step, up to 10 s, and fails with `<as> did not complete within …` past it. Redirect
 vectors list every nested hop URL and the final destination because Chromium
 reports the URL intercepted by the guard. A matching block still requires the
@@ -353,7 +360,7 @@ fixture log. A setup beacon on the same origin and tag cannot settle an unfinish
 redirect chain. This does not change the observations used to judge either leg.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
-`fixtureServer({ host, port, tls })`, defaulting to a random loopback port.
+`fixtureServer({ host, port, tls, latency })`, defaulting to a random loopback port. `latency(url)` returns milliseconds to hold that response, for timing tests.
 Pass `tls: { key, cert }` to serve HTTPS using Node TLS key and certificate
 values. The returned origin, request logs, redirect URLs and document heartbeats
 use `https://<Host>` with TLS, so `served`, `hops` and `liveCheck` compare against

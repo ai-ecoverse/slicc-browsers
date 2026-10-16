@@ -9,14 +9,18 @@ import { emulatedGuard } from './guard-emulator.mjs';
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const full = { autoAttach: true, browserSession: true, browserContexts: true };
 
-async function row(id, { capabilities = full, extraTabs = 0, nullTargets = [], ...options } = {}) {
-  const fixture = await fixtureServer();
+async function row(
+  id,
+  { capabilities = full, extraTabs = 0, nullTargets = [], unmapped = [], latency, ...options } = {}
+) {
+  const fixture = await fixtureServer({ latency });
   try {
     const browser = await launch(fixture);
     const targets = {
       ...origins(fixture),
       ...Object.fromEntries(nullTargets.map((name) => [name, null])),
     };
+    for (const name of unmapped) delete targets[name];
     for (let i = 0; i < extraTabs; i++)
       await browser.unguarded.send('Target.createTarget', {
         url: `${targets.ordinary}/doc?n=other-${i}`,
@@ -139,4 +143,30 @@ test('C1.script-nav runs with ordinary-same-site unavailable, through its other 
   const result = await row('C1.script-nav', { nullTargets: ['ordinary-same-site'] });
   assert.notEqual(result.control, 'skip', JSON.stringify(result));
   passes(result);
+});
+
+test('C3.popup-self-nav passes with a stale load event and a slow again document', async () => {
+  passes(
+    await row('C3.popup-self-nav', {
+      staleLoad: (_session, child) => child,
+      latency: (url) => (url.searchParams.get('again') === '1' ? 800 : 0),
+    })
+  );
+});
+
+for (const id of ['C4.static-same-site', 'C4.script-same-site'])
+  test(`${id} skips like a null target when ordinary-same-site is left unmapped`, async () => {
+    const result = await row(id, { unmapped: ['ordinary-same-site'] });
+    assert.equal(result.control, 'skip', JSON.stringify(result));
+    assert.equal(result.reason, 'not-applicable:no-ordinary-same-site-origin');
+  });
+
+test('C3.popup-self-nav passes with a slow child session and a slow first popup document', async () => {
+  passes(
+    await row('C3.popup-self-nav', {
+      childPageLatencyMs: 300,
+      latency: (url) =>
+        url.searchParams.get('n')?.startsWith('popup-') && !url.searchParams.has('again') ? 800 : 0,
+    })
+  );
 });

@@ -116,6 +116,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -318,6 +326,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -929,6 +945,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -1540,6 +1564,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -2151,6 +2183,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -2590,6 +2630,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -3029,6 +3077,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -3472,6 +3528,14 @@
         {
           "page": "navigate",
           "url": "{ordinary}/doc?n=next-{tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.3"]
+          }
         }
       ],
       "trigger": [
@@ -3929,6 +3993,9 @@
               }
             }
           ],
+          "where": {
+            "openerId": "page"
+          },
           "requires": ["autoAttach"]
         },
         {
@@ -3939,6 +4006,16 @@
           "page": "navigate",
           "url": "{ordinary}/doc?n=popup-{tag}&again=1",
           "session": "child",
+          "requires": ["autoAttach"]
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "session": "child",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["refused.2", "refused.5"]
+          },
           "requires": ["autoAttach"]
         }
       ],

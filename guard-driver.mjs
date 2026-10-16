@@ -1,7 +1,7 @@
 const q = JSON.stringify;
 
 export const beacon = (log, tag) =>
-  `try { navigator.sendBeacon(${q(log)} + '/beacon?tag=' + ${q(tag)} + '&origin=' + encodeURIComponent(location.origin)); } catch {}`;
+  `try { const u = ${q(log)} + '/beacon?tag=' + ${q(tag)} + '&origin=' + encodeURIComponent(location.origin); if (!navigator.sendBeacon(u)) fetch(u, { keepalive: true, mode: 'no-cors' }).catch(() => {}); } catch {}`;
 
 export const probe = (log, tag) =>
   `(() => { ${beacon(log, tag)} const p = btoa(location.origin + location.pathname); if (window.probeBinding) window.probeBinding(p); console.log('probe:' + p); })()`;

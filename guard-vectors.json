@@ -6811,7 +6811,10 @@
           "background": true
         },
         {
-          "wait": 500
+          "paused": {
+            "url": "{target}/auth/{tag}?n={tag}",
+            "ms": 5000
+          }
         },
         {
           "page": "fetch",
@@ -6949,7 +6952,10 @@
           "as": "body"
         },
         {
-          "wait": 300
+          "paused": {
+            "url": "{target}/data?n={tag}",
+            "ms": 5000
+          }
         },
         {
           "page": "fetch",
@@ -7120,7 +7126,10 @@
           "as": "body"
         },
         {
-          "wait": 300
+          "paused": {
+            "url": "{target}/data?n={tag}",
+            "ms": 5000
+          }
         },
         {
           "page": "fetch",
@@ -7280,7 +7289,10 @@
           "status": true
         },
         {
-          "wait": 300
+          "paused": {
+            "url": "{target}/data?n={tag}",
+            "ms": 5000
+          }
         },
         {
           "page": "fetch",
@@ -7465,7 +7477,10 @@
           "status": true
         },
         {
-          "wait": 300
+          "paused": {
+            "url": "{target}/auth/{tag}?n={tag}",
+            "ms": 5000
+          }
         },
         {
           "page": "fetch",

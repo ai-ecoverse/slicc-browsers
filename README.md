@@ -173,6 +173,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
 - `{ "children": steps, "where"? }`: run these steps on each target auto-attached from then on, then resume it. `where` scopes them to the row's own target: `{ "openerId": "page" }` (opened by the row's page) or `{ "urlPrefix": url }`; other attached targets are resumed and otherwise left alone.
 - `{ "settle": { "beacon"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
 - `{ "wait": ms }`.
+- `{ "paused": { "url", "ms" } }`: wait until the client has seen the pause that an `answer` rule for `url` matches (`Fetch.requestPaused` at the rule's stage, or `Fetch.authRequired` for a `Fetch.continueWithAuth` rule). It waits up to `ms`. On the control leg, a pause that never comes fails the row with `paused: no pause for <url> within <ms>ms`. On the guarded leg the guard may hide that pause, so the step waits the full `ms` and doesn't fail. The C5 guessed-id vectors and `C5.auth` use it before their second request, so the probe's interception id falls between the two ids the guess spans.
 - `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.
 - `{ "text": … }`: a step in words.
 

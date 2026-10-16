@@ -471,14 +471,33 @@ class Execution {
     this.pending.push(started);
   }
 
-  async answer(event) {
+  rule(event) {
     const p = event.params;
-    const rule = this.answers.find(
+    return this.answers.find(
       (a) =>
         a.url === p.request.url &&
         (!a.stage || (a.stage === 'Response') === Boolean(p.responseStatusCode)) &&
         (a.cdp === 'Fetch.continueWithAuth') === (event.method === 'Fetch.authRequired')
     );
+  }
+
+  async paused({ url, ms }) {
+    const seen = () =>
+      this.client.events
+        .slice(this.eventStart)
+        .some(
+          (event) =>
+            (event.method === 'Fetch.requestPaused' || event.method === 'Fetch.authRequired') &&
+            event.params?.request?.url === url &&
+            this.rule(event)?.url === url
+        );
+    if (!(await this.poll(seen, ms)) && this.side === 'control')
+      this.errors.push(`paused: no pause for ${url} within ${ms}ms`);
+  }
+
+  async answer(event) {
+    const p = event.params;
+    const rule = this.rule(event);
     if (rule?.hold) return;
     const method =
       rule?.cdp ??
@@ -568,6 +587,10 @@ class Execution {
     }
     if (step.wait !== undefined) {
       await sleep(step.wait);
+      return;
+    }
+    if (step.paused) {
+      await this.paused(step.paused);
       return;
     }
     if (step.settle) {

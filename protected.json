@@ -315,6 +315,10 @@
       "protected": true
     },
     {
+      "url": "https://echo.sliccy.ai/",
+      "protected": true
+    },
+    {
       "url": "https://vault-feature-x.sliccy.ai/",
       "protected": true
     }

@@ -92,7 +92,16 @@ for (const pattern of [
 }
 
 const sevenLabelsTrue = ['seven', 'link-websockets'];
-const sevenLabelsFalse = ['', 'www', 'vault', 'vault-preview', 'get', 'mcpcat', 'vault-feature-x'];
+const sevenLabelsFalse = [
+  '',
+  'www',
+  'vault',
+  'vault-preview',
+  'get',
+  'mcpcat',
+  'echo',
+  'vault-feature-x',
+];
 for (const label of sevenLabelsTrue) {
   if (!isSevenLabel(catalog.seven, label))
     fail(`isSevenLabel(${JSON.stringify(label)}) should be true`);

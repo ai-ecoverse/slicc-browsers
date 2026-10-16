@@ -31,7 +31,7 @@ func TestIsSevenLabel(t *testing.T) {
 			t.Errorf("IsSevenLabel(%q) = false, want true", label)
 		}
 	}
-	for _, label := range []string{"", "www", "vault", "vault-preview", "get", "mcpcat", "vault-feature-x"} {
+	for _, label := range []string{"", "www", "vault", "vault-preview", "get", "mcpcat", "echo", "vault-feature-x"} {
 		if seven.IsSevenLabel(label) {
 			t.Errorf("IsSevenLabel(%q) = true, want false", label)
 		}

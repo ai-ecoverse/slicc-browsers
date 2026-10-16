@@ -32,6 +32,7 @@ fn is_seven_label() {
         "vault-preview",
         "get",
         "mcpcat",
+        "echo",
         "vault-feature-x",
     ] {
         assert!(!seven.is_seven_label(label), "{label} should not be seven");

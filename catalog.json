@@ -642,7 +642,7 @@
   "seven": {
     "originScheme": "https",
     "originHostPattern": "^([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\\.sliccy\\.ai$",
-    "excludedLabels": ["www", "vault", "vault-preview", "get", "mcpcat"],
+    "excludedLabels": ["www", "vault", "vault-preview", "get", "mcpcat", "echo"],
     "excludedLabelPrefixes": ["vault-"],
     "sitePattern": "[*.]sliccy.ai",
     "switches": [

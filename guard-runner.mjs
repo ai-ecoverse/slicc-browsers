@@ -108,6 +108,7 @@ class Execution {
     this.answers = [];
     this.attachSettings = new Map();
     this.childSteps = [];
+    this.childRuns = new Map();
     this.processed = new Set();
     this.eventStart = this.client.events.length;
     this.actionEventStart = this.eventStart;
@@ -349,34 +350,34 @@ class Execution {
             continue;
           this.sessions.child = event.params.sessionId;
           if (info?.targetId) this.targets.push(info.targetId);
-          this.pending.push(
-            (async () => {
-              const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
-              if (reload < 0) await this.execute(this.childSteps, event.params.sessionId);
-              else {
-                await this.execute(this.childSteps.slice(0, reload), event.params.sessionId);
-                const start = this.client.events.length;
-                await outcome(
-                  this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
-                );
-                await this.poll(
-                  () =>
-                    this.client.events
-                      .slice(start)
-                      .some(
-                        (e) =>
-                          e.method === 'Page.loadEventFired' &&
-                          e.sessionId === event.params.sessionId
-                      ),
-                  1500
-                );
-                await this.execute(this.childSteps.slice(reload), event.params.sessionId);
-              }
+          const child = event.params.sessionId;
+          const started = (async () => {
+            const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
+            if (reload < 0) await this.execute(this.childSteps, event.params.sessionId);
+            else {
+              await this.execute(this.childSteps.slice(0, reload), event.params.sessionId);
+              const start = this.client.events.length;
               await outcome(
                 this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
               );
-            })().catch((error) => this.errors.push(String(error.message ?? error)))
-          );
+              await this.poll(
+                () =>
+                  this.client.events
+                    .slice(start)
+                    .some(
+                      (e) =>
+                        e.method === 'Page.loadEventFired' && e.sessionId === event.params.sessionId
+                    ),
+                1500
+              );
+              await this.execute(this.childSteps.slice(reload), event.params.sessionId);
+            }
+            await outcome(
+              this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+            );
+          })().catch((error) => this.errors.push(String(error.message ?? error)));
+          this.childRuns.set(child, started);
+          this.pending.push(started);
         }
       }
       await sleep(10);
@@ -410,23 +411,40 @@ class Execution {
     this.calls[`answer.${p.requestId}.${event.method}`] = out;
   }
 
+  async childrenSettled() {
+    await Promise.all([...this.childRuns.values()]);
+  }
+
+  detached(session) {
+    return this.client.events
+      .slice(this.eventStart)
+      .some((e) => e.method === 'Target.detachedFromTarget' && e.params?.sessionId === session);
+  }
+
   async execute(list, childSession, phase = 'child') {
+    if (phase === 'trigger') await this.childrenSettled();
     for (const raw of list) {
       const step = expand(raw, this.vars);
       if (!supported(step.requires, this.options.capabilities) || step.text) continue;
+      if (!childSession && step.session === 'child') await this.childrenSettled();
       const session = childSession ?? this.session(step.session);
       const out = await this.operation(step, session, phase);
       if (!out) continue;
+      const gone = Boolean(childSession) && !out.ok && this.detached(childSession);
+      const refused =
+        !gone &&
+        (step.refusable
+          ? isRefusal(out, step)
+          : /refused/.test(String(out.error?.message ?? out.error)));
       this.trace.push({
         phase,
         declared: Boolean(step.refusable),
         session,
         out,
-        refused: step.refusable
-          ? isRefusal(out, step)
-          : /refused/.test(String(out.error?.message ?? out.error)),
+        refused,
+        ...(gone ? { detached: true } : {}),
       });
-      if (step.refusable) this.refused[step.refusal.name] = isRefusal(out, step);
+      if (step.refusable) this.refused[step.refusal.name] = refused;
       if (step.as && !out.result?.pending) this.calls[step.as] = out;
       if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
       this.options.debug?.({ step, out, side: this.side });

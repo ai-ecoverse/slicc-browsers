@@ -108,6 +108,7 @@ class Execution {
     this.answers = [];
     this.attachSettings = new Map();
     this.childSteps = [];
+    this.childRuns = new Map();
     this.processed = new Set();
     this.eventStart = this.client.events.length;
     this.actionEventStart = this.eventStart;
@@ -283,12 +284,99 @@ class Execution {
               tree.frame.url.startsWith('chrome-error://')) ||
               (tree.childFrames ?? []).some(visit))
         );
-      return (
+      if (
         read.ok &&
         (spec.frame
           ? (read.result.frameTree.childFrames ?? []).some(visit)
           : visit(read.result.frameTree))
+      )
+        return true;
+      return spec.frame ? Boolean(await this.blockedFrameTarget(urls, targetId)) : false;
+    } finally {
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
       );
+    }
+  }
+
+  async frameIds(targetId) {
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return [];
+    try {
+      const read = await outcome(
+        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
+      );
+      const ids = (tree) => [tree.frame.id, ...(tree.childFrames ?? []).flatMap(ids)];
+      return read.ok ? ids(read.result.frameTree) : [];
+    } finally {
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+      );
+    }
+  }
+
+  async blockedFrameTarget(urls, parentTarget) {
+    const parents = await this.frameIds(parentTarget);
+    const listed = await outcome(this.reader.send('Target.getTargets', {}));
+    if (!listed.ok) return undefined;
+    for (const info of listed.result.targetInfos) {
+      if (info.type !== 'iframe' || !parents.includes(info.parentFrameId)) continue;
+      const attached = await outcome(
+        this.reader.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
+      );
+      if (!attached.ok) continue;
+      try {
+        const read = await outcome(
+          this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
+        );
+        const frame = read.result?.frameTree?.frame;
+        if (frame?.url.startsWith('chrome-error://') && urls.includes(frame.unreachableUrl))
+          return info.targetId;
+      } finally {
+        await outcome(
+          this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+        );
+      }
+    }
+    return undefined;
+  }
+
+  async frameBlocked(spec) {
+    const urls = (spec.anyOf ?? [spec.url]).map(address);
+    const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    if (!targetId) return false;
+    const frame = await this.blockedFrameTarget(urls, targetId);
+    if (!frame) return false;
+    const attached = await outcome(
+      this.client.send('Target.attachToTarget', { targetId: frame, flatten: true })
+    );
+    if (attached.ok)
+      await outcome(
+        this.client.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
+      );
+    return !attached.ok;
+  }
+
+  async history(spec) {
+    const urls = (spec.anyOf ?? [spec.url]).map(address);
+    const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    if (!targetId) return false;
+    const pre = await Promise.all(urls.map((url) => this.attemptCheck({ pre: url })));
+    if (!pre.some(Boolean)) return false;
+    const loaded = await Promise.all(urls.map((url) => this.attemptCheck({ loaded: url })));
+    const unloaded = urls.filter((_, index) => !loaded[index]);
+    if (!unloaded.length) return false;
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return false;
+    try {
+      const read = await outcome(
+        this.reader.send('Page.getNavigationHistory', {}, attached.result.sessionId)
+      );
+      return read.ok && read.result.entries.some((entry) => unloaded.includes(entry.url));
     } finally {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
@@ -349,34 +437,34 @@ class Execution {
             continue;
           this.sessions.child = event.params.sessionId;
           if (info?.targetId) this.targets.push(info.targetId);
-          this.pending.push(
-            (async () => {
-              const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
-              if (reload < 0) await this.execute(this.childSteps, event.params.sessionId);
-              else {
-                await this.execute(this.childSteps.slice(0, reload), event.params.sessionId);
-                const start = this.client.events.length;
-                await outcome(
-                  this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
-                );
-                await this.poll(
-                  () =>
-                    this.client.events
-                      .slice(start)
-                      .some(
-                        (e) =>
-                          e.method === 'Page.loadEventFired' &&
-                          e.sessionId === event.params.sessionId
-                      ),
-                  1500
-                );
-                await this.execute(this.childSteps.slice(reload), event.params.sessionId);
-              }
+          const child = event.params.sessionId;
+          const started = (async () => {
+            const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
+            if (reload < 0) await this.execute(this.childSteps, event.params.sessionId);
+            else {
+              await this.execute(this.childSteps.slice(0, reload), event.params.sessionId);
+              const start = this.client.events.length;
               await outcome(
                 this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
               );
-            })().catch((error) => this.errors.push(String(error.message ?? error)))
-          );
+              await this.poll(
+                () =>
+                  this.client.events
+                    .slice(start)
+                    .some(
+                      (e) =>
+                        e.method === 'Page.loadEventFired' && e.sessionId === event.params.sessionId
+                    ),
+                1500
+              );
+              await this.execute(this.childSteps.slice(reload), event.params.sessionId);
+            }
+            await outcome(
+              this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+            );
+          })().catch((error) => this.errors.push(String(error.message ?? error)));
+          this.childRuns.set(child, started);
+          this.pending.push(started);
         }
       }
       await sleep(10);
@@ -410,23 +498,40 @@ class Execution {
     this.calls[`answer.${p.requestId}.${event.method}`] = out;
   }
 
+  async childrenSettled() {
+    await Promise.all([...this.childRuns.values()]);
+  }
+
+  detached(session) {
+    return this.client.events
+      .slice(this.eventStart)
+      .some((e) => e.method === 'Target.detachedFromTarget' && e.params?.sessionId === session);
+  }
+
   async execute(list, childSession, phase = 'child') {
+    if (phase === 'trigger') await this.childrenSettled();
     for (const raw of list) {
       const step = expand(raw, this.vars);
       if (!supported(step.requires, this.options.capabilities) || step.text) continue;
+      if (!childSession && step.session === 'child') await this.childrenSettled();
       const session = childSession ?? this.session(step.session);
       const out = await this.operation(step, session, phase);
       if (!out) continue;
+      const gone = Boolean(childSession) && !out.ok && this.detached(childSession);
+      const refused =
+        !gone &&
+        (step.refusable
+          ? isRefusal(out, step)
+          : /refused/.test(String(out.error?.message ?? out.error)));
       this.trace.push({
         phase,
         declared: Boolean(step.refusable),
         session,
         out,
-        refused: step.refusable
-          ? isRefusal(out, step)
-          : /refused/.test(String(out.error?.message ?? out.error)),
+        refused,
+        ...(gone ? { detached: true } : {}),
       });
-      if (step.refusable) this.refused[step.refusal.name] = isRefusal(out, step);
+      if (step.refusable) this.refused[step.refusal.name] = refused;
       if (step.as && !out.result?.pending) this.calls[step.as] = out;
       if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
       this.options.debug?.({ step, out, side: this.side });
@@ -671,6 +776,8 @@ class Execution {
       );
     if (c.state) return this.readState(c.state);
     if (c.blocked) return this.blocked(c.blocked, c.observer);
+    if (c.history) return this.history(c.history);
+    if (c.frameBlocked) return this.frameBlocked(c.frameBlocked);
     if (c.pre || c.loaded) return this.attemptCheck(c);
   }
 
@@ -786,6 +893,8 @@ class Execution {
         if (!supported(observation.requires, this.options.capabilities)) continue;
         if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
         observed[name] = await this.check(observation.check);
+        if (observation.eitherWhen && this.side === 'guarded')
+          observed[`${name}.either`] = await this.check(observation.eitherWhen);
       }
       this.options.debug?.({
         events: this.client.events.slice(this.eventStart),
@@ -826,7 +935,9 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
-  Object.values(vector.observe ?? {}).some((observation) => observerRequired(observation.check));
+  Object.values(vector.observe ?? {}).some(
+    (observation) => observerRequired(observation.check) || observerRequired(observation.eitherWhen)
+  );
 
 const inactive = (vector, target, capabilities) =>
   vector.skip?.target === target ||
@@ -954,9 +1065,10 @@ const invalidBlocked = (check) =>
 function validateBlocked(vectors) {
   for (const vector of vectors)
     if (
-      [vector.liveCheck, ...Object.values(vector.observe ?? {}).map((o) => o.check)].some(
-        invalidBlocked
-      )
+      [
+        vector.liveCheck,
+        ...Object.values(vector.observe ?? {}).flatMap((o) => [o.check, o.eitherWhen]),
+      ].some(invalidBlocked)
     )
       throw new TypeError(`${vector.id}: blocked needs exactly one url or nonempty anyOf`);
 }

@@ -1,7 +1,7 @@
 const q = JSON.stringify;
 
 export const beacon = (log, tag) =>
-  `try { navigator.sendBeacon(${q(log)} + '/beacon?tag=' + ${q(tag)} + '&origin=' + encodeURIComponent(location.origin)); } catch {}`;
+  `try { const u = ${q(log)} + '/beacon?tag=' + ${q(tag)} + '&origin=' + encodeURIComponent(location.origin); if (!navigator.sendBeacon(u)) fetch(u, { keepalive: true, mode: 'no-cors' }).catch(() => {}); } catch {}`;
 
 export const probe = (log, tag) =>
   `(() => { ${beacon(log, tag)} const p = btoa(location.origin + location.pathname); if (window.probeBinding) window.probeBinding(p); console.log('probe:' + p); })()`;
@@ -91,13 +91,31 @@ export async function instrument(client, sessionId, log, tag) {
   await client.send('Page.setBypassCSP', { enabled: true }, sessionId);
 }
 
-export async function load(client, sessionId, url, ms = 20000) {
-  const loaded = client.waitEvent(
-    (e) => e.method === 'Page.loadEventFired' && e.sessionId === sessionId,
-    ms
+export function loadedAfter(events, sessionId, loaderId) {
+  const committed = events.findIndex(
+    (e) =>
+      e.method === 'Page.frameNavigated' &&
+      e.sessionId === sessionId &&
+      !e.params?.frame?.parentId &&
+      e.params?.frame?.loaderId === loaderId
   );
-  await client.send('Page.navigate', { url }, sessionId);
-  await loaded;
+  return (
+    committed >= 0 &&
+    events
+      .slice(committed + 1)
+      .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === sessionId)
+  );
+}
+
+export async function load(client, sessionId, url, ms = 20000) {
+  const start = client.events.length;
+  const { loaderId } = await client.send('Page.navigate', { url }, sessionId);
+  if (!loaderId) return;
+  const deadline = Date.now() + ms;
+  while (!loadedAfter(client.events.slice(start), sessionId, loaderId)) {
+    if (Date.now() > deadline) throw new Error(`load of ${url} timed out`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 export function popup(client, openerId, ms = 10000) {

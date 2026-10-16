@@ -26,7 +26,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
-      - run: timeout -k 30 720 npm run test:guard
+      - run: npm run test:guard-integration
+      - run: timeout -k 30 720 npm run test:guard-sweep
 
   lint:
     runs-on: ubuntu-latest

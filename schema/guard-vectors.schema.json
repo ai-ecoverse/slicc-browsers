@@ -545,6 +545,22 @@
             "children": {
               "$ref": "#/$defs/steps"
             },
+            "where": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["openerId"],
+                  "properties": { "openerId": { "const": "page" } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["urlPrefix"],
+                  "properties": { "urlPrefix": { "type": "string", "minLength": 1 } }
+                }
+              ]
+            },
             "on": {
               "$ref": "#/$defs/on"
             },
@@ -578,8 +594,22 @@
                 },
                 "session": {
                   "$ref": "#/$defs/session"
+                },
+                "required": {
+                  "const": true
+                },
+                "dependsOn": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^(refused\\.[0-9]+|[A-Za-z][A-Za-z0-9]*)$"
+                  }
                 }
               }
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             },
             "on": {
               "$ref": "#/$defs/on"

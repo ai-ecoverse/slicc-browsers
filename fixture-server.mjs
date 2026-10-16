@@ -76,7 +76,7 @@ function route(req, url, send, html) {
   return send(404, 'missing', 'text/plain');
 }
 
-export async function fixtureServer({ host = '127.0.0.1', port = 0, tls } = {}) {
+export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {
   let entries = [];
   const scheme = tls ? 'https' : 'http';
   const handler = (req, res) => {
@@ -105,7 +105,9 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls } = {}) 
         'text/html',
         headers
       );
-    route(req, url, send, html);
+    const wait = latency?.(url) ?? 0;
+    if (wait > 0) setTimeout(() => route(req, url, send, html), wait);
+    else route(req, url, send, html);
   };
   const server = tls ? createSecureServer(tls, handler) : createServer(handler);
   await new Promise((resolve, reject) => {

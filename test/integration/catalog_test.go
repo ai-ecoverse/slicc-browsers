@@ -303,6 +303,16 @@ func TestTheGuardVectorsParse(t *testing.T) {
 	}
 	for _, g := range v.Vectors {
 		switch g.ID {
+		case "C5.guessed-id.continue-response":
+			refusal := g.Setup[2].Refusal
+			if !g.Setup[2].Refusable || refusal == nil || !refusal.OnlyProtected || refusal.Match != "^slicc: refused" {
+				t.Fatalf("C5.guessed-id.continue-response refusal %+v", refusal)
+			}
+			for name, observation := range g.Observe {
+				if !slices.Equal(observation.DependsOn, []string{"refused.2"}) {
+					t.Fatalf("%s depends on %v", name, observation.DependsOn)
+				}
+			}
 		case "C8.newtab":
 			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapChromeURLsAttach) {
 				t.Fatalf("C8.newtab requires %v", g.Requires)

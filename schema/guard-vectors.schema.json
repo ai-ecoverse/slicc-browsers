@@ -456,6 +456,9 @@
               "additionalProperties": false,
               "required": ["match"],
               "properties": {
+                "onlyProtected": {
+                  "type": "boolean"
+                },
                 "match": {
                   "type": "string",
                   "minLength": 1

@@ -81,7 +81,7 @@ Every feature builds for `wasm32-wasip1`.
 - `rank`: `tiers`, 1 to 6: `sevenOpen` (an endpoint with a seven tab), `endpoint` (any other endpoint), `chrome` (installed `chromeId`), `chromium` (other installed Chromium browsers), `electron` (installed Electron apps), `six` (an endpoint in SLICC six's profile, with or without a seven tab; see [SLICC six's profiles](#slicc-sixs-profiles)).
 - `discovery`:
   - `activePortFile` (`DevToolsActivePort`): its first line is the port (1 to 65535) and its second the browser's websocket path, which starts with `/`. A file without both is ignored. A file is live only when its port answers `/json/version` with a `webSocketDebuggerUrl` whose path is that websocket path; otherwise it's stale and ignored. When the port accepts connections but serves no `/json/version`, the endpoint is listed as `wsOnly`, with `ws://127.0.0.1:<port><path>`;
-  - `probePorts` (9222 to 9229, probed by `slicc` only);
+  - `probePorts` (9222 to 9229);
   - every endpoint's `cdp` is `<scheme>://<host>:<port>`, with the host in lower case and `localhost` and `::1` written as `127.0.0.1`, whatever form the URL was found in. Endpoints with the same host and port, written that way, are one endpoint. A `ws://` `--cdp` URL that is listed as `wsOnly` keeps its websocket URL as given;
   - `sourceRank`: when two sources find the same host and port, the lower rank wins, and on a tie the first found;
   - `names`: an endpoint's name when it isn't from a known browser's user-data dir: `electron` when the user agent contains `electronUserAgent`, else `products[<product>]` for the product before the `/` in `/json/version`'s `Browser`, else that product, else `fallback`;
@@ -439,7 +439,7 @@ A six endpoint has tier `six`, whatever its seven tabs. **A program never choose
 
 ## Output schema 1
 
-`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6).
+`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6). An endpoint may carry `tabs`: every page target except protected origins, with seven's own tabs included, so it holds every entry of `sevenTabs`. `playwright-cli list --json` prints it, and a corpus case that checks it needs `tabs`.
 
 ## The corpus
 
@@ -447,7 +447,7 @@ Each case is a fake machine: a home tree, `DevToolsActivePort` files, fake `/jso
 
 **`case.json`:**
 - `description`, and `os?`: the OSes the case runs on (`darwin`, `linux`, `windows`; default all).
-- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes, `slicc` only), `origins` (extra seven origins), `installed` (ranking installed browsers), `six` (finding and marking SLICC six's profiles). A program skips a case that needs something it doesn't do.
+- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes), `origins` (extra seven origins), `installed` (ranking installed browsers), `six` (finding and marking SLICC six's profiles), `tabs` (each endpoint's `tabs` list). A program skips a case that needs something it doesn't do.
 - `env?`: environment variables for discovery, which sees nothing else from the real environment.
 - `files?`: file contents by path. Every path starts with a token.
 - `cdp?`, `origins?`, `probePorts?`: `--cdp` URLs, extra seven origins, and the ports to probe.
@@ -508,7 +508,7 @@ for case in corpus().cases {
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `tabs` (which holds every entry of `sevenTabs`), `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

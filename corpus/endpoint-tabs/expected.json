@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "minChromium": 116,
+  "entries": [
+    {
+      "id": "cdp:127.0.0.1:9331",
+      "kind": "endpoint",
+      "tier": 1,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9331",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/t1",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "P1",
+            "url": "https://lars.sliccy.ai/",
+            "title": "seven"
+          }
+        ],
+        "tabs": [
+          {
+            "id": "P1",
+            "url": "https://lars.sliccy.ai/",
+            "title": "seven"
+          },
+          {
+            "id": "P2",
+            "url": "https://example.test/docs",
+            "title": "docs"
+          },
+          {
+            "id": "P5",
+            "url": "about:blank",
+            "title": ""
+          }
+        ]
+      }
+    }
+  ]
+}

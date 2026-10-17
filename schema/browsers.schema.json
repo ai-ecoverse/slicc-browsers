@@ -75,7 +75,8 @@
         "wsOnly": { "const": true },
         "six": { "const": true },
         "sevenOpen": { "type": "boolean" },
-        "sevenTabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } }
+        "sevenTabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } },
+        "tabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } }
       }
     },
     "installed": {

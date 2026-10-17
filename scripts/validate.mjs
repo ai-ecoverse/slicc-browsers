@@ -144,6 +144,13 @@ for (const { name, case: c, expected } of corpus.cases ?? []) {
       const open = e.endpoint.sevenTabs.length > 0;
       if (e.endpoint.sevenOpen !== open)
         fail(`${label}: ${e.id} sevenOpen disagrees with sevenTabs`);
+      if (
+        e.endpoint.tabs &&
+        e.endpoint.sevenTabs.some(
+          (seven) => !e.endpoint.tabs.some((tab) => JSON.stringify(tab) === JSON.stringify(seven))
+        )
+      )
+        fail(`${label}: ${e.id} has a seven tab missing from tabs`);
       if (e.endpoint.six) {
         if (e.tier !== t.six) fail(`${label}: ${e.id} is six's but not in tier ${t.six}`);
       } else if ((e.tier === t.sevenOpen) !== open) {

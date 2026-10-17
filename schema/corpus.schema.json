@@ -47,7 +47,8 @@
               "probe",
               "origins",
               "installed",
-              "six"
+              "six",
+              "tabs"
             ]
           }
         },

@@ -111,6 +111,10 @@ class Execution {
     this.answers = [];
     this.attachSettings = new Map();
     this.childSteps = [];
+    this.deferred = [];
+    this.expectWhere = [...(vector.setup ?? []), ...(vector.trigger ?? [])].some(
+      (step) => step.children && step.where
+    );
     this.childRuns = new Map();
     this.named = new Map();
     this.processed = new Set();
@@ -447,6 +451,11 @@ class Execution {
   adopt(event) {
     const info = event.params.targetInfo;
     const child = event.params.sessionId;
+    if (info?.type === 'browser_ui') return;
+    if (this.expectWhere && !this.childWhere) {
+      this.deferred.push(event);
+      return;
+    }
     if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
       return;
     if (this.childWhere && !this.childMatches(info)) {
@@ -462,7 +471,8 @@ class Execution {
       else {
         await this.execute(this.childSteps.slice(0, reload), child);
         const start = this.client.events.length;
-        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+        if (event.params.waitingForDebugger)
+          await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
         await this.poll(
           () =>
             this.client.events
@@ -473,7 +483,8 @@ class Execution {
         await this.execute(this.childSteps.slice(reload), child);
       }
       const resumed = this.client.events.length;
-      await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+      if (event.params.waitingForDebugger)
+        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
       if (this.childSteps.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
     })().catch((error) => this.errors.push(String(error.message ?? error)));
@@ -604,6 +615,7 @@ class Execution {
     if (step.children) {
       this.childSteps = step.children;
       this.childWhere = step.where;
+      for (const event of this.deferred.splice(0)) this.adopt(event);
       return;
     }
     if (step.answer) {

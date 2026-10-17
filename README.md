@@ -145,14 +145,14 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 - `C5.continue-request` and `C5.continue-response`, added next to `C5.document`;
 - the `C8` rows for privileged pages: `C8.navigate` (a page navigates to `chrome://settings`, `chrome://password-manager`, an extension page or `file:///`; refused), `C8.view-source` (the same through `view-source:`; refused), `C8.create` (`Target.createTarget` straight on those pages; refused), `C8.browser-ui-listed` (`Target.getTargets` lists no `browser_ui` target) and `C8.browser-ui-attach` (`Target.attachToTarget` by a `browser_ui` target's id; refused). All four have an unguarded control, since the guard refuses them only on the privileged target. Two cases aren't rows, because Chrome itself blocks them, so an unguarded client can't tell a guard from none: a page's `window.open('chrome://settings')`, and an `about:` alias such as `about:settings`, which `Page.navigate` and `Target.createTarget` both turn into `about:blank#blocked`. The `about:` aliases are in `protected.json` instead.
 
-The `C8.newtab` reachability control attaches through the guard to a settled ordinary new tab, including its internal frames, then navigates that same tab to an ordinary document. Both legs must succeed, including without a guard. It uses the default browser context, since an incognito new tab omits the ordinary new tab's internal frames. It covers `chrome://newtab/` and directly opened `chrome://new-tab-page/`.
+The `C8.newtab` reachability control attaches through the guard to a settled ordinary new tab, including its internal frames, then navigates that same tab to an ordinary document. Both legs must succeed, including without a guard. It requires `chromeUrlsAttach`, so an extension transport reports it as `skip` with `not-supported:chromeUrlsAttach`. The other C8 rows expect a refusal on the guarded leg and run their controls unguarded, so they don't require it and still run on extension transports. It uses the default browser context, since an incognito new tab omits the ordinary new tab's internal frames. It covers `chrome://newtab/` and directly opened `chrome://new-tab-page/`.
 
 **Top level.**
 - `schemaVersion` (1): guards pin it.
 - `setVersion`: the package version. The release flow stamps it into the npm package and the crate (`scripts/set-crate-version.mjs`). In git, and so in the Go module, it reads `0.0.0`; Go code gets the version from the module.
 - `targets`: the names a runner maps to a scheme, host and port: `seven`, `vault`, `vault-x` (a vault branch preview), `apex`, `own` (the client page's origin, `{client}`), `ordinary`, `ordinary-same-site`, `chrome-newtab`, `chrome-new-tab-page`, `chrome-settings`, `chrome-passwords`, `chrome-extension-page` and `file-root`. Each has a `description` and, for the protected ones, a default `host`. `chrome-newtab` (`chrome://newtab/`), `chrome-new-tab-page` (`chrome://new-tab-page/`), `chrome-settings` (`chrome://settings/`), `chrome-passwords` (`chrome://password-manager/`), `chrome-extension-page` (a page of Chrome's built-in PDF viewer extension) and `file-root` (`file:///`) carry a `url`, which the runner uses unless `targets` maps the name to something else. No other URL in the file is one a runner must use.
 - `variants`: the detach variants in ms. `prompt` and `lagging` are documented; a runner may add others, such as `lagging-8s`, and reports the name it ran.
-- `capabilities`: what a transport may lack. `autoAttach` covers `Target.setAutoAttach`, `children` steps and child sessions; `browserSession` covers calls on the browser session; `browserContexts` covers `Target.createBrowserContext` and `Target.disposeBrowserContext`.
+- `capabilities`: what a transport may lack. `autoAttach` covers `Target.setAutoAttach`, `children` steps and child sessions; `browserSession` covers calls on the browser session; `browserContexts` covers `Target.createBrowserContext` and `Target.disposeBrowserContext`; `chromeUrlsAttach` means the transport can attach to and drive `chrome://` pages. CDP over a DevTools port can; `chrome.debugger` can't, since Chrome refuses it every `chrome://` page, even with `--extensions-on-chrome-urls`.
 - `placeholders`: every `{name}` used in the vectors, with what it stands for. `{client}` is the client page's origin, which the runner maps.
 
 **A vector** has:
@@ -168,7 +168,7 @@ The `C8.newtab` reachability control attaches through the guard to a settled ord
 - `skip?` (`target`, `reason`): `reason` starts with a code, as in `not-applicable: …`.
 
 **Steps** are declarative and transport-neutral. Any step can take `on` (`control` or `guarded`), which runs it on that leg only.
-Any `cdp`, `page` or `children` step can take `requires`, the capabilities it needs: `autoAttach` for `Target.setAutoAttach`, `children` and `session: "child"`, `browserSession` for `session: "browser"`, and `browserContexts` for `Target.createBrowserContext` and `Target.disposeBrowserContext`.
+Any `cdp`, `page` or `children` step can take `requires`, the capabilities it needs: `autoAttach` for `Target.setAutoAttach`, `children` and `session: "child"`, `browserSession` for `session: "browser"`, `browserContexts` for `Target.createBrowserContext` and `Target.disposeBrowserContext`, and `chromeUrlsAttach` for a step that must attach to a `chrome://` page to pass.
 - `{ "cdp": method, "params"?, "session"?, "as"?, "refusable"?, "refusal"? }`: a CDP call. It runs on the page session by default, on the browser with `browser`, on either with `page-or-browser` (the driver uses the page session), or on the current auto-attached target with `child`. `as` names its outcome. `refusable: true` with `refusal: { "match" }` (a regular expression for the error message or code) marks a call that a guard may refuse at registration.
 - `{ "page": action, … }`:
   - `tab`: a new tab at `url`, in `context`, which becomes the page. `background` defaults to `true`;
@@ -280,7 +280,10 @@ The optional `close` releases the row's clients; release pooled browsers after
 browser-wide settings. Without a factory execution is serial. Cookie and storage
 rows use fresh browser contexts when `capabilities.browserContexts` is true;
 otherwise they run serially. `capabilities` is an object of booleans or an array
-of supported names. `capabilities.scope` selects owner-specific rows.
+of supported names, and a capability that isn't declared is unsupported: a CDP
+transport over a DevTools port declares `chromeUrlsAttach: true`, and an
+extension on `chrome.debugger` leaves it out, so `C8.newtab` is skipped with
+`not-supported:chromeUrlsAttach`. `capabilities.scope` selects owner-specific rows.
 
 Map `ordinary`, `ordinary-same-site`, `seven`, `vault`, `vault-x`, `apex`, `own`
 and `client` to origins. `chrome-newtab`, `chrome-new-tab-page`, `chrome-settings`, `chrome-passwords`, `chrome-extension-page` and `file-root` default to their `url`.
@@ -411,6 +414,7 @@ const capabilities = {
   autoAttach: true,
   browserSession: true,
   browserContexts: true,
+  chromeUrlsAttach: true,
 };
 const execution = await run(set, {
   clientFactory: (metadata) => connectGuardAndObserver(metadata),

@@ -81,7 +81,8 @@
   "capabilities": {
     "autoAttach": "Target.setAutoAttach, the children steps and child sessions",
     "browserSession": "CDP calls on the browser session",
-    "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext"
+    "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
+    "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -12386,7 +12387,7 @@
           },
           "session": "browser",
           "as": "attach",
-          "requires": ["browserSession"]
+          "requires": ["browserSession", "chromeUrlsAttach"]
         },
         {
           "page": "navigate",
@@ -12402,7 +12403,7 @@
         }
       ],
       "targets": ["chrome-newtab", "chrome-new-tab-page"],
-      "requires": ["browserSession"],
+      "requires": ["browserSession", "chromeUrlsAttach"],
       "observe": {
         "attached": {
           "means": "the guard attached to the settled new tab page",

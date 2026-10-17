@@ -231,9 +231,14 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_AUTO_ATTACH,
         guard::CAP_BROWSER_SESSION,
         guard::CAP_BROWSER_CONTEXTS,
+        guard::CAP_CHROME_URLS_ATTACH,
     ] {
         assert!(v.capabilities.contains_key(c));
     }
+    let newtab = v.vectors.iter().find(|x| x.id == "C8.newtab").unwrap();
+    assert!(newtab
+        .requires
+        .contains(&guard::CAP_CHROME_URLS_ATTACH.to_string()));
     let popup = v.vectors.iter().find(|x| x.id == "C3.popup").unwrap();
     assert!(popup.requires.contains(&guard::CAP_AUTO_ATTACH.to_string()));
     let e3 = v.vectors.iter().find(|x| x.id == "E3.bypass-csp").unwrap();

@@ -10,8 +10,8 @@ const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', impor
 const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
 const scripts = (method) => /^Page\.(addScriptToEvaluateOnNewDocument|setBypassCSP)$/.test(method);
 
-async function row(id, options, sides = {}) {
-  const fixture = await fixtureServer();
+async function row(id, options, sides = {}, served = {}) {
+  const fixture = await fixtureServer(served);
   try {
     const browser = await launch(fixture);
     const targets = origins(fixture);
@@ -149,5 +149,18 @@ for (const id of ['C3.redirect-popup-stays-out', 'C3.direct-popup-stays-out']) {
     passes(result);
     assert.equal(result.observations.guarded.navigatedLater, true);
     assert.equal(result.observations.guarded.attached, false);
+  });
+}
+
+for (const id of ['C2.post-307-308', 'C2.post-308-307']) {
+  test(`${id}: a slow POST chain is waited for when the init script is refused`, async () => {
+    const latency = (url) =>
+      url.pathname === '/hop' && url.searchParams.get('code') === '307' ? 1700 : 0;
+    const { result } = await row(id, { refuse: scripts }, {}, { latency });
+    passes(result);
+    assert.equal(result.observations.control['refused.3'], true);
+    assert.equal(result.observations.control.hopped, true);
+    assert.equal(result.observations.control.loaded, true);
+    assert.equal(result.observations.guarded.hopped, true);
   });
 }

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   guard-runner:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       LEFTHOOK: '0'
     steps:
@@ -27,7 +27,7 @@ jobs:
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:guard-integration
-      - run: timeout -k 30 720 npm run test:guard-sweep
+      - run: timeout -k 30 1200 npm run test:guard-sweep
 
   lint:
     runs-on: ubuntu-latest

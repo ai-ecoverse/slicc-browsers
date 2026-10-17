@@ -77,7 +77,12 @@ test('the reference runner checks real Chromium effects without a guard', {
             return { client, unguarded: client, close: () => client.close() };
           },
           targets: origins(fixture),
-          capabilities: { autoAttach: true, browserSession: true, browserContexts: true },
+          capabilities: {
+            autoAttach: true,
+            browserSession: true,
+            browserContexts: true,
+            chromeUrlsAttach: true,
+          },
           parallel: width,
           variant: process.env.GUARD_VARIANT ?? Object.keys(set.variants),
           fixture,

@@ -35,13 +35,14 @@ const (
 	GuardControl                   = "control"
 	GuardGuarded                   = "guarded"
 
-	GuardCapAutoAttach      = "autoAttach"
-	GuardCapBrowserSession  = "browserSession"
-	GuardCapBrowserContexts = "browserContexts"
-	GuardSessionPage        = "page"
-	GuardSessionBrowser     = "browser"
-	GuardSessionEither      = "page-or-browser"
-	GuardSessionChild       = "child"
+	GuardCapAutoAttach       = "autoAttach"
+	GuardCapBrowserSession   = "browserSession"
+	GuardCapBrowserContexts  = "browserContexts"
+	GuardCapChromeURLsAttach = "chromeUrlsAttach"
+	GuardSessionPage         = "page"
+	GuardSessionBrowser      = "browser"
+	GuardSessionEither       = "page-or-browser"
+	GuardSessionChild        = "child"
 )
 
 type GuardVectors struct {

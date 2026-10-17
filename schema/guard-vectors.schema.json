@@ -81,7 +81,7 @@
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["autoAttach", "browserSession", "browserContexts"],
+      "required": ["autoAttach", "browserSession", "browserContexts", "chromeUrlsAttach"],
       "properties": {
         "autoAttach": {
           "type": "string",
@@ -92,6 +92,10 @@
           "minLength": 1
         },
         "browserContexts": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chromeUrlsAttach": {
           "type": "string",
           "minLength": 1
         }
@@ -117,7 +121,7 @@
   },
   "$defs": {
     "capability": {
-      "enum": ["autoAttach", "browserSession", "browserContexts"]
+      "enum": ["autoAttach", "browserSession", "browserContexts", "chromeUrlsAttach"]
     },
     "requires": {
       "type": "array",

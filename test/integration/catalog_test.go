@@ -296,13 +296,17 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}
 	}
 	for _, g := range v.Vectors {
 		switch g.ID {
+		case "C8.newtab":
+			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapChromeURLsAttach) {
+				t.Fatalf("C8.newtab requires %v", g.Requires)
+			}
 		case "C3.popup":
 			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapAutoAttach) || !slices.Contains(g.Observe["attached"].Requires, sliccbrowsers.GuardCapAutoAttach) {
 				t.Fatalf("C3.popup requires %v", g.Requires)

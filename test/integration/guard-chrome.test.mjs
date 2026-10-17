@@ -7,7 +7,12 @@ import { launch, origins } from './cdp-client.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
-const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
+const capabilities = {
+  autoAttach: true,
+  browserSession: true,
+  browserContexts: true,
+  chromeUrlsAttach: true,
+};
 test('new tab pages stay attachable and navigable with the catalog, but fail with 1.8.1 rules', {
   timeout: 120000,
 }, async () => {
@@ -53,6 +58,65 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
       }
     }
   } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});
+
+test('C8.newtab is skipped without chromeUrlsAttach and runs with it', {
+  timeout: 120000,
+}, async () => {
+  const vectors = data.vectors.filter((v) => v.id === 'C8.newtab');
+  const lacking = { autoAttach: true, browserSession: true, browserContexts: true };
+  const fixture = await fixtureServer();
+  const calls = [];
+  const stub = {
+    events: [],
+    send: async (method) => {
+      calls.push(method);
+      return {};
+    },
+  };
+  for (const declared of [lacking, Object.keys(lacking), { ...lacking, chromeUrlsAttach: false }]) {
+    const execution = await run(
+      { ...data, vectors, variants: { prompt: 0 } },
+      { client: stub, unguarded: stub, targets: origins(fixture), fixture, capabilities: declared }
+    );
+    assert.equal(execution.results.length, 2);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'skip', JSON.stringify(row));
+      assert.equal(row.guarded, 'skip', JSON.stringify(row));
+      assert.equal(row.reason, 'not-supported:chromeUrlsAttach', JSON.stringify(row));
+    }
+    assert.match(execution.summary().line, /not-supported:chromeUrlsAttach=2/);
+  }
+  assert.deepEqual(calls, []);
+  const { protectedOrigins } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  const browser = await launch(fixture);
+  const guard = emulatedGuard(browser, { protectedOrigins });
+  try {
+    for (const declared of [capabilities, Object.keys(capabilities)]) {
+      const execution = await run(
+        { ...data, vectors, variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          targets: origins(fixture),
+          fixture,
+          capabilities: declared,
+        }
+      );
+      assert.equal(execution.results.length, 2);
+      for (const row of execution.results) {
+        assert.equal(row.reason, undefined, JSON.stringify(row));
+        assert.equal(row.control, 'pass', JSON.stringify(row));
+        assert.equal(row.guarded, 'pass', JSON.stringify(row));
+      }
+    }
+  } finally {
+    await guard.stop();
     await browser.close();
     await fixture.close();
   }

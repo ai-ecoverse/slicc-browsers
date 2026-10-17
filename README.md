@@ -443,7 +443,7 @@ A six endpoint has tier `six`, whatever its seven tabs. **A program never choose
 
 ## Output schema 1
 
-`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6). An endpoint may carry `tabs`: every page target except protected origins, with seven's own tabs included, so it holds every entry of `sevenTabs`. `playwright-cli list --json` prints it, and a corpus case that checks it needs `tabs`.
+`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6). An endpoint may carry `tabs`: every page target except those on protected origins. Seven's own tabs are protected, so they are in `sevenTabs` only, never in `tabs`. `playwright-cli list --json` prints it, and a corpus case that checks it needs `tabs`.
 
 ## The corpus
 
@@ -512,7 +512,7 @@ for case in corpus().cases {
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `tabs` (which holds every entry of `sevenTabs`), `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `tabs` (which holds no entry of `sevenTabs`), `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

@@ -1,5 +1,5 @@
 {
-  "description": "tabs lists every page target except protected origins, with seven's own tabs, which are also in sevenTabs; iframes, workers and other protected pages are left out",
+  "description": "tabs lists every page target except those on protected origins; seven's own tabs are only in sevenTabs, and iframes, workers and other protected pages are left out",
   "needs": ["flag", "tabs"],
   "cdp": ["127.0.0.1:9331"],
   "http": {

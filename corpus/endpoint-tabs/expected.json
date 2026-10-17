@@ -26,11 +26,6 @@
         ],
         "tabs": [
           {
-            "id": "P1",
-            "url": "https://lars.sliccy.ai/",
-            "title": "seven"
-          },
-          {
             "id": "P2",
             "url": "https://example.test/docs",
             "title": "docs"

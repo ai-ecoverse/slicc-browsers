@@ -173,7 +173,18 @@ export function result(vector, run) {
   }
   const c = run.control ? judge(vector, 'control', run.control) : null;
   const g = run.guarded ? judge(vector, 'guarded', run.guarded) : null;
-  const only = (a, b) => (a?.refused ?? []).filter((name) => !(b?.refused ?? []).includes(name));
+  const ranOn = (observed, name) => typeof observed?.[name] === 'boolean';
+  const both = (name) => ranOn(run.control, name) && ranOn(run.guarded, name);
+  const only = (a, b) =>
+    (a?.refused ?? []).filter((name) => both(name) && !(b?.refused ?? []).includes(name));
+  const ran = Object.fromEntries(
+    refusals(vector)
+      .filter(
+        (name) =>
+          run.control && run.guarded && ranOn(run.control, name) !== ranOn(run.guarded, name)
+      )
+      .map((name) => [name, ranOn(run.control, name) ? 'control-only' : 'guarded-only'])
+  );
   const why = [];
   let control = c?.pass ? 'pass' : 'fail';
   if (!c) why.push('no control');
@@ -195,7 +206,14 @@ export function result(vector, run) {
   } else why.push(...g.mismatches);
   const live = run.live === true ? 'pass' : 'fail';
   if (live === 'fail') why.push('not live');
-  return { ...row, control, guarded, live, ...(why.length ? { why: why.join('; ') } : {}) };
+  return {
+    ...row,
+    control,
+    guarded,
+    live,
+    ...(Object.keys(ran).length ? { ran } : {}),
+    ...(why.length ? { why: why.join('; ') } : {}),
+  };
 }
 
 const passed = (r) =>

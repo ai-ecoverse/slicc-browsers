@@ -57,6 +57,32 @@ export function emulatedGuard(browser, options = {}) {
       for (const event of client.events.slice(cursor)) {
         cursor++;
         options.trace?.push({ at: Date.now(), event });
+        if (
+          options.hideOpened &&
+          event.method === 'Target.attachedToTarget' &&
+          pages.has(event.params.targetInfo?.openerId)
+        ) {
+          const child = event.params.sessionId;
+          const { targetId } = event.params.targetInfo;
+          if (event.params.waitingForDebugger)
+            await client.send('Runtime.runIfWaitingForDebugger', {}, child).catch(() => {});
+          const until = Date.now() + 1500;
+          let landed = false;
+          while (!landed && Date.now() < until) {
+            const info = await unguarded
+              .send('Target.getTargetInfo', { targetId })
+              .then((answer) => answer.targetInfo)
+              .catch(() => undefined);
+            landed = Boolean(info?.url && mentions(info.url));
+            if (!landed) await pause(25);
+          }
+          if (landed) {
+            await client.send('Target.detachFromTarget', { sessionId: child }).catch(() => {});
+            continue;
+          }
+          events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
+          continue;
+        }
         if (!mentions(event)) {
           events.push(event);
           for (const waiter of waiters)
@@ -104,8 +130,10 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
-        if (options.refuse?.(method, params ?? {}, children.has(sessionId)))
+        if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
+          await pause(options.refuseLatencyMs ?? 0);
           throw refusal('browser-wide call');
+        }
         if (
           options.refuseFrameAttach &&
           method === 'Target.attachToTarget' &&
@@ -131,6 +159,7 @@ export function emulatedGuard(browser, options = {}) {
         )
           throw refusal('cookies in a context slicc did not create');
         options.trace?.push({ at: Date.now(), method, params, sessionId });
+        if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
         const result = await client.send(method, params, sessionId);
         await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
         if (

@@ -107,6 +107,7 @@ class Execution {
     this.contexts = [];
     this.pending = [];
     this.errors = [];
+    this.notes = [];
     this.answers = [];
     this.attachSettings = new Map();
     this.childSteps = [];
@@ -604,13 +605,20 @@ class Execution {
   }
 
   async settle(settle) {
-    if ((settle.dependsOn ?? []).some((name) => this.refused[name])) return;
+    const refused = () => (settle.dependsOn ?? []).some((name) => this.refused[name]);
+    const skipped = () => {
+      this.notes.push(
+        `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.title ? `title ${settle.title}` : 'load'}`
+      );
+    };
+    if (refused()) return skipped();
     if (settle.variant) await sleep(this.delay);
     if (settle.title && !this.reader) {
       await sleep(settle.ms ?? 1500);
       return;
     }
     const met = await this.poll(async () => {
+      if (refused()) return true;
       if (settle.beacon)
         return (
           (await this.requestCheck({ beacon: settle.beacon }, this.actionRequestStart)) &&
@@ -628,6 +636,7 @@ class Execution {
             .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === event.sessionId)
       );
     }, settle.ms ?? 1500);
+    if (refused()) return skipped();
     if (settle.required && !met)
       this.errors.push(
         `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`
@@ -986,7 +995,7 @@ class Execution {
         side: this.side,
       });
       const live = this.side === 'control' ? true : await this.check(this.vector.liveCheck);
-      return { observed, live, errors: this.errors };
+      return { observed, live, errors: this.errors, notes: this.notes };
     } finally {
       this.stopped = true;
       await pumping;
@@ -1218,6 +1227,11 @@ async function executeRow(job, opts, clients, set, slot, index) {
     errors: [...legs.control.errors, ...legs.guarded.errors],
     designDependent: vector.designDependent ?? [],
   };
+  const notes = [
+    ...(legs.control.notes ?? []).map((note) => `control ${note}`),
+    ...(legs.guarded.notes ?? []).map((note) => `guarded ${note}`),
+  ];
+  if (notes.length) row.notes = notes;
   if (row.errors.length) {
     row.control = 'fail';
     row.guarded = 'fail';

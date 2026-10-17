@@ -191,7 +191,7 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 
 **The control rule.** Every vector has a control on an ordinary origin: the same setup and trigger against an unprotected origin must succeed. A missing or failing control fails the id. With `via: "guard"`, the control runs through the guard. With `via: "unguarded"`, the runner runs setup and trigger through its own CDP against the ordinary origin and against the protected stand-in, and both must show the effect. The runner reports the control's transport as `via`.
 
-**Refusals.** Each refusable step has a refusal name: its `as`, or `refused.<i>`, where `i` is its index in the vector's steps, setup then trigger, with each `children` step's steps right after it, counted from 0 before `on` is applied. When a guard refuses the step and the error matches `refusal.match`, the runner sets that name to `true` in the leg's observations. On that leg, an observation whose `dependsOn` lists the name is skipped; every other observation is checked as usual. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. With `via: "guard"`, a refusal on one leg only fails that leg. A guard that allows the step must pass its control through the guard.
+**Refusals.** Each refusable step has a refusal name: its `as`, or `refused.<i>`, where `i` is its index in the vector's steps, setup then trigger, with each `children` step's steps right after it, counted from 0 before `on` is applied. When a guard refuses the step and the error matches `refusal.match`, the runner sets that name to `true` in the leg's observations. On that leg, an observation whose `dependsOn` lists the name is skipped; every other observation is checked as usual. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. With `via: "guard"`, a refusal on one leg only fails that leg. The comparison only counts steps that ran on both legs. A step that ran on one leg only (for example a `children` step on the control's popup, when the guarded leg never gets that popup attached) doesn't fail the row by itself, and the row reports it in `ran`, as `{ "refused.5": "control-only" }` or `"guarded-only"`. Observations that depend on such a step follow their `dependsOn` on each leg. A guard that allows the step must pass its control through the guard.
 
 **Liveness.** A runner checks `live` through its own CDP, never through the guard path: either the protected document loaded (title, marker or URL), or the guard returned its own refusal for a refusable step. A failing `live` fails the id.
 
@@ -285,7 +285,7 @@ target. In observations and liveness checks, an `any` alternative that reference
 a `null` origin is dropped and the rest are evaluated; the row skips only when
 every alternative of an `any`, or a required (`all`, `not` or plain) check, needs it. Tags and cookie names are unique per leg. `variant`
 selects one variant or an array; omission selects all. `parallel` defaults to 1.
-`log(row)` receives completed rows. A variant supplies the wait before an
+`log(row)` receives completed rows. Besides `control`, `guarded`, `live`, `why` and `errors`, a row may carry `ran` (steps that ran on one leg only) and `notes` (settles skipped because their registration was refused). A variant supplies the wait before an
 explicit `Target.detachFromTarget` step and for a `settle.variant` step.
 
 Every runnable vector has a declarative `liveCheck`; every observation has a
@@ -336,7 +336,7 @@ load event never ends a wait. After a child's `children` steps that include `Pag
 the runner waits, bounded at 5 s, for the child's first document to commit and load before
 any later child step. `{ "settle": { "beacon", "required": true, "dependsOn"? } }` waits
 for that beacon at the fixture and fails the row with `settle: no beacon from <origin>
-within <ms>ms` when it never arrives, unless a refusal it `dependsOn` was recorded; the rows
+within <ms>ms` when it never arrives, unless a refusal it `dependsOn` was recorded. It checks `dependsOn` again while it waits, since a child's `children` steps may still be running. When the registration it depends on was refused, the settle is skipped, the row's `notes` gets `<leg> settle:skipped-refused beacon <origin>`, and the row is judged on its other observations. The rows
 whose `allowedBeacon` comes from an earlier document settle on it before their trigger.
 Beacons use `navigator.sendBeacon`, with a `fetch(…, { keepalive: true })` fallback. An observation that reads a background step's `as` result
 waits for that step, up to 10 s, and fails with `<as> did not complete within …` past it. Redirect

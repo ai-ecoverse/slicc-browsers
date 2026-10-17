@@ -8,7 +8,10 @@ import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
-const privileged = (url) => /^(chrome|chrome-untrusted|devtools):/i.test(String(url ?? ''));
+const privileged = (url) =>
+  /^(view-source:)?(chrome|chrome-untrusted|chrome-extension|devtools|file):/i.test(
+    String(url ?? '')
+  );
 
 test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no guard fails them', {
   timeout: 300000,
@@ -30,7 +33,7 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
       hideTypes: ['browser_ui'],
     });
     const vectors = data.vectors.filter((v) => v.id.startsWith('C8.'));
-    assert.equal(vectors.length, 4);
+    assert.equal(vectors.length, 5);
     const rows = async (client) =>
       (
         await run(

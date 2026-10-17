@@ -56,6 +56,14 @@
     "chrome-passwords": {
       "url": "chrome://password-manager/",
       "description": "Chrome's password manager, a privileged chrome: page"
+    },
+    "chrome-extension-page": {
+      "url": "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+      "description": "a page of Chrome's built-in PDF viewer extension, standing in for any extension page"
+    },
+    "file-root": {
+      "url": "file:///",
+      "description": "the local file system's root, standing in for any file: page"
     }
   },
   "variants": {
@@ -12357,7 +12365,7 @@
       "defaultContext": true,
       "setup": [
         {
-          "text": "a plain tab navigates itself to a privileged chrome: page"
+          "text": "a plain tab navigates itself to a privileged chrome:, extension or file: page"
         },
         {
           "page": "tab",
@@ -12385,10 +12393,92 @@
           }
         }
       ],
-      "targets": ["chrome-settings", "chrome-passwords"],
+      "targets": ["chrome-settings", "chrome-passwords", "chrome-extension-page", "file-root"],
       "observe": {
         "navigated": {
           "means": "the page committed {target}",
+          "dependsOn": ["nav"],
+          "check": {
+            "attached": "{target}",
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "the navigation was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["nav"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its refusal for the step, or the runner's own CDP sees the effect",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "navigated": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "navigated": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "attached": "{target}",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "C8.view-source",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "text": "a plain tab navigates itself to view-source: of a privileged page"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "view-source:{target}"
+          },
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "settle": {
+            "ms": 2000
+          }
+        }
+      ],
+      "targets": ["chrome-settings", "chrome-extension-page", "file-root"],
+      "observe": {
+        "navigated": {
+          "means": "the page committed view-source: of {target}",
           "dependsOn": ["nav"],
           "check": {
             "attached": "{target}",

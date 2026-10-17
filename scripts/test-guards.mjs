@@ -1,6 +1,16 @@
 import { spawn } from 'node:child_process';
 
-const targets = ['seven', 'vault', 'vault-x', 'apex', 'own', 'chrome-settings', 'chrome-passwords'];
+const targets = [
+  'seven',
+  'vault',
+  'vault-x',
+  'apex',
+  'own',
+  'chrome-settings',
+  'chrome-passwords',
+  'chrome-extension-page',
+  'file-root',
+];
 const started = Date.now();
 let next = 0;
 let failed = 0;

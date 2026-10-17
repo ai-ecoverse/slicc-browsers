@@ -27,6 +27,7 @@ type ProtectedOrigins struct {
 	AnySchemes       []string `json:"anySchemes"`
 	ProtectedSchemes []string `json:"protectedSchemes"`
 	SchemeExceptions []string `json:"schemeExceptions"`
+	AboutScheme      string   `json:"aboutScheme"`
 	TargetTypes      []string `json:"targetTypes"`
 	Inheriting       []string `json:"inheriting"`
 	Refusal          string   `json:"refusal"`

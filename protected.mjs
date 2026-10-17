@@ -34,8 +34,14 @@ export function protectedOrigins(rules, extraOrigins = []) {
     return u;
   };
 
+  const alias = (u) => {
+    if (!u || scheme(u) !== 'about' || !rules.aboutScheme) return u;
+    if (rules.inheriting.includes(`about:${u.pathname.toLowerCase()}`)) return u;
+    return parse(`${rules.aboutScheme}://${u.pathname}${u.search}${u.hash}`) ?? u;
+  };
+
   const url = (text) => {
-    const u = unwrap(parse(text));
+    const u = alias(unwrap(parse(text)));
     if (!u) return false;
     const s = scheme(u);
     if (rules.anySchemes.includes(s)) return true;

@@ -156,7 +156,17 @@
       }
     },
     "target": {
-      "enum": ["seven", "vault", "vault-x", "apex", "own", "chrome-settings", "chrome-passwords"]
+      "enum": [
+        "seven",
+        "vault",
+        "vault-x",
+        "apex",
+        "own",
+        "chrome-settings",
+        "chrome-passwords",
+        "chrome-extension-page",
+        "file-root"
+      ]
     },
     "expected": {
       "oneOf": [

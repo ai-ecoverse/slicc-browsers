@@ -194,6 +194,8 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::TARGET_OWN,
         guard::TARGET_CHROME_SETTINGS,
         guard::TARGET_CHROME_PASSWORDS,
+        guard::TARGET_CHROME_EXTENSION_PAGE,
+        guard::TARGET_FILE_ROOT,
     ];
     for t in targets
         .iter()

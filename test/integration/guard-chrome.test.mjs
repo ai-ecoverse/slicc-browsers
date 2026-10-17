@@ -22,7 +22,6 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
     for (const missing of [
       ['chrome://new-tab-page', 'chrome-untrusted://new-tab-page'],
       ['chrome://new-tab-page'],
-      ['chrome-untrusted://new-tab-page'],
       [],
     ]) {
       const fixed = missing.length === 0;
@@ -56,6 +55,78 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
   } finally {
     await browser.close();
     await fixture.close();
+  }
+});
+
+test('a recorded NTP internal frame needs its exception in either process layout', async () => {
+  const { protectedOrigins: rules } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  const { urls } = JSON.parse(await readFile(new URL('../../protected.json', import.meta.url)));
+  const frameUrl = urls.find((row) => row.url.includes('/one-google-bar?')).url;
+  for (const outOfProcess of [false, true]) {
+    for (const fixed of [false, true]) {
+      const unguarded = {
+        events: [],
+        send: async (method, params, sessionId) => {
+          if (method === 'Target.getTargetInfo')
+            return { targetInfo: { url: 'chrome://newtab/', type: 'page' } };
+          if (method === 'Target.attachToTarget') return { sessionId: 'reader' };
+          if (method === 'Page.getFrameTree')
+            return {
+              frameTree: {
+                frame: { url: 'chrome://newtab/' },
+                childFrames: outOfProcess ? [] : [{ frame: { url: frameUrl } }],
+              },
+            };
+          if (method === 'Target.setAutoAttach' && params.autoAttach && outOfProcess)
+            unguarded.events.push({
+              method: 'Target.attachedToTarget',
+              sessionId,
+              params: { sessionId: 'frame', targetInfo: { url: frameUrl, type: 'iframe' } },
+            });
+          return {};
+        },
+      };
+      const calls = [];
+      const guard = emulatedGuard(
+        {
+          unguarded,
+          client: {
+            events: [],
+            send: async (method, params, sessionId) => {
+              calls.push({ method, params, sessionId });
+              return { sessionId: 'client' };
+            },
+          },
+        },
+        {
+          protectedOrigins: {
+            ...rules,
+            schemeExceptions: rules.schemeExceptions.filter(
+              (value) => fixed || value !== 'chrome-untrusted://new-tab-page'
+            ),
+          },
+        }
+      );
+      try {
+        const attach = () =>
+          guard.client.send('Target.attachToTarget', { targetId: 'ntp', flatten: true });
+        if (fixed) {
+          const { sessionId } = await attach();
+          await guard.client.send('Page.navigate', { url: 'https://example.test/' }, sessionId);
+          assert.deepEqual(
+            calls.map((call) => call.method),
+            ['Target.attachToTarget', 'Page.navigate']
+          );
+        } else {
+          await assert.rejects(attach, /refused.*protected.*frame/);
+          assert.deepEqual(calls, []);
+        }
+      } finally {
+        await guard.stop();
+      }
+    }
   }
 });
 

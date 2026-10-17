@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import { fixtureServer } from '../../fixture-server.mjs';
+import { run } from '../../guard-runner.mjs';
+import { connect, launch, origins } from './cdp-client.mjs';
+
+const set = JSON.parse(
+  await readFile(new URL('../../guard-vectors.json', import.meta.url), 'utf8')
+);
+
+const vector = (id) => ({
+  id,
+  kind: 'cdp',
+  scope: 'any',
+  targets: ['seven'],
+  setup: [{ page: 'tab', url: '{ordinary}/doc?n={tag}' }],
+  trigger: [{ cdp: 'Page.getFrameTree', as: 'tree' }],
+  observe: {
+    tree: { check: { result: 'tree', path: 'ok', equals: true, observer: 'client' } },
+  },
+  liveCheck: { loaded: '{ordinary}/doc?n={tag}', observer: 'fixture' },
+  control: { origin: 'ordinary', via: 'guard', expected: { tree: true } },
+  expected: { tree: true },
+});
+
+test('onStart, the in-flight view and rowTimeoutMs fail only the stuck row', {
+  timeout: 180000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const started = [];
+  const closed = [];
+  const seen = [];
+  try {
+    const running = run(
+      { ...set, vectors: [vector('D1.stuck'), vector('D1.after')], variants: { prompt: 0 } },
+      {
+        targets: origins(fixture),
+        fixture,
+        rowTimeoutMs: 4000,
+        onStart: (row) => started.push(row.id),
+        clientFactory: async ({ vector: { id } }) => {
+          const client = await connect(browser.ws);
+          const hung = new Set();
+          return {
+            client: {
+              ...client,
+              send: (method, params, sessionId) =>
+                id === 'D1.stuck' && method === 'Page.getFrameTree'
+                  ? new Promise((_, reject) => hung.add(reject))
+                  : client.send(method, params, sessionId),
+            },
+            unguarded: client,
+            close: async () => {
+              closed.push(id);
+              for (const reject of hung) reject(new Error('closed'));
+              client.close();
+            },
+          };
+        },
+      }
+    );
+    const sampling = (async () => {
+      for (let i = 0; i < 400 && seen.length === 0; i++) {
+        const views = running.inFlight();
+        if (views.some((item) => item.clients.client.length > 0)) seen.push(...views);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    })();
+    const { results, inFlight } = await running;
+    await sampling;
+    assert.deepEqual(started, ['D1.stuck', 'D1.after']);
+    assert.deepEqual(closed, ['D1.stuck', 'D1.after']);
+    assert.deepEqual(inFlight(), []);
+    const [stuck, after] = results;
+    assert.equal(stuck.control, 'fail');
+    assert.equal(stuck.guarded, 'fail');
+    assert.match(stuck.errors[0], /^row timed out after 4000ms: /);
+    assert.equal(stuck.inFlight.id, 'D1.stuck');
+    assert.equal(stuck.inFlight.leg, 'control');
+    assert.equal(stuck.inFlight.phase, 'trigger');
+    assert.equal(stuck.inFlight.step, 0);
+    const call = stuck.inFlight.clients.client.find((item) => item.method === 'Page.getFrameTree');
+    assert.ok(
+      call && call.ageMs >= 3000 && typeof call.session === 'string',
+      JSON.stringify(stuck)
+    );
+    assert.equal(after.control, 'pass', JSON.stringify(after));
+    assert.equal(after.guarded, 'pass', JSON.stringify(after));
+    assert.ok(seen.some((item) => item.id === 'D1.stuck' && item.target === 'seven'));
+  } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});

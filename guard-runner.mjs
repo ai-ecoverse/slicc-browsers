@@ -414,7 +414,7 @@ class Execution {
   }
 
   async pump() {
-    while (!this.stopped) {
+    while (!this.stopped && !this.clients.flight?.abandoned) {
       for (const event of this.client.events.slice(this.eventStart)) {
         if (this.processed.has(event)) continue;
         this.processed.add(event);
@@ -571,7 +571,9 @@ class Execution {
 
   async execute(list, childSession, phase = 'child') {
     if (phase === 'trigger') await this.childrenSettled();
-    for (const raw of list) {
+    for (const [index, raw] of list.entries()) {
+      if (this.clients.flight)
+        Object.assign(this.clients.flight, { leg: this.side, phase, step: index });
       const step = expand(raw, this.vars);
       if (!supported(step.requires, this.options.capabilities) || step.text) continue;
       if (!childSession && step.session === 'child') await this.childrenSettled();
@@ -1152,8 +1154,87 @@ function variables(targets, target, side, slot, index) {
   return vars;
 }
 
-async function executeRow(job, opts, clients, set, slot, index) {
+function tracked(client, calls, name) {
+  if (!client || typeof client.send !== 'function') return client;
+  let next = 0;
+  const send = (method, params, sessionId) => {
+    const id = ++next;
+    calls.set(id, { name, method, session: sessionId, since: Date.now() });
+    return Promise.resolve()
+      .then(() => client.send(method, params, sessionId))
+      .finally(() => calls.delete(id));
+  };
+  return new Proxy(client, {
+    get(base, key) {
+      if (key === 'send') return send;
+      const value = Reflect.get(base, key);
+      return typeof value === 'function' ? value.bind(base) : value;
+    },
+  });
+}
+
+function view(flight, base, clients) {
+  const now = Date.now();
+  const pending = (name) =>
+    [...flight.calls.values()]
+      .filter((call) => call.name === name)
+      .map(({ method, session, since }) => ({ method, session, ageMs: now - since }));
+  return {
+    id: base.id,
+    target: base.target,
+    variant: base.variant,
+    leg: flight.leg,
+    phase: flight.phase,
+    step: flight.step,
+    clients: {
+      client: pending('client'),
+      ...(clients.unguarded && clients.unguarded !== clients.client
+        ? { unguarded: pending('unguarded') }
+        : {}),
+    },
+  };
+}
+
+async function watch(work, ms, snapshot) {
+  if (!ms) {
+    await work;
+    return undefined;
+  }
+  let timer;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(snapshot()), ms);
+  });
+  const stuck = await Promise.race([work.then(() => undefined), expired]);
+  clearTimeout(timer);
+  return stuck;
+}
+
+async function timedOut(stuck, base, made, work, opts) {
+  const close = made.close;
+  made.close = undefined;
+  await close?.call(made);
+  work.catch(() => {});
+  const failed = {
+    ...base,
+    control: 'fail',
+    guarded: 'fail',
+    live: 'fail',
+    why: `row timed out after ${opts.rowTimeoutMs}ms`,
+    errors: [`row timed out after ${opts.rowTimeoutMs}ms: ${JSON.stringify(stuck)}`],
+    inFlight: stuck,
+  };
+  opts.log?.(failed);
+  return failed;
+}
+
+async function executeRow(job, opts, made, set, slot, index, flights) {
   const { target, variant } = job;
+  const calls = new Map();
+  const client = tracked(made.client, calls, 'client');
+  const unguarded =
+    made.unguarded === made.client ? client : tracked(made.unguarded, calls, 'unguarded');
+  const flight = { calls, leg: undefined, phase: undefined, step: undefined };
+  const clients = { ...made, client, unguarded, flight };
   const scoped = available(job.vector, target, opts.targets);
   const vector = scoped.vector ?? job.vector;
   const base = {
@@ -1211,20 +1292,30 @@ async function executeRow(job, opts, clients, set, slot, index) {
       reason: 'not-supported:unguarded-observer',
     };
   const legs = {};
-  for (const side of ['control', 'guarded']) {
-    try {
-      const vars = variables(opts.targets, target, side, slot, index);
-      legs[side] = await new Execution(
-        vector,
-        side,
-        opts,
-        clients,
-        vars,
-        set.variants[variant]
-      ).run();
-    } catch (error) {
-      legs[side] = { observed: {}, live: false, errors: [String(error.message ?? error)] };
+  flights.add({ flight, base, clients });
+  opts.onStart?.(base);
+  const sides = (async () => {
+    for (const side of ['control', 'guarded']) {
+      try {
+        const vars = variables(opts.targets, target, side, slot, index);
+        legs[side] = await new Execution(
+          vector,
+          side,
+          opts,
+          clients,
+          vars,
+          set.variants[variant]
+        ).run();
+      } catch (error) {
+        legs[side] = { observed: {}, live: false, errors: [String(error.message ?? error)] };
+      }
     }
+  })();
+  const stuck = await watch(sides, opts.rowTimeoutMs, () => view(flight, base, clients));
+  for (const entry of flights) if (entry.flight === flight) flights.delete(entry);
+  if (stuck) {
+    flight.abandoned = true;
+    return timedOut(stuck, base, made, sides, opts);
   }
   const row = {
     ...result(vector, {
@@ -1301,7 +1392,16 @@ function validate(set, opts) {
   return variants;
 }
 
-export async function run(set, options) {
+export function run(set, options) {
+  const flights = new Set();
+  const inFlight = () =>
+    [...flights].map(({ flight, base, clients }) => view(flight, base, clients));
+  const running = runAll(set, options, flights).then((done) => ({ ...done, inFlight }));
+  running.inFlight = inFlight;
+  return running;
+}
+
+async function runAll(set, options, flights) {
   const opts = { capabilities: {}, variant: Object.keys(set.variants), parallel: 1, ...options };
   const variants = validate(set, opts);
   const jobs = set.vectors.flatMap((vector) =>
@@ -1345,11 +1445,11 @@ export async function run(set, options) {
           });
           await previous;
           try {
-            results[index] = await executeRow(job, opts, clients, set, slot, index);
+            results[index] = await executeRow(job, opts, clients, set, slot, index, flights);
           } finally {
             done();
           }
-        } else results[index] = await executeRow(job, opts, clients, set, slot, index);
+        } else results[index] = await executeRow(job, opts, clients, set, slot, index, flights);
       } finally {
         await clients.close?.();
       }

@@ -46,7 +46,7 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
         assert.equal(execution.results.length, 2);
         for (const row of execution.results) {
           assert.equal(row.control, 'pass', JSON.stringify(row));
-          assert.equal(row.guarded, fixed ? 'pass' : 'fail', JSON.stringify(row));
+          assert.equal(row.guarded, fixed ? 'pass' : 'fail', JSON.stringify({ missing, row }));
           if (fixed) assert.equal(row.live, 'pass', JSON.stringify(row));
         }
       } finally {

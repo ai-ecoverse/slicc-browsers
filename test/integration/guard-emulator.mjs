@@ -147,15 +147,28 @@ export function emulatedGuard(browser, options = {}) {
             const protectedFrame = (tree) =>
               catalog.url(tree.frame.url) || (tree.childFrames ?? []).some(protectedFrame);
             if (protectedFrame(frameTree)) throw refusal('protected frame');
-            const { targetInfos } = await unguarded.send('Target.getTargets');
-            for (const info of targetInfos) {
-              if (info.type !== 'iframe' || !catalog.url(info.url)) continue;
-              const owner = await unguarded
-                .send('DOM.getFrameOwner', { frameId: info.targetId }, attached.sessionId)
-                .catch(() => null);
-              if (owner) throw refusal('protected out-of-process frame');
-            }
+            const start = unguarded.events.length;
+            await unguarded.send(
+              'Target.setAutoAttach',
+              { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+              attached.sessionId
+            );
+            const frames = unguarded.events
+              .slice(start)
+              .filter(
+                (event) =>
+                  event.method === 'Target.attachedToTarget' &&
+                  event.sessionId === attached.sessionId &&
+                  event.params.targetInfo.type === 'iframe'
+              );
+            if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
+              throw refusal('protected out-of-process frame');
           } finally {
+            await unguarded.send(
+              'Target.setAutoAttach',
+              { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+              attached.sessionId
+            );
             await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
           }
         }

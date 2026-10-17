@@ -10,6 +10,7 @@ export async function launch(fixture, { spki } = {}) {
     chromium.executablePath(),
     [
       '--headless',
+      '--use-mock-keychain',
       ...(spki ? [`--ignore-certificate-errors-spki-list=${spki}`] : []),
       '--no-sandbox',
       '--disable-gpu',

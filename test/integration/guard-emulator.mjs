@@ -1,8 +1,11 @@
+import { protectedOrigins } from '../../protected.mjs';
+
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function emulatedGuard(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
+  const catalog = options.protectedOrigins ? protectedOrigins(options.protectedOrigins) : null;
   const pages = new Set();
   const shielded = new Set();
   const foreign = new Set();
@@ -130,6 +133,32 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        if (catalog && method === 'Target.attachToTarget') {
+          const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
+            targetId: params.targetId,
+          });
+          if (catalog.target(targetInfo)) throw refusal('protected target');
+          const attached = await unguarded.send('Target.attachToTarget', {
+            targetId: params.targetId,
+            flatten: true,
+          });
+          try {
+            const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
+            const protectedFrame = (tree) =>
+              catalog.url(tree.frame.url) || (tree.childFrames ?? []).some(protectedFrame);
+            if (protectedFrame(frameTree)) throw refusal('protected frame');
+            const { targetInfos } = await unguarded.send('Target.getTargets');
+            for (const info of targetInfos) {
+              if (info.type !== 'iframe' || !catalog.url(info.url)) continue;
+              const owner = await unguarded
+                .send('DOM.getFrameOwner', { frameId: info.targetId }, attached.sessionId)
+                .catch(() => null);
+              if (owner) throw refusal('protected out-of-process frame');
+            }
+          } finally {
+            await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
+          }
+        }
         const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
         if (failure) throw new Error(failure);
         if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {

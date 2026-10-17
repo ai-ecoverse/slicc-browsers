@@ -720,7 +720,14 @@
       "arc",
       "file"
     ],
-    "schemeExceptions": ["chrome://newtab", "edge://newtab", "brave://newtab", "opera://startpage"],
+    "schemeExceptions": [
+      "chrome://newtab",
+      "chrome://new-tab-page",
+      "chrome-untrusted://new-tab-page",
+      "edge://newtab",
+      "brave://newtab",
+      "opera://startpage"
+    ],
     "aboutScheme": "chrome",
     "targetTypes": ["browser_ui"],
     "inheriting": ["about:blank", "about:srcdoc"],

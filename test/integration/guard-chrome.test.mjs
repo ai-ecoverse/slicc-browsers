@@ -8,6 +8,57 @@ import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
+test('new tab pages stay attachable and navigable with the catalog, but fail with 1.8.1 rules', {
+  timeout: 120000,
+}, async () => {
+  const { protectedOrigins: rules } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  try {
+    const vectors = data.vectors.filter((v) => v.id === 'C8.newtab');
+    assert.equal(vectors.length, 1);
+    for (const missing of [
+      ['chrome://new-tab-page', 'chrome-untrusted://new-tab-page'],
+      ['chrome://new-tab-page'],
+      ['chrome-untrusted://new-tab-page'],
+      [],
+    ]) {
+      const fixed = missing.length === 0;
+      const guard = emulatedGuard(browser, {
+        protectedOrigins: {
+          ...rules,
+          schemeExceptions: rules.schemeExceptions.filter((value) => !missing.includes(value)),
+        },
+      });
+      try {
+        const execution = await run(
+          { ...data, vectors, variants: { prompt: 0 } },
+          {
+            client: guard.client,
+            unguarded: browser.unguarded,
+            targets: origins(fixture),
+            fixture,
+            capabilities,
+          }
+        );
+        assert.equal(execution.results.length, 2);
+        for (const row of execution.results) {
+          assert.equal(row.control, 'pass', JSON.stringify(row));
+          assert.equal(row.guarded, fixed ? 'pass' : 'fail', JSON.stringify(row));
+          if (fixed) assert.equal(row.live, 'pass', JSON.stringify(row));
+        }
+      } finally {
+        await guard.stop();
+      }
+    }
+  } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});
+
 const privileged = (url) =>
   /^(view-source:)?(chrome|chrome-untrusted|chrome-extension|devtools|file):/i.test(
     String(url ?? '')
@@ -32,7 +83,7 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
         (method === 'Target.attachToTarget' && ui.has(params.targetId)),
       hideTypes: ['browser_ui'],
     });
-    const vectors = data.vectors.filter((v) => v.id.startsWith('C8.'));
+    const vectors = data.vectors.filter((v) => v.id.startsWith('C8.') && v.id !== 'C8.newtab');
     assert.equal(vectors.length, 5);
     const rows = async (client) =>
       (

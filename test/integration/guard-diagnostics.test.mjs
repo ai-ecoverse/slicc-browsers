@@ -94,3 +94,44 @@ test('onStart, the in-flight view and rowTimeoutMs fail only the stuck row', {
     await fixture.close();
   }
 });
+
+test('a Target.createBrowserContext that times out once is retried, and the row still runs', {
+  timeout: 120000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const client = await connect(browser.ws);
+  let first = true;
+  const slow = {
+    ...client,
+    send: async (method, params, sessionId) => {
+      if (method === 'Target.createBrowserContext' && first) {
+        first = false;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        throw new Error('CDP timeout Target.createBrowserContext');
+      }
+      return client.send(method, params, sessionId);
+    },
+  };
+  try {
+    const { results } = await run(
+      { ...set, vectors: [vector('D1.context')], variants: { prompt: 0 } },
+      {
+        client: slow,
+        unguarded: slow,
+        targets: origins(fixture),
+        fixture,
+        capabilities: { browserContexts: true, browserSession: true },
+      }
+    );
+    assert.equal(results[0].control, 'pass', JSON.stringify(results[0]));
+    assert.equal(results[0].guarded, 'pass', JSON.stringify(results[0]));
+    assert.deepEqual(results[0].notes, [
+      'control Target.createBrowserContext retried once after: CDP timeout Target.createBrowserContext',
+    ]);
+  } finally {
+    client.close();
+    await browser.close();
+    await fixture.close();
+  }
+});

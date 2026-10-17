@@ -385,12 +385,21 @@ class Execution {
     }
   }
 
+  async createContext() {
+    const client = this.reader ?? this.client;
+    try {
+      return (await client.send('Target.createBrowserContext', {})).browserContextId;
+    } catch (error) {
+      const message = String(error?.message ?? error);
+      if (!/timed? ?out/i.test(message)) throw error;
+      this.notes.push(`Target.createBrowserContext retried once after: ${message}`);
+      return (await client.send('Target.createBrowserContext', {})).browserContextId;
+    }
+  }
+
   async seed() {
     if (supported(['browserContexts'], this.options.capabilities)) {
-      const { browserContextId } = await (this.reader ?? this.client).send(
-        'Target.createBrowserContext',
-        {}
-      );
+      const browserContextId = await this.createContext();
       this.vars.context = browserContextId;
       this.contexts.push(browserContextId);
     }

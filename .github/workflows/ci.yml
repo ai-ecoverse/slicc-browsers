@@ -27,7 +27,9 @@ jobs:
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:guard-integration
-      - run: timeout -k 30 1200 npm run test:guard-sweep
+      - run: npm run test:gates
+      - run: |
+          timeout -k 30 1200 node scripts/gate.mjs --expect '^guard-sweep: PASS 5 targets$' -- node scripts/test-guards.mjs
 
   lint:
     runs-on: ubuntu-latest
@@ -93,7 +95,9 @@ jobs:
       - run: npm ci
 
       - name: Validate the catalog and the corpus
-        run: npm run validate
+        run: |
+          node scripts/gate.mjs --expect '^validate: PASS ' -- node scripts/validate.mjs
+          node scripts/gate.mjs --expect '^corpus: PASS [0-9]+ cases$' -- node scripts/corpus.mjs --check
 
       - name: Go
         run: |

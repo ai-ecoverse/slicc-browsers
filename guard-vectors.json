@@ -138,7 +138,12 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         }
       ],
@@ -362,7 +367,36 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "ms": 5000,
+            "or": {
+              "all": [
+                {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 302
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 303
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                },
+                {
+                  "served": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                }
+              ],
+              "observer": "client"
+            }
           }
         }
       ],
@@ -981,7 +1015,36 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "ms": 5000,
+            "or": {
+              "all": [
+                {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 302
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                },
+                {
+                  "served": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                }
+              ],
+              "observer": "client"
+            }
           }
         }
       ],
@@ -1600,7 +1663,36 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "ms": 5000,
+            "or": {
+              "all": [
+                {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 303
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 301
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                },
+                {
+                  "served": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                }
+              ],
+              "observer": "client"
+            }
           }
         }
       ],
@@ -2215,7 +2307,32 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "ms": 5000,
+            "or": {
+              "all": [
+                {
+                  "hops": [
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    },
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                },
+                {
+                  "served": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                }
+              ],
+              "observer": "client"
+            }
           }
         }
       ],
@@ -2662,7 +2779,32 @@
         },
         {
           "settle": {
-            "beacon": "{target}"
+            "beacon": "{target}",
+            "dependsOn": ["refused.3"],
+            "ms": 5000,
+            "or": {
+              "all": [
+                {
+                  "hops": [
+                    {
+                      "origin": "{cross}",
+                      "code": 308
+                    },
+                    {
+                      "origin": "{ordinary}",
+                      "code": 307
+                    }
+                  ],
+                  "to": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                },
+                {
+                  "served": "{target}/doc?n={tag}",
+                  "observer": "fixture"
+                }
+              ],
+              "observer": "client"
+            }
           }
         }
       ],
@@ -3109,7 +3251,12 @@
         },
         {
           "settle": {
-            "beacon": "{cross}"
+            "beacon": "{cross}",
+            "dependsOn": ["refused.3"],
+            "or": {
+              "served": "{cross}/doc?n={tag}-after",
+              "observer": "fixture"
+            }
           }
         }
       ],
@@ -3560,7 +3707,12 @@
         },
         {
           "settle": {
-            "beacon": "{cross}"
+            "beacon": "{cross}",
+            "dependsOn": ["refused.3"],
+            "or": {
+              "served": "{cross}/doc?n={tag}-after",
+              "observer": "fixture"
+            }
           }
         }
       ],
@@ -4034,7 +4186,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "session": "child"
+            "session": "child",
+            "dependsOn": ["refused.2", "refused.5"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -4282,7 +4439,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 5000
+            "ms": 5000,
+            "dependsOn": ["refused.2", "refused.5"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -4528,7 +4690,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 5000
+            "ms": 5000,
+            "dependsOn": ["refused.2", "refused.5"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -5204,7 +5371,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 4000
+            "ms": 4000,
+            "dependsOn": ["refused.3", "refused.7", "refused.8"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -5446,7 +5618,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 4000
+            "ms": 4000,
+            "dependsOn": ["refused.3", "refused.7", "refused.8"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -5685,7 +5862,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 4000
+            "ms": 4000,
+            "dependsOn": ["refused.3"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -5930,7 +6112,12 @@
         {
           "settle": {
             "beacon": "{target}",
-            "ms": 4000
+            "ms": 4000,
+            "dependsOn": ["refused.3"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {

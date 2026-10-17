@@ -28,6 +28,7 @@
         "required": ["url", "protected"],
         "properties": {
           "url": { "type": "string" },
+          "type": { "type": "string" },
           "previous": { "type": "boolean" },
           "opener": { "enum": ["protected", "unprotected", "unknown"] },
           "protected": { "type": "boolean" }

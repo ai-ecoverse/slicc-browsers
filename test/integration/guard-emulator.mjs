@@ -174,7 +174,12 @@ export function emulatedGuard(browser, options = {}) {
         if (method === 'Target.createBrowserContext' && result?.browserContextId)
           contexts.add(result.browserContextId);
         if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos))
-          return { ...result, targetInfos: result.targetInfos.filter((info) => !mentions(info)) };
+          return {
+            ...result,
+            targetInfos: result.targetInfos.filter(
+              (info) => !mentions(info) && !(options.hideTypes ?? []).includes(info.type)
+            ),
+          };
         return result;
       },
     },

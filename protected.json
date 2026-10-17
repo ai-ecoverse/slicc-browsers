@@ -284,7 +284,7 @@
     },
     {
       "url": "chrome://version/",
-      "protected": false
+      "protected": true
     },
     {
       "url": "chrome-extension://abcdefghijklmnopabcdefghijklmnop/page.html",
@@ -320,6 +320,46 @@
     },
     {
       "url": "https://vault-feature-x.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "chrome://settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://settings/passwords",
+      "protected": true
+    },
+    {
+      "url": "chrome://password-manager/passwords",
+      "protected": true
+    },
+    {
+      "url": "CHROME://Settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://omnibox-popup.top-chrome/",
+      "protected": true
+    },
+    {
+      "url": "chrome-untrusted://print/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome://settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://newtab/",
+      "protected": false
+    },
+    {
+      "url": "chrome://newtab",
+      "protected": false
+    },
+    {
+      "url": "chrome://newtab-x/",
       "protected": true
     }
   ],
@@ -435,6 +475,26 @@
     {
       "url": "http://127.0.0.1:5711/index.html",
       "previous": true,
+      "protected": false
+    },
+    {
+      "url": "chrome://omnibox-popup.top-chrome/",
+      "type": "browser_ui",
+      "protected": true
+    },
+    {
+      "url": "https://example.test/",
+      "type": "browser_ui",
+      "protected": true
+    },
+    {
+      "url": "chrome://newtab/",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "https://example.test/",
+      "type": "page",
       "protected": false
     }
   ],

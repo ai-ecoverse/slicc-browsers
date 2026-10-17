@@ -39,6 +39,8 @@ export function protectedOrigins(rules, extraOrigins = []) {
     if (!u) return false;
     const s = scheme(u);
     if (rules.anySchemes.includes(s)) return true;
+    if ((rules.protectedSchemes ?? []).includes(s))
+      return !(rules.schemeExceptions ?? []).includes(`${s}://${hostOf(u)}`);
     if (rules.schemes.includes(s) && rules.hosts.includes(hostOf(u))) return true;
     if (rules.schemes.includes(s) && rules.domains.some((d) => under(hostOf(u), d))) return true;
     const o = originOf(u);
@@ -55,7 +57,8 @@ export function protectedOrigins(rules, extraOrigins = []) {
     );
   };
 
-  const target = ({ url: text, previous = false, opener }) => {
+  const target = ({ url: text, previous = false, opener, type }) => {
+    if (type && (rules.targetTypes ?? []).includes(type)) return true;
     if (inheriting(text)) return previous || opener === 'protected' || opener === 'unknown';
     return url(text);
   };

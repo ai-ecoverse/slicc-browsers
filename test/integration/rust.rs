@@ -192,6 +192,8 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::TARGET_VAULT_X,
         guard::TARGET_APEX,
         guard::TARGET_OWN,
+        guard::TARGET_CHROME_SETTINGS,
+        guard::TARGET_CHROME_PASSWORDS,
     ];
     for t in targets
         .iter()

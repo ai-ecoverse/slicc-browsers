@@ -182,6 +182,12 @@ pub struct ProtectedOrigins {
     pub schemes: Vec<String>,
     pub inner_schemes: Vec<String>,
     pub any_schemes: Vec<String>,
+    #[serde(default)]
+    pub protected_schemes: Vec<String>,
+    #[serde(default)]
+    pub scheme_exceptions: Vec<String>,
+    #[serde(default)]
+    pub target_types: Vec<String>,
     pub inheriting: Vec<String>,
     pub refusal: String,
 }

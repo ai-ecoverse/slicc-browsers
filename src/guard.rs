@@ -6,6 +6,8 @@ pub const TARGET_VAULT: &str = "vault";
 pub const TARGET_VAULT_X: &str = "vault-x";
 pub const TARGET_APEX: &str = "apex";
 pub const TARGET_OWN: &str = "own";
+pub const TARGET_CHROME_SETTINGS: &str = "chrome-settings";
+pub const TARGET_CHROME_PASSWORDS: &str = "chrome-passwords";
 pub const ORDINARY: &str = "ordinary";
 pub const ORDINARY_SAME_SITE: &str = "ordinary-same-site";
 pub const KIND_CDP: &str = "cdp";
@@ -42,6 +44,8 @@ pub struct Vectors {
 pub struct Target {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     pub description: String,
 }
 
@@ -75,6 +79,12 @@ pub struct Vector {
     pub expected: Expected,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip: Option<Skip>,
+    #[serde(
+        default,
+        rename = "defaultContext",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub default_context: bool,
     #[serde(
         default,
         rename = "designDependent",

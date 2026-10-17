@@ -48,6 +48,14 @@
     },
     "ordinary-same-site": {
       "description": "an unprotected origin same-site with the target"
+    },
+    "chrome-settings": {
+      "url": "chrome://settings/",
+      "description": "Chrome's settings page, a privileged chrome: page"
+    },
+    "chrome-passwords": {
+      "url": "chrome://password-manager/",
+      "description": "Chrome's password manager, a privileged chrome: page"
     }
   },
   "variants": {
@@ -79,7 +87,8 @@
     "beacon": "guard-driver.mjs beacon({log}, {tag})",
     "probe": "guard-driver.mjs probe({log}, {tag})",
     "pageTarget": "the current page target id",
-    "responseOrigin": "the fixture response CORS origin"
+    "responseOrigin": "the fixture response CORS origin",
+    "browserUi": "the id of one of Chrome's own browser_ui targets, which the runner looks up with its own CDP"
   },
   "vectors": [
     {
@@ -12339,6 +12348,317 @@
         "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
       },
       "expected": "as each vector"
+    },
+    {
+      "id": "C8.navigate",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "text": "a plain tab navigates itself to a privileged chrome: page"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}"
+          },
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "settle": {
+            "ms": 2000
+          }
+        }
+      ],
+      "targets": ["chrome-settings", "chrome-passwords"],
+      "observe": {
+        "navigated": {
+          "means": "the page committed {target}",
+          "dependsOn": ["nav"],
+          "check": {
+            "attached": "{target}",
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "the navigation was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["nav"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its refusal for the step, or the runner's own CDP sees the effect",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "navigated": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "navigated": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "attached": "{target}",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "C8.create",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the client opens a new tab straight on a privileged chrome: page"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{target}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["chrome-settings", "chrome-passwords"],
+      "requires": ["browserSession"],
+      "observe": {
+        "opened": {
+          "means": "Target.createTarget returned a target",
+          "dependsOn": ["created"],
+          "check": {
+            "result": "created",
+            "path": "result.targetId",
+            "equals": {
+              "$regex": "."
+            },
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "Target.createTarget was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["created"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its refusal for the step, or the runner's own CDP sees the effect",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "opened": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "opened": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["created"],
+            "observer": "client"
+          },
+          {
+            "result": "created",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "C8.browser-ui-listed",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the client lists the browser's targets; Chrome's own browser_ui targets are among them"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["chrome-settings"],
+      "requires": ["browserSession"],
+      "observe": {
+        "listed": {
+          "means": "Target.getTargets lists a browser_ui target",
+          "dependsOn": ["targets"],
+          "check": {
+            "result": "targets",
+            "path": "result.targetInfos",
+            "equals": {
+              "$some": {
+                "type": "browser_ui"
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the runner's own CDP lists a browser_ui target",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "listed": true
+        }
+      },
+      "expected": {
+        "listed": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["targets"],
+            "observer": "client"
+          },
+          {
+            "result": "targets",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "C8.browser-ui-attach",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "the client attaches to one of Chrome's own browser_ui targets by its id"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{browserUi}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["chrome-settings"],
+      "requires": ["browserSession"],
+      "observe": {
+        "attached": {
+          "means": "Target.attachToTarget returned a session",
+          "dependsOn": ["attach"],
+          "check": {
+            "result": "attach",
+            "path": "result.sessionId",
+            "equals": {
+              "$regex": "."
+            },
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "Target.attachToTarget was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["attach"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its refusal for the step, or the runner's own CDP sees the effect",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "attached": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "attached": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["attach"],
+            "observer": "client"
+          },
+          {
+            "result": "attach",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     }
   ]
 }

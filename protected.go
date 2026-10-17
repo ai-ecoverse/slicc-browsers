@@ -20,13 +20,16 @@ const (
 )
 
 type ProtectedOrigins struct {
-	Domains      []string `json:"domains"`
-	Hosts        []string `json:"hosts"`
-	Schemes      []string `json:"schemes"`
-	InnerSchemes []string `json:"innerSchemes"`
-	AnySchemes   []string `json:"anySchemes"`
-	Inheriting   []string `json:"inheriting"`
-	Refusal      string   `json:"refusal"`
+	Domains          []string `json:"domains"`
+	Hosts            []string `json:"hosts"`
+	Schemes          []string `json:"schemes"`
+	InnerSchemes     []string `json:"innerSchemes"`
+	AnySchemes       []string `json:"anySchemes"`
+	ProtectedSchemes []string `json:"protectedSchemes"`
+	SchemeExceptions []string `json:"schemeExceptions"`
+	TargetTypes      []string `json:"targetTypes"`
+	Inheriting       []string `json:"inheriting"`
+	Refusal          string   `json:"refusal"`
 }
 
 type ProtectedVectors struct {
@@ -45,6 +48,7 @@ type URLVector struct {
 
 type TargetVector struct {
 	URL       string `json:"url"`
+	Type      string `json:"type,omitempty"`
 	Previous  bool   `json:"previous,omitempty"`
 	Opener    string `json:"opener,omitempty"`
 	Protected bool   `json:"protected"`

@@ -24,6 +24,8 @@ pub struct UrlVector {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TargetVector {
     pub url: String,
+    #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub previous: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

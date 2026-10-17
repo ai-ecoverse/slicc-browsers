@@ -708,6 +708,9 @@
     "schemes": ["https", "http"],
     "innerSchemes": ["blob", "filesystem", "view-source"],
     "anySchemes": ["devtools"],
+    "protectedSchemes": ["chrome", "chrome-untrusted", "devtools"],
+    "schemeExceptions": ["chrome://newtab"],
+    "targetTypes": ["browser_ui"],
     "inheriting": ["about:blank", "about:srcdoc"],
     "refusal": "slicc: refused: target is on seven's origin"
   },

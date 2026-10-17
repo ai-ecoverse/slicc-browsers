@@ -408,7 +408,13 @@ class Execution {
   }
 
   async seed() {
-    if (supported(['browserContexts'], this.options.capabilities)) {
+    if (JSON.stringify([this.vector.setup, this.vector.trigger]).includes('{browserUi}')) {
+      const listed = await (this.reader ?? this.client).send('Target.getTargets', {});
+      const ui = listed.targetInfos?.find((info) => info.type === 'browser_ui');
+      if (!ui) throw new Error('no browser_ui target to use as {browserUi}');
+      this.vars.browserUi = ui.targetId;
+    }
+    if (supported(['browserContexts'], this.options.capabilities) && !this.vector.defaultContext) {
       const browserContextId = await this.createContext();
       this.vars.context = browserContextId;
       this.contexts.push(browserContextId);
@@ -731,6 +737,8 @@ class Execution {
       if (params.autoAttach) this.attachSettings.set(session, true);
       else this.attachSettings.delete(session);
     }
+    if (step.cdp === 'Target.createTarget' && out.ok && out.result?.targetId)
+      this.targets.push(out.result.targetId);
     if (step.cdp === 'Target.createBrowserContext' && out.ok) {
       this.vars.context = out.result.browserContextId;
       this.contexts.push(this.vars.context);
@@ -1452,6 +1460,14 @@ export function run(set, options) {
 
 async function runAll(set, options, flights) {
   const opts = { capabilities: {}, variant: Object.keys(set.variants), parallel: 1, ...options };
+  opts.targets = {
+    ...Object.fromEntries(
+      Object.entries(set.targets ?? {})
+        .filter(([, target]) => typeof target?.url === 'string')
+        .map(([name, target]) => [name, target.url])
+    ),
+    ...opts.targets,
+  };
   const variants = validate(set, opts);
   const jobs = set.vectors.flatMap((vector) =>
     vector.targets.flatMap((target) => variants.map((variant) => ({ vector, target, variant })))

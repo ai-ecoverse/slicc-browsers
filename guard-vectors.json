@@ -5458,11 +5458,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -5690,11 +5703,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }

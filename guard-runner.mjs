@@ -117,6 +117,7 @@ class Execution {
       (step) => step.children && step.where
     );
     this.scale = options.settleScale ?? 1;
+    this.refusalScale = options.refusalScale ?? 1;
     this.childRuns = new Map();
     this.named = new Map();
     this.processed = new Set();
@@ -169,12 +170,12 @@ class Execution {
     return out;
   }
 
-  bound(ms) {
-    return Math.round(ms * this.scale);
+  bound(ms, absent = false) {
+    return Math.round(ms * (absent ? this.refusalScale : this.scale));
   }
 
-  async poll(predicate, ms = 1500) {
-    const deadline = Date.now() + this.bound(ms);
+  async poll(predicate, ms = 1500, absent = false) {
+    const deadline = Date.now() + this.bound(ms, absent);
     do {
       if (await predicate()) return true;
       await sleep(25);
@@ -524,7 +525,7 @@ class Execution {
             event.params?.request?.url === url &&
             this.rule(event)?.url === url
         );
-    if (!(await this.poll(seen, ms)) && this.side === 'control')
+    if (!(await this.poll(seen, ms, this.side === 'guarded')) && this.side === 'control')
       this.errors.push(`paused: no pause for ${url} within ${this.bound(ms)}ms`);
   }
 
@@ -660,13 +661,14 @@ class Execution {
       );
     };
     const alt = settle.or;
+    const absent = this.side === 'guarded' && !settle.required;
     if (refused() && !alt) return skipped();
     if (settle.variant) await sleep(this.delay);
     if (settle.title && !this.reader) {
-      await sleep(this.bound(settle.ms ?? 1500));
+      await sleep(this.bound(settle.ms ?? 1500, absent));
       return;
     }
-    const met = await this.poll(async () => {
+    const arrived = async () => {
       if (refused()) return !alt || (await this.check(alt));
       if (settle.served) return this.requestCheck({ served: settle.served, tagged: false });
       if (settle.beacon)
@@ -685,7 +687,8 @@ class Execution {
             .slice(index + 1)
             .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === event.sessionId)
       );
-    }, settle.ms ?? 1500);
+    };
+    const met = await this.poll(arrived, settle.ms ?? 1500, absent);
     if (refused() && !alt) return skipped();
     if (settle.required && !met)
       this.errors.push(
@@ -1419,13 +1422,22 @@ function validateBlocked(vectors) {
       throw new TypeError(`${vector.id}: blocked needs exactly one url or nonempty anyOf`);
 }
 
-function validate(set, opts) {
-  if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
+function validateScales(opts) {
   if (
     opts.settleScale !== undefined &&
     !(Number.isFinite(opts.settleScale) && opts.settleScale > 0)
   )
     throw new TypeError('settleScale must be a positive number');
+  if (
+    opts.refusalScale !== undefined &&
+    !(Number.isFinite(opts.refusalScale) && opts.refusalScale >= 1)
+  )
+    throw new TypeError('refusalScale must be a number of at least 1');
+}
+
+function validate(set, opts) {
+  if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
+  validateScales(opts);
   for (const vector of set.vectors)
     for (const [name, observation] of Object.entries(vector.observe ?? {}))
       if (!observation.check) throw new TypeError(`${vector.id}: ${name} lacks a check`);

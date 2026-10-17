@@ -49,6 +49,14 @@
     "ordinary-same-site": {
       "description": "an unprotected origin same-site with the target"
     },
+    "chrome-newtab": {
+      "url": "chrome://newtab/",
+      "description": "Chrome's ordinary new tab page, including its internal frames"
+    },
+    "chrome-new-tab-page": {
+      "url": "chrome://new-tab-page/",
+      "description": "Chrome's directly opened new tab page"
+    },
     "chrome-settings": {
       "url": "chrome://settings/",
       "description": "Chrome's settings page, a privileged chrome: page"
@@ -12356,6 +12364,82 @@
         "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
       },
       "expected": "as each vector"
+    },
+    {
+      "id": "C8.newtab",
+      "defaultContext": true,
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{target}"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{pageTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "requires": ["browserSession"]
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?tag={tag}",
+          "as": "navigate"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["chrome-newtab", "chrome-new-tab-page"],
+      "requires": ["browserSession"],
+      "observe": {
+        "attached": {
+          "means": "the guard attached to the settled new tab page",
+          "check": {
+            "result": "attach",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "navigated": {
+          "means": "the same tab reached an ordinary document through the guard",
+          "check": {
+            "title": "doc",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the runner sees the ordinary document in the same tab",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "attached": true,
+          "navigated": true
+        }
+      },
+      "expected": {
+        "attached": true,
+        "navigated": true
+      },
+      "liveCheck": {
+        "title": "doc",
+        "via": "unguarded",
+        "observer": "unguarded"
+      }
     },
     {
       "id": "C8.navigate",

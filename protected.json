@@ -359,6 +359,34 @@
       "protected": false
     },
     {
+      "url": "chrome://new-tab-page/",
+      "protected": false
+    },
+    {
+      "url": "chrome://new-tab-page",
+      "protected": false
+    },
+    {
+      "url": "chrome-untrusted://new-tab-page/one-google-bar?paramsencoded=",
+      "protected": false
+    },
+    {
+      "url": "chrome-untrusted://new-tab-page",
+      "protected": false
+    },
+    {
+      "url": "chrome://new-tab-page.evil/",
+      "protected": true
+    },
+    {
+      "url": "chrome-untrusted://new-tab-page.evil/",
+      "protected": true
+    },
+    {
+      "url": "chrome-untrusted://other/",
+      "protected": true
+    },
+    {
       "url": "chrome://newtab-x/",
       "protected": true
     },

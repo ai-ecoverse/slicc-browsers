@@ -19,6 +19,8 @@ const (
 	GuardTargetVaultX              = "vault-x"
 	GuardTargetApex                = "apex"
 	GuardTargetOwn                 = "own"
+	GuardTargetChromeNewtab        = "chrome-newtab"
+	GuardTargetChromeNewTabPage    = "chrome-new-tab-page"
 	GuardTargetChromeSettings      = "chrome-settings"
 	GuardTargetChromePasswords     = "chrome-passwords"
 	GuardTargetChromeExtensionPage = "chrome-extension-page"

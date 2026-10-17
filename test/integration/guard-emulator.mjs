@@ -1,8 +1,11 @@
+import { protectedOrigins } from '../../protected.mjs';
+
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function emulatedGuard(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
+  const catalog = options.protectedOrigins ? protectedOrigins(options.protectedOrigins) : null;
   const pages = new Set();
   const shielded = new Set();
   const foreign = new Set();
@@ -130,6 +133,45 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        if (catalog && method === 'Target.attachToTarget') {
+          const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
+            targetId: params.targetId,
+          });
+          if (catalog.target(targetInfo)) throw refusal('protected target');
+          const attached = await unguarded.send('Target.attachToTarget', {
+            targetId: params.targetId,
+            flatten: true,
+          });
+          try {
+            const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
+            const protectedFrame = (tree) =>
+              catalog.url(tree.frame.url) || (tree.childFrames ?? []).some(protectedFrame);
+            if (protectedFrame(frameTree)) throw refusal('protected frame');
+            const start = unguarded.events.length;
+            await unguarded.send(
+              'Target.setAutoAttach',
+              { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+              attached.sessionId
+            );
+            const frames = unguarded.events
+              .slice(start)
+              .filter(
+                (event) =>
+                  event.method === 'Target.attachedToTarget' &&
+                  event.sessionId === attached.sessionId &&
+                  event.params.targetInfo.type === 'iframe'
+              );
+            if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
+              throw refusal('protected out-of-process frame');
+          } finally {
+            await unguarded.send(
+              'Target.setAutoAttach',
+              { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+              attached.sessionId
+            );
+            await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
+          }
+        }
         const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
         if (failure) throw new Error(failure);
         if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {

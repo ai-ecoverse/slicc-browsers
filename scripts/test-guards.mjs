@@ -6,6 +6,8 @@ const targets = [
   'vault-x',
   'apex',
   'own',
+  'chrome-newtab',
+  'chrome-new-tab-page',
   'chrome-settings',
   'chrome-passwords',
   'chrome-extension-page',

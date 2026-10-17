@@ -8,6 +8,128 @@ import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
+test('new tab pages stay attachable and navigable with the catalog, but fail with 1.8.1 rules', {
+  timeout: 120000,
+}, async () => {
+  const { protectedOrigins: rules } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  try {
+    const vectors = data.vectors.filter((v) => v.id === 'C8.newtab');
+    assert.equal(vectors.length, 1);
+    for (const missing of [
+      ['chrome://new-tab-page', 'chrome-untrusted://new-tab-page'],
+      ['chrome://new-tab-page'],
+      [],
+    ]) {
+      const fixed = missing.length === 0;
+      const guard = emulatedGuard(browser, {
+        protectedOrigins: {
+          ...rules,
+          schemeExceptions: rules.schemeExceptions.filter((value) => !missing.includes(value)),
+        },
+      });
+      try {
+        const execution = await run(
+          { ...data, vectors, variants: { prompt: 0 } },
+          {
+            client: guard.client,
+            unguarded: browser.unguarded,
+            targets: origins(fixture),
+            fixture,
+            capabilities,
+          }
+        );
+        assert.equal(execution.results.length, 2);
+        for (const row of execution.results) {
+          assert.equal(row.control, 'pass', JSON.stringify(row));
+          assert.equal(row.guarded, fixed ? 'pass' : 'fail', JSON.stringify({ missing, row }));
+          if (fixed) assert.equal(row.live, 'pass', JSON.stringify(row));
+        }
+      } finally {
+        await guard.stop();
+      }
+    }
+  } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});
+
+test('a recorded NTP internal frame needs its exception in either process layout', async () => {
+  const { protectedOrigins: rules } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  const { urls } = JSON.parse(await readFile(new URL('../../protected.json', import.meta.url)));
+  const frameUrl = urls.find((row) => row.url.includes('/one-google-bar?')).url;
+  for (const outOfProcess of [false, true]) {
+    for (const fixed of [false, true]) {
+      const unguarded = {
+        events: [],
+        send: async (method, params, sessionId) => {
+          if (method === 'Target.getTargetInfo')
+            return { targetInfo: { url: 'chrome://newtab/', type: 'page' } };
+          if (method === 'Target.attachToTarget') return { sessionId: 'reader' };
+          if (method === 'Page.getFrameTree')
+            return {
+              frameTree: {
+                frame: { url: 'chrome://newtab/' },
+                childFrames: outOfProcess ? [] : [{ frame: { url: frameUrl } }],
+              },
+            };
+          if (method === 'Target.setAutoAttach' && params.autoAttach && outOfProcess)
+            unguarded.events.push({
+              method: 'Target.attachedToTarget',
+              sessionId,
+              params: { sessionId: 'frame', targetInfo: { url: frameUrl, type: 'iframe' } },
+            });
+          return {};
+        },
+      };
+      const calls = [];
+      const guard = emulatedGuard(
+        {
+          unguarded,
+          client: {
+            events: [],
+            send: async (method, params, sessionId) => {
+              calls.push({ method, params, sessionId });
+              return { sessionId: 'client' };
+            },
+          },
+        },
+        {
+          protectedOrigins: {
+            ...rules,
+            schemeExceptions: rules.schemeExceptions.filter(
+              (value) => fixed || value !== 'chrome-untrusted://new-tab-page'
+            ),
+          },
+        }
+      );
+      try {
+        const attach = () =>
+          guard.client.send('Target.attachToTarget', { targetId: 'ntp', flatten: true });
+        if (fixed) {
+          const { sessionId } = await attach();
+          await guard.client.send('Page.navigate', { url: 'https://example.test/' }, sessionId);
+          assert.deepEqual(
+            calls.map((call) => call.method),
+            ['Target.attachToTarget', 'Page.navigate']
+          );
+        } else {
+          await assert.rejects(attach, /refused.*protected.*frame/);
+          assert.deepEqual(calls, []);
+        }
+      } finally {
+        await guard.stop();
+      }
+    }
+  }
+});
+
 const privileged = (url) =>
   /^(view-source:)?(chrome|chrome-untrusted|chrome-extension|devtools|file):/i.test(
     String(url ?? '')
@@ -32,7 +154,7 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
         (method === 'Target.attachToTarget' && ui.has(params.targetId)),
       hideTypes: ['browser_ui'],
     });
-    const vectors = data.vectors.filter((v) => v.id.startsWith('C8.'));
+    const vectors = data.vectors.filter((v) => v.id.startsWith('C8.') && v.id !== 'C8.newtab');
     assert.equal(vectors.length, 5);
     const rows = async (client) =>
       (

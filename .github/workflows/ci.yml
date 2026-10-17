@@ -29,7 +29,7 @@ jobs:
       - run: npm run test:guard-integration
       - run: npm run test:gates
       - run: |
-          timeout -k 30 1200 node scripts/gate.mjs --expect '^guard-sweep: PASS 9 targets$' -- node scripts/test-guards.mjs
+          timeout -k 30 1200 node scripts/gate.mjs --expect '^guard-sweep: PASS 11 targets$' -- node scripts/test-guards.mjs
 
   lint:
     runs-on: ubuntu-latest

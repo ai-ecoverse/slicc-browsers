@@ -92,7 +92,9 @@ test('the reference runner checks real Chromium effects without a guard', {
         await Promise.all(browsers.map((browser) => browser.close()));
       }
       const rows = execution.results.filter((r) => r.control !== 'skip' && r.control !== 'not-run');
-      const failures = rows.filter((r) => r.control !== 'pass' || r.guarded !== 'fail');
+      const failures = rows.filter(
+        (r) => r.control !== 'pass' || r.guarded !== (r.id === 'C8.newtab' ? 'pass' : 'fail')
+      );
       reports.push({ repeat, counts: execution.summary().counts, results: execution.results });
       if (process.env.GUARD_REPORT)
         await writeFile(

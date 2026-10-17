@@ -16,7 +16,7 @@ if (after === before) {
   process.exit(1);
 }
 const guard = readFileSync('guard-vectors.json', 'utf8');
-const stamped = guard.replace(/^ {2}"setVersion": "0\.0\.0",$/m, `  "setVersion": "${version}",`);
+const stamped = guard.replace(/^  "setVersion": "0\.0\.0",$/m, `  "setVersion": "${version}",`);
 if (stamped === guard) {
   process.stderr.write('guard-vectors.json has no "setVersion": "0.0.0" line\n');
   process.exit(1);

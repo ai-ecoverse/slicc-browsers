@@ -635,14 +635,15 @@ class Execution {
         `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.served ? `request ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'}`
       );
     };
-    if (refused()) return skipped();
+    const alt = settle.or;
+    if (refused() && !alt) return skipped();
     if (settle.variant) await sleep(this.delay);
     if (settle.title && !this.reader) {
       await sleep(settle.ms ?? 1500);
       return;
     }
     const met = await this.poll(async () => {
-      if (refused()) return true;
+      if (refused()) return !alt || (await this.check(alt));
       if (settle.served) return this.requestCheck({ served: settle.served, tagged: false });
       if (settle.beacon)
         return (
@@ -661,7 +662,7 @@ class Execution {
             .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === event.sessionId)
       );
     }, settle.ms ?? 1500);
-    if (refused()) return skipped();
+    if (refused() && !alt) return skipped();
     if (settle.required && !met)
       this.errors.push(
         `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`

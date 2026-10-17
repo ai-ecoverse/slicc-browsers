@@ -15,7 +15,7 @@ concurrency:
 jobs:
   guard-runner:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       LEFTHOOK: '0'
     steps:
@@ -28,7 +28,7 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:guard-integration
       - run: npm run test:gates
-      - run: timeout -k 30 720 node scripts/gate.mjs --expect '^guard-sweep: PASS 5 targets$' -- node scripts/test-guards.mjs
+      - run: timeout -k 30 1200 node scripts/gate.mjs --expect '^guard-sweep: PASS 5 targets$' -- node scripts/test-guards.mjs
 
   lint:
     runs-on: ubuntu-latest

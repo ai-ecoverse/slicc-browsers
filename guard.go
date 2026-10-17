@@ -200,14 +200,15 @@ type GuardAnswer struct {
 }
 
 type GuardSettle struct {
-	Beacon    string   `json:"beacon,omitempty"`
-	Served    string   `json:"served,omitempty"`
-	Title     string   `json:"title,omitempty"`
-	MS        int      `json:"ms,omitempty"`
-	Variant   bool     `json:"variant,omitempty"`
-	Session   string   `json:"session,omitempty"`
-	Required  bool     `json:"required,omitempty"`
-	DependsOn []string `json:"dependsOn,omitempty"`
+	Beacon    string          `json:"beacon,omitempty"`
+	Served    string          `json:"served,omitempty"`
+	Or        json.RawMessage `json:"or,omitempty"`
+	Title     string          `json:"title,omitempty"`
+	MS        int             `json:"ms,omitempty"`
+	Variant   bool            `json:"variant,omitempty"`
+	Session   string          `json:"session,omitempty"`
+	Required  bool            `json:"required,omitempty"`
+	DependsOn []string        `json:"dependsOn,omitempty"`
 }
 
 type GuardPaused struct {

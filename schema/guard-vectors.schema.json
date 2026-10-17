@@ -585,6 +585,9 @@
                 "served": {
                   "type": "string"
                 },
+                "or": {
+                  "$ref": "#/$defs/check"
+                },
                 "title": {
                   "type": "string"
                 },

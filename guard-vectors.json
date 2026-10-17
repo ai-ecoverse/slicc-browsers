@@ -7806,6 +7806,11 @@
                 "requestStage": "Response"
               }
             ]
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused",
+            "onlyProtected": true
           }
         },
         {
@@ -7875,6 +7880,7 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "candidates": {
+          "dependsOn": ["refused.2"],
           "means": "attempts is not empty",
           "check": {
             "result": "attempts",
@@ -7886,6 +7892,7 @@
           }
         },
         "refused": {
+          "dependsOn": ["refused.2"],
           "means": "every attempt was refused",
           "check": {
             "refused": ["attempts"],
@@ -7893,6 +7900,7 @@
           }
         },
         "answered": {
+          "dependsOn": ["refused.2"],
           "means": "body is 'real-{tag}'",
           "check": {
             "result": "body",
@@ -7902,6 +7910,7 @@
           }
         },
         "overridden": {
+          "dependsOn": ["refused.2"],
           "means": "the fetch reported the overridden response status",
           "check": {
             "result": "body",

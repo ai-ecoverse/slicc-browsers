@@ -192,7 +192,8 @@ type GuardWhere struct {
 }
 
 type GuardRefusal struct {
-	Match string `json:"match"`
+	Match         string `json:"match"`
+	OnlyProtected bool   `json:"onlyProtected,omitempty"`
 }
 
 type GuardHop struct {

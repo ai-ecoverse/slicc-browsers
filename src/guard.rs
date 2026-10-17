@@ -230,6 +230,12 @@ pub struct Step {
 pub struct Refusal {
     #[serde(rename = "match")]
     pub pattern: String,
+    #[serde(
+        default,
+        rename = "onlyProtected",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub only_protected: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -235,6 +235,18 @@ fn the_guard_vectors_parse_and_round_trip() {
     ] {
         assert!(v.capabilities.contains_key(c));
     }
+    let fetch = v
+        .vectors
+        .iter()
+        .find(|x| x.id == "C5.guessed-id.continue-response")
+        .unwrap();
+    let refusal = fetch.setup[2].refusal.as_ref().unwrap();
+    assert!(fetch.setup[2].refusable);
+    assert!(refusal.only_protected);
+    assert_eq!(refusal.pattern, "^slicc: refused");
+    for observation in fetch.observe.as_ref().unwrap().values() {
+        assert_eq!(observation.depends_on, Some(vec!["refused.2".to_string()]));
+    }
     let newtab = v.vectors.iter().find(|x| x.id == "C8.newtab").unwrap();
     assert!(newtab
         .requires

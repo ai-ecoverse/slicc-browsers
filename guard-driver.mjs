@@ -152,6 +152,32 @@ export function judge(vector, side, observed) {
   return { pass: mismatches.length === 0, refused, skipped, mismatches };
 }
 
+const ranOn = (observed, name) => typeof observed?.[name] === 'boolean';
+
+const refusalRuns = (vector, control, guarded) =>
+  Object.fromEntries(
+    refusals(vector)
+      .filter((name) => control && guarded && ranOn(control, name) !== ranOn(guarded, name))
+      .map((name) => [name, ranOn(control, name) ? 'control-only' : 'guarded-only'])
+  );
+
+const protectedRefusals = (vector) =>
+  new Set(
+    flatten(named([...(vector.setup ?? []), ...(vector.trigger ?? [])]))
+      .filter((step) => step.refusable && step.refusal.onlyProtected)
+      .map((step) => step.refusal.name)
+  );
+
+function controlRefusal(c, g, via, only, onlyProtected) {
+  if (!c) return 'no control';
+  if (c.refused.length > 0 && via !== 'guard') return 'an unguarded control was refused';
+  if (c.refused.some((name) => onlyProtected.has(name)))
+    return 'a protected-only step was refused on the control';
+  if (via === 'guard' && g && only(c, g).length > 0)
+    return `refused only on the control: ${only(c, g).join(', ')}`;
+  return null;
+}
+
 export function result(vector, run) {
   const row = {
     id: vector.id,
@@ -173,33 +199,22 @@ export function result(vector, run) {
   }
   const c = run.control ? judge(vector, 'control', run.control) : null;
   const g = run.guarded ? judge(vector, 'guarded', run.guarded) : null;
-  const ranOn = (observed, name) => typeof observed?.[name] === 'boolean';
   const both = (name) => ranOn(run.control, name) && ranOn(run.guarded, name);
   const only = (a, b) =>
     (a?.refused ?? []).filter((name) => both(name) && !(b?.refused ?? []).includes(name));
-  const ran = Object.fromEntries(
-    refusals(vector)
-      .filter(
-        (name) =>
-          run.control && run.guarded && ranOn(run.control, name) !== ranOn(run.guarded, name)
-      )
-      .map((name) => [name, ranOn(run.control, name) ? 'control-only' : 'guarded-only'])
-  );
+  const ran = refusalRuns(vector, run.control, run.guarded);
+  const onlyProtected = protectedRefusals(vector);
+  const protectedOnly = only(g, c).filter((name) => !onlyProtected.has(name));
   const why = [];
-  let control = c?.pass ? 'pass' : 'fail';
-  if (!c) why.push('no control');
-  else if (c.refused.length > 0 && row.via !== 'guard') {
-    control = 'fail';
-    why.push('an unguarded control was refused');
-  } else if (row.via === 'guard' && g && only(c, g).length > 0) {
-    control = 'fail';
-    why.push(`refused only on the control: ${only(c, g).join(', ')}`);
-  } else why.push(...c.mismatches.map((m) => `control ${m}`));
+  const refusal = controlRefusal(c, g, row.via, only, onlyProtected);
+  const control = c?.pass && !refusal ? 'pass' : 'fail';
+  if (refusal) why.push(refusal);
+  else why.push(...c.mismatches.map((m) => `control ${m}`));
   let guarded = g?.pass ? 'pass' : 'fail';
   if (!g) why.push('no guarded run');
-  else if (row.via === 'guard' && only(g, c).length > 0) {
+  else if (row.via === 'guard' && protectedOnly.length > 0) {
     guarded = 'fail';
-    why.push(`refused only on the protected target: ${only(g, c).join(', ')}`);
+    why.push(`refused only on the protected target: ${protectedOnly.join(', ')}`);
   } else if (row.via === 'unguarded' && g.refused.length > 0 && !c?.pass) {
     guarded = 'fail';
     why.push('refused on the protected target without a passing control');

@@ -131,7 +131,7 @@ A same-site frame shares its parent's process and has no target of its own. Ever
 ## Guard vectors
 
 Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-vectors.schema.json`): bios, slicc-cdp, slicc-extension and slicc-cli. The sources are listed in `sources`:
-- slicc-cli's `protectVectors` at `2d5d981` (`test/integration/testdata/link/protect.js`), with the ids kept;
+- slicc-cli's `protectVectors` at `2d5d981` (`test/integration/testdata/link/protect.js`), with the ids kept, and at `fe33052` for `C3.redirect-popup-stays-out` and `C3.direct-popup-stays-out`: a popup opened straight onto, or through a redirect chain to, a protected origin never reaches the client, not at open and not after the page later navigates itself and auto-attach runs again;
 - slicc-cdp's `test/integration/guard-vectors.json` at `4907a45`, where its `E1`, `E2`, `E3`, `E5` and `B2` are renamed `E1.onload`, `E2.binding`, `E3.bypass-csp`, `E5.console` and `B2.headers`;
 - the cert lane's E and B rows;
 - `C5.continue-request` and `C5.continue-response`, added next to `C5.document`.
@@ -171,7 +171,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
   `hops` routes `url` through `/hop` on each `origin`, with its `code`.
 - `{ "answer": { "url", "stage"?, "cdp"?, "params"?, "hold"? } }`: answer each paused request or auth challenge for `url` with that call; `hold` leaves it paused. Every other paused request continues unchanged.
 - `{ "children": steps, "where"? }`: run these steps on each target auto-attached from then on, then resume it. `where` scopes them to the row's own target: `{ "openerId": "page" }` (opened by the row's page) or `{ "urlPrefix": url }`; other attached targets are resumed and otherwise left alone.
-- `{ "settle": { "beacon"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
+- `{ "settle": { "beacon"?, "served"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the fixture to log a request for the URL `served`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
 - `{ "wait": ms }`.
 - `{ "paused": { "url", "ms" } }`: wait until the client has seen the pause that an `answer` rule for `url` matches (`Fetch.requestPaused` at the rule's stage, or `Fetch.authRequired` for a `Fetch.continueWithAuth` rule). It waits up to `ms`. On the control leg, a pause that never comes fails the row with `paused: no pause for <url> within <ms>ms`. On the guarded leg the guard may hide that pause, so the step waits the full `ms` and doesn't fail. The C5 guessed-id vectors and `C5.auth` use it before their second request, so the probe's interception id falls between the two ids the guess spans.
 - `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.

@@ -142,3 +142,12 @@ test('a dependsOn step that failed rather than was refused fails the row', async
   for (const name of ['allowedBeacon', 'beacon'])
     assert.equal(typeof result.observations.guarded[name], 'boolean', `${name} was skipped`);
 });
+
+for (const id of ['C3.redirect-popup-stays-out', 'C3.direct-popup-stays-out']) {
+  test(`${id}: a guard that never surfaces the protected popup passes, even after a later attach round`, async () => {
+    const { result } = await row(id, { hideOpened: true });
+    passes(result);
+    assert.equal(result.observations.guarded.navigatedLater, true);
+    assert.equal(result.observations.guarded.attached, false);
+  });
+}

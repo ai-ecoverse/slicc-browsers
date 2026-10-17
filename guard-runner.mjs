@@ -621,7 +621,7 @@ class Execution {
     const refused = () => (settle.dependsOn ?? []).some((name) => this.refused[name]);
     const skipped = () => {
       this.notes.push(
-        `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.title ? `title ${settle.title}` : 'load'}`
+        `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.served ? `request ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'}`
       );
     };
     if (refused()) return skipped();
@@ -632,6 +632,7 @@ class Execution {
     }
     const met = await this.poll(async () => {
       if (refused()) return true;
+      if (settle.served) return this.requestCheck({ served: settle.served, tagged: false });
       if (settle.beacon)
         return (
           (await this.requestCheck({ beacon: settle.beacon }, this.actionRequestStart)) &&
@@ -652,7 +653,7 @@ class Execution {
     if (refused()) return skipped();
     if (settle.required && !met)
       this.errors.push(
-        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`
+        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`
       );
   }
 

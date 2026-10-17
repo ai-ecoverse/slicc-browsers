@@ -201,6 +201,7 @@ type GuardAnswer struct {
 
 type GuardSettle struct {
 	Beacon    string   `json:"beacon,omitempty"`
+	Served    string   `json:"served,omitempty"`
 	Title     string   `json:"title,omitempty"`
 	MS        int      `json:"ms,omitempty"`
 	Variant   bool     `json:"variant,omitempty"`

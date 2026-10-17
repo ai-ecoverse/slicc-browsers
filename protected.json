@@ -284,15 +284,15 @@
     },
     {
       "url": "chrome://version/",
-      "protected": false
+      "protected": true
     },
     {
       "url": "chrome-extension://abcdefghijklmnopabcdefghijklmnop/page.html",
-      "protected": false
+      "protected": true
     },
     {
       "url": "file:///tmp/seven.sliccy.ai/index.html",
-      "protected": false
+      "protected": true
     },
     {
       "url": "",
@@ -321,6 +321,170 @@
     {
       "url": "https://vault-feature-x.sliccy.ai/",
       "protected": true
+    },
+    {
+      "url": "chrome://settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://settings/passwords",
+      "protected": true
+    },
+    {
+      "url": "chrome://password-manager/passwords",
+      "protected": true
+    },
+    {
+      "url": "CHROME://Settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://omnibox-popup.top-chrome/",
+      "protected": true
+    },
+    {
+      "url": "chrome-untrusted://print/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome://settings/",
+      "protected": true
+    },
+    {
+      "url": "chrome://newtab/",
+      "protected": false
+    },
+    {
+      "url": "chrome://newtab",
+      "protected": false
+    },
+    {
+      "url": "chrome://newtab-x/",
+      "protected": true
+    },
+    {
+      "url": "edge://settings/passwords",
+      "protected": true
+    },
+    {
+      "url": "edge://wallet/",
+      "protected": true
+    },
+    {
+      "url": "EDGE://Settings/",
+      "protected": true
+    },
+    {
+      "url": "brave://settings/",
+      "protected": true
+    },
+    {
+      "url": "brave://wallet/",
+      "protected": true
+    },
+    {
+      "url": "opera://settings/",
+      "protected": true
+    },
+    {
+      "url": "vivaldi://settings/",
+      "protected": true
+    },
+    {
+      "url": "arc://settings/",
+      "protected": true
+    },
+    {
+      "url": "edge://newtab/",
+      "protected": false
+    },
+    {
+      "url": "brave://newtab/",
+      "protected": false
+    },
+    {
+      "url": "opera://startpage/",
+      "protected": false
+    },
+    {
+      "url": "about:settings",
+      "protected": true
+    },
+    {
+      "url": "about:passwords",
+      "protected": true
+    },
+    {
+      "url": "about:password-manager",
+      "protected": true
+    },
+    {
+      "url": "ABOUT:Settings",
+      "protected": true
+    },
+    {
+      "url": "about:version",
+      "protected": true
+    },
+    {
+      "url": "about:newtab",
+      "protected": false
+    },
+    {
+      "url": "about:blank#x",
+      "protected": false
+    },
+    {
+      "url": "about:srcdoc",
+      "protected": false
+    },
+    {
+      "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/popup.html",
+      "protected": true
+    },
+    {
+      "url": "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html#unlock",
+      "protected": true
+    },
+    {
+      "url": "blob:chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/0b9e0f6c",
+      "protected": true
+    },
+    {
+      "url": "filesystem:chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/temporary/x",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html",
+      "protected": true
+    },
+    {
+      "url": "file:///etc/passwd",
+      "protected": true
+    },
+    {
+      "url": "file:///Users/me/.ssh/id_ed25519",
+      "protected": true
+    },
+    {
+      "url": "file:///C:/Users/me/.aws/credentials",
+      "protected": true
+    },
+    {
+      "url": "FILE:///",
+      "protected": true
+    },
+    {
+      "url": "view-source:file:///etc/hosts",
+      "protected": true
+    },
+    {
+      "url": "view-source:https://example.test/",
+      "protected": false
+    },
+    {
+      "url": "blob:https://example.test/0b9e0f6c",
+      "protected": false
     }
   ],
   "targets": [
@@ -413,7 +577,7 @@
     {
       "url": "about:version",
       "previous": true,
-      "protected": false
+      "protected": true
     },
     {
       "url": "data:text/html,x",
@@ -436,6 +600,51 @@
       "url": "http://127.0.0.1:5711/index.html",
       "previous": true,
       "protected": false
+    },
+    {
+      "url": "chrome://omnibox-popup.top-chrome/",
+      "type": "browser_ui",
+      "protected": true
+    },
+    {
+      "url": "https://example.test/",
+      "type": "browser_ui",
+      "protected": true
+    },
+    {
+      "url": "chrome://newtab/",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "https://example.test/",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/background.js",
+      "type": "service_worker",
+      "protected": true
+    },
+    {
+      "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/background.html",
+      "type": "background_page",
+      "protected": true
+    },
+    {
+      "url": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/offscreen.html",
+      "type": "other",
+      "protected": true
+    },
+    {
+      "url": "file:///Users/me/notes.html",
+      "type": "page",
+      "protected": true
+    },
+    {
+      "url": "file:///Users/me/frame.html",
+      "type": "iframe",
+      "protected": true
     }
   ],
   "cookieDomains": [

@@ -34,11 +34,19 @@ export function protectedOrigins(rules, extraOrigins = []) {
     return u;
   };
 
+  const alias = (u) => {
+    if (!u || scheme(u) !== 'about' || !rules.aboutScheme) return u;
+    if (rules.inheriting.includes(`about:${u.pathname.toLowerCase()}`)) return u;
+    return parse(`${rules.aboutScheme}://${u.pathname}${u.search}${u.hash}`) ?? u;
+  };
+
   const url = (text) => {
-    const u = unwrap(parse(text));
+    const u = alias(unwrap(parse(text)));
     if (!u) return false;
     const s = scheme(u);
     if (rules.anySchemes.includes(s)) return true;
+    if ((rules.protectedSchemes ?? []).includes(s))
+      return !(rules.schemeExceptions ?? []).includes(`${s}://${hostOf(u)}`);
     if (rules.schemes.includes(s) && rules.hosts.includes(hostOf(u))) return true;
     if (rules.schemes.includes(s) && rules.domains.some((d) => under(hostOf(u), d))) return true;
     const o = originOf(u);
@@ -55,7 +63,8 @@ export function protectedOrigins(rules, extraOrigins = []) {
     );
   };
 
-  const target = ({ url: text, previous = false, opener }) => {
+  const target = ({ url: text, previous = false, opener, type }) => {
+    if (type && (rules.targetTypes ?? []).includes(type)) return true;
     if (inheriting(text)) return previous || opener === 'protected' || opener === 'unknown';
     return url(text);
   };

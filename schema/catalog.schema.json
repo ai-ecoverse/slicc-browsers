@@ -180,6 +180,10 @@
         "schemes",
         "innerSchemes",
         "anySchemes",
+        "protectedSchemes",
+        "schemeExceptions",
+        "aboutScheme",
+        "targetTypes",
         "inheriting",
         "refusal"
       ],
@@ -204,6 +208,18 @@
         "schemes": { "$ref": "#/$defs/schemes", "type": "array", "minItems": 1 },
         "innerSchemes": { "$ref": "#/$defs/schemes" },
         "anySchemes": { "$ref": "#/$defs/schemes" },
+        "protectedSchemes": { "$ref": "#/$defs/schemes" },
+        "schemeExceptions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://[a-z0-9.-]+$" }
+        },
+        "aboutScheme": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*$" },
+        "targetTypes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z_]+$" }
+        },
         "inheriting": {
           "type": "array",
           "uniqueItems": true,

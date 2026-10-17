@@ -14,20 +14,24 @@ var guardVectorsJSON []byte
 var guardVectorsSchemaJSON []byte
 
 const (
-	GuardTargetSeven  = "seven"
-	GuardTargetVault  = "vault"
-	GuardTargetVaultX = "vault-x"
-	GuardTargetApex   = "apex"
-	GuardTargetOwn    = "own"
-	GuardOrdinary     = "ordinary"
-	GuardSameSite     = "ordinary-same-site"
-	GuardKindCDP      = "cdp"
-	GuardKindText     = "text"
-	GuardViaGuard     = "guard"
-	GuardViaUnguarded = "unguarded"
-	GuardScopeAny     = "any"
-	GuardControl      = "control"
-	GuardGuarded      = "guarded"
+	GuardTargetSeven               = "seven"
+	GuardTargetVault               = "vault"
+	GuardTargetVaultX              = "vault-x"
+	GuardTargetApex                = "apex"
+	GuardTargetOwn                 = "own"
+	GuardTargetChromeSettings      = "chrome-settings"
+	GuardTargetChromePasswords     = "chrome-passwords"
+	GuardTargetChromeExtensionPage = "chrome-extension-page"
+	GuardTargetFileRoot            = "file-root"
+	GuardOrdinary                  = "ordinary"
+	GuardSameSite                  = "ordinary-same-site"
+	GuardKindCDP                   = "cdp"
+	GuardKindText                  = "text"
+	GuardViaGuard                  = "guard"
+	GuardViaUnguarded              = "unguarded"
+	GuardScopeAny                  = "any"
+	GuardControl                   = "control"
+	GuardGuarded                   = "guarded"
 
 	GuardCapAutoAttach      = "autoAttach"
 	GuardCapBrowserSession  = "browserSession"
@@ -51,6 +55,7 @@ type GuardVectors struct {
 
 type GuardTarget struct {
 	Host        string `json:"host,omitempty"`
+	URL         string `json:"url,omitempty"`
 	Description string `json:"description"`
 }
 
@@ -75,6 +80,7 @@ type GuardVector struct {
 	Control         GuardControlRun             `json:"control"`
 	Expected        GuardExpected               `json:"expected"`
 	Skip            *GuardSkip                  `json:"skip,omitempty"`
+	DefaultContext  bool                        `json:"defaultContext,omitempty"`
 	DesignDependent []string                    `json:"designDependent,omitempty"`
 	Observable      *GuardObservable            `json:"observable,omitempty"`
 	AppliesTo       []string                    `json:"appliesTo,omitempty"`

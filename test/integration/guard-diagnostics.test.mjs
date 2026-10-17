@@ -192,3 +192,52 @@ test('a browser_ui target that auto-attaches and never answers is left alone', {
     await fixture.close();
   }
 });
+
+for (const [scale, passes] of [
+  [1, false],
+  [3, true],
+]) {
+  test(`a beacon that lands 8 s late ${passes ? 'passes' : 'fails'} the control at settleScale ${scale}`, {
+    timeout: 240000,
+  }, async () => {
+    const fixture = await fixtureServer();
+    const browser = await launch(fixture);
+    const client = await connect(browser.ws);
+    const seen = new Map();
+    const late = {
+      log: () =>
+        fixture.log().filter((entry) => {
+          if (!new URL(entry.url).pathname.startsWith('/beacon')) return true;
+          if (!seen.has(entry.url)) seen.set(entry.url, Date.now());
+          return Date.now() - seen.get(entry.url) >= 8000;
+        }),
+    };
+    try {
+      const vector = set.vectors.find((item) => item.id === 'C2.chain-301-302-303');
+      const { results } = await run(
+        { ...set, vectors: [{ ...vector, targets: ['seven'] }], variants: { prompt: 0 } },
+        {
+          client,
+          unguarded: client,
+          targets: origins(fixture),
+          fixture: late,
+          settleScale: scale,
+          capabilities: { autoAttach: true, browserSession: true, browserContexts: true },
+        }
+      );
+      const [row] = results;
+      if (passes) assert.equal(row.control, 'pass', JSON.stringify(row));
+      else {
+        assert.equal(row.control, 'fail', JSON.stringify(row));
+        assert.ok(
+          row.errors.some((error) => /^settle: no beacon from \S+ within 5000ms$/.test(error)),
+          JSON.stringify(row.errors)
+        );
+      }
+    } finally {
+      client.close();
+      await browser.close();
+      await fixture.close();
+    }
+  });
+}

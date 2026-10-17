@@ -13,6 +13,7 @@ import {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
+const observeMs = 5000;
 const q = JSON.stringify;
 const at = (value, path = '') =>
   path
@@ -115,6 +116,7 @@ class Execution {
     this.expectWhere = [...(vector.setup ?? []), ...(vector.trigger ?? [])].some(
       (step) => step.children && step.where
     );
+    this.scale = options.settleScale ?? 1;
     this.childRuns = new Map();
     this.named = new Map();
     this.processed = new Set();
@@ -167,8 +169,12 @@ class Execution {
     return out;
   }
 
+  bound(ms) {
+    return Math.round(ms * this.scale);
+  }
+
   async poll(predicate, ms = 1500) {
-    const deadline = Date.now() + ms;
+    const deadline = Date.now() + this.bound(ms);
     do {
       if (await predicate()) return true;
       await sleep(25);
@@ -513,7 +519,7 @@ class Execution {
             this.rule(event)?.url === url
         );
     if (!(await this.poll(seen, ms)) && this.side === 'control')
-      this.errors.push(`paused: no pause for ${url} within ${ms}ms`);
+      this.errors.push(`paused: no pause for ${url} within ${this.bound(ms)}ms`);
   }
 
   async answer(event) {
@@ -651,7 +657,7 @@ class Execution {
     if (refused() && !alt) return skipped();
     if (settle.variant) await sleep(this.delay);
     if (settle.title && !this.reader) {
-      await sleep(settle.ms ?? 1500);
+      await sleep(this.bound(settle.ms ?? 1500));
       return;
     }
     const met = await this.poll(async () => {
@@ -677,7 +683,7 @@ class Execution {
     if (refused() && !alt) return skipped();
     if (settle.required && !met)
       this.errors.push(
-        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${settle.ms ?? 1500}ms`
+        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${this.bound(settle.ms ?? 1500)}ms`
       );
   }
 
@@ -795,7 +801,10 @@ class Execution {
     if (!waits.length) return true;
     let timer;
     const expired = new Promise((resolve) => {
-      timer = setTimeout(() => resolve(false), this.options.namedResultMs ?? namedResultMs);
+      timer = setTimeout(
+        () => resolve(false),
+        this.bound(this.options.namedResultMs ?? namedResultMs)
+      );
     });
     const done = await Promise.race([Promise.all(waits).then(() => true), expired]);
     clearTimeout(timer);
@@ -814,9 +823,22 @@ class Execution {
       .filter((name) => typeof name === 'string' && this.named.has(name));
     if (!names.length || (await this.namedSettled(names))) return true;
     this.errors.push(
-      `${names.join(', ')} did not complete within ${this.options.namedResultMs ?? namedResultMs}ms`
+      `${names.join(', ')} did not complete within ${this.bound(this.options.namedResultMs ?? namedResultMs)}ms`
     );
     return false;
+  }
+
+  async observe(name, check) {
+    const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
+      name
+    ];
+    if (want !== true || check?.observer !== 'fixture') return this.check(check);
+    let seen = false;
+    await this.poll(async () => {
+      seen = await this.check(check);
+      return seen === true;
+    }, observeMs);
+    return seen;
   }
 
   async check(check) {
@@ -1022,7 +1044,7 @@ class Execution {
       for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
         if (!supported(observation.requires, this.options.capabilities)) continue;
         if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
-        observed[name] = await this.check(observation.check);
+        observed[name] = await this.observe(name, observation.check);
         if (observation.eitherWhen && this.side === 'guarded')
           observed[`${name}.either`] = await this.check(observation.eitherWhen);
       }
@@ -1391,6 +1413,11 @@ function validateBlocked(vectors) {
 
 function validate(set, opts) {
   if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
+  if (
+    opts.settleScale !== undefined &&
+    !(Number.isFinite(opts.settleScale) && opts.settleScale > 0)
+  )
+    throw new TypeError('settleScale must be a positive number');
   for (const vector of set.vectors)
     for (const [name, observation] of Object.entries(vector.observe ?? {}))
       if (!observation.check) throw new TypeError(`${vector.id}: ${name} lacks a check`);

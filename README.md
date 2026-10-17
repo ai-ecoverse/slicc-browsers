@@ -81,7 +81,7 @@ Every feature builds for `wasm32-wasip1`.
 - `rank`: `tiers`, 1 to 6: `sevenOpen` (an endpoint with a seven tab), `endpoint` (any other endpoint), `chrome` (installed `chromeId`), `chromium` (other installed Chromium browsers), `electron` (installed Electron apps), `six` (an endpoint in SLICC six's profile, with or without a seven tab; see [SLICC six's profiles](#slicc-sixs-profiles)).
 - `discovery`:
   - `activePortFile` (`DevToolsActivePort`): its first line is the port (1 to 65535) and its second the browser's websocket path, which starts with `/`. A file without both is ignored. A file is live only when its port answers `/json/version` with a `webSocketDebuggerUrl` whose path is that websocket path; otherwise it's stale and ignored. When the port accepts connections but serves no `/json/version`, the endpoint is listed as `wsOnly`, with `ws://127.0.0.1:<port><path>`;
-  - `probePorts` (9222 to 9229, probed by `slicc` only);
+  - `probePorts` (9222 to 9229);
   - every endpoint's `cdp` is `<scheme>://<host>:<port>`, with the host in lower case and `localhost` and `::1` written as `127.0.0.1`, whatever form the URL was found in. Endpoints with the same host and port, written that way, are one endpoint. A `ws://` `--cdp` URL that is listed as `wsOnly` keeps its websocket URL as given;
   - `sourceRank`: when two sources find the same host and port, the lower rank wins, and on a tie the first found;
   - `names`: an endpoint's name when it isn't from a known browser's user-data dir: `electron` when the user agent contains `electronUserAgent`, else `products[<product>]` for the product before the `/` in `/json/version`'s `Browser`, else that product, else `fallback`;
@@ -131,7 +131,7 @@ A same-site frame shares its parent's process and has no target of its own. Ever
 ## Guard vectors
 
 Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-vectors.schema.json`): bios, slicc-cdp, slicc-extension and slicc-cli. The sources are listed in `sources`:
-- slicc-cli's `protectVectors` at `2d5d981` (`test/integration/testdata/link/protect.js`), with the ids kept;
+- slicc-cli's `protectVectors` at `2d5d981` (`test/integration/testdata/link/protect.js`), with the ids kept, and at `fe33052` for `C3.redirect-popup-stays-out` and `C3.direct-popup-stays-out`: a popup opened straight onto, or through a redirect chain to, a protected origin never reaches the client, not at open and not after the page later navigates itself and auto-attach runs again;
 - slicc-cdp's `test/integration/guard-vectors.json` at `4907a45`, where its `E1`, `E2`, `E3`, `E5` and `B2` are renamed `E1.onload`, `E2.binding`, `E3.bypass-csp`, `E5.console` and `B2.headers`;
 - the cert lane's E and B rows;
 - `C5.continue-request` and `C5.continue-response`, added next to `C5.document`.
@@ -171,7 +171,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
   `hops` routes `url` through `/hop` on each `origin`, with its `code`.
 - `{ "answer": { "url", "stage"?, "cdp"?, "params"?, "hold"? } }`: answer each paused request or auth challenge for `url` with that call; `hold` leaves it paused. Every other paused request continues unchanged.
 - `{ "children": steps, "where"? }`: run these steps on each target auto-attached from then on, then resume it. `where` scopes them to the row's own target: `{ "openerId": "page" }` (opened by the row's page) or `{ "urlPrefix": url }`; other attached targets are resumed and otherwise left alone.
-- `{ "settle": { "beacon"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
+- `{ "settle": { "beacon"?, "served"?, "title"?, "ms"?, "variant"?, "session"? } }`: wait for a beacon from `beacon`, for the fixture to log a request for the URL `served`, for the page `title`, or for the session to detach. It waits up to `ms` (10000 by default), then another 600 ms. `variant` waits the run's detach variant instead.
 - `{ "wait": ms }`.
 - `{ "paused": { "url", "ms" } }`: wait until the client has seen the pause that an `answer` rule for `url` matches (`Fetch.requestPaused` at the rule's stage, or `Fetch.authRequired` for a `Fetch.continueWithAuth` rule). It waits up to `ms`. On the control leg, a pause that never comes fails the row with `paused: no pause for <url> within <ms>ms`. On the guarded leg the guard may hide that pause, so the step waits the full `ms` and doesn't fail. The C5 guessed-id vectors and `C5.auth` use it before their second request, so the probe's interception id falls between the two ids the guess spans.
 - `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.
@@ -191,7 +191,7 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 
 **The control rule.** Every vector has a control on an ordinary origin: the same setup and trigger against an unprotected origin must succeed. A missing or failing control fails the id. With `via: "guard"`, the control runs through the guard. With `via: "unguarded"`, the runner runs setup and trigger through its own CDP against the ordinary origin and against the protected stand-in, and both must show the effect. The runner reports the control's transport as `via`.
 
-**Refusals.** Each refusable step has a refusal name: its `as`, or `refused.<i>`, where `i` is its index in the vector's steps, setup then trigger, with each `children` step's steps right after it, counted from 0 before `on` is applied. When a guard refuses the step and the error matches `refusal.match`, the runner sets that name to `true` in the leg's observations. On that leg, an observation whose `dependsOn` lists the name is skipped; every other observation is checked as usual. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. With `via: "guard"`, a refusal on one leg only fails that leg. The comparison only counts steps that ran on both legs. A step that ran on one leg only (for example a `children` step on the control's popup, when the guarded leg never gets that popup attached) doesn't fail the row by itself, and the row reports it in `ran`, as `{ "refused.5": "control-only" }` or `"guarded-only"`. Observations that depend on such a step follow their `dependsOn` on each leg. A guard that allows the step must pass its control through the guard.
+**Refusals.** Each refusable step has a refusal name: its `as`, or `refused.<i>`, where `i` is its index in the vector's steps, setup then trigger, with each `children` step's steps right after it, counted from 0 before `on` is applied. When a guard refuses the step and the error matches `refusal.match`, the runner sets that name to `true` in the leg's observations. On that leg, an observation whose `dependsOn` lists the name is skipped; every other observation is checked as usual. A guard that refuses the step on every origin passes in one of two ways: through the guard, with the step refused on both legs, or with an unguarded control and the guard's matched refusal on the guarded leg. With `via: "guard"`, a refusal on one leg only fails that leg. The comparison only counts steps that ran on both legs. A step that ran on one leg only (for example a `children` step on the control's popup, when the guarded leg never gets that popup attached) doesn't fail the row by itself, and the row reports it in `ran`, as `{ "refused.5": "control-only" }` or `"guarded-only"`. Observations that depend on such a step follow their `dependsOn` on each leg. A refusable step that fails without a matching refusal, for example with an internal error or a timeout, is not a refusal: it fails the row with `<name> failed without a refusal: <message>`. A step skipped because an earlier step failed therefore never passes through `ran`, and only a matched refusal skips the observations that depend on it. A guard that allows the step must pass its control through the guard.
 
 **Liveness.** A runner checks `live` through its own CDP, never through the guard path: either the protected document loaded (title, marker or URL), or the guard returned its own refusal for a refusable step. A failing `live` fails the id.
 
@@ -285,7 +285,11 @@ target. In observations and liveness checks, an `any` alternative that reference
 a `null` origin is dropped and the rest are evaluated; the row skips only when
 every alternative of an `any`, or a required (`all`, `not` or plain) check, needs it. Tags and cookie names are unique per leg. `variant`
 selects one variant or an array; omission selects all. `parallel` defaults to 1.
-`log(row)` receives completed rows. Besides `control`, `guarded`, `live`, `why` and `errors`, a row may carry `ran` (steps that ran on one leg only) and `notes` (settles skipped because their registration was refused). A variant supplies the wait before an
+With the `browserContexts` capability each leg runs in its own browser context. A `Target.createBrowserContext` that fails with a timeout is retried once, and the row's `notes` records it; any other failure fails the row.
+
+`onStart(row)` receives each row's `id`, `target`, `variant`, `transport` and `via` as the row starts. `run()` returns a promise that also has `inFlight()`, and its result has `inFlight` too. `inFlight()` lists the rows that are running now, each as `{ id, target, variant, leg, phase, step, clients }`, where `step` is the index of the current step in its `phase` (`setup`, `trigger` or `child`), and `clients` lists each client's pending CDP calls as `{ method, session, ageMs }` (`client`, plus `unguarded` when it is a separate client). With `rowTimeoutMs`, a row still running after that many milliseconds fails on its own. Its `errors` hold `row timed out after <ms>ms: <the in-flight view>`, `inFlight` holds the view, and the clients that `clientFactory` made for it are closed. The run then goes on to the next row. It is off by default, and a client passed as `client` is never closed.
+
+`log(row)` receives completed rows. Besides `control`, `guarded`, `live`, `why` and `errors`, a row may carry `ran` (steps that ran on one leg only) and `notes` (settles skipped because their registration was refused). Both are informational: they explain a row's verdict, and adopters (bios, slicc-cli, slicc-cdp) must not count them as failures, or as passes. The verdict is `control`, `guarded` and `live`. A variant supplies the wait before an
 explicit `Target.detachFromTarget` step and for a `settle.variant` step.
 
 Every runnable vector has a declarative `liveCheck`; every observation has a
@@ -439,7 +443,7 @@ A six endpoint has tier `six`, whatever its seven tabs. **A program never choose
 
 ## Output schema 1
 
-`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6).
+`schema/browsers.schema.json` describes `slicc browsers --json`, which `playwright-cli list --json` also prints. [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) is the authoritative spec for it; this schema is a copy and follows it. Fields can be added; `source` is one of `devtools-active-port`, `flag`, `probe` and `process`. `tier` is 1 to 6, and `six: true` marks an endpoint in SLICC six's profile (tier 6). An endpoint may carry `tabs`: every page target except those on protected origins. Seven's own tabs are protected, so they are in `sevenTabs` only, never in `tabs`. `playwright-cli list --json` prints it, and a corpus case that checks it needs `tabs`.
 
 ## The corpus
 
@@ -447,7 +451,7 @@ Each case is a fake machine: a home tree, `DevToolsActivePort` files, fake `/jso
 
 **`case.json`:**
 - `description`, and `os?`: the OSes the case runs on (`darwin`, `linux`, `windows`; default all).
-- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes, `slicc` only), `origins` (extra seven origins), `installed` (ranking installed browsers), `six` (finding and marking SLICC six's profiles). A program skips a case that needs something it doesn't do.
+- `needs`: what a program must support to run the case: `user-data-dirs` (`DevToolsActivePort` in browsers' default user-data dirs), `seven-profiles` (in the profile roots), `flag` (`--cdp` URLs), `process`, `probe` (port probes), `origins` (extra seven origins), `installed` (ranking installed browsers), `six` (finding and marking SLICC six's profiles), `tabs` (each endpoint's `tabs` list). A program skips a case that needs something it doesn't do.
 - `env?`: environment variables for discovery, which sees nothing else from the real environment.
 - `files?`: file contents by path. Every path starts with a token.
 - `cdp?`, `origins?`, `probePorts?`: `--cdp` URLs, extra seven origins, and the ports to probe.
@@ -508,7 +512,7 @@ for case in corpus().cases {
 
 Go 1.26, Rust stable with `wasm32-wasip1`, Node ≥ 24.
 - `npm run corpus` regenerates `corpus.json` from `corpus/`; the pre-commit hook and CI fail when it's stale.
-- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
+- `npm run validate` checks `catalog.json`, `corpus.json`, `protected.json` and `guard-vectors.json` against the schemas, runs the protected-origin vectors through `protected.mjs`, and checks what a schema can't say: unique ids, bundle ids and names, known Windows roots, rising tiers, compiling patterns, known tokens, tier order, `sevenOpen`, `tabs` (which holds no entry of `sevenTabs`), `six` and `auto` in each `expected.json`, and no port from 9222 to 9229.
 - `npm run lint`: the slicc lint tools (Biome, no comments, no unit tests in git, `AGENTS.md`), `gofmt`, `go mod tidy -diff`, `go vet`, golangci-lint, `cargo fmt --check` and clippy.
 - `npm test`: `validate`, the Go tests in `test/integration/`, and `cargo test --all-features`.
 - `npm run build`: the Go module, the crate (also for `wasm32-wasip1`), and `npm pack --dry-run`.

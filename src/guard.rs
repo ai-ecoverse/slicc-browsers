@@ -251,6 +251,8 @@ pub struct Settle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub beacon: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub served: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ms: Option<u64>,

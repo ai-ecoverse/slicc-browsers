@@ -11,6 +11,7 @@ pub const NEED_PROBE: &str = "probe";
 pub const NEED_ORIGINS: &str = "origins";
 pub const NEED_INSTALLED: &str = "installed";
 pub const NEED_SIX: &str = "six";
+pub const NEED_TABS: &str = "tabs";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Corpus {

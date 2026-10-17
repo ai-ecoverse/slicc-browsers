@@ -22,6 +22,7 @@ const (
 	NeedOrigins      = "origins"
 	NeedInstalled    = "installed"
 	NeedSix          = "six"
+	NeedTabs         = "tabs"
 )
 
 type Case struct {

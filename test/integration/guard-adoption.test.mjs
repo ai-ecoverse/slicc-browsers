@@ -64,3 +64,9 @@ test('a proven block without a detach satisfies detached', async () => {
 test('a cross-site iframe the client cannot attach to is the error frame', async () => {
   passes(await row('C4.static-cross-site', { refuseFrameAttach: true }));
 });
+
+for (const id of ['C4.static-same-site', 'C4.script-same-site']) {
+  test(`${id}: a same-site iframe in its own process is the error frame through the observer`, async () => {
+    passes(await row(id, { refuseFrameAttach: true }));
+  });
+}

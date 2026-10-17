@@ -8,6 +8,11 @@
       "path": "test/integration/testdata/link/protect.js"
     },
     {
+      "repo": "ai-ecoverse/slicc-cli",
+      "ref": "fe33052afd7bf94e98f38f85e95d29df7cb9e8c2",
+      "path": "test/integration/testdata/link/protect.js"
+    },
+    {
       "repo": "ai-ecoverse/slicc-cdp",
       "ref": "4907a45d5ab8547483eaa013d4378deafe9f82d8",
       "path": "test/integration/guard-vectors.json"
@@ -4826,6 +4831,302 @@
       }
     },
     {
+      "id": "C3.redirect-popup-stays-out",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed opener with auto-attach opens a popup on a redirect chain that ends on a page that later navigates itself to another path of its origin, then auto-attaches again without detaching"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            }
+          ],
+          "where": {
+            "openerId": "page"
+          },
+          "requires": ["autoAttach"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/page?k=deferred&defer=3000&n={tag}&to={target}/doc?n={tag}-later",
+          "hops": [
+            {
+              "origin": "{ordinary}",
+              "code": 302
+            },
+            {
+              "origin": "{cross}",
+              "code": 307
+            }
+          ]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}-later",
+            "ms": 15000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        },
+        {
+          "wait": 1000
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": false,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "requires": ["autoAttach", "browserSession"],
+      "observe": {
+        "committed": {
+          "means": "the stand-in served the popup's first page on {target}",
+          "dependsOn": [],
+          "check": {
+            "served": "/page",
+            "origin": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "navigatedLater": {
+          "means": "the popup navigated itself to {target}/doc?n={tag}-later",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}-later",
+            "observer": "fixture"
+          }
+        },
+        "attached": {
+          "means": "the client got Target.attachedToTarget for the popup on {target}, at open or later",
+          "dependsOn": ["refused.2"],
+          "requires": ["autoAttach"],
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "committed": true,
+          "navigatedLater": true,
+          "attached": true
+        }
+      },
+      "expected": {
+        "committed": true,
+        "navigatedLater": true,
+        "attached": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}-later",
+            "observer": "fixture"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "C3.direct-popup-stays-out",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an allowed opener with auto-attach opens a popup straight on a page that later navigates itself to another path of its origin, then auto-attaches again without detaching"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Page.enable"
+            }
+          ],
+          "where": {
+            "openerId": "page"
+          },
+          "requires": ["autoAttach"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/page?k=deferred&defer=3000&n={tag}&to={target}/doc?n={tag}-later"
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}-later",
+            "ms": 15000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        },
+        {
+          "wait": 1000
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": false,
+            "waitForDebuggerOnStart": false,
+            "flatten": true
+          },
+          "session": "browser",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["autoAttach", "browserSession"]
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "requires": ["autoAttach", "browserSession"],
+      "observe": {
+        "committed": {
+          "means": "the stand-in served the popup's first page on {target}",
+          "dependsOn": [],
+          "check": {
+            "served": "/page",
+            "origin": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "navigatedLater": {
+          "means": "the popup navigated itself to {target}/doc?n={tag}-later",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}-later",
+            "observer": "fixture"
+          }
+        },
+        "attached": {
+          "means": "the client got Target.attachedToTarget for the popup on {target}, at open or later",
+          "dependsOn": ["refused.2"],
+          "requires": ["autoAttach"],
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "committed": true,
+          "navigatedLater": true,
+          "attached": true
+        }
+      },
+      "expected": {
+        "committed": true,
+        "navigatedLater": true,
+        "attached": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}-later",
+            "observer": "fixture"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
       "id": "C4.static-cross-site",
       "family": "C",
       "kind": "cdp",
@@ -5458,11 +5759,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }
@@ -5690,11 +6004,24 @@
           "means": "a child frame is a chrome-error page for {target}/doc?n={tag}",
           "dependsOn": ["refused.8"],
           "check": {
-            "result": "frameTree",
-            "path": "result",
-            "equals": {
-              "$regex": "chrome-error://"
-            },
+            "any": [
+              {
+                "result": "frameTree",
+                "path": "result",
+                "equals": {
+                  "$regex": "chrome-error://"
+                },
+                "observer": "client"
+              },
+              {
+                "frameBlocked": {
+                  "url": "{target}/doc?n={tag}",
+                  "session": "page",
+                  "frame": true
+                },
+                "observer": "unguarded"
+              }
+            ],
             "observer": "client"
           }
         }

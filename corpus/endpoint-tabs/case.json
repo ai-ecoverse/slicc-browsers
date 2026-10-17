@@ -1,0 +1,68 @@
+{
+  "description": "tabs lists every page target except those on protected origins; seven's own tabs are only in sevenTabs, and iframes, workers and other protected pages are left out",
+  "needs": ["flag", "tabs"],
+  "cdp": ["127.0.0.1:9331"],
+  "http": {
+    "127.0.0.1:9331": {
+      "version": {
+        "Browser": "Chrome/154.0.8037.98",
+        "Protocol-Version": "1.3",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "V8-Version": "15.4.79.1",
+        "WebKit-Version": "537.36 (@a1b2c3)",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9331/devtools/browser/t1"
+      },
+      "list": [
+        {
+          "id": "P1",
+          "type": "page",
+          "url": "https://lars.sliccy.ai/",
+          "title": "seven",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P1"
+        },
+        {
+          "id": "P2",
+          "type": "page",
+          "url": "https://example.test/docs",
+          "title": "docs",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P2"
+        },
+        {
+          "id": "P3",
+          "type": "page",
+          "url": "https://www.sliccy.ai/",
+          "title": "SLICC",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P3"
+        },
+        {
+          "id": "P4",
+          "type": "page",
+          "url": "https://vault.sliccy.ai/",
+          "title": "vault",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P4"
+        },
+        {
+          "id": "P5",
+          "type": "page",
+          "url": "about:blank",
+          "title": "",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P5"
+        },
+        {
+          "id": "P6",
+          "type": "iframe",
+          "url": "https://example.test/frame",
+          "title": "frame",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P6"
+        },
+        {
+          "id": "P7",
+          "type": "service_worker",
+          "url": "https://example.test/sw.js",
+          "title": "worker",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/P7"
+        }
+      ]
+    }
+  }
+}

@@ -546,6 +546,29 @@ class Execution {
       .some((e) => e.method === 'Target.detachedFromTarget' && e.params?.sessionId === session);
   }
 
+  record(step, out, session, phase, gone) {
+    const refused =
+      !gone &&
+      (step.refusable
+        ? isRefusal(out, step)
+        : /refused/.test(String(out.error?.message ?? out.error)));
+    this.trace.push({
+      phase,
+      declared: Boolean(step.refusable),
+      session,
+      out,
+      refused,
+      ...(gone ? { detached: true } : {}),
+    });
+    if (step.refusable) this.refused[step.refusal.name] = refused;
+    if (step.refusable && !out.ok && !refused && !gone)
+      this.errors.push(
+        `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
+      );
+    if (step.as && !out.result?.pending) this.calls[step.as] = out;
+    if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
+  }
+
   async execute(list, childSession, phase = 'child') {
     if (phase === 'trigger') await this.childrenSettled();
     for (const raw of list) {
@@ -555,23 +578,13 @@ class Execution {
       const session = childSession ?? this.session(step.session);
       const out = await this.operation(step, session, phase);
       if (!out) continue;
-      const gone = Boolean(childSession) && !out.ok && this.detached(childSession);
-      const refused =
-        !gone &&
-        (step.refusable
-          ? isRefusal(out, step)
-          : /refused/.test(String(out.error?.message ?? out.error)));
-      this.trace.push({
-        phase,
-        declared: Boolean(step.refusable),
-        session,
+      this.record(
+        step,
         out,
-        refused,
-        ...(gone ? { detached: true } : {}),
-      });
-      if (step.refusable) this.refused[step.refusal.name] = refused;
-      if (step.as && !out.result?.pending) this.calls[step.as] = out;
-      if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
+        session,
+        phase,
+        Boolean(childSession) && !out.ok && this.detached(childSession)
+      );
       this.options.debug?.({ step, out, side: this.side });
     }
   }

@@ -130,6 +130,8 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
+        if (failure) throw new Error(failure);
         if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
           await pause(options.refuseLatencyMs ?? 0);
           throw refusal('browser-wide call');

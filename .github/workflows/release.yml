@@ -59,7 +59,7 @@ jobs:
 
       - run: cargo build --target wasm32-wasip1 --all-features
 
-      - run: npx semantic-release
+      - run: npx semantic-release 2>&1 | tee "$RUNNER_TEMP/semantic-release.log"
         if: inputs.tag == ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -83,6 +83,13 @@ jobs:
           if [ -z "$tag" ]; then
             echo "no release tag on HEAD"
             exit 0
+          fi
+          if [ ! -s "$RUNNER_TEMP/semantic-release.log" ]; then
+            echo "::error::semantic-release left no log"
+            exit 1
+          fi
+          if grep -qF "Created tag $tag" "$RUNNER_TEMP/semantic-release.log"; then
+            node scripts/gate.mjs --expect "major-guard: PASS ${tag//./\\.} fits " --in "$RUNNER_TEMP/semantic-release.log"
           fi
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "release $tag"

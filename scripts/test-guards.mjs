@@ -27,3 +27,4 @@ const worker = async () => {
 await Promise.all([worker(), worker()]);
 process.stdout.write(`whole sweep elapsed ${Date.now() - started}ms\n`);
 if (failed) process.exit(failed);
+process.stdout.write(`guard-sweep: PASS ${targets.length} targets\n`);

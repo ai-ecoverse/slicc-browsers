@@ -345,5 +345,5 @@ const observerRows = guard.vectors.filter(
 ).length;
 process.stdout.write(`guard observers: ${observerRows} runnable vectors require unguarded CDP\n`);
 process.stdout.write(
-  `ok: catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases, the protected-origin vectors and ${guardIds.size} guard vectors\n`
+  `validate: PASS catalog.json (${ids.length} browsers), ${corpus.cases.length} corpus cases, the protected-origin vectors and ${guardIds.size} guard vectors\n`
 );

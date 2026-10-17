@@ -1,6 +1,7 @@
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export function moduleMajor(goMod) {
   const match = goMod.match(/^module\s+(\S+)/m);
@@ -22,10 +23,18 @@ export async function verifyRelease(_config, { cwd, nextRelease, logger }) {
       `major-guard: v${nextRelease.version} needs module path ${want}, go.mod declares ${path}`
     );
   }
-  logger.log(`major-guard: v${nextRelease.version} fits ${path}`);
+  logger.log(`major-guard: PASS v${nextRelease.version} fits ${path}`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+const main = (url) => {
+  try {
+    return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(url));
+  } catch {
+    return false;
+  }
+};
+
+if (process.argv[1] && main(import.meta.url)) {
   try {
     await verifyRelease(
       {},

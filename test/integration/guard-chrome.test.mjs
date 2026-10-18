@@ -31,6 +31,7 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
     ]) {
       const fixed = missing.length === 0;
       const guard = emulatedGuard(browser, {
+        catalogAttachOnly: !fixed,
         protectedOrigins: {
           ...rules,
           schemeExceptions: rules.schemeExceptions.filter((value) => !missing.includes(value)),
@@ -56,6 +57,22 @@ test('new tab pages stay attachable and navigable with the catalog, but fail wit
       } finally {
         await guard.stop();
       }
+    }
+    const plain = await run(
+      { ...data, vectors, variants: { prompt: 0 } },
+      {
+        client: browser.client,
+        unguarded: browser.unguarded,
+        targets: origins(fixture),
+        fixture,
+        capabilities,
+      }
+    );
+    assert.equal(plain.results.length, 2);
+    for (const row of plain.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'pass', JSON.stringify(row));
+      assert.equal(row.live, 'pass', JSON.stringify(row));
     }
   } finally {
     await browser.close();
@@ -122,14 +139,19 @@ test('C8.newtab is skipped without chromeUrlsAttach and runs with it', {
   }
 });
 
-test('a recorded NTP internal frame needs its exception in either process layout', async () => {
+test('NTP frames need exact exceptions and protected search/error frames refuse the whole tab', async () => {
   const { protectedOrigins: rules } = JSON.parse(
     await readFile(new URL('../../catalog.json', import.meta.url))
   );
   const { urls } = JSON.parse(await readFile(new URL('../../protected.json', import.meta.url)));
-  const frameUrl = urls.find((row) => row.url.includes('/one-google-bar?')).url;
+  const ntpFrameUrl = urls.find((row) => row.url.includes('/one-google-bar?')).url;
   for (const outOfProcess of [false, true]) {
-    for (const fixed of [false, true]) {
+    for (const { frameUrl, fixed, allowed } of [
+      { frameUrl: ntpFrameUrl, fixed: false, allowed: false },
+      { frameUrl: ntpFrameUrl, fixed: true, allowed: true },
+      { frameUrl: 'chrome-search://most-visited/', fixed: true, allowed: false },
+      { frameUrl: 'chrome-error://chromewebdata/', fixed: true, allowed: false },
+    ]) {
       const unguarded = {
         events: [],
         send: async (method, params, sessionId) => {
@@ -176,7 +198,7 @@ test('a recorded NTP internal frame needs its exception in either process layout
       try {
         const attach = () =>
           guard.client.send('Target.attachToTarget', { targetId: 'ntp', flatten: true });
-        if (fixed) {
+        if (allowed) {
           const { sessionId } = await attach();
           await guard.client.send('Page.navigate', { url: 'https://example.test/' }, sessionId);
           assert.deepEqual(
@@ -194,11 +216,6 @@ test('a recorded NTP internal frame needs its exception in either process layout
   }
 });
 
-const privileged = (url) =>
-  /^(view-source:)?(chrome|chrome-untrusted|chrome-extension|devtools|file):/i.test(
-    String(url ?? '')
-  );
-
 test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no guard fails them', {
   timeout: 300000,
 }, async () => {
@@ -206,20 +223,19 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
   const browser = await launch(fixture);
   try {
     const { targetInfos } = await browser.unguarded.send('Target.getTargets');
-    const ui = new Set(
-      targetInfos.filter((info) => info.type === 'browser_ui').map((info) => info.targetId)
+    assert.ok(
+      targetInfos.some((info) => info.type === 'browser_ui'),
+      'this Chrome has no browser_ui target'
     );
-    assert.ok(ui.size > 0, 'this Chrome has no browser_ui target');
+    const { protectedOrigins } = JSON.parse(
+      await readFile(new URL('../../catalog.json', import.meta.url))
+    );
     const guard = emulatedGuard(browser, {
       protectedHosts: [new URL(origins(fixture).seven).host],
-      refuse: (method, params) =>
-        ((method === 'Page.navigate' || method === 'Target.createTarget') &&
-          privileged(params.url)) ||
-        (method === 'Target.attachToTarget' && ui.has(params.targetId)),
-      hideTypes: ['browser_ui'],
+      protectedOrigins,
     });
     const vectors = data.vectors.filter((v) => v.id.startsWith('C8.') && v.id !== 'C8.newtab');
-    assert.equal(vectors.length, 5);
+    assert.equal(vectors.length, 6);
     const rows = async (client) =>
       (
         await run(
@@ -235,6 +251,35 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
       }
     } finally {
       await guard.stop();
+    }
+    const stale = emulatedGuard(browser, {
+      protectedOrigins: {
+        ...protectedOrigins,
+        protectedSchemes: protectedOrigins.protectedSchemes.filter(
+          (scheme) => scheme !== 'chrome-search'
+        ),
+      },
+    });
+    try {
+      const execution = await run(
+        {
+          ...data,
+          vectors: vectors.filter((vector) => vector.id === 'C8.chrome-search'),
+          variants: { prompt: 0 },
+        },
+        {
+          client: stale.client,
+          unguarded: browser.unguarded,
+          targets: origins(fixture),
+          fixture,
+          capabilities,
+        }
+      );
+      assert.equal(execution.results.length, 1);
+      assert.equal(execution.results[0].control, 'pass', JSON.stringify(execution.results));
+      assert.equal(execution.results[0].guarded, 'fail', JSON.stringify(execution.results));
+    } finally {
+      await stale.stop();
     }
     for (const row of await rows(browser.client)) {
       assert.equal(row.control, 'pass', JSON.stringify(row));

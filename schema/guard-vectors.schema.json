@@ -170,6 +170,7 @@
         "chrome-new-tab-page",
         "chrome-settings",
         "chrome-passwords",
+        "chrome-search",
         "chrome-extension-page",
         "file-root"
       ]

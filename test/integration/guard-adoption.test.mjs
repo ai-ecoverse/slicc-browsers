@@ -8,6 +8,9 @@ import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
+const { protectedOrigins } = JSON.parse(
+  await readFile(new URL('../../catalog.json', import.meta.url))
+);
 
 async function row(id, options) {
   const fixture = await fixtureServer();
@@ -16,6 +19,11 @@ async function row(id, options) {
     const targets = origins(fixture);
     const guard = emulatedGuard(browser, {
       protectedHosts: [new URL(targets.seven).host],
+      protectedOrigins: {
+        ...protectedOrigins,
+        domains: [],
+        hosts: [new URL(targets.seven).hostname],
+      },
       ...options,
     });
     try {
@@ -39,6 +47,62 @@ const passes = (result) => {
   assert.equal(result.guarded, 'pass', JSON.stringify(result));
   assert.equal(result.live, 'pass', JSON.stringify(result));
 };
+
+test('catalog adoption preserves C1-C5 blocks, including protected chrome-error documents', {
+  timeout: 300000,
+}, async () => {
+  const ids = [
+    'C1.href',
+    'C2.302',
+    'C3.popup-self-nav',
+    'C4.iframe',
+    'C4.static-cross-site',
+    'C4.static-same-site',
+    'C4.script-same-site',
+    'C5.document',
+  ];
+  const vectors = data.vectors
+    .filter((vector) => ids.includes(vector.id))
+    .map((vector) => ({ ...vector, targets: ['seven'] }));
+  assert.equal(vectors.length, ids.length);
+  const fixture = await fixtureServer();
+  try {
+    for (const { vector, guarded } of vectors.flatMap((vector) =>
+      [false, true].map((guarded) => ({ vector, guarded }))
+    )) {
+      const browser = await launch(fixture);
+      const targets = origins(fixture);
+      const guard = guarded
+        ? emulatedGuard(browser, {
+            protectedHosts: [new URL(targets.seven).host],
+            protectedOrigins: {
+              ...protectedOrigins,
+              domains: [],
+              hosts: [new URL(targets.seven).hostname],
+            },
+          })
+        : undefined;
+      const client = guard?.client ?? browser.client;
+      try {
+        const execution = await run(
+          { ...data, vectors: [vector], variants: { prompt: 0 } },
+          { client, unguarded: browser.unguarded, targets, fixture, capabilities }
+        );
+        assert.equal(execution.results.length, 1);
+        for (const result of execution.results) {
+          assert.equal(result.control, 'pass', JSON.stringify(result));
+          assert.equal(result.guarded, guarded ? 'pass' : 'fail', JSON.stringify(result));
+          if (guarded) assert.equal(result.live, 'pass', JSON.stringify(result));
+        }
+      } finally {
+        await guard?.stop();
+        await browser.close();
+      }
+    }
+  } finally {
+    await fixture.close();
+  }
+});
 
 test('a guard that refuses Network.clearBrowserCookies on both legs passes C6.clear-cookies', async () => {
   passes(

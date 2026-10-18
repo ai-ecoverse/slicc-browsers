@@ -61,6 +61,10 @@
       "url": "chrome://settings/",
       "description": "Chrome's settings page, a privileged chrome: page"
     },
+    "chrome-search": {
+      "url": "chrome-search://most-visited/",
+      "description": "Chrome's internal search UI, including NTP search-provider resources"
+    },
     "chrome-passwords": {
       "url": "chrome://password-manager/",
       "description": "Chrome's password manager, a privileged chrome: page"
@@ -12449,6 +12453,87 @@
         "title": "doc",
         "via": "unguarded",
         "observer": "unguarded"
+      }
+    },
+    {
+      "id": "C8.chrome-search",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "text": "a plain tab requests an internal search UI URL; Chrome may return an unavailable data-source error, but the guard must refuse before forwarding"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}"
+          },
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["chrome-search"],
+      "observe": {
+        "accepted": {
+          "means": "Chrome answered Page.navigate rather than a guard refusal, even if its internal data source is unavailable",
+          "dependsOn": ["nav"],
+          "check": {
+            "result": "nav",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "the navigation was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["nav"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its explicit refusal, or Chrome answered the forwarded navigation request",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "accepted": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "accepted": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "result": "nav",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {

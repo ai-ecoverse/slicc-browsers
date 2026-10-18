@@ -327,6 +327,146 @@
       "protected": true
     },
     {
+      "url": "chrome-search://local-ntp/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-search://local-ntp/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-search%3A%2F%2Flocal-ntp%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-search://most-visited/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-search://most-visited/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-search%3A%2F%2Fmost-visited%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-search://remote-ntp/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-search://remote-ntp/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-search%3A%2F%2Fremote-ntp%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-search://new-tab-page/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-search://new-tab-page/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-search%3A%2F%2Fnew-tab-page%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-native://newtab/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-native://newtab/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-native%3A%2F%2Fnewtab%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-distiller://reader/?url=https://example.test/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-distiller://reader/?url=https://example.test/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-distiller%3A%2F%2Freader%2F%3Furl%3Dhttps%3A%2F%2Fexample.test%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-error://chromewebdata/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-error://chromewebdata/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-error%3A%2F%2Fchromewebdata%2F",
+      "protected": false
+    },
+    {
+      "url": "chrome-experimental-site-token-provider://token/",
+      "protected": true
+    },
+    {
+      "url": "view-source:chrome-experimental-site-token-provider://token/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=chrome-experimental-site-token-provider%3A%2F%2Ftoken%2F",
+      "protected": false
+    },
+    {
+      "url": "isolated-app://app-id/",
+      "protected": true
+    },
+    {
+      "url": "view-source:isolated-app://app-id/",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=isolated-app%3A%2F%2Fapp-id%2F",
+      "protected": false
+    },
+    {
+      "url": "externalfile://downloads/private.txt",
+      "protected": true
+    },
+    {
+      "url": "view-source:externalfile://downloads/private.txt",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=externalfile%3A%2F%2Fdownloads%2Fprivate.txt",
+      "protected": false
+    },
+    {
+      "url": "content://provider/private.txt",
+      "protected": true
+    },
+    {
+      "url": "view-source:content://provider/private.txt",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/?next=content%3A%2F%2Fprovider%2Fprivate.txt",
+      "protected": false
+    },
+    {
+      "url": "android-app://com.example/https/example.test/",
+      "protected": false
+    },
+    {
+      "url": "googlechrome://example.test/",
+      "protected": false
+    },
+    {
       "url": "chrome://settings/passwords",
       "protected": true
     },
@@ -516,6 +656,86 @@
     }
   ],
   "targets": [
+    {
+      "url": "chrome-search://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/chrome-search",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "chrome-native://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/chrome-native",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "chrome-distiller://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/chrome-distiller",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "chrome-error://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/chrome-error",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "chrome-experimental-site-token-provider://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/chrome-experimental-site-token-provider",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "isolated-app://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/isolated-app",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "externalfile://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/externalfile",
+      "type": "page",
+      "protected": false
+    },
+    {
+      "url": "content://private/",
+      "type": "iframe",
+      "protected": true
+    },
+    {
+      "url": "https://ordinary.example.test/content",
+      "type": "page",
+      "protected": false
+    },
     {
       "url": "https://seven.sliccy.ai/",
       "protected": true

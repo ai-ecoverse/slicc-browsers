@@ -23,6 +23,7 @@ const (
 	GuardTargetChromeNewTabPage    = "chrome-new-tab-page"
 	GuardTargetChromeSettings      = "chrome-settings"
 	GuardTargetChromePasswords     = "chrome-passwords"
+	GuardTargetChromeSearch        = "chrome-search"
 	GuardTargetChromeExtensionPage = "chrome-extension-page"
 	GuardTargetFileRoot            = "file-root"
 	GuardOrdinary                  = "ordinary"

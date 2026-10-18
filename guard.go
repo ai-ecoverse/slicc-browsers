@@ -24,6 +24,7 @@ const (
 	GuardTargetChromeSettings      = "chrome-settings"
 	GuardTargetChromePasswords     = "chrome-passwords"
 	GuardTargetChromeSearch        = "chrome-search"
+	GuardTargetNetworkError        = "network-error"
 	GuardTargetChromeExtensionPage = "chrome-extension-page"
 	GuardTargetFileRoot            = "file-root"
 	GuardOrdinary                  = "ordinary"

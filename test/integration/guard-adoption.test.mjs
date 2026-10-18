@@ -48,7 +48,7 @@ const passes = (result) => {
   assert.equal(result.live, 'pass', JSON.stringify(result));
 };
 
-test('catalog adoption preserves C1-C5 blocks, including protected chrome-error documents', {
+test('catalog adoption preserves C1-C5 blocks, including chrome-error block evidence', {
   timeout: 300000,
 }, async () => {
   const ids = [

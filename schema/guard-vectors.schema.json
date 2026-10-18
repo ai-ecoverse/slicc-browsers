@@ -171,6 +171,7 @@
         "chrome-settings",
         "chrome-passwords",
         "chrome-search",
+        "network-error",
         "chrome-extension-page",
         "file-root"
       ]

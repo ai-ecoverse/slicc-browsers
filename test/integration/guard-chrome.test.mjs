@@ -139,7 +139,7 @@ test('C8.newtab is skipped without chromeUrlsAttach and runs with it', {
   }
 });
 
-test('NTP frames need exact exceptions and protected search/error frames refuse the whole tab', async () => {
+test('NTP and ordinary error frames stay reachable while protected search frames refuse the tab', async () => {
   const { protectedOrigins: rules } = JSON.parse(
     await readFile(new URL('../../catalog.json', import.meta.url))
   );
@@ -150,7 +150,7 @@ test('NTP frames need exact exceptions and protected search/error frames refuse 
       { frameUrl: ntpFrameUrl, fixed: false, allowed: false },
       { frameUrl: ntpFrameUrl, fixed: true, allowed: true },
       { frameUrl: 'chrome-search://most-visited/', fixed: true, allowed: false },
-      { frameUrl: 'chrome-error://chromewebdata/', fixed: true, allowed: false },
+      { frameUrl: 'chrome-error://chromewebdata/', fixed: true, allowed: true },
     ]) {
       const unguarded = {
         events: [],
@@ -216,6 +216,72 @@ test('NTP frames need exact exceptions and protected search/error frames refuse 
   }
 });
 
+test('ordinary network-error documents and iframe parents stay readable and recoverable', {
+  timeout: 180000,
+}, async () => {
+  const { protectedOrigins: rules } = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url))
+  );
+  assert.ok(!rules.protectedSchemes.includes('chrome-error'));
+  const vectors = data.vectors.filter((vector) =>
+    ['C8.network-error', 'C8.iframe-error'].includes(vector.id)
+  );
+  assert.equal(vectors.length, 2);
+  const fixture = await fixtureServer();
+  try {
+    for (const mode of ['scheme-wide-error', 'plain', 'catalog']) {
+      const browser = await launch(fixture);
+      const guard =
+        mode === 'plain'
+          ? undefined
+          : emulatedGuard(browser, {
+              protectedOrigins: {
+                ...rules,
+                protectedSchemes:
+                  mode === 'scheme-wide-error'
+                    ? [
+                        ...rules.protectedSchemes.filter((scheme) => scheme !== 'chrome-error'),
+                        'chrome-error',
+                      ]
+                    : rules.protectedSchemes,
+              },
+            });
+      try {
+        const execution = await run(
+          { ...data, vectors, variants: { prompt: 0 } },
+          {
+            client: guard?.client ?? browser.client,
+            unguarded: browser.unguarded,
+            targets: origins(fixture),
+            fixture,
+            capabilities,
+          }
+        );
+        assert.equal(execution.results.length, 2);
+        if (mode === 'scheme-wide-error') {
+          const main = execution.results.find((row) => row.id === 'C8.network-error');
+          assert.equal(main.control, 'fail', JSON.stringify(main));
+          assert.equal(main.guarded, 'fail', JSON.stringify(main));
+          assert.equal(main.observations.guarded.attached, false, JSON.stringify(main));
+          for (const row of execution.results)
+            process.stdout.write(`scheme-wide chrome-error: ${JSON.stringify(row)}\n`);
+        } else {
+          for (const row of execution.results) {
+            assert.equal(row.control, 'pass', JSON.stringify(row));
+            assert.equal(row.guarded, 'pass', JSON.stringify(row));
+            assert.equal(row.live, 'pass', JSON.stringify(row));
+          }
+        }
+      } finally {
+        await guard?.stop();
+        await browser.close();
+      }
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no guard fails them', {
   timeout: 300000,
 }, async () => {
@@ -234,7 +300,11 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
       protectedHosts: [new URL(origins(fixture).seven).host],
       protectedOrigins,
     });
-    const vectors = data.vectors.filter((v) => v.id.startsWith('C8.') && v.id !== 'C8.newtab');
+    const vectors = data.vectors.filter(
+      (v) =>
+        v.id.startsWith('C8.') &&
+        !['C8.newtab', 'C8.network-error', 'C8.iframe-error'].includes(v.id)
+    );
     assert.equal(vectors.length, 6);
     const rows = async (client) =>
       (

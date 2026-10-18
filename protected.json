@@ -400,11 +400,11 @@
     },
     {
       "url": "chrome-error://chromewebdata/",
-      "protected": true
+      "protected": false
     },
     {
       "url": "view-source:chrome-error://chromewebdata/",
-      "protected": true
+      "protected": false
     },
     {
       "url": "https://ordinary.example.test/?next=chrome-error%3A%2F%2Fchromewebdata%2F",
@@ -689,7 +689,7 @@
     {
       "url": "chrome-error://private/",
       "type": "iframe",
-      "protected": true
+      "protected": false
     },
     {
       "url": "https://ordinary.example.test/chrome-error",

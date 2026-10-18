@@ -714,7 +714,6 @@
       "chrome-search",
       "chrome-native",
       "chrome-distiller",
-      "chrome-error",
       "chrome-experimental-site-token-provider",
       "isolated-app",
       "externalfile",

@@ -197,6 +197,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::TARGET_CHROME_SETTINGS,
         guard::TARGET_CHROME_PASSWORDS,
         guard::TARGET_CHROME_SEARCH,
+        guard::TARGET_NETWORK_ERROR,
         guard::TARGET_CHROME_EXTENSION_PAGE,
         guard::TARGET_FILE_ROOT,
     ];

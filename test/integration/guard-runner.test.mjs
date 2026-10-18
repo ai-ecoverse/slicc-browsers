@@ -98,7 +98,10 @@ test('the reference runner checks real Chromium effects without a guard', {
       }
       const rows = execution.results.filter((r) => r.control !== 'skip' && r.control !== 'not-run');
       const failures = rows.filter(
-        (r) => r.control !== 'pass' || r.guarded !== (r.id === 'C8.newtab' ? 'pass' : 'fail')
+        (r) =>
+          r.control !== 'pass' ||
+          r.guarded !==
+            (['C8.newtab', 'C8.network-error', 'C8.iframe-error'].includes(r.id) ? 'pass' : 'fail')
       );
       reports.push({ repeat, counts: execution.summary().counts, results: execution.results });
       if (process.env.GUARD_REPORT)

@@ -11,6 +11,7 @@ pub const TARGET_CHROME_NEW_TAB_PAGE: &str = "chrome-new-tab-page";
 pub const TARGET_CHROME_SETTINGS: &str = "chrome-settings";
 pub const TARGET_CHROME_PASSWORDS: &str = "chrome-passwords";
 pub const TARGET_CHROME_SEARCH: &str = "chrome-search";
+pub const TARGET_NETWORK_ERROR: &str = "network-error";
 pub const TARGET_CHROME_EXTENSION_PAGE: &str = "chrome-extension-page";
 pub const TARGET_FILE_ROOT: &str = "file-root";
 pub const ORDINARY: &str = "ordinary";

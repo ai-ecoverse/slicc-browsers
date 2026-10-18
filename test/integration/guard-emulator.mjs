@@ -133,6 +133,13 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        if (
+          catalog &&
+          !options.catalogAttachOnly &&
+          (method === 'Page.navigate' || method === 'Target.createTarget') &&
+          catalog.url(params?.url)
+        )
+          throw refusal('protected URL');
         if (catalog && method === 'Target.attachToTarget') {
           const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
             targetId: params.targetId,
@@ -219,7 +226,10 @@ export function emulatedGuard(browser, options = {}) {
           return {
             ...result,
             targetInfos: result.targetInfos.filter(
-              (info) => !mentions(info) && !(options.hideTypes ?? []).includes(info.type)
+              (info) =>
+                !mentions(info) &&
+                !catalog?.target(info) &&
+                !(options.hideTypes ?? []).includes(info.type)
             ),
           };
         return result;

@@ -61,6 +61,14 @@
       "url": "chrome://settings/",
       "description": "Chrome's settings page, a privileged chrome: page"
     },
+    "network-error": {
+      "url": "http://nonexistent.invalid/",
+      "description": "an ordinary URL with a failing DNS lookup, used on both reachability legs"
+    },
+    "chrome-search": {
+      "url": "chrome-search://most-visited/",
+      "description": "Chrome's internal search UI, including NTP search-provider resources"
+    },
     "chrome-passwords": {
       "url": "chrome://password-manager/",
       "description": "Chrome's password manager, a privileged chrome: page"
@@ -94,6 +102,7 @@
     "own": "the own target's origin, which is {client}",
     "ordinary": "the ordinary origin the run starts from",
     "ordinary-same-site": "the ordinary-same-site origin",
+    "network-error": "the ordinary failing-network URL, unchanged on the control",
     "client": "the client page's origin, which the runner maps",
     "cross": "another ordinary origin, cross-site with {ordinary}",
     "plain": "an ordinary destination origin, the control target",
@@ -12449,6 +12458,376 @@
         "title": "doc",
         "via": "unguarded",
         "observer": "unguarded"
+      }
+    },
+    {
+      "id": "C8.network-error",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an ordinary tab hits a network error; the error document must remain readable, attachable and navigable"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?tag={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{network-error}"
+        },
+        {
+          "settle": {
+            "ms": 2500
+          }
+        },
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{pageTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "requires": ["browserSession"]
+        },
+        {
+          "page": "eval",
+          "expression": "Boolean(document.body)",
+          "as": "read"
+        },
+        {
+          "cdp": "DOM.getDocument",
+          "params": {
+            "depth": 1
+          },
+          "as": "snapshot"
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?tag={tag}",
+          "as": "navigate"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["network-error"],
+      "requires": ["browserSession"],
+      "observe": {
+        "errorSeen": {
+          "means": "Chrome reported a failed ordinary document request before the tab navigated away",
+          "check": {
+            "event": "Network.loadingFailed",
+            "where": {
+              "params": {
+                "type": "Document",
+                "errorText": {
+                  "$regex": "^net::ERR_"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "the client can reattach to the settled ordinary error tab, including an error iframe",
+          "check": {
+            "result": "attach",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "readable": {
+          "means": "the client can evaluate the error document or its ordinary iframe parent",
+          "check": {
+            "result": "read",
+            "path": "result.result.value",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotted": {
+          "means": "the client can snapshot the error document or its ordinary iframe parent",
+          "check": {
+            "result": "snapshot",
+            "path": "result.root.nodeName",
+            "equals": "#document",
+            "observer": "client"
+          }
+        },
+        "navigated": {
+          "means": "the same tab reached an ordinary document through the client",
+          "check": {
+            "title": "doc",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the client sees an ordinary network error and the observer sees recovery to an ordinary document",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "errorSeen": true,
+          "attached": true,
+          "readable": true,
+          "snapshotted": true,
+          "navigated": true
+        }
+      },
+      "expected": {
+        "errorSeen": true,
+        "attached": true,
+        "readable": true,
+        "snapshotted": true,
+        "navigated": true
+      },
+      "liveCheck": {
+        "title": "doc",
+        "via": "unguarded",
+        "observer": "unguarded"
+      }
+    },
+    {
+      "id": "C8.iframe-error",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an ordinary tab embeds an ordinary iframe whose network request fails; its parent must remain readable, attachable and navigable"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?tag={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{network-error}"
+        },
+        {
+          "settle": {
+            "ms": 2500
+          }
+        },
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{pageTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "requires": ["browserSession"]
+        },
+        {
+          "page": "eval",
+          "expression": "Boolean(document.body)",
+          "as": "read"
+        },
+        {
+          "cdp": "DOM.getDocument",
+          "params": {
+            "depth": 1
+          },
+          "as": "snapshot"
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?tag={tag}",
+          "as": "navigate"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["network-error"],
+      "requires": ["browserSession"],
+      "observe": {
+        "errorSeen": {
+          "means": "Chrome reported a failed ordinary document request before the tab navigated away",
+          "check": {
+            "event": "Network.loadingFailed",
+            "where": {
+              "params": {
+                "type": "Document",
+                "errorText": {
+                  "$regex": "^net::ERR_"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "the client can reattach to the settled ordinary error tab, including an error iframe",
+          "check": {
+            "result": "attach",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "readable": {
+          "means": "the client can evaluate the error document or its ordinary iframe parent",
+          "check": {
+            "result": "read",
+            "path": "result.result.value",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotted": {
+          "means": "the client can snapshot the error document or its ordinary iframe parent",
+          "check": {
+            "result": "snapshot",
+            "path": "result.root.nodeName",
+            "equals": "#document",
+            "observer": "client"
+          }
+        },
+        "navigated": {
+          "means": "the same tab reached an ordinary document through the client",
+          "check": {
+            "title": "doc",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the client sees an ordinary network error and the observer sees recovery to an ordinary document",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "errorSeen": true,
+          "attached": true,
+          "readable": true,
+          "snapshotted": true,
+          "navigated": true
+        }
+      },
+      "expected": {
+        "errorSeen": true,
+        "attached": true,
+        "readable": true,
+        "snapshotted": true,
+        "navigated": true
+      },
+      "liveCheck": {
+        "title": "doc",
+        "via": "unguarded",
+        "observer": "unguarded"
+      }
+    },
+    {
+      "id": "C8.chrome-search",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "text": "a plain tab requests an internal search UI URL; Chrome may return an unavailable data-source error, but the guard must refuse before forwarding"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}"
+          },
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["chrome-search"],
+      "observe": {
+        "accepted": {
+          "means": "Chrome answered Page.navigate rather than a guard refusal, even if its internal data source is unavailable",
+          "dependsOn": ["nav"],
+          "check": {
+            "result": "nav",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "refused": {
+          "means": "the navigation was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["nav"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard returned its explicit refusal, or Chrome answered the forwarded navigation request",
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "accepted": true,
+          "refused": false
+        }
+      },
+      "expected": {
+        "accepted": false,
+        "refused": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "result": "nav",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {

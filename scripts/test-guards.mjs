@@ -10,6 +10,8 @@ const targets = [
   'chrome-new-tab-page',
   'chrome-settings',
   'chrome-passwords',
+  'chrome-search',
+  'network-error',
   'chrome-extension-page',
   'file-root',
 ];

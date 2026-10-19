@@ -662,6 +662,7 @@ class Execution {
           origin: this.vars.ordinary,
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
+          extensionId: this.options.extensionWorldId,
         })
       );
     if (step.guess) return this.guess(step.guess, session);

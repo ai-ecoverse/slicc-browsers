@@ -321,7 +321,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 				t.Fatalf("C9 vector %+v", g)
 			}
 		case "C8.unparseable":
-			if !g.DefaultContext || !g.Trigger[0].Unparseable || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapBrowserSession}) {
+			if !g.DefaultContext || !g.Trigger[0].Unparseable || len(g.Requires) != 0 || len(g.Trigger[0].Requires) != 0 {
 				t.Fatalf("C8.unparseable %+v", g)
 			}
 		case "C8.newtab":

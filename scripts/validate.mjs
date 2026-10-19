@@ -290,7 +290,8 @@ for (const v of guard.vectors ?? []) {
         gv(`${v.id}: ${name} depends on ${d}, which isn't a refusable step`);
     }
   }
-  const needs = new Set(Object.values(v.observe ?? {}).flatMap((o) => o.requires ?? []));
+  const optional = new Set(Object.values(v.observe ?? {}).flatMap((o) => o.requires ?? []));
+  const needs = new Set();
   const top = [...(v.setup ?? []), ...(v.trigger ?? [])];
   for (const st of flat(top)) {
     const want = [];
@@ -309,7 +310,10 @@ for (const v of guard.vectors ?? []) {
     for (const c of st.requires ?? []) needs.add(c);
   }
   const requires = new Set(v.requires ?? []);
-  if (requires.size !== needs.size || [...needs].some((c) => !requires.has(c)))
+  if (
+    [...requires].some((c) => !needs.has(c) && !optional.has(c)) ||
+    [...needs].some((c) => !requires.has(c))
+  )
     gv(
       `${v.id} requires ${[...requires].join(', ') || 'nothing'}, not ${[...needs].join(', ') || 'nothing'}`
     );

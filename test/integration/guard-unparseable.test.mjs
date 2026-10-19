@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { judge } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { protectedOrigins } from '../../protected.mjs';
+import { canonicalURL, rootURL } from '../../unparseable-url.mjs';
 import { launch, origins } from './cdp-client.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 
@@ -60,75 +62,133 @@ test('unparseable URL commands and browser-reported URLs fail closed, unlike rea
   assert.equal(catalog.protectedOrigins.unparseableRefusal, data.unparseableRefusal);
 });
 
-test('C8.unparseable skips before sending when browserSession is unavailable', async () => {
-  const fixture = await fixtureServer();
-  try {
-    const client = { events: [], send: async () => assert.fail('unsupported transport sent CDP') };
-    const execution = await run(
-      { ...set, vectors, variants: { prompt: 0 } },
-      { client, unguarded: client, fixture, targets: origins(fixture), capabilities: {} }
+test('unparseable fixture URLs omit empty and default ports and match Chrome canonical URLs', () => {
+  for (const origin of [
+    'https://ordinary.test',
+    'https://ordinary.test:443',
+    'http://ordinary.test:80',
+  ]) {
+    const root = new URL(origin);
+    const url = rootURL(root, 'exa%20mple.sliccy.ai', '/doc?n=default');
+    assert.equal(url, `${root.protocol}//exa%20mple.sliccy.ai/doc?n=default`);
+    assert.equal(
+      canonicalURL(url),
+      canonicalURL(`${root.protocol}//exa%20mple.sliccy.ai:/doc?n=default`)
     );
-    assert.equal(execution.results.length, 1);
-    assert.equal(execution.results[0].reason, 'not-supported:browserSession');
-  } finally {
-    await fixture.close();
+    assert.equal(
+      canonicalURL(url),
+      canonicalURL(
+        `${root.protocol}//exa mple.sliccy.ai:${root.protocol === 'https:' ? '443' : '80'}/doc?n=default`
+      )
+    );
   }
+  assert.equal(
+    rootURL(new URL('http://ordinary.test:8123'), 'exa%20mple.sliccy.ai', '/doc'),
+    'http://exa%20mple.sliccy.ai:8123/doc'
+  );
+  assert.equal(canonicalURL('HTTPS://example.test:443'), 'https://example.test/');
+});
+
+test('observation-only capabilities skip explicitly unavailable fields, not missing evidence', () => {
+  const vector = vectors[0];
+  assert.deepEqual(vector.requires ?? [], []);
+  assert.deepEqual(vector.trigger[0].requires ?? [], []);
+  assert.deepEqual(vector.observe.listed.requires, ['browserSession']);
+  const observed = { ...vector.expected, listed: 'not-supported' };
+  assert.equal(judge(vector, 'guarded', observed).pass, true);
+  assert.deepEqual(judge(vector, 'guarded', observed).skipped, ['listed']);
+  assert.equal(judge(vector, 'guarded', { ...observed, listed: undefined }).pass, false);
+  assert.equal(judge(vector, 'guarded', { ...observed, cookieRefused: false }).pass, false);
+  assert.equal(
+    judge(vector, 'guarded', { ...observed, cookieRefused: 'not-supported' }).pass,
+    false
+  );
 });
 
 test('real Chrome unparseable documents are refused, hidden, unattachable and deliver no seven cookie', {
-  timeout: 180000,
+  timeout: 300000,
 }, async () => {
   const fixture = await fixtureServer();
   try {
-    for (const mode of ['catalog', 'plain', '1.9.0']) {
-      const browser = await launch(fixture);
-      const rules = { ...catalog.protectedOrigins };
-      if (mode === '1.9.0') {
-        delete rules.unparseable;
-        delete rules.unparseableRefusal;
-      }
-      const guard = mode === 'plain' ? null : emulatedGuard(browser, { protectedOrigins: rules });
-      const evidence = {};
-      try {
-        const execution = await run(
-          { ...set, vectors, variants: { prompt: 0 } },
-          {
-            client: guard?.client ?? browser.client,
-            unguarded: browser.unguarded,
-            fixture,
-            targets: origins(fixture),
-            capabilities: { browserSession: true },
-            rowTimeoutMs: 40000,
-            debug: (entry) => {
-              if (entry.calls?.unparseable?.result)
-                evidence[entry.side] = entry.calls.unparseable.result;
-            },
-          }
-        );
-        const row = execution.results[0];
-        assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
-        assert.equal(evidence.control.responses.length, 5);
-        for (const response of evidence.control.responses) {
-          const allowed =
-            response.canonical === 'exa%20mple.sliccy.ai'
-              ? ['document']
-              : ['document', 'native-rejection'];
-          assert(allowed.includes(response.createOutcome), JSON.stringify(response));
-          assert(allowed.includes(response.navigateOutcome), JSON.stringify(response));
+    for (const browserSession of [true, false]) {
+      for (const mode of ['catalog', 'plain', '1.9.0', 'filtering']) {
+        const browser = await launch(fixture);
+        const rules = { ...catalog.protectedOrigins };
+        if (mode === '1.9.0') {
+          delete rules.unparseable;
+          delete rules.unparseableRefusal;
         }
-        console.log(
-          `${mode} ${evidence.control.browserVersion}: ${JSON.stringify(evidence.control.responses.map(({ input, createOutcome, navigateOutcome }) => ({ input, createOutcome, navigateOutcome })))}`
-        );
-        assert.equal(
-          row.guarded,
-          mode === 'catalog' ? 'pass' : 'fail',
-          JSON.stringify({ mode, row })
-        );
-        assert.equal(row.live, 'pass', JSON.stringify({ mode, row }));
-        assert.equal(execution.summary().pass, mode === 'catalog');
-      } finally {
-        await guard?.stop();
-        await browser.close();
+        const guard = mode === 'plain' ? null : emulatedGuard(browser, { protectedOrigins: rules });
+        const guardedClient = guard?.client ?? browser.client;
+        const client = {
+          events: guardedClient.events,
+          send: (method, params, session) => {
+            if (!browserSession) {
+              assert.notEqual(method, 'Storage.setCookies');
+              assert.notEqual(method, 'Target.getTargets');
+              if (!method.startsWith('Target.')) assert(session, `${method} needs a page session`);
+            }
+            if (mode === 'filtering' && method === 'Network.getCookies')
+              return Promise.resolve({ cookies: [] });
+            return guardedClient.send(method, params, session);
+          },
+        };
+        const evidence = {};
+        try {
+          const execution = await run(
+            { ...set, vectors, variants: { prompt: 0 } },
+            {
+              client,
+              unguarded: browser.unguarded,
+              fixture,
+              targets: Object.fromEntries(
+                Object.entries(origins(fixture)).map(([key, origin]) => [
+                  key,
+                  origin.replace(`:${fixture.port}`, ''),
+                ])
+              ),
+              capabilities: { browserSession },
+              rowTimeoutMs: 40000,
+              debug: (entry) => {
+                if (entry.calls?.unparseable?.result)
+                  evidence[entry.side] = entry.calls.unparseable.result;
+              },
+            }
+          );
+          const row = execution.results[0];
+          assert.equal(row.control, 'pass', JSON.stringify({ mode, browserSession, row }));
+          assert.equal(
+            evidence.guarded.listed,
+            browserSession ? mode === 'plain' || mode === '1.9.0' : 'not-supported'
+          );
+          if (!browserSession) assert.deepEqual(row.notSupported, ['listed']);
+          if (mode === 'filtering') {
+            assert.equal(evidence.guarded.cookieRefused, false);
+            assert.match(row.why, /cookieRefused/);
+          }
+          assert.equal(evidence.control.responses.length, 5);
+          for (const response of evidence.control.responses) {
+            const allowed =
+              response.canonical === 'exa%20mple.sliccy.ai'
+                ? ['document']
+                : ['document', 'native-rejection'];
+            assert(allowed.includes(response.createOutcome), JSON.stringify(response));
+            assert(allowed.includes(response.navigateOutcome), JSON.stringify(response));
+          }
+          console.log(
+            `${mode} ${evidence.control.browserVersion}: ${JSON.stringify(evidence.control.responses.map(({ input, createOutcome, navigateOutcome }) => ({ input, createOutcome, navigateOutcome })))}`
+          );
+          assert.equal(
+            row.guarded,
+            mode === 'catalog' ? 'pass' : 'fail',
+            JSON.stringify({ mode, row })
+          );
+          assert.equal(row.live, 'pass', JSON.stringify({ mode, row }));
+          assert.equal(execution.summary().pass, mode === 'catalog');
+        } finally {
+          await guard?.stop();
+          await browser.close();
+        }
       }
     }
   } finally {

@@ -139,8 +139,10 @@ export function judge(vector, side, observed) {
     const mismatches = observed === true ? [] : [want];
     return { pass: mismatches.length === 0, refused, skipped: [], mismatches };
   }
-  const skipped = Object.keys(want).filter((k) =>
-    (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
+  const skipped = Object.keys(want).filter(
+    (k) =>
+      (observed?.[k] === 'not-supported' && vector.observe?.[k]?.requires?.length > 0) ||
+      (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const mismatches = Object.entries(want)
     .filter(
@@ -227,6 +229,13 @@ export function result(vector, run) {
     guarded,
     live,
     ...(Object.keys(ran).length ? { ran } : {}),
+    ...(Object.values(run.guarded ?? {}).includes('not-supported')
+      ? {
+          notSupported: Object.keys(run.guarded).filter(
+            (name) => run.guarded[name] === 'not-supported'
+          ),
+        }
+      : {}),
     ...(why.length ? { why: why.join('; ') } : {}),
   };
 }

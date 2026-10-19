@@ -166,11 +166,13 @@ test('a profile removal error is a warning rather than a failed browser close', 
       await fixture.close();
     }
   `;
-  const { stdout, stderr } = await promisify(execFile)(process.execPath, [
-    '--input-type=module',
-    '-e',
-    script,
-  ]);
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  const { stdout, stderr } = await promisify(execFile)(
+    process.execPath,
+    ['--input-type=module', '-e', script],
+    { env }
+  );
   assert.equal(stdout.trim(), 'closed');
   assert.match(stderr, /Warning: Chromium profile cleanup/);
 });

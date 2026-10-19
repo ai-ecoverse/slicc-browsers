@@ -443,6 +443,9 @@ invocation: controls must pass and guarded protection expectations must fail; th
 target use `GUARD_TARGET=seven npm run test:guard-target`. The fixture also serves
 `/live` image requests from stand-in documents, independently of injected code.
 
+The integration launcher owns each Chrome process group and temporary profile. `close()` terminates the group, escalates to SIGKILL if necessary and removes the profile; node:test workers also register an after hook for every launch. Process exit, uncaught errors, SIGINT, SIGTERM and SIGHUP reap tracked groups synchronously. An independent POSIX watchdog watches the runner’s pipe and reaps Chrome and its profile even if the runner receives SIGKILL. `launch(fixture, { signal })` also accepts a test’s AbortSignal for timeout cleanup. `guard-lifecycle.test.mjs` interrupts real runner subprocesses and checks every Chrome PID returned by CDP’s `SystemInfo.getProcessInfo` plus profile removal, without consulting a host-wide process list.
+
+
 ```js
 import set from '@ai-ecoverse/slicc-browsers/guard-vectors.json' with { type: 'json' };
 import { run } from '@ai-ecoverse/slicc-browsers/guard-runner';

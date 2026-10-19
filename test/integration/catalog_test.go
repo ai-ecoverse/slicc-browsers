@@ -238,6 +238,9 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 		}
 	}
 	po := sliccbrowsers.Default().ProtectedOrigins
+	if po.Unparseable != "protected" || v.Unparseable != po.Unparseable || v.UnparseableRefusal != po.UnparseableRefusal || po.UnparseableRefusal != "slicc: refused: slicc can't parse this URL, so it could be a protected page" {
+		t.Fatalf("unparseable rule: %+v / %+v", po, v)
+	}
 	if !slices.Contains(po.Domains, "sliccy.ai") || !slices.Contains(po.Hosts, "vault.sliccy.ai") || !slices.Contains(po.Schemes, "https") || po.Refusal != "slicc: refused: target is on seven's origin" {
 		t.Fatalf("protectedOrigins: %+v", po)
 	}
@@ -316,6 +319,10 @@ func TestTheGuardVectorsParse(t *testing.T) {
 		case "C9.world-hidden", "C9.world-select", "C9.world-debugger", "C9.page-drivable":
 			if !g.DefaultContext || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapExtensionWorld}) || g.Trigger[0].ExtensionWorld == "" || g.Control.Via != sliccbrowsers.GuardViaUnguarded {
 				t.Fatalf("C9 vector %+v", g)
+			}
+		case "C8.unparseable":
+			if !g.DefaultContext || !g.Trigger[0].Unparseable || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapBrowserSession}) {
+				t.Fatalf("C8.unparseable %+v", g)
 			}
 		case "C8.newtab":
 			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapChromeURLsAttach) {

@@ -11,6 +11,7 @@ import {
   result,
   steps,
 } from './guard-driver.mjs';
+import { unparseableURLs } from './unparseable-url.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
@@ -600,8 +601,10 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
-    if (step.extensionWorld && !out.ok)
-      this.errors.push(`extensionWorld: ${out.error?.message ?? 'probe failed'}`);
+    if ((step.extensionWorld || step.unparseable) && !out.ok)
+      this.errors.push(
+        `${step.unparseable ? 'unparseable' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
+      );
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
   }
@@ -651,6 +654,18 @@ class Execution {
       await this.settle(step.settle);
       return;
     }
+    if (step.unparseable)
+      return outcome(
+        unparseableURLs({
+          client: this.client,
+          reader: this.reader,
+          session,
+          targetId: this.pageTarget,
+          origin: this.vars.ordinary,
+          tag: this.vars.tag,
+          fixture: this.options.fixture,
+        })
+      );
     if (step.extensionWorld)
       return outcome(
         extensionWorld({
@@ -662,6 +677,7 @@ class Execution {
           origin: this.vars.ordinary,
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
+          extensionId: this.options.extensionWorldId,
         })
       );
     if (step.guess) return this.guess(step.guess, session);

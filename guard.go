@@ -162,6 +162,7 @@ func (e *GuardExpected) UnmarshalJSON(b []byte) error {
 }
 
 type GuardStep struct {
+	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
 	Text           string          `json:"text,omitempty"`
 	CDP            string          `json:"cdp,omitempty"`

@@ -40,9 +40,13 @@ export function protectedOrigins(rules, extraOrigins = []) {
     return parse(`${rules.aboutScheme}://${u.pathname}${u.search}${u.hash}`) ?? u;
   };
 
-  const url = (text) => {
+  const exempt = (text) => text === '' || text === 'null' || text === '://';
+  const failed = (u) => !u || rules.innerSchemes.includes(scheme(u));
+  const unparseable = (text) => !exempt(text) && failed(unwrap(parse(text)));
+
+  const url = (text, { readOnly = false } = {}) => {
     const u = alias(unwrap(parse(text)));
-    if (!u) return false;
+    if (failed(u)) return rules.unparseable === 'protected' && !readOnly && !exempt(text);
     const s = scheme(u);
     if (rules.anySchemes.includes(s)) return true;
     if ((rules.protectedSchemes ?? []).includes(s))
@@ -80,8 +84,10 @@ export function protectedOrigins(rules, extraOrigins = []) {
 
   const storageKey = (key) => {
     const [first, ...rest] = key.split('^');
-    return [first, ...rest.filter((p) => p.startsWith('0')).map((p) => p.slice(1))].some(url);
+    return [first, ...rest.filter((p) => p.startsWith('0')).map((p) => p.slice(1))].some((text) =>
+      url(text, { readOnly: true })
+    );
   };
 
-  return { url, target, cookieDomain, storageKey };
+  return { url, target, cookieDomain, storageKey, unparseable };
 }

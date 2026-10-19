@@ -70,7 +70,13 @@ export function emulatedGuard(browser, options = {}) {
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
-    if (!hosts.includes(new URL(request.url).host)) {
+    let blocked;
+    try {
+      blocked = hosts.includes(new URL(request.url).host) || Boolean(catalog?.url(request.url));
+    } catch {
+      blocked = Boolean(catalog?.url(request.url));
+    }
+    if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
       return;
@@ -224,12 +230,42 @@ export function emulatedGuard(browser, options = {}) {
           (method === 'Page.navigate' || method === 'Target.createTarget') &&
           catalog.url(params?.url)
         )
-          throw refusal('protected URL');
+          throw catalog.unparseable(params?.url)
+            ? new Error(options.protectedOrigins.unparseableRefusal)
+            : refusal('protected URL');
+        if (
+          catalog &&
+          [
+            'Network.getCookies',
+            'Network.setCookie',
+            'Network.deleteCookies',
+            'Fetch.continueRequest',
+            'Network.continueInterceptedRequest',
+            'Network.loadNetworkResource',
+            'PWA.install',
+            'PWA.launch',
+          ].includes(method)
+        ) {
+          const urls = [
+            ...(params?.urls ?? []),
+            params?.url,
+            params?.cookieUrl,
+            params?.installUrlOrOrigin,
+          ].filter((url) => url !== undefined);
+          const blocked = urls.find((url) => catalog.url(url));
+          if (blocked !== undefined)
+            throw catalog.unparseable(blocked)
+              ? new Error(options.protectedOrigins.unparseableRefusal)
+              : refusal('protected URL');
+        }
         if (catalog && method === 'Target.attachToTarget') {
           const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
             targetId: params.targetId,
           });
-          if (catalog.target(targetInfo)) throw refusal('protected target');
+          if (catalog.target(targetInfo))
+            throw catalog.unparseable(targetInfo.url)
+              ? new Error(options.protectedOrigins.unparseableRefusal)
+              : refusal('protected target');
           const attached = await unguarded.send('Target.attachToTarget', {
             targetId: params.targetId,
             flatten: true,
@@ -237,7 +273,9 @@ export function emulatedGuard(browser, options = {}) {
           try {
             const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
             const protectedFrame = (tree) =>
-              catalog.url(tree.frame.url) || (tree.childFrames ?? []).some(protectedFrame);
+              catalog.url(tree.frame.url) ||
+              (tree.frame.securityOrigin && catalog.url(tree.frame.securityOrigin)) ||
+              (tree.childFrames ?? []).some(protectedFrame);
             if (protectedFrame(frameTree)) throw refusal('protected frame');
             const start = unguarded.events.length;
             await unguarded.send(

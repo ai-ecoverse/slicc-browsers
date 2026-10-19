@@ -738,6 +738,8 @@
     "aboutScheme": "chrome",
     "targetTypes": ["browser_ui"],
     "inheriting": ["about:blank", "about:srcdoc"],
+    "unparseable": "protected",
+    "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
     "refusal": "slicc: refused: target is on seven's origin"
   },
   "profiles": {

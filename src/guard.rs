@@ -176,6 +176,8 @@ pub struct Where {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unparseable: bool,
     #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]
     pub extension_world: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,5 +1,7 @@
 import { outcome } from './guard-driver.mjs';
 
+export const DEFAULT_EXTENSION_WORLD_ID = 'ankmbodmgimjemnojmeddfcdlbocolob';
+
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const extension = (context) =>
   context?.origin?.startsWith('chrome-extension://') && !context.auxData?.isDefault;
@@ -7,7 +9,7 @@ const marker =
   'typeof root !== "undefined" && root === document.documentElement && root.dataset.sliccHarnessExtension === chrome.runtime.id';
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 
-async function discover(reader, session) {
+async function discover(reader, session, extensionId) {
   const start = reader.events.length;
   await reader.send('Runtime.enable', {}, session);
   const deadline = Date.now() + 5000;
@@ -18,12 +20,13 @@ async function discover(reader, session) {
         (event) =>
           event.sessionId === session &&
           event.method === 'Runtime.executionContextCreated' &&
-          extension(event.params.context)
+          extension(event.params.context) &&
+          event.params.context.origin === `chrome-extension://${extensionId}`
       )?.params.context;
     if (world) return world;
     await pause(25);
   } while (Date.now() < deadline);
-  throw new Error('extensionWorld: no foreign content-script context');
+  throw new Error(`extensionWorld: no content-script context for ${extensionId}`);
 }
 
 async function drivable(client, session, live) {
@@ -306,12 +309,13 @@ export async function extensionWorld({
   origin,
   side,
   controls,
+  extensionId = DEFAULT_EXTENSION_WORLD_ID,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
   const seen = client.events.length;
   try {
-    const world = await discover(reader, observer);
+    const world = await discover(reader, observer, extensionId);
     const enabled = await outcome(client.send('Runtime.enable', {}, session));
     await pause(100);
     const events = () => client.events.slice(seen).filter((event) => event.sessionId === session);

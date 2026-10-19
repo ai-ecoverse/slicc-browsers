@@ -90,6 +90,7 @@
     "autoAttach": "Target.setAutoAttach, the children steps and child sessions",
     "browserSession": "CDP calls on the browser session",
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
+    "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
     "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't"
   },
   "placeholders": {
@@ -117,6 +118,537 @@
     "browserUi": "the id of one of Chrome's own browser_ui targets, which the runner looks up with its own CDP"
   },
   "vectors": [
+    {
+      "id": "C9.world-hidden",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionWorld": "hidden",
+          "as": "world",
+          "requires": ["extensionWorld"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionWorld"],
+      "observe": {
+        "exists": {
+          "means": "foreign extension world exists",
+          "check": {
+            "result": "world",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "foreign extension world listed",
+          "check": {
+            "result": "world",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "leaks": {
+          "means": "foreign extension world leaks",
+          "check": {
+            "result": "world",
+            "path": "result.leaks",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "defaultSeen": {
+          "means": "foreign extension world defaultSeen",
+          "check": {
+            "result": "world",
+            "path": "result.defaultSeen",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "foreign extension world alive",
+          "check": {
+            "result": "world",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a foreign extension isolated world exists on an ordinary page",
+      "liveCheck": {
+        "result": "world",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "listed": true,
+          "leaks": true,
+          "defaultSeen": true,
+          "alive": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "listed": false,
+        "leaks": false,
+        "defaultSeen": true,
+        "alive": true
+      }
+    },
+    {
+      "id": "C9.world-select",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionWorld": "select",
+          "as": "world",
+          "requires": ["extensionWorld"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionWorld"],
+      "observe": {
+        "exists": {
+          "means": "foreign extension world exists",
+          "check": {
+            "result": "world",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "foreign extension world alive",
+          "check": {
+            "result": "world",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contextIdRefused": {
+          "means": "foreign extension world contextIdRefused",
+          "check": {
+            "result": "world",
+            "path": "result.contextIdRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "uniqueContextIdRefused": {
+          "means": "foreign extension world uniqueContextIdRefused",
+          "check": {
+            "result": "world",
+            "path": "result.uniqueContextIdRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "executionContextIdRefused": {
+          "means": "foreign extension world executionContextIdRefused",
+          "check": {
+            "result": "world",
+            "path": "result.executionContextIdRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "objectIdRefused": {
+          "means": "foreign extension world objectIdRefused",
+          "check": {
+            "result": "world",
+            "path": "result.objectIdRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "argumentRefused": {
+          "means": "foreign extension world argumentRefused",
+          "check": {
+            "result": "world",
+            "path": "result.argumentRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "promiseObjectIdRefused": {
+          "means": "foreign extension world promiseObjectIdRefused",
+          "check": {
+            "result": "world",
+            "path": "result.promiseObjectIdRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "propertiesRefused": {
+          "means": "foreign extension world propertiesRefused",
+          "check": {
+            "result": "world",
+            "path": "result.propertiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "bindingRefused": {
+          "means": "foreign extension world bindingRefused",
+          "check": {
+            "result": "world",
+            "path": "result.bindingRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "resolveNodeRefused": {
+          "means": "foreign extension world resolveNodeRefused",
+          "check": {
+            "result": "world",
+            "path": "result.resolveNodeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contextIdReached": {
+          "means": "foreign extension world contextIdReached",
+          "check": {
+            "result": "world",
+            "path": "result.contextIdReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "uniqueContextIdReached": {
+          "means": "foreign extension world uniqueContextIdReached",
+          "check": {
+            "result": "world",
+            "path": "result.uniqueContextIdReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "executionContextIdReached": {
+          "means": "foreign extension world executionContextIdReached",
+          "check": {
+            "result": "world",
+            "path": "result.executionContextIdReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "objectIdReached": {
+          "means": "foreign extension world objectIdReached",
+          "check": {
+            "result": "world",
+            "path": "result.objectIdReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "argumentReached": {
+          "means": "foreign extension world argumentReached",
+          "check": {
+            "result": "world",
+            "path": "result.argumentReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "promiseObjectIdReached": {
+          "means": "foreign extension world promiseObjectIdReached",
+          "check": {
+            "result": "world",
+            "path": "result.promiseObjectIdReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "propertiesReached": {
+          "means": "foreign extension world propertiesReached",
+          "check": {
+            "result": "world",
+            "path": "result.propertiesReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "bindingReached": {
+          "means": "foreign extension world bindingReached",
+          "check": {
+            "result": "world",
+            "path": "result.bindingReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "resolveNodeReached": {
+          "means": "foreign extension world resolveNodeReached",
+          "check": {
+            "result": "world",
+            "path": "result.resolveNodeReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "guessesRefused": {
+          "means": "numeric and unique context ids guessed from the successful control leg",
+          "check": {
+            "result": "world",
+            "path": "result.guessesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "guessesReached": {
+          "means": "numeric and unique context ids guessed from the successful control leg",
+          "check": {
+            "result": "world",
+            "path": "result.guessesReached",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a foreign extension isolated world exists on an ordinary page",
+      "liveCheck": {
+        "result": "world",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "alive": true,
+          "contextIdRefused": false,
+          "contextIdReached": true,
+          "uniqueContextIdRefused": false,
+          "uniqueContextIdReached": true,
+          "executionContextIdRefused": false,
+          "executionContextIdReached": true,
+          "objectIdRefused": false,
+          "objectIdReached": true,
+          "argumentRefused": false,
+          "argumentReached": true,
+          "promiseObjectIdRefused": false,
+          "promiseObjectIdReached": true,
+          "propertiesRefused": false,
+          "propertiesReached": true,
+          "bindingRefused": false,
+          "bindingReached": true,
+          "resolveNodeRefused": false,
+          "resolveNodeReached": true,
+          "guessesRefused": false,
+          "guessesReached": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "alive": true,
+        "contextIdRefused": true,
+        "uniqueContextIdRefused": true,
+        "executionContextIdRefused": true,
+        "objectIdRefused": true,
+        "argumentRefused": true,
+        "promiseObjectIdRefused": true,
+        "propertiesRefused": true,
+        "bindingRefused": true,
+        "resolveNodeRefused": true,
+        "guessesRefused": true
+      }
+    },
+    {
+      "id": "C9.world-debugger",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionWorld": "debugger",
+          "as": "world",
+          "requires": ["extensionWorld"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionWorld"],
+      "observe": {
+        "exists": {
+          "means": "foreign extension world exists",
+          "check": {
+            "result": "world",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "reachable": {
+          "means": "foreign extension world reachable",
+          "check": {
+            "result": "world",
+            "path": "result.reachable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "protected": {
+          "means": "foreign extension world protected",
+          "check": {
+            "result": "world",
+            "path": "result.protected",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "foreign extension world alive",
+          "check": {
+            "result": "world",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a foreign extension isolated world exists on an ordinary page",
+      "liveCheck": {
+        "result": "world",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "reachable": true,
+          "protected": false,
+          "alive": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "reachable": false,
+        "protected": true,
+        "alive": true
+      }
+    },
+    {
+      "id": "C9.page-drivable",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionWorld": "drivable",
+          "as": "world",
+          "requires": ["extensionWorld"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionWorld"],
+      "observe": {
+        "exists": {
+          "means": "foreign extension world exists",
+          "check": {
+            "result": "world",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "foreign extension world alive",
+          "check": {
+            "result": "world",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "foreign extension world snapshot",
+          "check": {
+            "result": "world",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "foreign extension world click",
+          "check": {
+            "result": "world",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a foreign extension isolated world exists on an ordinary page",
+      "liveCheck": {
+        "result": "world",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "alive": true,
+          "snapshot": true,
+          "click": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "alive": true,
+        "snapshot": true,
+        "click": true
+      }
+    },
     {
       "id": "C1.script-nav",
       "family": "C",

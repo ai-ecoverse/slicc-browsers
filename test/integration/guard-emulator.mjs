@@ -13,6 +13,39 @@ export function emulatedGuard(browser, options = {}) {
   const closed = new Set();
   const shields = new Map();
   const contexts = new Set();
+  const extensionContexts = new Map();
+  const cutSessions = new Set();
+  const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
+  const learnWorlds = () => {
+    for (const event of client.events) {
+      if (event.method !== 'Runtime.executionContextCreated') continue;
+      const context = event.params.context;
+      if (foreignWorld(context)) {
+        extensionContexts.set(`${event.sessionId}:${context.id}`, context);
+        if (options.cutExtensionWorlds) cutSessions.add(event.sessionId);
+      } else if (catalog?.url(context.origin) && context.auxData?.isDefault) {
+        cutSessions.add(event.sessionId);
+      }
+    }
+  };
+  const hidden = (event) => {
+    if (!catalog || options.exposeExtensionWorlds) return false;
+    learnWorlds();
+    const worlds = [...extensionContexts.entries()]
+      .filter(([key]) => key.startsWith(`${event.sessionId}:`))
+      .map(([, context]) => context);
+    return (
+      (event.method === 'Runtime.executionContextCreated' && foreignWorld(event.params.context)) ||
+      (/^(Runtime|Debugger)\./.test(event.method) &&
+        worlds.some(
+          (world) =>
+            event.params.executionContextId === world.id ||
+            event.params.executionContextUniqueId === world.uniqueId ||
+            JSON.stringify(event.params).includes(world.uniqueId)
+        )) ||
+      (event.method.startsWith('Debugger.') && worlds.length > 0)
+    );
+  };
   const events = [];
   const waiters = new Set();
   const mentions = (value) => hosts.some((host) => JSON.stringify(value).includes(host));
@@ -86,7 +119,7 @@ export function emulatedGuard(browser, options = {}) {
           events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
           continue;
         }
-        if (!mentions(event)) {
+        if (!mentions(event) && !hidden(event)) {
           events.push(event);
           for (const waiter of waiters)
             if (waiter.pred(event)) {
@@ -133,6 +166,58 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        learnWorlds();
+        if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+        if (catalog && !options.exposeExtensionWorlds && sessionId) {
+          const worlds = [...extensionContexts.entries()]
+            .filter(([key]) => key.startsWith(`${sessionId}:`))
+            .map(([, context]) => context);
+          if (
+            worlds.some(
+              (world) =>
+                params?.contextId === world.id ||
+                params?.uniqueContextId === world.uniqueId ||
+                params?.executionContextId === world.id ||
+                (method === 'Runtime.addBinding' && params?.executionContextName === world.name)
+            ) ||
+            (method === 'Debugger.enable' && worlds.length > 0)
+          )
+            throw refusal('that execution context belongs to a browser extension');
+          if (
+            (params?.contextId !== undefined ||
+              params?.uniqueContextId !== undefined ||
+              params?.executionContextId !== undefined) &&
+            !client.events.some(
+              (event) =>
+                event.sessionId === sessionId &&
+                event.method === 'Runtime.executionContextCreated' &&
+                (event.params.context.id === (params.contextId ?? params.executionContextId) ||
+                  event.params.context.uniqueId === params.uniqueContextId)
+            )
+          )
+            throw refusal('that execution context is not exposed');
+          const ids = [
+            params?.objectId,
+            params?.promiseObjectId,
+            ...(params?.arguments ?? []).map((argument) => argument.objectId),
+          ].filter(Boolean);
+          for (const objectId of ids) {
+            const origin = await client
+              .send(
+                'Runtime.callFunctionOn',
+                {
+                  objectId,
+                  functionDeclaration: 'function(){return self.chrome?.runtime?.id ?? null}',
+                  returnByValue: true,
+                },
+                sessionId
+              )
+              .catch(() => null);
+            if (!origin) throw refusal('that object is not exposed');
+            if (origin?.result?.value)
+              throw refusal('that execution context belongs to a browser extension');
+          }
+        }
         if (
           catalog &&
           !options.catalogAttachOnly &&
@@ -212,6 +297,7 @@ export function emulatedGuard(browser, options = {}) {
         options.trace?.push({ at: Date.now(), method, params, sessionId });
         if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
         const result = await client.send(method, params, sessionId);
+        learnWorlds();
         await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
         if (
           method === 'Page.navigate' &&

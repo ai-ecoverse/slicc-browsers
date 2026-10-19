@@ -27,6 +27,7 @@ pub const CAP_AUTO_ATTACH: &str = "autoAttach";
 pub const CAP_BROWSER_SESSION: &str = "browserSession";
 pub const CAP_BROWSER_CONTEXTS: &str = "browserContexts";
 pub const CAP_CHROME_URLS_ATTACH: &str = "chromeUrlsAttach";
+pub const CAP_EXTENSION_WORLD: &str = "extensionWorld";
 pub const SESSION_PAGE: &str = "page";
 pub const SESSION_BROWSER: &str = "browser";
 pub const SESSION_PAGE_OR_BROWSER: &str = "page-or-browser";
@@ -175,6 +176,8 @@ pub struct Where {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
+    #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]
+    pub extension_world: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

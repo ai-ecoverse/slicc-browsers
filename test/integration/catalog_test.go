@@ -268,7 +268,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 	if !reflect.DeepEqual(decode(t, back), decode(t, sliccbrowsers.GuardVectorsJSON())) {
 		t.Fatal("guard vectors don't round-trip")
 	}
-	targets := []string{sliccbrowsers.GuardTargetSeven, sliccbrowsers.GuardTargetVault, sliccbrowsers.GuardTargetVaultX, sliccbrowsers.GuardTargetApex, sliccbrowsers.GuardTargetOwn, sliccbrowsers.GuardTargetChromeNewtab, sliccbrowsers.GuardTargetChromeNewTabPage, sliccbrowsers.GuardTargetChromeSettings, sliccbrowsers.GuardTargetChromePasswords, sliccbrowsers.GuardTargetChromeSearch, sliccbrowsers.GuardTargetNetworkError, sliccbrowsers.GuardTargetChromeExtensionPage, sliccbrowsers.GuardTargetFileRoot}
+	targets := []string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardTargetSeven, sliccbrowsers.GuardTargetVault, sliccbrowsers.GuardTargetVaultX, sliccbrowsers.GuardTargetApex, sliccbrowsers.GuardTargetOwn, sliccbrowsers.GuardTargetChromeNewtab, sliccbrowsers.GuardTargetChromeNewTabPage, sliccbrowsers.GuardTargetChromeSettings, sliccbrowsers.GuardTargetChromePasswords, sliccbrowsers.GuardTargetChromeSearch, sliccbrowsers.GuardTargetNetworkError, sliccbrowsers.GuardTargetChromeExtensionPage, sliccbrowsers.GuardTargetFileRoot}
 	for _, tg := range append([]string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardSameSite}, targets...) {
 		if v.Targets[tg].Description == "" {
 			t.Fatalf("target %s: %+v", tg, v.Targets)
@@ -296,7 +296,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}
@@ -312,6 +312,10 @@ func TestTheGuardVectorsParse(t *testing.T) {
 				if !slices.Equal(observation.DependsOn, []string{"refused.2"}) {
 					t.Fatalf("%s depends on %v", name, observation.DependsOn)
 				}
+			}
+		case "C9.world-hidden", "C9.world-select", "C9.world-debugger", "C9.page-drivable":
+			if !g.DefaultContext || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapExtensionWorld}) || g.Trigger[0].ExtensionWorld == "" || g.Control.Via != sliccbrowsers.GuardViaUnguarded {
+				t.Fatalf("C9 vector %+v", g)
 			}
 		case "C8.newtab":
 			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapChromeURLsAttach) {

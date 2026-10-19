@@ -1,3 +1,4 @@
+import { extensionWorld } from './extension-world.mjs';
 import {
   beacon,
   canary,
@@ -15,6 +16,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
 const q = JSON.stringify;
+
 const at = (value, path = '') =>
   path
     .split('.')
@@ -598,6 +600,8 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
+    if (step.extensionWorld && !out.ok)
+      this.errors.push(`extensionWorld: ${out.error?.message ?? 'probe failed'}`);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
   }
@@ -647,6 +651,19 @@ class Execution {
       await this.settle(step.settle);
       return;
     }
+    if (step.extensionWorld)
+      return outcome(
+        extensionWorld({
+          client: this.client,
+          reader: this.reader,
+          session,
+          targetId: this.pageTarget,
+          mode: step.extensionWorld,
+          origin: this.vars.ordinary,
+          side: this.side,
+          controls: (this.clients.extensionWorldControls ??= {}),
+        })
+      );
     if (step.guess) return this.guess(step.guess, session);
     if (step.cdp) return this.cdp(step, session);
     if (step.page) return this.page(step, session, phase);

@@ -187,6 +187,7 @@ fn the_guard_vectors_parse_and_round_trip() {
     let raw: Value = serde_json::from_str(GUARD_VECTORS).unwrap();
     assert_eq!(serde_json::to_value(&v).unwrap(), raw);
     let targets = [
+        guard::ORDINARY,
         guard::TARGET_SEVEN,
         guard::TARGET_VAULT,
         guard::TARGET_VAULT_X,
@@ -234,6 +235,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_BROWSER_SESSION,
         guard::CAP_BROWSER_CONTEXTS,
         guard::CAP_CHROME_URLS_ATTACH,
+        guard::CAP_EXTENSION_WORLD,
     ] {
         assert!(v.capabilities.contains_key(c));
     }
@@ -248,6 +250,18 @@ fn the_guard_vectors_parse_and_round_trip() {
     assert_eq!(refusal.pattern, "^slicc: refused");
     for observation in fetch.observe.as_ref().unwrap().values() {
         assert_eq!(observation.depends_on, Some(vec!["refused.2".to_string()]));
+    }
+    let worlds: Vec<_> = v
+        .vectors
+        .iter()
+        .filter(|x| x.id.starts_with("C9."))
+        .collect();
+    assert_eq!(worlds.len(), 4);
+    for world in worlds {
+        assert!(world.default_context);
+        assert_eq!(world.requires, vec![guard::CAP_EXTENSION_WORLD.to_string()]);
+        assert!(world.trigger[0].extension_world.is_some());
+        assert_eq!(world.control.via, guard::VIA_UNGUARDED);
     }
     let newtab = v.vectors.iter().find(|x| x.id == "C8.newtab").unwrap();
     assert!(newtab

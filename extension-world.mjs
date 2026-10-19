@@ -3,7 +3,8 @@ import { outcome } from './guard-driver.mjs';
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const extension = (context) =>
   context?.origin?.startsWith('chrome-extension://') && !context.auxData?.isDefault;
-const marker = 'typeof chrome.runtime?.id === "string"';
+const marker =
+  'typeof root !== "undefined" && root === document.documentElement && root.dataset.sliccHarnessExtension === chrome.runtime.id';
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 
 async function discover(reader, session) {
@@ -174,7 +175,74 @@ function commands(world, objectId, promiseObjectId, nodeId) {
   ];
 }
 
-async function selectWorld({ client, session, world, side, controls, live }) {
+async function guessWorld({ client, session, world, handles, events }) {
+  const exposed = new Set(
+    events()
+      .filter((event) => event.method === 'Runtime.executionContextCreated')
+      .map((event) => event.params.context.id)
+  );
+  const ids = new Set([
+    ...Array.from({ length: 32 }, (_, index) => index + 1),
+    handles.world.id,
+    world.id,
+    ...exposed,
+  ]);
+  const numeric = [];
+  for (const id of ids) {
+    const probes = [
+      ['Runtime.evaluate', { contextId: id, expression: marker, returnByValue: true }],
+      [
+        'Runtime.callFunctionOn',
+        {
+          executionContextId: id,
+          functionDeclaration: `function(){return ${marker}}`,
+          returnByValue: true,
+        },
+      ],
+    ];
+    for (const [method, params] of probes) {
+      const out = await outcome(client.send(method, params, session));
+      numeric.push({
+        id,
+        method,
+        exposed: exposed.has(id),
+        refused: refused(out),
+        ok: out.ok && !out.result.exceptionDetails && typeof out.result.result?.value === 'boolean',
+        reached: out.ok && out.result.result?.value === true,
+      });
+    }
+  }
+  const unique = [];
+  for (const uniqueContextId of new Set([handles.world.uniqueId, world.uniqueId])) {
+    const out = await outcome(
+      client.send(
+        'Runtime.evaluate',
+        { uniqueContextId, expression: marker, returnByValue: true },
+        session
+      )
+    );
+    unique.push({
+      uniqueContextId,
+      refused: refused(out),
+      reached: out.ok && out.result.result?.value === true,
+    });
+  }
+  return {
+    guessesRefused:
+      numeric.filter((guess) => !guess.exposed).every((guess) => guess.refused) &&
+      unique.every((guess) => guess.refused),
+    guessesReached: [...numeric, ...unique].some((guess) => guess.reached),
+    exposedContextsWork: numeric
+      .filter((guess) => guess.exposed)
+      .every((guess) => guess.ok && !guess.refused),
+    numericGuesses: numeric,
+    uniqueGuesses: unique,
+    controlNumericId: handles.world.id,
+    hiddenNumericId: world.id,
+  };
+}
+
+async function selectWorld({ client, session, world, side, controls, live, events }) {
   let handles = controls.select;
   if (side === 'control') {
     const object = await client.send(
@@ -220,19 +288,11 @@ async function selectWorld({ client, session, world, side, controls, live }) {
               : true);
     result[`${name}Error`] = out.error?.message ?? out.result?.exceptionDetails?.text;
   }
-  const guesses = commands(
-    handles.world,
-    handles.objectId,
-    handles.promiseObjectId,
-    dom.result?.root.nodeId ?? 1
-  ).slice(0, 3);
-  result.guessesRefused = true;
-  result.guessesReached = true;
-  for (const [, method, params] of guesses) {
-    const out = await outcome(client.send(method, params, session));
-    result.guessesRefused &&= refused(out);
-    result.guessesReached &&= out.ok && out.result.result?.value === true;
-  }
+  Object.assign(result, await guessWorld({ client, session, world, handles, events }));
+  const pageMarker = await outcome(
+    client.send('Runtime.evaluate', { expression: marker, returnByValue: true }, session)
+  );
+  result.pageMarkerAbsent = pageMarker.ok && pageMarker.result.result?.value === false;
   result.alive = await live();
   return result;
 }

@@ -415,7 +415,7 @@
           }
         },
         "guessesRefused": {
-          "means": "numeric and unique context ids guessed from the successful control leg",
+          "means": "numeric ids 1..32 not exposed to this client, the same-tab hidden numeric id and extension unique-id guesses receive matched refusals; exposed numeric ids need not be refused",
           "check": {
             "result": "world",
             "path": "result.guessesRefused",
@@ -424,10 +424,28 @@
           }
         },
         "guessesReached": {
-          "means": "numeric and unique context ids guessed from the successful control leg",
+          "means": "numeric sweeps and extension unique-id guesses reach the content-script-only marker on the control, never on the guarded leg",
           "check": {
             "result": "world",
             "path": "result.guessesReached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "exposedContextsWork": {
+          "means": "every numeric context id exposed to this client remains usable",
+          "check": {
+            "result": "world",
+            "path": "result.exposedContextsWork",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageMarkerAbsent": {
+          "means": "the fixture content-script marker is absent from the page default world",
+          "check": {
+            "result": "world",
+            "path": "result.pageMarkerAbsent",
             "equals": true,
             "observer": "client"
           }
@@ -465,7 +483,9 @@
           "resolveNodeRefused": false,
           "resolveNodeReached": true,
           "guessesRefused": false,
-          "guessesReached": true
+          "guessesReached": true,
+          "exposedContextsWork": true,
+          "pageMarkerAbsent": true
         }
       },
       "expected": {
@@ -480,7 +500,10 @@
         "propertiesRefused": true,
         "bindingRefused": true,
         "resolveNodeRefused": true,
-        "guessesRefused": true
+        "guessesRefused": true,
+        "exposedContextsWork": true,
+        "pageMarkerAbsent": true,
+        "guessesReached": false
       }
     },
     {

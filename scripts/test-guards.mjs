@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 const targets = [
+  'ordinary',
   'seven',
   'vault',
   'vault-x',

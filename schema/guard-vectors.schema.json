@@ -81,7 +81,13 @@
     "capabilities": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["autoAttach", "browserSession", "browserContexts", "chromeUrlsAttach"],
+      "required": [
+        "autoAttach",
+        "browserSession",
+        "browserContexts",
+        "chromeUrlsAttach",
+        "extensionWorld"
+      ],
       "properties": {
         "autoAttach": {
           "type": "string",
@@ -95,6 +101,7 @@
           "type": "string",
           "minLength": 1
         },
+        "extensionWorld": { "type": "string", "minLength": 1 },
         "chromeUrlsAttach": {
           "type": "string",
           "minLength": 1
@@ -121,7 +128,13 @@
   },
   "$defs": {
     "capability": {
-      "enum": ["autoAttach", "browserSession", "browserContexts", "chromeUrlsAttach"]
+      "enum": [
+        "autoAttach",
+        "browserSession",
+        "browserContexts",
+        "chromeUrlsAttach",
+        "extensionWorld"
+      ]
     },
     "requires": {
       "type": "array",
@@ -161,6 +174,7 @@
     },
     "target": {
       "enum": [
+        "ordinary",
         "seven",
         "vault",
         "vault-x",
@@ -413,6 +427,22 @@
     },
     "step": {
       "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extensionWorld", "as", "requires"],
+          "properties": {
+            "extensionWorld": {
+              "enum": ["hidden", "select", "debugger", "drivable"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
         {
           "type": "object",
           "additionalProperties": false,

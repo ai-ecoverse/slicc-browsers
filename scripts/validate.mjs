@@ -250,7 +250,7 @@ for (const v of guard.vectors ?? []) {
   const steps = flat([...(v.setup ?? []), ...(v.trigger ?? [])]);
   if (v.observe?.hopped && !steps.some((step) => step.hops))
     gv(`${v.id}: hopped requires a hops step`);
-  const runnable = steps.some((st) => st.cdp || st.page);
+  const runnable = steps.some((st) => st.cdp || st.page || st.extensionWorld);
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);
   const all = [...(v.setup ?? []), ...(v.trigger ?? [])];

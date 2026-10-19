@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { EXTENSION_ID, EXTENSION_PATH } from '@ai-ecoverse/slicc-shared-web/harness';
 import { chromium } from 'playwright-core';
 
 export async function launch(fixture, { spki } = {}) {
@@ -14,7 +15,7 @@ export async function launch(fixture, { spki } = {}) {
       ...(spki ? [`--ignore-certificate-errors-spki-list=${spki}`] : []),
       '--no-sandbox',
       '--disable-gpu',
-      '--disable-extensions',
+      '--enable-unsafe-extension-debugging',
       '--no-first-run',
       '--no-default-browser-check',
       '--remote-debugging-port=0',
@@ -63,6 +64,11 @@ export async function launch(fixture, { spki } = {}) {
       if (!endpoint) await new Promise((resolve) => setTimeout(resolve, 25));
     }
     const client = await connect(endpoint);
+    const loaded = await client.send('Extensions.loadUnpacked', { path: EXTENSION_PATH });
+    if (loaded.id !== EXTENSION_ID) {
+      client.close();
+      throw new Error(`harness extension loaded as ${loaded.id}`);
+    }
     const unguarded = await connect(endpoint);
     return {
       client,

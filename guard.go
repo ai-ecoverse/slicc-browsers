@@ -41,6 +41,7 @@ const (
 	GuardCapBrowserSession   = "browserSession"
 	GuardCapBrowserContexts  = "browserContexts"
 	GuardCapChromeURLsAttach = "chromeUrlsAttach"
+	GuardCapExtensionWorld   = "extensionWorld"
 	GuardSessionPage         = "page"
 	GuardSessionBrowser      = "browser"
 	GuardSessionEither       = "page-or-browser"
@@ -161,31 +162,32 @@ func (e *GuardExpected) UnmarshalJSON(b []byte) error {
 }
 
 type GuardStep struct {
-	Text        string          `json:"text,omitempty"`
-	CDP         string          `json:"cdp,omitempty"`
-	Params      json.RawMessage `json:"params,omitempty"`
-	Refusable   bool            `json:"refusable,omitempty"`
-	Refusal     *GuardRefusal   `json:"refusal,omitempty"`
-	Page        string          `json:"page,omitempty"`
-	URL         string          `json:"url,omitempty"`
-	Hops        []GuardHop      `json:"hops,omitempty"`
-	From        string          `json:"from,omitempty"`
-	Context     string          `json:"context,omitempty"`
-	Expression  string          `json:"expression,omitempty"`
-	Credentials string          `json:"credentials,omitempty"`
-	Status      bool            `json:"status,omitempty"`
-	Background  *bool           `json:"background,omitempty"`
-	Answer      *GuardAnswer    `json:"answer,omitempty"`
-	Children    []GuardStep     `json:"children,omitempty"`
-	Where       *GuardWhere     `json:"where,omitempty"`
-	Settle      *GuardSettle    `json:"settle,omitempty"`
-	Wait        *int            `json:"wait,omitempty"`
-	Paused      *GuardPaused    `json:"paused,omitempty"`
-	Guess       *GuardGuess     `json:"guess,omitempty"`
-	Session     string          `json:"session,omitempty"`
-	As          string          `json:"as,omitempty"`
-	On          string          `json:"on,omitempty"`
-	Requires    []string        `json:"requires,omitempty"`
+	ExtensionWorld string          `json:"extensionWorld,omitempty"`
+	Text           string          `json:"text,omitempty"`
+	CDP            string          `json:"cdp,omitempty"`
+	Params         json.RawMessage `json:"params,omitempty"`
+	Refusable      bool            `json:"refusable,omitempty"`
+	Refusal        *GuardRefusal   `json:"refusal,omitempty"`
+	Page           string          `json:"page,omitempty"`
+	URL            string          `json:"url,omitempty"`
+	Hops           []GuardHop      `json:"hops,omitempty"`
+	From           string          `json:"from,omitempty"`
+	Context        string          `json:"context,omitempty"`
+	Expression     string          `json:"expression,omitempty"`
+	Credentials    string          `json:"credentials,omitempty"`
+	Status         bool            `json:"status,omitempty"`
+	Background     *bool           `json:"background,omitempty"`
+	Answer         *GuardAnswer    `json:"answer,omitempty"`
+	Children       []GuardStep     `json:"children,omitempty"`
+	Where          *GuardWhere     `json:"where,omitempty"`
+	Settle         *GuardSettle    `json:"settle,omitempty"`
+	Wait           *int            `json:"wait,omitempty"`
+	Paused         *GuardPaused    `json:"paused,omitempty"`
+	Guess          *GuardGuess     `json:"guess,omitempty"`
+	Session        string          `json:"session,omitempty"`
+	As             string          `json:"as,omitempty"`
+	On             string          `json:"on,omitempty"`
+	Requires       []string        `json:"requires,omitempty"`
 }
 
 type GuardWhere struct {

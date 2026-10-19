@@ -82,6 +82,7 @@ test('the reference runner checks real Chromium effects without a guard', {
             browserSession: true,
             browserContexts: true,
             chromeUrlsAttach: true,
+            extensionWorld: true,
           },
           parallel: width,
           variant: process.env.GUARD_VARIANT ?? Object.keys(set.variants),
@@ -101,7 +102,9 @@ test('the reference runner checks real Chromium effects without a guard', {
         (r) =>
           r.control !== 'pass' ||
           r.guarded !==
-            (['C8.newtab', 'C8.network-error', 'C8.iframe-error'].includes(r.id) ? 'pass' : 'fail')
+            (['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C9.page-drivable'].includes(r.id)
+              ? 'pass'
+              : 'fail')
       );
       reports.push({ repeat, counts: execution.summary().counts, results: execution.results });
       if (process.env.GUARD_REPORT)

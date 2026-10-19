@@ -1,11 +1,76 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { after } from 'node:test';
 import { EXTENSION_ID, EXTENSION_PATH } from '@ai-ecoverse/slicc-shared-web/harness';
 import { chromium } from 'playwright-core';
 
-export async function launch(fixture, { spki } = {}) {
+const running = new Set();
+
+function killGroup(child, signal = 'SIGKILL') {
+  if (!child.pid) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    try {
+      process.kill(-child.pid, signal);
+    } catch {}
+  }
+  if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+}
+
+function reap() {
+  const entries = [...running];
+  for (const entry of entries) {
+    killGroup(entry.child);
+    if (entry.watchdog) killGroup(entry.watchdog);
+  }
+  const remove = () => {
+    for (const entry of entries)
+      rmSync(entry.directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  };
+  remove();
+  if (entries.length) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+  remove();
+  running.clear();
+}
+
+process.on('exit', reap);
+process.on('uncaughtExceptionMonitor', reap);
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+  ['SIGHUP', 129],
+]) {
+  process.on(signal, () => {
+    reap();
+    process.exit(code);
+  });
+}
+
+function watchdog(child, directory) {
+  if (!child.pid || process.platform === 'win32') return;
+  const dog = spawn(
+    'sh',
+    [
+      '-c',
+      'read -r _; kill -9 -"$1" "$1" 2>/dev/null; sleep 0.2; rm -rf -- "$2"',
+      'slicc-guard-watchdog',
+      String(child.pid),
+      directory,
+    ],
+    { detached: true, stdio: ['pipe', 'ignore', 'ignore'] }
+  );
+  dog.on('error', () => {});
+  dog.stdin.on('error', () => {});
+  dog.unref();
+  dog.stdin.unref?.();
+  return dog;
+}
+
+export async function launch(fixture, { spki, signal } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
   const child = spawn(
     chromium.executablePath(),
@@ -26,8 +91,10 @@ export async function launch(fixture, { spki } = {}) {
       `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP *.control.test 127.0.0.1:${fixture.port}`,
       'about:blank',
     ],
-    { stdio: 'ignore' }
+    { detached: true, stdio: 'ignore' }
   );
+  const entry = { child, directory, watchdog: watchdog(child, directory) };
+  running.add(entry);
   let failure;
   child.on('error', (error) => {
     failure = error;
@@ -35,23 +102,43 @@ export async function launch(fixture, { spki } = {}) {
   let closing;
   const close = () =>
     (closing ??= (async () => {
-      if (child.pid && child.exitCode === null) {
+      if (child.pid && child.exitCode === null && child.signalCode === null) {
         const exited = new Promise((resolve) => child.once('exit', resolve));
-        child.kill('SIGTERM');
-        const timer = setTimeout(() => child.kill('SIGKILL'), 5000);
+        killGroup(child, 'SIGTERM');
+        const timer = setTimeout(() => killGroup(child), 5000);
         await exited;
         clearTimeout(timer);
       }
+      killGroup(child);
+      if (entry.watchdog) killGroup(entry.watchdog);
+      signal?.removeEventListener('abort', abort);
       try {
         await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+        running.delete(entry);
       } catch (error) {
         process.stderr.write(`Warning: Chromium profile cleanup ${directory}: ${error.message}\n`);
       }
     })());
+  let client;
+  let unguarded;
+  const abort = () => {
+    client?.close();
+    unguarded?.close();
+    void close();
+  };
+  if (process.env.NODE_TEST_CONTEXT)
+    after(async () => {
+      client?.close();
+      unguarded?.close();
+      await close();
+    });
+  signal?.addEventListener('abort', abort, { once: true });
   try {
+    signal?.throwIfAborted();
     const deadline = Date.now() + 15000;
     let endpoint;
     while (!endpoint) {
+      signal?.throwIfAborted();
       if (failure) throw failure;
       if (child.exitCode !== null) throw new Error('Chromium exited before CDP startup');
       if (Date.now() > deadline) throw new Error('Chromium CDP startup timed out');
@@ -63,14 +150,16 @@ export async function launch(fixture, { spki } = {}) {
       } catch {}
       if (!endpoint) await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    const client = await connect(endpoint);
+    client = await connect(endpoint);
     const loaded = await client.send('Extensions.loadUnpacked', { path: EXTENSION_PATH });
     if (loaded.id !== EXTENSION_ID) {
       client.close();
       throw new Error(`harness extension loaded as ${loaded.id}`);
     }
-    const unguarded = await connect(endpoint);
+    unguarded = await connect(endpoint);
+    signal?.throwIfAborted();
     return {
+      pid: child.pid,
       client,
       unguarded,
       ws: endpoint,
@@ -82,6 +171,8 @@ export async function launch(fixture, { spki } = {}) {
       },
     };
   } catch (error) {
+    client?.close();
+    unguarded?.close();
     await close();
     throw error;
   }

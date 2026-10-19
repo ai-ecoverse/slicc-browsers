@@ -76,11 +76,28 @@ function route(req, url, send, html) {
   return send(404, 'missing', 'text/plain');
 }
 
+function requestURL(req, scheme) {
+  const origin = `${scheme}://${req.headers.host}`;
+  try {
+    return new URL(req.url, origin);
+  } catch {
+    const path = new URL(req.url, `${scheme}://fixture.invalid`);
+    return {
+      pathname: path.pathname,
+      searchParams: path.searchParams,
+      href: `${origin}${path.pathname}${path.search}${path.hash}`,
+      origin,
+      host: req.headers.host,
+      hostname: req.headers.host.replace(/:\d+$/, ''),
+    };
+  }
+}
+
 export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {
   let entries = [];
   const scheme = tls ? 'https' : 'http';
   const handler = (req, res) => {
-    const url = new URL(req.url, `${scheme}://${req.headers.host}`);
+    const url = requestURL(req, scheme);
     entries.push({
       url: url.href,
       method: req.method,

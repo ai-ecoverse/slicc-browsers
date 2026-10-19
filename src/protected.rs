@@ -8,6 +8,8 @@ pub const OPENER_UNKNOWN: &str = "unknown";
 #[serde(rename_all = "camelCase")]
 pub struct Vectors {
     pub schema: u32,
+    pub unparseable: String,
+    pub unparseable_refusal: String,
     pub origins: Vec<String>,
     pub urls: Vec<UrlVector>,
     pub targets: Vec<TargetVector>,

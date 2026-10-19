@@ -169,6 +169,13 @@ fn the_protected_vectors_parse_and_round_trip() {
         .iter()
         .all(|t| t.opener.as_deref().is_none_or(|o| openers.contains(&o))));
     let po = catalog().protected_origins;
+    assert_eq!(po.unparseable, "protected");
+    assert_eq!(v.unparseable, po.unparseable);
+    assert_eq!(v.unparseable_refusal, po.unparseable_refusal);
+    assert_eq!(
+        po.unparseable_refusal,
+        "slicc: refused: slicc can't parse this URL, so it could be a protected page"
+    );
     assert!(po.domains.iter().any(|d| d == "sliccy.ai"));
     assert!(po.hosts.iter().any(|h| h == "vault.sliccy.ai"));
     assert_eq!(po.refusal, "slicc: refused: target is on seven's origin");
@@ -263,6 +270,13 @@ fn the_guard_vectors_parse_and_round_trip() {
         assert!(world.trigger[0].extension_world.is_some());
         assert_eq!(world.control.via, guard::VIA_UNGUARDED);
     }
+    let unparseable = v.vectors.iter().find(|x| x.id == "C8.unparseable").unwrap();
+    assert!(unparseable.default_context);
+    assert!(unparseable.trigger[0].unparseable);
+    assert_eq!(
+        unparseable.requires,
+        vec![guard::CAP_BROWSER_SESSION.to_string()]
+    );
     let newtab = v.vectors.iter().find(|x| x.id == "C8.newtab").unwrap();
     assert!(newtab
         .requires

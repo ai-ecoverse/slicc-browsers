@@ -430,6 +430,26 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["unparseable", "as", "requires"],
+          "properties": {
+            "unparseable": {
+              "const": true
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires",
+              "type": "array",
+              "contains": {
+                "const": "browserSession"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["extensionWorld", "as", "requires"],
           "properties": {
             "extensionWorld": {

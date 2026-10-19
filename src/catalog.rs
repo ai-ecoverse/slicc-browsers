@@ -191,6 +191,10 @@ pub struct ProtectedOrigins {
     #[serde(default)]
     pub target_types: Vec<String>,
     pub inheriting: Vec<String>,
+    #[serde(default)]
+    pub unparseable: String,
+    #[serde(default)]
+    pub unparseable_refusal: String,
     pub refusal: String,
 }
 

@@ -20,26 +20,30 @@ const (
 )
 
 type ProtectedOrigins struct {
-	Domains          []string `json:"domains"`
-	Hosts            []string `json:"hosts"`
-	Schemes          []string `json:"schemes"`
-	InnerSchemes     []string `json:"innerSchemes"`
-	AnySchemes       []string `json:"anySchemes"`
-	ProtectedSchemes []string `json:"protectedSchemes"`
-	SchemeExceptions []string `json:"schemeExceptions"`
-	AboutScheme      string   `json:"aboutScheme"`
-	TargetTypes      []string `json:"targetTypes"`
-	Inheriting       []string `json:"inheriting"`
-	Refusal          string   `json:"refusal"`
+	Domains            []string `json:"domains"`
+	Hosts              []string `json:"hosts"`
+	Schemes            []string `json:"schemes"`
+	InnerSchemes       []string `json:"innerSchemes"`
+	AnySchemes         []string `json:"anySchemes"`
+	ProtectedSchemes   []string `json:"protectedSchemes"`
+	SchemeExceptions   []string `json:"schemeExceptions"`
+	AboutScheme        string   `json:"aboutScheme"`
+	TargetTypes        []string `json:"targetTypes"`
+	Inheriting         []string `json:"inheriting"`
+	Unparseable        string   `json:"unparseable"`
+	UnparseableRefusal string   `json:"unparseableRefusal"`
+	Refusal            string   `json:"refusal"`
 }
 
 type ProtectedVectors struct {
-	Schema        int            `json:"schema"`
-	Origins       []string       `json:"origins"`
-	URLs          []URLVector    `json:"urls"`
-	Targets       []TargetVector `json:"targets"`
-	CookieDomains []CookieVector `json:"cookieDomains"`
-	StorageKeys   []KeyVector    `json:"storageKeys"`
+	Unparseable        string         `json:"unparseable"`
+	UnparseableRefusal string         `json:"unparseableRefusal"`
+	Schema             int            `json:"schema"`
+	Origins            []string       `json:"origins"`
+	URLs               []URLVector    `json:"urls"`
+	Targets            []TargetVector `json:"targets"`
+	CookieDomains      []CookieVector `json:"cookieDomains"`
+	StorageKeys        []KeyVector    `json:"storageKeys"`
 }
 
 type URLVector struct {

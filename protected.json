@@ -1,7 +1,89 @@
 {
   "schema": 1,
+  "unparseable": "protected",
+  "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
   "origins": ["http://127.0.0.1:5710", "https://seven.example.test"],
   "urls": [
+    {
+      "url": "http://exa mple.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://exa%20mple.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://‍.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://xn--1ug.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://xn--a.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://[::1",
+      "protected": true
+    },
+    {
+      "url": "http://",
+      "protected": true
+    },
+    {
+      "url": "http://a:99999/",
+      "protected": true
+    },
+    {
+      "url": "http://1.2.3.4.5/",
+      "protected": true
+    },
+    {
+      "url": "http://%zz/",
+      "protected": true
+    },
+    {
+      "url": "http://[1::2::3]/",
+      "protected": true
+    },
+    {
+      "url": "http://a^b/",
+      "protected": true
+    },
+    {
+      "url": "blob:http://[::1",
+      "protected": true
+    },
+    {
+      "url": "http://‍.example/",
+      "protected": true
+    },
+    {
+      "url": "https://exa mple.com/",
+      "protected": true
+    },
+    {
+      "url": "https://exa%20mple.com/",
+      "protected": true
+    },
+    {
+      "url": "view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:https://example.com/",
+      "protected": true
+    },
+    {
+      "url": "null",
+      "protected": false
+    },
+    {
+      "url": "://",
+      "protected": false
+    },
+    {
+      "url": "view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:https://example.com/",
+      "protected": false
+    },
     {
       "url": "https://seven.sliccy.ai/",
       "protected": true
@@ -264,7 +346,7 @@
     },
     {
       "url": "blob:null/0b9e0f6c",
-      "protected": false
+      "protected": true
     },
     {
       "url": "blob:https://example.com/0b9e0f6c",
@@ -300,15 +382,15 @@
     },
     {
       "url": "https://",
-      "protected": false
+      "protected": true
     },
     {
       "url": "seven.sliccy.ai",
-      "protected": false
+      "protected": true
     },
     {
       "url": "not a url",
-      "protected": false
+      "protected": true
     },
     {
       "url": "https://vault-preview.sliccy.ai/",
@@ -657,6 +739,74 @@
   ],
   "targets": [
     {
+      "url": "http://exa mple.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://exa%20mple.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://‍.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://xn--1ug.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://xn--a.sliccy.ai/",
+      "protected": true
+    },
+    {
+      "url": "http://[::1",
+      "protected": true
+    },
+    {
+      "url": "http://",
+      "protected": true
+    },
+    {
+      "url": "http://a:99999/",
+      "protected": true
+    },
+    {
+      "url": "http://1.2.3.4.5/",
+      "protected": true
+    },
+    {
+      "url": "http://%zz/",
+      "protected": true
+    },
+    {
+      "url": "http://[1::2::3]/",
+      "protected": true
+    },
+    {
+      "url": "http://a^b/",
+      "protected": true
+    },
+    {
+      "url": "blob:http://[::1",
+      "protected": true
+    },
+    {
+      "url": "http://‍.example/",
+      "protected": true
+    },
+    {
+      "url": "https://exa mple.com/",
+      "protected": true
+    },
+    {
+      "url": "https://exa%20mple.com/",
+      "protected": true
+    },
+    {
+      "url": "view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:https://example.com/",
+      "protected": true
+    },
+    {
       "url": "chrome-search://private/",
       "type": "iframe",
       "protected": true
@@ -978,6 +1128,26 @@
     }
   ],
   "storageKeys": [
+    {
+      "key": "http://[::1",
+      "protected": false
+    },
+    {
+      "key": "https://exa mple.com/",
+      "protected": false
+    },
+    {
+      "key": "blob:http://[::1",
+      "protected": false
+    },
+    {
+      "key": "view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:view-source:https://seven.sliccy.ai/",
+      "protected": false
+    },
+    {
+      "key": "https://example.com/^0http://[::1",
+      "protected": false
+    },
     {
       "key": "https://seven.sliccy.ai/",
       "protected": true

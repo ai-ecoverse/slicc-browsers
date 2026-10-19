@@ -119,6 +119,195 @@
   },
   "vectors": [
     {
+      "id": "C8.unparseable",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-ordinary"
+        }
+      ],
+      "trigger": [
+        {
+          "unparseable": true,
+          "as": "unparseable",
+          "requires": ["browserSession"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["browserSession"],
+      "observe": {
+        "live": {
+          "means": "unparseable URL protection live",
+          "check": {
+            "result": "unparseable",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "createRefused": {
+          "means": "unparseable URL protection createRefused",
+          "check": {
+            "result": "unparseable",
+            "path": "result.createRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "navigateRefused": {
+          "means": "unparseable URL protection navigateRefused",
+          "check": {
+            "result": "unparseable",
+            "path": "result.navigateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "unparseable URL protection listed",
+          "check": {
+            "result": "unparseable",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "unparseable URL protection attached",
+          "check": {
+            "result": "unparseable",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "unparseable URL protection attachRefused",
+          "check": {
+            "result": "unparseable",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "readCookie": {
+          "means": "unparseable URL protection readCookie",
+          "check": {
+            "result": "unparseable",
+            "path": "result.readCookie",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cookieRefused": {
+          "means": "unparseable URL protection cookieRefused",
+          "check": {
+            "result": "unparseable",
+            "path": "result.cookieRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cookieDelivered": {
+          "means": "unparseable URL protection cookieDelivered",
+          "check": {
+            "result": "unparseable",
+            "path": "result.cookieDelivered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cookieRequest": {
+          "means": "unparseable URL protection cookieRequest",
+          "check": {
+            "result": "unparseable",
+            "path": "result.cookieRequest",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "createAnswered": {
+          "means": "Chrome answers the raw and canonical URL probes without a guard refusal, including native invalid-URL responses",
+          "check": {
+            "result": "unparseable",
+            "path": "result.createAnswered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "navigateAnswered": {
+          "means": "Chrome answers the raw and canonical URL probes without a guard refusal, including native invalid-URL responses",
+          "check": {
+            "result": "unparseable",
+            "path": "result.navigateAnswered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "spaceCreated": {
+          "means": "the encoded-space fixture URL commits a real document unguarded",
+          "check": {
+            "result": "unparseable",
+            "path": "result.spaceCreated",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "spaceNavigated": {
+          "means": "the encoded-space fixture URL commits a real document unguarded",
+          "check": {
+            "result": "unparseable",
+            "path": "result.spaceNavigated",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer loads a real Chrome document on the encoded-space host with a seeded seven cookie",
+      "liveCheck": {
+        "result": "unparseable",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "createRefused": false,
+          "navigateRefused": false,
+          "listed": true,
+          "attached": true,
+          "attachRefused": false,
+          "readCookie": true,
+          "cookieRefused": false,
+          "cookieDelivered": true,
+          "cookieRequest": true,
+          "createAnswered": true,
+          "navigateAnswered": true,
+          "spaceCreated": true,
+          "spaceNavigated": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "createRefused": true,
+        "navigateRefused": true,
+        "listed": false,
+        "attached": false,
+        "attachRefused": true,
+        "readCookie": false,
+        "cookieRefused": true,
+        "cookieDelivered": false,
+        "cookieRequest": false
+      }
+    },
+    {
       "id": "C9.world-hidden",
       "family": "C",
       "kind": "cdp",

@@ -4,9 +4,22 @@
   "title": "slicc-browsers protected-origin test vectors, schema 1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "origins", "urls", "targets", "cookieDomains", "storageKeys"],
+  "required": [
+    "schema",
+    "unparseable",
+    "unparseableRefusal",
+    "origins",
+    "urls",
+    "targets",
+    "cookieDomains",
+    "storageKeys"
+  ],
   "properties": {
     "schema": { "const": 1 },
+    "unparseable": { "const": "protected" },
+    "unparseableRefusal": {
+      "const": "slicc: refused: slicc can't parse this URL, so it could be a protected page"
+    },
     "origins": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "urls": {
       "type": "array",

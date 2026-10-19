@@ -173,6 +173,8 @@ for (const { name, case: c, expected } of corpus.cases ?? []) {
 const vectors = read('protected.json');
 check('protected', vectors, 'protected.json');
 const po = catalog.protectedOrigins;
+if (vectors.unparseable !== po.unparseable || vectors.unparseableRefusal !== po.unparseableRefusal)
+  fail('protected.json: unparseable rule and refusal must match catalog.json');
 if (!po.domains.every((d) => po.domains.every((x) => d === x || !d.endsWith(`.${x}`))))
   fail('catalog.json: protectedOrigins.domains lists a domain under another');
 const m = protectedOrigins(po, vectors.origins);
@@ -180,7 +182,15 @@ const byName = protectedOrigins({ ...po, domains: [] });
 for (const h of po.hosts) {
   if (!byName.url(`https://${h}/`) || !byName.cookieDomain(h))
     fail(`catalog.json: ${h} in protectedOrigins.hosts isn't protected without domains`);
-  if (!vectors.urls.some((v) => v.protected && new URL(v.url).hostname === h))
+  if (
+    !vectors.urls.some((v) => {
+      try {
+        return v.protected && new URL(v.url).hostname === h;
+      } catch {
+        return false;
+      }
+    })
+  )
     fail(`protected.json: no vector for ${h}`);
 }
 const vectorChecks = [
@@ -250,7 +260,7 @@ for (const v of guard.vectors ?? []) {
   const steps = flat([...(v.setup ?? []), ...(v.trigger ?? [])]);
   if (v.observe?.hopped && !steps.some((step) => step.hops))
     gv(`${v.id}: hopped requires a hops step`);
-  const runnable = steps.some((st) => st.cdp || st.page || st.extensionWorld);
+  const runnable = steps.some((st) => st.cdp || st.page || st.extensionWorld || st.unparseable);
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);
   const all = [...(v.setup ?? []), ...(v.trigger ?? [])];

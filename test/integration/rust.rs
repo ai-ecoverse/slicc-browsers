@@ -273,10 +273,8 @@ fn the_guard_vectors_parse_and_round_trip() {
     let unparseable = v.vectors.iter().find(|x| x.id == "C8.unparseable").unwrap();
     assert!(unparseable.default_context);
     assert!(unparseable.trigger[0].unparseable);
-    assert_eq!(
-        unparseable.requires,
-        vec![guard::CAP_BROWSER_SESSION.to_string()]
-    );
+    assert!(unparseable.requires.is_empty());
+    assert!(unparseable.trigger[0].requires.is_empty());
     let newtab = v.vectors.iter().find(|x| x.id == "C8.newtab").unwrap();
     assert!(newtab
         .requires

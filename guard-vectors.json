@@ -133,12 +133,10 @@
       "trigger": [
         {
           "unparseable": true,
-          "as": "unparseable",
-          "requires": ["browserSession"]
+          "as": "unparseable"
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["browserSession"],
       "observe": {
         "live": {
           "means": "unparseable URL protection live",
@@ -169,6 +167,7 @@
         },
         "listed": {
           "means": "unparseable URL protection listed",
+          "requires": ["browserSession"],
           "check": {
             "result": "unparseable",
             "path": "result.listed",

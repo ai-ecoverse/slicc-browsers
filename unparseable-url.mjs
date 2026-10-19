@@ -10,7 +10,25 @@ const hosts = [
   ['xn--a.sliccy.ai', 'xn--a.sliccy.ai'],
 ];
 
+export const rootURL = (root, host, path) =>
+  `${root.protocol}//${host}${root.port ? `:${root.port}` : ''}${path}`;
+
+export function canonicalURL(value) {
+  try {
+    return new URL(value).href;
+  } catch {
+    const match = /^(https?:)\/\/([^/?#]+)(.*)$/.exec(value);
+    if (!match) return value;
+    const [, protocol, authority, path] = match;
+    const host = authority.replace(/:\d*$/, '').replaceAll(' ', '%20');
+    const port = /:(\d*)$/.exec(authority)?.[1];
+    const parsed = new URL(`${protocol}//example.test${port ? `:${port}` : ''}${path}`);
+    return rootURL(parsed, host, `${parsed.pathname}${parsed.search}${parsed.hash}`);
+  }
+}
+
 async function document(reader, targetId, expected, allowNativeRejection = false) {
+  expected = canonicalURL(expected);
   const { sessionId } = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   try {
     const deadline = Date.now() + 5000;
@@ -19,7 +37,7 @@ async function document(reader, targetId, expected, allowNativeRejection = false
     do {
       const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
       targetURL = targetInfo.url;
-      if (targetInfo.url !== expected) {
+      if (canonicalURL(targetInfo.url) !== expected) {
         last = { url: targetInfo.url, title: targetInfo.title };
         await pause(25);
         continue;
@@ -41,7 +59,7 @@ async function document(reader, targetId, expected, allowNativeRejection = false
       );
       const value = out.result?.result?.value;
       last = value ?? out;
-      if (out.ok && value?.title === 'doc' && value.href === expected) return value;
+      if (out.ok && value?.title === 'doc' && canonicalURL(value.href) === expected) return value;
       await pause(25);
     } while (Date.now() < deadline);
     if (allowNativeRejection && ['', 'about:blank', 'about:blank#blocked'].includes(targetURL))
@@ -75,10 +93,10 @@ async function destinations({ client, reader, root, tag, targets, session, targe
     out.error?.code === -32000 && /invalid URL/i.test(out.error?.message ?? '');
   for (const [index, [input, canonical]] of hosts.entries()) {
     const strict = canonical === 'exa%20mple.sliccy.ai';
-    const base = `${root.protocol}//${canonical}:${root.port}/doc?n=${tag}`;
+    const base = rootURL(root, canonical, `/doc?n=${tag}`);
     const created = await outcome(
       client.send('Target.createTarget', {
-        url: `${root.protocol}//${input}:${root.port}/doc?n=${tag}-create-${index}`,
+        url: rootURL(root, input, `/doc?n=${tag}-create-${index}`),
         background: true,
       })
     );
@@ -95,7 +113,7 @@ async function destinations({ client, reader, root, tag, targets, session, targe
     const navigated = await outcome(
       client.send(
         'Page.navigate',
-        { url: `${root.protocol}//${input}:${root.port}/doc?n=${tag}-navigate-${index}` },
+        { url: rootURL(root, input, `/doc?n=${tag}-navigate-${index}`) },
         session
       )
     );
@@ -116,7 +134,7 @@ async function destinations({ client, reader, root, tag, targets, session, targe
     await outcome(
       client.send(
         'Page.navigate',
-        { url: `${root.origin}/doc?n=${tag}-ordinary-${index}` },
+        { url: rootURL(root, root.hostname, `/doc?n=${tag}-ordinary-${index}`) },
         session
       )
     );
@@ -124,7 +142,16 @@ async function destinations({ client, reader, root, tag, targets, session, targe
   return result;
 }
 
-export async function unparseableURLs({ client, reader, session, targetId, origin, tag, fixture }) {
+export async function unparseableURLs({
+  client,
+  reader,
+  session,
+  targetId,
+  origin,
+  tag,
+  fixture,
+  browserSession,
+}) {
   const root = new URL(origin);
   const cookie = `seven-unparseable-${tag}`;
   const value = `secret-${tag}`;
@@ -134,7 +161,7 @@ export async function unparseableURLs({ client, reader, session, targetId, origi
     await reader.send('Storage.setCookies', {
       cookies: [{ name: cookie, value, domain: '.sliccy.ai', path: '/', secure: false }],
     });
-    const url = `${root.protocol}//exa%20mple.sliccy.ai:${root.port}/doc?n=${tag}-observer`;
+    const url = rootURL(root, 'exa%20mple.sliccy.ai', `/doc?n=${tag}-observer`);
     const { targetId: probeId } = await reader.send('Target.createTarget', {
       url,
       background: true,
@@ -143,7 +170,9 @@ export async function unparseableURLs({ client, reader, session, targetId, origi
     const ground = await document(reader, probeId, url);
     observer = (await reader.send('Target.attachToTarget', { targetId: probeId, flatten: true }))
       .sessionId;
-    const listed = await outcome(client.send('Target.getTargets', {}));
+    const listed = browserSession
+      ? await outcome(client.send('Target.getTargets', {}))
+      : 'not-supported';
     const attached = await outcome(
       client.send('Target.attachToTarget', { targetId: probeId, flatten: true })
     );
@@ -168,7 +197,10 @@ export async function unparseableURLs({ client, reader, session, targetId, origi
     const result = {
       browserVersion: (await reader.send('Browser.getVersion', {})).product,
       live: ground.cookie.includes(`${cookie}=${value}`),
-      listed: listed.ok && listed.result.targetInfos?.some((info) => info.targetId === probeId),
+      listed:
+        listed === 'not-supported'
+          ? listed
+          : listed.ok && listed.result.targetInfos?.some((info) => info.targetId === probeId),
       attached: attached.ok,
       attachRefused: refused(attached),
       readCookie,

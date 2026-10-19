@@ -664,6 +664,7 @@ class Execution {
           origin: this.vars.ordinary,
           tag: this.vars.tag,
           fixture: this.options.fixture,
+          browserSession: supported(['browserSession'], this.options.capabilities),
         })
       );
     if (step.extensionWorld)
@@ -1086,7 +1087,10 @@ class Execution {
       await sleep(100);
       const observed = { ...this.refused };
       for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
-        if (!supported(observation.requires, this.options.capabilities)) continue;
+        if (!supported(observation.requires, this.options.capabilities)) {
+          observed[name] = 'not-supported';
+          continue;
+        }
         if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
         observed[name] = await this.observe(name, observation.check);
         if (observation.eitherWhen && this.side === 'guarded')

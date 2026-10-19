@@ -430,7 +430,7 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["unparseable", "as", "requires"],
+          "required": ["unparseable", "as"],
           "properties": {
             "unparseable": {
               "const": true
@@ -439,11 +439,7 @@
               "$ref": "#/$defs/name"
             },
             "requires": {
-              "$ref": "#/$defs/requires",
-              "type": "array",
-              "contains": {
-                "const": "browserSession"
-              }
+              "$ref": "#/$defs/requires"
             }
           }
         },

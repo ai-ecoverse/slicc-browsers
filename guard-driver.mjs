@@ -275,3 +275,15 @@ export function summary({ guard, sha, set, results }) {
     line: `${pass ? 'GUARD-PASS' : 'GUARD-FAIL'} ${guard}@${sha} (vectors ${name})`,
   };
 }
+
+export function parseURL(value, base) {
+  if (typeof value !== 'string') return null;
+  try {
+    return new URL(value, base);
+  } catch {
+    return null;
+  }
+}
+
+export const owned = (entries, tag) =>
+  (entries ?? []).filter((entry) => typeof entry?.url === 'string' && entry.url.includes(tag));

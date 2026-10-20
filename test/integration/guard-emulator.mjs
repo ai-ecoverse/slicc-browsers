@@ -1,3 +1,4 @@
+import { parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,12 +71,8 @@ export function emulatedGuard(browser, options = {}) {
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
-    let blocked;
-    try {
-      blocked = hosts.includes(new URL(request.url).host) || Boolean(catalog?.url(request.url));
-    } catch {
-      blocked = Boolean(catalog?.url(request.url));
-    }
+    const blocked =
+      hosts.includes(parseURL(request.url)?.host) || Boolean(catalog?.url(request.url));
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});

@@ -1,10 +1,4 @@
-const parse = (text) => {
-  try {
-    return new URL(text);
-  } catch {
-    return null;
-  }
-};
+import { parseURL as parse } from './guard-driver.mjs';
 
 const scheme = (u) => u.protocol.slice(0, -1);
 

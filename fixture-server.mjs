@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createServer as createSecureServer } from 'node:https';
+import { parseURL } from './guard-driver.mjs';
 
 const tall = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -78,19 +79,18 @@ function route(req, url, send, html) {
 
 function requestURL(req, scheme) {
   const origin = `${scheme}://${req.headers.host}`;
-  try {
-    return new URL(req.url, origin);
-  } catch {
-    const path = new URL(req.url, `${scheme}://fixture.invalid`);
-    return {
-      pathname: path.pathname,
-      searchParams: path.searchParams,
-      href: `${origin}${path.pathname}${path.search}${path.hash}`,
-      origin,
-      host: req.headers.host,
-      hostname: req.headers.host.replace(/:\d+$/, ''),
-    };
-  }
+  const parsed = parseURL(req.url, origin);
+  if (parsed) return parsed;
+  const path =
+    parseURL(req.url, `${scheme}://fixture.invalid`) ?? new URL(`${scheme}://fixture.invalid/`);
+  return {
+    pathname: path.pathname,
+    searchParams: path.searchParams,
+    href: `${origin}${path.pathname}${path.search}${path.hash}`,
+    origin,
+    host: req.headers.host,
+    hostname: String(req.headers.host ?? '').replace(/:\d+$/, ''),
+  };
 }
 
 export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {

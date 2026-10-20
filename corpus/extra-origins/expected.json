@@ -20,13 +20,13 @@
         "sevenTabs": [
           {
             "id": "O1",
-            "url": "https://dev.example.test/app",
-            "title": "dev"
+            "url": "https://dev.example.test",
+            "title": "https://dev.example.test"
           },
           {
             "id": "O3",
-            "url": "https://dev.example.test:443/other",
-            "title": "dev again"
+            "url": "https://dev.example.test",
+            "title": "https://dev.example.test"
           }
         ]
       }

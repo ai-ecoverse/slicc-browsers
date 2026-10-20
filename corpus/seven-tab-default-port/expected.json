@@ -20,8 +20,8 @@
         "sevenTabs": [
           {
             "id": "D1",
-            "url": "https://seven.sliccy.ai:443/",
-            "title": "seven"
+            "url": "https://seven.sliccy.ai",
+            "title": "https://seven.sliccy.ai"
           }
         ]
       }

@@ -1,4 +1,5 @@
 import { outcome, owned, parseURL } from './guard-driver.mjs';
+import { createObserverTarget } from './observer-target.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
@@ -151,6 +152,7 @@ export async function unparseableURLs({
   tag,
   fixture,
   browserSession,
+  notes = [],
 }) {
   const root = new URL(origin);
   const cookie = `seven-unparseable-${tag}`;
@@ -162,10 +164,14 @@ export async function unparseableURLs({
       cookies: [{ name: cookie, value, domain: '.sliccy.ai', path: '/', secure: false }],
     });
     const url = rootURL(root, 'exa%20mple.sliccy.ai', `/doc?n=${tag}-observer`);
-    const { targetId: probeId } = await reader.send('Target.createTarget', {
-      url,
-      background: true,
-    });
+    const { targetId: probeId } = await createObserverTarget(
+      reader,
+      {
+        url,
+        background: true,
+      },
+      notes
+    );
     targets.add(probeId);
     const ground = await document(reader, probeId, url);
     observer = (await reader.send('Target.attachToTarget', { targetId: probeId, flatten: true }))

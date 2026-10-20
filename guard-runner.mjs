@@ -13,6 +13,7 @@ import {
   result,
   steps,
 } from './guard-driver.mjs';
+import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
@@ -153,11 +154,15 @@ class Execution {
   }
 
   async create(url, context = this.vars.context, client = this.client, background = true) {
-    const { targetId } = await client.send('Target.createTarget', {
+    const params = {
       url: 'about:blank',
       background,
       ...(context ? { browserContextId: context } : {}),
-    });
+    };
+    const { targetId } =
+      client === this.reader
+        ? await createObserverTarget(this.reader, params, this.notes)
+        : await client.send('Target.createTarget', params);
     this.targets.push(targetId);
     this.pageTarget = targetId;
     this.vars.pageTarget = targetId;
@@ -200,10 +205,14 @@ class Execution {
       ...(this.vars.context ? { browserContextId: this.vars.context } : {}),
     });
     if (!state.storage) return;
-    const { targetId } = await this.reader.send('Target.createTarget', {
-      url: 'about:blank',
-      ...(this.vars.context ? { browserContextId: this.vars.context } : {}),
-    });
+    const { targetId } = await createObserverTarget(
+      this.reader,
+      {
+        url: 'about:blank',
+        ...(this.vars.context ? { browserContextId: this.vars.context } : {}),
+      },
+      this.notes
+    );
     this.canaryTarget = targetId;
     this.targets.push(targetId);
     const { sessionId } = await this.reader.send('Target.attachToTarget', {
@@ -711,6 +720,8 @@ class Execution {
           mode: step.errorPage,
           side: this.side,
           secret: step.secret,
+          discovery: supported(['discovery'], this.options.capabilities),
+          notes: this.notes,
         })
       );
     if (step.unparseable)
@@ -724,6 +735,7 @@ class Execution {
           tag: this.vars.tag,
           fixture: this.options.fixture,
           browserSession: supported(['browserSession'], this.options.capabilities),
+          notes: this.notes,
         })
       );
     if (step.extensionWorld)
@@ -1219,6 +1231,16 @@ class Execution {
           (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
         );
       await Promise.allSettled(this.pending);
+      if (
+        this.side === 'guarded' &&
+        this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
+      ) {
+        const violation = discoveryViolation(
+          this.client.events.slice(this.eventStart),
+          supported(['discovery'], this.options.capabilities)
+        );
+        if (violation) this.errors.push(violation);
+      }
     }
   }
 }

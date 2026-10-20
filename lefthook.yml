@@ -4,7 +4,7 @@ extends:
 pre-commit:
   jobs:
     - name: guard runner diff coverage
-      glob: "{guard-runner.mjs,fixture-server.mjs}"
+      glob: "{guard-runner.mjs,fixture-server.mjs,observer-target.mjs,protected-error-page.mjs,unparseable-url.mjs}"
       run: npm run --silent test:unit:guard
     - name: redirect diff coverage
       glob: "{redirect-secret.mjs,redirect-fragments.mjs}"

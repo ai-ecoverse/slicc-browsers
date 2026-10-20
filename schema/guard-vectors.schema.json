@@ -86,7 +86,8 @@
         "browserSession",
         "browserContexts",
         "chromeUrlsAttach",
-        "extensionWorld"
+        "extensionWorld",
+        "discovery"
       ],
       "properties": {
         "autoAttach": {
@@ -102,6 +103,7 @@
           "minLength": 1
         },
         "extensionWorld": { "type": "string", "minLength": 1 },
+        "discovery": { "type": "string", "minLength": 1 },
         "chromeUrlsAttach": {
           "type": "string",
           "minLength": 1
@@ -133,7 +135,8 @@
         "browserSession",
         "browserContexts",
         "chromeUrlsAttach",
-        "extensionWorld"
+        "extensionWorld",
+        "discovery"
       ]
     },
     "requires": {

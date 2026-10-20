@@ -247,6 +247,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_BROWSER_CONTEXTS,
         guard::CAP_CHROME_URLS_ATTACH,
         guard::CAP_EXTENSION_WORLD,
+        guard::CAP_DISCOVERY,
     ] {
         assert!(v.capabilities.contains_key(c));
     }

@@ -42,6 +42,7 @@ const (
 	GuardCapBrowserContexts  = "browserContexts"
 	GuardCapChromeURLsAttach = "chromeUrlsAttach"
 	GuardCapExtensionWorld   = "extensionWorld"
+	GuardCapDiscovery        = "discovery"
 	GuardSessionPage         = "page"
 	GuardSessionBrowser      = "browser"
 	GuardSessionEither       = "page-or-browser"

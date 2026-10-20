@@ -91,6 +91,7 @@
     "browserSession": "CDP calls on the browser session",
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
+    "discovery": "session-less Target.setDiscoverTargets and targetCreated/targetInfoChanged delivery; absent transports must emit neither event",
     "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't"
   },
   "placeholders": {
@@ -820,6 +821,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page recover: eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -968,6 +970,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page recover (query): eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -1116,6 +1119,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page recover (fragment): eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -1263,6 +1267,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page restore: eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -1443,6 +1448,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page sticky: eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -1635,6 +1641,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page sticky (query): eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",
@@ -1827,6 +1834,7 @@
         },
         "eventsRedacted": {
           "means": "protected error-page sticky (fragment): eventsRedacted",
+          "requires": ["discovery"],
           "check": {
             "result": "errorPage",
             "path": "result.eventsRedacted",

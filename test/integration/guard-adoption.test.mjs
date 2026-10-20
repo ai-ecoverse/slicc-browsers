@@ -134,3 +134,11 @@ for (const id of ['C4.static-same-site', 'C4.script-same-site']) {
     passes(await row(id, { refuseFrameAttach: true }));
   });
 }
+
+test('a blocking guard passes every executable E4 and E6 row', { timeout: 900000 }, async () => {
+  const ids = data.vectors
+    .map(({ id }) => id)
+    .filter((id) => id === 'E4' || id.startsWith('E4.') || id.startsWith('E6.'));
+  assert.equal(ids.length, 17);
+  for (const id of ids) passes(await row(id, {}));
+});

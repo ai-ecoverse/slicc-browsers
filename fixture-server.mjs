@@ -12,9 +12,12 @@ const escape = (value) =>
 function document(url, html) {
   const p = url.searchParams;
   const csp = p.has('csp') || url.pathname === '/csp';
+  const listener = p.has('listener')
+    ? "<script>\naddEventListener('load', function () { document.body.dataset.listened = 'true'; });\n</script>"
+    : '';
   return html(
     'doc',
-    `<p>document ${escape(p.get('n') ?? '')}</p>${csp ? '<script>document.title="inline"; document.body.dataset.inline="true"</script>' : ''}`,
+    `<p>document ${escape(p.get('n') ?? '')}</p>${listener}${csp ? '<script>document.title="inline"; document.body.dataset.inline="true"</script>' : ''}`,
     csp ? { 'content-security-policy': "script-src 'none'" } : {}
   );
 }

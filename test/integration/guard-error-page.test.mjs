@@ -37,16 +37,18 @@ test('protected error pages remain drivable and redacted; real and already-prote
 }, async () => {
   const fixture = await fixtureServer();
   try {
-    for (const mode of ['catalog', 'target-url-only', 'unlock-error', 'plain']) {
+    for (const mode of ['catalog', 'target-url-only', 'unlock-error', 'plain', 'unblocked']) {
       const browser = await launch(fixture);
       const guard =
-        mode === 'plain'
-          ? emulatedGuard(browser, { failDocumentOrigins: [origins(fixture).seven] })
-          : emulatedGuard(browser, {
-              protectedOrigins: rules,
-              targetURLOnly: mode === 'target-url-only',
-              unlockErrorPage: mode === 'unlock-error',
-            });
+        mode === 'unblocked'
+          ? undefined
+          : mode === 'plain'
+            ? emulatedGuard(browser, { failDocumentOrigins: [origins(fixture).seven] })
+            : emulatedGuard(browser, {
+                protectedOrigins: rules,
+                targetURLOnly: mode === 'target-url-only',
+                unlockErrorPage: mode === 'unlock-error',
+              });
       try {
         const execution = await run(
           { ...data, vectors, variants: { prompt: 0 } },
@@ -61,7 +63,7 @@ test('protected error pages remain drivable and redacted; real and already-prote
         for (const row of execution.results) {
           process.stdout.write(`${mode}: ${JSON.stringify(row)}\n`);
           assert.equal(row.control, 'pass', JSON.stringify(row));
-          assert.equal(row.live, 'pass', JSON.stringify(row));
+          assert.equal(row.live, mode === 'unblocked' ? 'fail' : 'pass', JSON.stringify(row));
           assert.equal(
             row.guarded,
             mode === 'catalog' ||

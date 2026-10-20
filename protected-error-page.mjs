@@ -151,6 +151,7 @@ export async function protectedErrorPage({
         targetInfo.url === failedURL
       );
     });
+    if (!result.live && side !== 'control') return result;
     if (!result.live)
       throw new Error(
         `protected-error-page: missing error commit ${JSON.stringify(result.evidence)}`

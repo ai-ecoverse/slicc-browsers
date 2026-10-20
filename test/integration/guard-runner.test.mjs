@@ -67,7 +67,7 @@ test('the reference runner checks real Chromium effects without a guard', {
     );
     const repeats = process.env.GUARD_IDS ? 1 : 2;
     for (let repeat = 0; repeat < repeats; repeat++) {
-      const width = Number(process.env.GUARD_PARALLEL ?? (target === 'ordinary' ? 1 : 6));
+      const width = Number(process.env.GUARD_PARALLEL ?? (target === 'ordinary' ? 2 : 6));
       const browsers = await Promise.all(Array.from({ length: width }, () => launch(fixture)));
       let execution;
       try {

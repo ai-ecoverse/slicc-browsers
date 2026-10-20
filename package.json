@@ -66,7 +66,7 @@
     "validate": "node scripts/validate.mjs",
     "lint": "slicc-lint && test -z \"$(gofmt -l .)\" && go mod tidy -diff && go vet ./... && golangci-lint run && cargo fmt --check && cargo clippy --all-features --all-targets -- -D warnings",
     "format": "biome check --write . && gofmt -w . && cargo fmt",
-    "test": "npm run validate && node --test test/integration/self-contained.test.mjs test/integration/browser-runner.test.mjs test/integration/fixture-client.test.mjs && go test -race -count=1 ./test/integration/... && cargo test --all-features",
+    "test": "npm run validate && node --test test/integration/self-contained.test.mjs test/integration/browser-runner.test.mjs test/integration/fixture-client.test.mjs test/integration/git-retry.test.mjs && go test -race -count=1 ./test/integration/... && cargo test --all-features",
     "test:unit": "go test -race -cover ./...",
     "build": "go build ./... && cargo build --all-features && cargo build --target wasm32-wasip1 --all-features && npm pack --dry-run",
     "trust": "npx fledgling sync -y --skip-publish",

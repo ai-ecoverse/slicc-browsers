@@ -75,7 +75,11 @@
         "wsOnly": { "const": true },
         "six": { "const": true },
         "sevenOpen": { "type": "boolean" },
-        "sevenTabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } },
+        "sevenTabs": {
+          "description": "Seven tabs: url and title are the origin only, never a path, query, fragment or document title.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/tab" }
+        },
         "tabs": { "type": "array", "items": { "$ref": "#/$defs/tab" } }
       }
     },

@@ -6,6 +6,9 @@ pre-commit:
     - name: guard runner diff coverage
       glob: "{guard-runner.mjs,fixture-server.mjs}"
       run: npm run --silent test:unit:guard
+    - name: redirect diff coverage
+      glob: "{redirect-secret.mjs,redirect-fragments.mjs}"
+      run: npm run --silent test:unit:redirect
     - name: corpus bundle
       glob: "corpus/**"
       run: node scripts/corpus.mjs --check

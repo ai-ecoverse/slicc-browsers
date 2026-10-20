@@ -1,5 +1,6 @@
 import { parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
+import { redactProtectedURLs } from '../../redirect-redaction.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -114,6 +115,38 @@ export function emulatedGuard(browser, options = {}) {
     );
   };
   const events = [];
+  const messages = [];
+  const protectedBodies = new Set();
+  let bodyCursor = 0;
+  const sanitize = (event) => {
+    if (!catalog || !options.redirectSecrets) return event;
+    const response = event.params?.redirectResponse ?? event.params;
+    const headers = response?.headers ?? response?.responseHeaders;
+    if (
+      headers &&
+      catalog.url(
+        (Array.isArray(headers)
+          ? headers.find((h) => h.name.toLowerCase() === 'location')?.value
+          : (headers.location ?? headers.Location)) ?? '',
+        { readOnly: true }
+      )
+    )
+      protectedBodies.add(`${event.sessionId}:${event.params.requestId}`);
+    if (options.parsedHeadersOnly) {
+      const copy = structuredClone(event);
+      const walk = (value) => {
+        if (!value || typeof value !== 'object') return;
+        for (const [key, entry] of Object.entries(value)) {
+          if (key === 'headers' || key === 'responseHeaders')
+            value[key] = redactProtectedURLs(entry, catalog);
+          else walk(entry);
+        }
+      };
+      walk(copy);
+      return copy;
+    }
+    return redactProtectedURLs(event, catalog);
+  };
   const waiters = new Set();
   const mentions = (value) => hosts.some((host) => JSON.stringify(value).includes(host));
   const refusal = (what) => new Error(`slicc: refused: ${what}`);
@@ -131,7 +164,15 @@ export function emulatedGuard(browser, options = {}) {
     frames.set(targetId, frameTree.frame);
     await unguarded.send(
       'Fetch.enable',
-      { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] },
+      {
+        patterns: [
+          {
+            urlPattern: '*',
+            ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
+            requestStage: 'Request',
+          },
+        ],
+      },
       sessionId
     );
     if (waiting) await unguarded.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
@@ -193,14 +234,16 @@ export function emulatedGuard(browser, options = {}) {
           events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
           continue;
         }
-        const exposed =
+        const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {
                 ...event,
                 params: { ...event.params, targetInfo: redactInfo(event.params.targetInfo) },
               }
-            : event;
+            : event
+        );
         if (!mentions(event) && !hidden(event)) {
+          messages.push(JSON.stringify(exposed));
           events.push(exposed);
           for (const waiter of waiters)
             if (waiter.pred(exposed)) {
@@ -240,6 +283,7 @@ export function emulatedGuard(browser, options = {}) {
     client: {
       ...client,
       events,
+      messages,
       waitEvent: (pred, ms) =>
         new Promise((resolve, reject) => {
           const found = events.find(pred);
@@ -251,223 +295,9 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
-        const targetId = params?.targetId ?? sessions.get(sessionId);
-        if (
-          catalog &&
-          !options.catalogAttachOnly &&
-          targetId &&
-          (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
-          (await decision(targetId))
-        )
-          throw refusal('protected target');
-        learnWorlds();
-        if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
-        if (catalog && !options.exposeExtensionWorlds && sessionId) {
-          const worlds = [...extensionContexts.entries()]
-            .filter(([key]) => key.startsWith(`${sessionId}:`))
-            .map(([, context]) => context);
-          if (
-            worlds.some(
-              (world) =>
-                params?.contextId === world.id ||
-                params?.uniqueContextId === world.uniqueId ||
-                params?.executionContextId === world.id ||
-                (method === 'Runtime.addBinding' && params?.executionContextName === world.name)
-            ) ||
-            (method === 'Debugger.enable' && worlds.length > 0)
-          )
-            throw refusal('that execution context belongs to a browser extension');
-          if (
-            (params?.contextId !== undefined ||
-              params?.uniqueContextId !== undefined ||
-              params?.executionContextId !== undefined) &&
-            !client.events.some(
-              (event) =>
-                event.sessionId === sessionId &&
-                event.method === 'Runtime.executionContextCreated' &&
-                (event.params.context.id === (params.contextId ?? params.executionContextId) ||
-                  event.params.context.uniqueId === params.uniqueContextId)
-            )
-          )
-            throw refusal('that execution context is not exposed');
-          const ids = [
-            params?.objectId,
-            params?.promiseObjectId,
-            ...(params?.arguments ?? []).map((argument) => argument.objectId),
-          ].filter(Boolean);
-          for (const objectId of ids) {
-            const origin = await client
-              .send(
-                'Runtime.callFunctionOn',
-                {
-                  objectId,
-                  functionDeclaration: 'function(){return self.chrome?.runtime?.id ?? null}',
-                  returnByValue: true,
-                },
-                sessionId
-              )
-              .catch(() => null);
-            if (!origin) throw refusal('that object is not exposed');
-            if (origin?.result?.value)
-              throw refusal('that execution context belongs to a browser extension');
-          }
-        }
-        if (
-          catalog &&
-          !options.catalogAttachOnly &&
-          (method === 'Page.navigate' || method === 'Target.createTarget') &&
-          catalog.url(params?.url)
-        )
-          throw catalog.unparseable(params?.url)
-            ? new Error(options.protectedOrigins.unparseableRefusal)
-            : refusal('protected URL');
-        if (
-          catalog &&
-          [
-            'Network.getCookies',
-            'Network.setCookie',
-            'Network.deleteCookies',
-            'Fetch.continueRequest',
-            'Network.continueInterceptedRequest',
-            'Network.loadNetworkResource',
-            'PWA.install',
-            'PWA.launch',
-          ].includes(method)
-        ) {
-          const urls = [
-            ...(params?.urls ?? []),
-            params?.url,
-            params?.cookieUrl,
-            params?.installUrlOrOrigin,
-          ].filter((url) => url !== undefined);
-          const blocked = urls.find((url) => catalog.url(url));
-          if (blocked !== undefined)
-            throw catalog.unparseable(blocked)
-              ? new Error(options.protectedOrigins.unparseableRefusal)
-              : refusal('protected URL');
-        }
-        if (catalog && method === 'Target.attachToTarget') {
-          const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
-            targetId: params.targetId,
-          });
-          if (await decision(params.targetId))
-            throw catalog.unparseable(targetInfo.url)
-              ? new Error(options.protectedOrigins.unparseableRefusal)
-              : refusal('protected target');
-          const attached = await unguarded.send('Target.attachToTarget', {
-            targetId: params.targetId,
-            flatten: true,
-          });
-          try {
-            const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
-            const protectedFrame = (tree) =>
-              catalog.url(tree.frame.url) ||
-              (tree.frame.securityOrigin && catalog.url(tree.frame.securityOrigin)) ||
-              (tree.childFrames ?? []).some(protectedFrame);
-            if (protectedFrame(frameTree)) throw refusal('protected frame');
-            const start = unguarded.events.length;
-            await unguarded.send(
-              'Target.setAutoAttach',
-              { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-              attached.sessionId
-            );
-            const frames = unguarded.events
-              .slice(start)
-              .filter(
-                (event) =>
-                  event.method === 'Target.attachedToTarget' &&
-                  event.sessionId === attached.sessionId &&
-                  event.params.targetInfo.type === 'iframe'
-              );
-            if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
-              throw refusal('protected out-of-process frame');
-          } finally {
-            await unguarded.send(
-              'Target.setAutoAttach',
-              { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
-              attached.sessionId
-            );
-            await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
-          }
-        }
-        const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
-        if (failure) throw new Error(failure);
-        if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
-          await pause(options.refuseLatencyMs ?? 0);
-          throw refusal('browser-wide call');
-        }
-        if (
-          options.refuseFrameAttach &&
-          method === 'Target.attachToTarget' &&
-          !pages.has(params?.targetId)
-        )
-          throw refusal('slicc only attaches to tabs it knows');
-        if (
-          sessionId &&
-          children.has(sessionId) &&
-          options.childPageLatencyMs &&
-          method.startsWith('Page.')
-        )
-          await pause(options.childPageLatencyMs);
-        if (sessionId && closed.has(sessionId)) throw refusal("target is on seven's origin");
-        if (options.refuseForeign && sessionId && foreign.has(sessionId)) {
-          await pause(options.foreignLatencyMs ?? 0);
-          throw refusal('slicc only drives the tabs it opened');
-        }
-        if (
-          options.ownContextsOnly &&
-          method === 'Storage.clearCookies' &&
-          !contexts.has(params?.browserContextId)
-        )
-          throw refusal('cookies in a context slicc did not create');
-        options.trace?.push({ at: Date.now(), method, params, sessionId });
-        if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
-        const result = await client.send(method, params, sessionId);
-        learnWorlds();
-        await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
-        if (
-          method === 'Page.navigate' &&
-          sessionId &&
-          options.staleLoad?.(sessionId, children.has(sessionId))
-        )
-          events.push({ method: 'Page.loadEventFired', sessionId, params: { timestamp: 0 } });
-        if (method === 'Target.createTarget' && result?.targetId) pages.add(result.targetId);
-        if (method === 'Target.createBrowserContext' && result?.browserContextId)
-          contexts.add(result.browserContextId);
-        if (method === 'Target.attachToTarget' && result?.sessionId) {
-          sessions.set(result.sessionId, params.targetId);
-          if (!shielded.has(params.targetId)) {
-            const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
-              targetId: params.targetId,
-            });
-            if (targetInfo.type === 'page') {
-              shielded.add(params.targetId);
-              pages.add(params.targetId);
-              readyShields.set(
-                params.targetId,
-                shield(params.targetId).catch(() => {})
-              );
-            }
-          }
-          await readyShields.get(params.targetId);
-        }
-        if (method === 'Target.getTargetInfo' && catalog)
-          return { ...result, targetInfo: redactInfo(result.targetInfo) };
-        if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
-          const visible = [];
-          for (const info of result.targetInfos)
-            if (
-              !mentions(info) &&
-              !(options.hideTypes ?? []).includes(info.type) &&
-              (!catalog || !(await decision(info.targetId)))
-            )
-              visible.push(info);
-          return {
-            ...result,
-            targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
-          };
-        }
-        return result;
+        const reply = await outcomeSend(method, params, sessionId);
+        messages.push(JSON.stringify({ id: messages.length + 1, result: reply, sessionId }));
+        return reply;
       },
     },
     stop: async () => {
@@ -477,4 +307,258 @@ export function emulatedGuard(browser, options = {}) {
         await unguarded.send('Target.detachFromTarget', { sessionId }).catch(() => {});
     },
   };
+  async function outcomeSend(method, params, sessionId) {
+    try {
+      return await guardedSend(method, params, sessionId);
+    } catch (error) {
+      messages.push(
+        JSON.stringify({ id: messages.length + 1, error: { message: error.message }, sessionId })
+      );
+      throw error;
+    }
+  }
+  async function guardedSend(method, params, sessionId) {
+    if (options.redirectSecrets && catalog) {
+      const requestId = params?.requestId;
+      for (const event of client.events.slice(bodyCursor)) {
+        bodyCursor++;
+        sanitize(event);
+      }
+      if (
+        ['Fetch.getResponseBody', 'Network.getResponseBody', 'Network.replayXHR'].includes(
+          method
+        ) &&
+        protectedBodies.has(`${sessionId}:${requestId}`)
+      )
+        throw refusal('protected redirect body');
+      const destination = options.redirects?.get(parseURL(params?.url)?.pathname)?.to;
+      if (
+        [
+          'Network.loadNetworkResource',
+          'Fetch.continueRequest',
+          'Network.continueInterceptedRequest',
+        ].includes(method) &&
+        destination &&
+        catalog.url(destination)
+      )
+        throw refusal('protected redirect destination');
+    }
+    const targetId = params?.targetId ?? sessions.get(sessionId);
+    if (
+      catalog &&
+      !options.catalogAttachOnly &&
+      targetId &&
+      (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
+      (await decision(targetId))
+    )
+      throw refusal('protected target');
+    learnWorlds();
+    if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+    if (catalog && !options.exposeExtensionWorlds && sessionId) {
+      const worlds = [...extensionContexts.entries()]
+        .filter(([key]) => key.startsWith(`${sessionId}:`))
+        .map(([, context]) => context);
+      if (
+        worlds.some(
+          (world) =>
+            params?.contextId === world.id ||
+            params?.uniqueContextId === world.uniqueId ||
+            params?.executionContextId === world.id ||
+            (method === 'Runtime.addBinding' && params?.executionContextName === world.name)
+        ) ||
+        (method === 'Debugger.enable' && worlds.length > 0)
+      )
+        throw refusal('that execution context belongs to a browser extension');
+      if (
+        (params?.contextId !== undefined ||
+          params?.uniqueContextId !== undefined ||
+          params?.executionContextId !== undefined) &&
+        !client.events.some(
+          (event) =>
+            event.sessionId === sessionId &&
+            event.method === 'Runtime.executionContextCreated' &&
+            (event.params.context.id === (params.contextId ?? params.executionContextId) ||
+              event.params.context.uniqueId === params.uniqueContextId)
+        )
+      )
+        throw refusal('that execution context is not exposed');
+      const ids = [
+        params?.objectId,
+        params?.promiseObjectId,
+        ...(params?.arguments ?? []).map((argument) => argument.objectId),
+      ].filter(Boolean);
+      for (const objectId of ids) {
+        const origin = await client
+          .send(
+            'Runtime.callFunctionOn',
+            {
+              objectId,
+              functionDeclaration: 'function(){return self.chrome?.runtime?.id ?? null}',
+              returnByValue: true,
+            },
+            sessionId
+          )
+          .catch(() => null);
+        if (!origin) throw refusal('that object is not exposed');
+        if (origin?.result?.value)
+          throw refusal('that execution context belongs to a browser extension');
+      }
+    }
+    if (
+      catalog &&
+      !options.catalogAttachOnly &&
+      (method === 'Page.navigate' || method === 'Target.createTarget') &&
+      catalog.url(params?.url)
+    )
+      throw catalog.unparseable(params?.url)
+        ? new Error(options.protectedOrigins.unparseableRefusal)
+        : refusal('protected URL');
+    if (
+      catalog &&
+      [
+        'Network.getCookies',
+        'Network.setCookie',
+        'Network.deleteCookies',
+        'Fetch.continueRequest',
+        'Network.continueInterceptedRequest',
+        'Network.loadNetworkResource',
+        'PWA.install',
+        'PWA.launch',
+      ].includes(method)
+    ) {
+      const urls = [
+        ...(params?.urls ?? []),
+        params?.url,
+        params?.cookieUrl,
+        params?.installUrlOrOrigin,
+      ].filter((url) => url !== undefined);
+      const blocked = urls.find((url) => catalog.url(url));
+      if (blocked !== undefined)
+        throw catalog.unparseable(blocked)
+          ? new Error(options.protectedOrigins.unparseableRefusal)
+          : refusal('protected URL');
+    }
+    if (catalog && method === 'Target.attachToTarget') {
+      const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
+        targetId: params.targetId,
+      });
+      if (await decision(params.targetId))
+        throw catalog.unparseable(targetInfo.url)
+          ? new Error(options.protectedOrigins.unparseableRefusal)
+          : refusal('protected target');
+      const attached = await unguarded.send('Target.attachToTarget', {
+        targetId: params.targetId,
+        flatten: true,
+      });
+      try {
+        const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
+        const protectedFrame = (tree) =>
+          catalog.url(tree.frame.url) ||
+          (tree.frame.securityOrigin && catalog.url(tree.frame.securityOrigin)) ||
+          (tree.childFrames ?? []).some(protectedFrame);
+        if (protectedFrame(frameTree)) throw refusal('protected frame');
+        const start = unguarded.events.length;
+        await unguarded.send(
+          'Target.setAutoAttach',
+          { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+          attached.sessionId
+        );
+        const frames = unguarded.events
+          .slice(start)
+          .filter(
+            (event) =>
+              event.method === 'Target.attachedToTarget' &&
+              event.sessionId === attached.sessionId &&
+              event.params.targetInfo.type === 'iframe'
+          );
+        if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
+          throw refusal('protected out-of-process frame');
+      } finally {
+        await unguarded.send(
+          'Target.setAutoAttach',
+          { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+          attached.sessionId
+        );
+        await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
+      }
+    }
+    const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
+    if (failure) throw new Error(failure);
+    if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
+      await pause(options.refuseLatencyMs ?? 0);
+      throw refusal('browser-wide call');
+    }
+    if (
+      options.refuseFrameAttach &&
+      method === 'Target.attachToTarget' &&
+      !pages.has(params?.targetId)
+    )
+      throw refusal('slicc only attaches to tabs it knows');
+    if (
+      sessionId &&
+      children.has(sessionId) &&
+      options.childPageLatencyMs &&
+      method.startsWith('Page.')
+    )
+      await pause(options.childPageLatencyMs);
+    if (sessionId && closed.has(sessionId)) throw refusal("target is on seven's origin");
+    if (options.refuseForeign && sessionId && foreign.has(sessionId)) {
+      await pause(options.foreignLatencyMs ?? 0);
+      throw refusal('slicc only drives the tabs it opened');
+    }
+    if (
+      options.ownContextsOnly &&
+      method === 'Storage.clearCookies' &&
+      !contexts.has(params?.browserContextId)
+    )
+      throw refusal('cookies in a context slicc did not create');
+    options.trace?.push({ at: Date.now(), method, params, sessionId });
+    if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
+    const result = await client.send(method, params, sessionId);
+    learnWorlds();
+    await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
+    if (
+      method === 'Page.navigate' &&
+      sessionId &&
+      options.staleLoad?.(sessionId, children.has(sessionId))
+    )
+      events.push({ method: 'Page.loadEventFired', sessionId, params: { timestamp: 0 } });
+    if (method === 'Target.createTarget' && result?.targetId) pages.add(result.targetId);
+    if (method === 'Target.createBrowserContext' && result?.browserContextId)
+      contexts.add(result.browserContextId);
+    if (method === 'Target.attachToTarget' && result?.sessionId) {
+      sessions.set(result.sessionId, params.targetId);
+      if (!shielded.has(params.targetId)) {
+        const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
+          targetId: params.targetId,
+        });
+        if (targetInfo.type === 'page') {
+          shielded.add(params.targetId);
+          pages.add(params.targetId);
+          readyShields.set(
+            params.targetId,
+            shield(params.targetId).catch(() => {})
+          );
+        }
+      }
+      await readyShields.get(params.targetId);
+    }
+    if (method === 'Target.getTargetInfo' && catalog)
+      return { ...result, targetInfo: redactInfo(result.targetInfo) };
+    if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
+      const visible = [];
+      for (const info of result.targetInfos)
+        if (
+          !mentions(info) &&
+          !(options.hideTypes ?? []).includes(info.type) &&
+          (!catalog || !(await decision(info.targetId)))
+        )
+          visible.push(info);
+      return {
+        ...result,
+        targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
+      };
+    }
+    return options.redirectSecrets && catalog ? redactProtectedURLs(result, catalog) : result;
+  }
 }

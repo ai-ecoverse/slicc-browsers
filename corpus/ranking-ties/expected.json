@@ -20,8 +20,8 @@
         "sevenTabs": [
           {
             "id": "S1",
-            "url": "https://b.sliccy.ai/",
-            "title": "seven b"
+            "url": "https://b.sliccy.ai",
+            "title": "https://b.sliccy.ai"
           }
         ]
       }
@@ -44,8 +44,8 @@
         "sevenTabs": [
           {
             "id": "S2",
-            "url": "https://a.sliccy.ai/",
-            "title": "seven a"
+            "url": "https://a.sliccy.ai",
+            "title": "https://a.sliccy.ai"
           }
         ]
       }

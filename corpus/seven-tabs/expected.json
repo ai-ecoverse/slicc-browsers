@@ -20,13 +20,13 @@
         "sevenTabs": [
           {
             "id": "T1",
-            "url": "https://lars.sliccy.ai/",
-            "title": "seven"
+            "url": "https://lars.sliccy.ai",
+            "title": "https://lars.sliccy.ai"
           },
           {
             "id": "T6",
-            "url": "https://seven.sliccy.ai/?x=1#top",
-            "title": "seven too"
+            "url": "https://seven.sliccy.ai",
+            "title": "https://seven.sliccy.ai"
           }
         ]
       }
@@ -49,8 +49,8 @@
         "sevenTabs": [
           {
             "id": "V1",
-            "url": "https://team-7.sliccy.ai/workspace",
-            "title": "seven"
+            "url": "https://team-7.sliccy.ai",
+            "title": "https://team-7.sliccy.ai"
           }
         ]
       }

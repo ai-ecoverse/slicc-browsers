@@ -433,6 +433,7 @@
           "required": ["errorPage", "as"],
           "properties": {
             "errorPage": { "enum": ["recover", "restore", "sticky"] },
+            "secret": { "enum": ["all", "query", "fragment"] },
             "requires": { "$ref": "#/$defs/requires" },
             "as": { "$ref": "#/$defs/name" }
           }

@@ -114,6 +114,7 @@ class Execution {
     this.contexts = [];
     this.pending = [];
     this.errors = [];
+    this.preSent = [];
     this.notes = [];
     this.answers = [];
     this.internalSessions = new Set();
@@ -234,6 +235,17 @@ class Execution {
     if (!state.storage) return true;
     const read = await this.evaluate(canary.read(), this.canarySession, this.reader);
     return read.ok && canary.untouched(state.value, read.result?.result?.value);
+  }
+
+  async awaitPre() {
+    const sent = [...new Set(this.preSent)];
+    if (!sent.length || !usesPre(this.vector)) return [];
+    const missing = async () => {
+      const seen = await Promise.all(sent.map((url) => this.attemptCheck({ pre: url })));
+      return sent.filter((_, index) => !seen[index]);
+    };
+    await this.poll(async () => (await missing()).length === 0, 5000);
+    return missing();
   }
 
   async attemptCheck(c) {
@@ -609,6 +621,8 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
+    if (step.extensionWorld && out.result?.incomplete)
+      this.errors.push(`extensionWorld ${step.extensionWorld}: ${out.result.incomplete}`);
     if ((step.extensionWorld || step.unparseable || step.errorPage) && !out.ok)
       this.errors.push(
         `${step.unparseable ? 'unparseable' : step.errorPage ? 'errorPage' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
@@ -675,6 +689,7 @@ class Execution {
           internalSessions: this.internalSessions,
           mode: step.errorPage,
           side: this.side,
+          secret: step.secret,
         })
       );
     if (step.unparseable)
@@ -701,6 +716,7 @@ class Execution {
           origin: this.vars.ordinary,
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
+          pauseMs: this.bound(this.side === 'control' ? 5000 : 1500, this.side !== 'control'),
           extensionId: this.options.extensionWorldId,
         })
       );
@@ -834,16 +850,19 @@ class Execution {
       this.pageTarget = tab.targetId;
       return { ok: true, result: tab };
     }
+    if (pre && step.page !== 'framed') this.preSent.push(url);
     if (step.page === 'navigate') {
       if (pre) await this.evaluate(pre, session);
       return this.navigate(this.client, session, url);
     }
-    if (step.page === 'framed')
+    if (step.page === 'framed') {
+      if (phase === 'trigger') this.preSent.push(url);
       return this.navigate(
         this.client,
         session,
         `${step.from}/framed?tag=${encodeURIComponent(this.vars.tag)}&url=${encodeURIComponent(url)}&log=${encodeURIComponent(this.vars.log)}`
       );
+    }
     let expression = pageExpression(step, url);
     if (pre) expression = `(() => { ${pre} return (${expression}); })()`;
     const promise = this.evaluate(expression, session);
@@ -900,6 +919,8 @@ class Execution {
     const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
       name
     ];
+    if (check?.result && at(this.calls[check.result], check.path) === 'incomplete')
+      return 'incomplete';
     if (want !== true || check?.observer !== 'fixture') return this.check(check);
     let seen = false;
     await this.poll(async () => {
@@ -1098,6 +1119,42 @@ class Execution {
     }
   }
 
+  async observeAll(unseen) {
+    const observed = { ...this.refused };
+    const incomplete = [];
+    for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
+      if (!supported(observation.requires, this.options.capabilities)) {
+        observed[name] = 'not-supported';
+        continue;
+      }
+      if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
+      observed[name] = await this.observe(name, observation.check);
+      if (!observation.eitherWhen || this.side !== 'guarded') continue;
+      const holds = await this.either(observation.eitherWhen, observed[name], name, unseen);
+      observed[`${name}.either`] = holds;
+      if (holds === 'incomplete') incomplete.push(name);
+    }
+    return { observed, incomplete };
+  }
+
+  async either(check, value, name, unseen) {
+    const holds = () => this.check(check);
+    if (await holds()) return true;
+    if (unseen.length) return usesPre(check) ? 'incomplete' : false;
+    if (value === this.vector.expected?.[name]) return false;
+    return this.poll(holds, 1500);
+  }
+
+  async liveness(unseen, incomplete) {
+    if (this.side === 'control') return { live: true };
+    const alive = () => this.check(this.vector.liveCheck);
+    let live = await alive();
+    if (!live && !unseen.length) live = await this.poll(alive, 1500);
+    if (!unseen.length || (live && !incomplete.length)) return { live };
+    const detail = incomplete.length ? ` (${incomplete.join(', ')} incomplete)` : '';
+    return { live: false, liveWhy: `pre beacon not observed for ${unseen.join(', ')}${detail}` };
+  }
+
   async run() {
     this.requestStart = (await this.options.fixture.log()).length;
     let pumping;
@@ -1113,25 +1170,16 @@ class Execution {
       await this.execute(plan.setup, undefined, 'setup');
       await this.execute(plan.trigger, undefined, 'trigger');
       await sleep(100);
-      const observed = { ...this.refused };
-      for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
-        if (!supported(observation.requires, this.options.capabilities)) {
-          observed[name] = 'not-supported';
-          continue;
-        }
-        if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
-        observed[name] = await this.observe(name, observation.check);
-        if (observation.eitherWhen && this.side === 'guarded')
-          observed[`${name}.either`] = await this.check(observation.eitherWhen);
-      }
+      const unseen = await this.awaitPre();
+      const { observed, incomplete } = await this.observeAll(unseen);
       this.options.debug?.({
         events: this.client.events.slice(this.eventStart),
         calls: this.calls,
         requests: await this.options.fixture.log(),
         side: this.side,
       });
-      const live = this.side === 'control' ? true : await this.check(this.vector.liveCheck);
-      return { observed, live, errors: this.errors, notes: this.notes };
+      const { live, liveWhy } = await this.liveness(unseen, incomplete);
+      return { observed, live, liveWhy, errors: this.errors, notes: this.notes };
     } finally {
       this.stopped = true;
       await pumping;
@@ -1153,6 +1201,12 @@ class Execution {
     }
   }
 }
+
+const usesPre = (value) =>
+  Boolean(value && typeof value === 'object') &&
+  (Object.hasOwn(value, 'pre') ||
+    Object.hasOwn(value, 'history') ||
+    Object.values(value).some(usesPre));
 
 const observerRequired = (check) => {
   if (check?.observer === 'unguarded') return true;
@@ -1446,6 +1500,7 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
       control: legs.control.observed,
       guarded: legs.guarded.observed,
       live: legs.control.live && legs.guarded.live,
+      liveWhy: legs.guarded.liveWhy,
     }),
     transportVariant: base.transportVariant,
     observations: { control: legs.control.observed, guarded: legs.guarded.observed },

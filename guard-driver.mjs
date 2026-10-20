@@ -144,10 +144,14 @@ export function judge(vector, side, observed) {
       (observed?.[k] === 'not-supported' && vector.observe?.[k]?.requires?.length > 0) ||
       (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
+  const incomplete = Object.keys(want).filter(
+    (k) => !skipped.includes(k) && observed?.[`${k}.either`] === 'incomplete'
+  );
   const mismatches = Object.entries(want)
     .filter(
       ([k, v]) =>
         !skipped.includes(k) &&
+        !incomplete.includes(k) &&
         !matches(observed?.[`${k}.either`] === true ? 'either' : v, observed?.[k])
     )
     .map(([k, v]) => `${k}: got ${q(observed?.[k])}, want ${q(v)}`);
@@ -222,7 +226,7 @@ export function result(vector, run) {
     why.push('refused on the protected target without a passing control');
   } else why.push(...g.mismatches);
   const live = run.live === true ? 'pass' : 'fail';
-  if (live === 'fail') why.push('not live');
+  if (live === 'fail') why.push(['not live', run.liveWhy].filter(Boolean).join(': '));
   return {
     ...row,
     control,

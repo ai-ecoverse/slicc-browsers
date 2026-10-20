@@ -366,7 +366,7 @@ every alternative of an `any`, or a required (`all`, `not` or plain) check, need
 selects one variant or an array; omission selects all. `parallel` defaults to 1.
 With the `browserContexts` capability each leg runs in its own browser context. A `Target.createBrowserContext` that fails with a timeout is retried once, and the row's `notes` records it; any other failure fails the row.
 
-`settleScale` (default 1) multiplies the bounds of waits for events the leg expects to happen: settles (beacon, served, title and load) on the control leg and `required` settles on either leg, `paused` on the control leg, page and child loads, the wait for a background step's `as` result (`<as> did not complete within <ms>ms`), and the wait for an observation the leg expects to be `true`. Adopters on slow hosts can set 3 or 4. Every wait polls and returns as soon as its event arrives, so a larger bound only costs time when something is really missing, and each timeout error names the bound it used. An observation read from the fixture (`observer: "fixture"`, such as a beacon or a served request) that the leg expects to be `true` is polled for up to 5000 ms (scaled) instead of read once. One that the leg expects to be `false` is still read once.
+`settleScale` (default 1) multiplies the bounds of waits for events the leg expects to happen: settles (beacon, served, title and load) on the control leg and `required` settles on either leg, `paused` on the control leg, page and child loads, the wait for a background step's `as` result (`<as> did not complete within <ms>ms`), the wait for the pre-action beacons, and the wait for an observation the leg expects to be `true`. Adopters on slow hosts can set 3 or 4. Every wait polls and returns as soon as its event arrives, so a larger bound only costs time when something is really missing, and each timeout error names the bound it used. An observation read from the fixture (`observer: "fixture"`, such as a beacon or a served request) that the leg expects to be `true` is polled for up to 5000 ms (scaled) instead of read once. One that the leg expects to be `false` is still read once.
 
 `refusalScale` (default 1) multiplies the bounds of waits for what the guarded leg expects to be absent, the beacon, request, title or navigation that the guard should block: settles that are not `required`, and `paused`, on the guarded leg. Such a wait runs to its full bound whenever the guard works, so `settleScale` leaves it alone. The trade-off: a larger `refusalScale` gives more sensitivity to a leak that arrives late on a slow host, because the observations after the wait see it, at the cost of that much more time per guarded row. Adopters should keep `refusalScale` at 1 or higher, never below 1; the runner refuses a `refusalScale` below 1 with `refusalScale must be a number of at least 1`.
 
@@ -401,7 +401,13 @@ observations: a missing or failing effect fails the control. Guarded liveness
 requires the exact target URL in the fixture log or a target-origin `/live`
 heartbeat; alternatively a pre-action `/live?tag=...&step=pre&to=...` request and
 an exact-URL block/error from the client or unguarded frame tree. An error for a
-different URL is not evidence. `blocked` accepts either `{ url }` for one exact URL
+different URL is not evidence. Before judging, the runner waits, bounded at 5 s (scaled by `settleScale`), for the
+pre-action beacon of every trigger step it ran, since a keepalive beacon has no ordering
+guarantee. When one never arrives, an `eitherWhen` that needs it is `"incomplete"` and
+excluded from that field's expectations, and the guarded leg is not live with
+`not live: pre beacon not observed for <url>` in the row's `why`, never a false
+mismatch. Once the beacon is in, a failing `eitherWhen` whose field mismatches, and a
+failing `liveCheck`, are rechecked for up to 1.5 s (scaled) before they count. `blocked` accepts either `{ url }` for one exact URL
 or `{ anyOf: [url, ...] }` for a nonempty list of exact URLs; each URL can be a
 string or `{ hops, to, index? }`. Both forms allow `session` and `frame`. With `frame`,
 the unguarded observer also reads the page's out-of-process iframe targets (matched by

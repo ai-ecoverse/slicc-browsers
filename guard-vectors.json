@@ -119,6 +119,550 @@
   },
   "vectors": [
     {
+      "id": "C2.redirect-body",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-start"
+        }
+      ],
+      "trigger": [
+        {
+          "redirectSecret": "body",
+          "as": "redirect"
+        }
+      ],
+      "targets": ["ordinary"],
+      "observe": {
+        "live": {
+          "means": "redirect secret: live",
+          "check": {
+            "result": "redirect",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "rawRecorded": {
+          "means": "redirect secret: rawRecorded",
+          "check": {
+            "result": "redirect",
+            "path": "result.rawRecorded",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "secretHidden": {
+          "means": "redirect secret: secretHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.secretHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sessionSurvives": {
+          "means": "redirect secret: sessionSurvives",
+          "check": {
+            "result": "redirect",
+            "path": "result.sessionSurvives",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "protectedBodyHidden": {
+          "means": "redirect secret: protectedBodyHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.protectedBodyHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cookieHidden": {
+          "means": "redirect secret: cookieHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.cookieHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "replayAttempted": {
+          "means": "redirect secret: replayAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.replayAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "resourceContentAttempted": {
+          "means": "redirect secret: resourceContentAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.resourceContentAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotAttempted": {
+          "means": "redirect secret: snapshotAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.snapshotAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domSnapshotAttempted": {
+          "means": "redirect secret: domSnapshotAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.domSnapshotAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "overridesRefused": {
+          "means": "redirect secret: overridesRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.overridesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryBody": {
+          "means": "redirect secret: ordinaryBody",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinaryBody",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryResource": {
+          "means": "redirect secret: ordinaryResource",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinaryResource",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinarySnapshot": {
+          "means": "redirect secret: ordinarySnapshot",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinarySnapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryDOM": {
+          "means": "redirect secret: ordinaryDOM",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinaryDOM",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "iframeSnapshotAttempted": {
+          "means": "redirect body iframe: iframeSnapshotAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.iframeSnapshotAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryIframeSnapshot": {
+          "means": "redirect body iframe: ordinaryIframeSnapshot",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinaryIframeSnapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryIframeDOM": {
+          "means": "redirect body iframe: ordinaryIframeDOM",
+          "check": {
+            "result": "redirect",
+            "path": "result.ordinaryIframeDOM",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "overridesWorked": {
+          "means": "redirect secret: overridesWorked",
+          "check": {
+            "result": "redirect",
+            "path": "result.overridesWorked",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the fixture served the registered ordinary redirect",
+      "liveCheck": {
+        "result": "redirect",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "rawRecorded": true,
+          "secretHidden": false,
+          "sessionSurvives": true,
+          "ordinaryBody": true,
+          "ordinaryResource": true,
+          "ordinarySnapshot": true,
+          "ordinaryDOM": true,
+          "iframeSnapshotAttempted": true,
+          "ordinaryIframeSnapshot": true,
+          "ordinaryIframeDOM": true,
+          "replayAttempted": true,
+          "resourceContentAttempted": true,
+          "snapshotAttempted": true,
+          "domSnapshotAttempted": true,
+          "overridesWorked": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "rawRecorded": true,
+        "secretHidden": true,
+        "sessionSurvives": true,
+        "protectedBodyHidden": true,
+        "cookieHidden": true,
+        "replayAttempted": true,
+        "resourceContentAttempted": true,
+        "snapshotAttempted": true,
+        "domSnapshotAttempted": true,
+        "overridesRefused": true,
+        "iframeSnapshotAttempted": true
+      }
+    },
+    {
+      "id": "C2.redirect-secret-mix",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-start"
+        }
+      ],
+      "trigger": [
+        {
+          "redirectSecret": "mix",
+          "as": "redirect"
+        }
+      ],
+      "targets": ["ordinary"],
+      "observe": {
+        "live": {
+          "means": "redirect secret: live",
+          "check": {
+            "result": "redirect",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "rawRecorded": {
+          "means": "redirect secret: rawRecorded",
+          "check": {
+            "result": "redirect",
+            "path": "result.rawRecorded",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "secretHidden": {
+          "means": "redirect secret: secretHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.secretHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sessionSurvives": {
+          "means": "redirect secret: sessionSurvives",
+          "check": {
+            "result": "redirect",
+            "path": "result.sessionSurvives",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchBodyAttempted": {
+          "means": "redirect secret: fetchBodyAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchBodyAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkBodyAttempted": {
+          "means": "redirect secret: networkBodyAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchBodyRefused": {
+          "means": "redirect secret: fetchBodyRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchBodyRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkBodyRefused": {
+          "means": "redirect secret: networkBodyRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "redirectLocation": {
+          "means": "redirect secret: redirectLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.redirectLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "extraLocation": {
+          "means": "redirect secret: extraLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.extraLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchLocation": {
+          "means": "redirect secret: fetchLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the fixture served the registered ordinary redirect",
+      "liveCheck": {
+        "result": "redirect",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "rawRecorded": true,
+          "secretHidden": false,
+          "sessionSurvives": true,
+          "fetchBodyAttempted": true,
+          "networkBodyAttempted": true,
+          "redirectLocation": true,
+          "extraLocation": true,
+          "fetchLocation": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "rawRecorded": true,
+        "secretHidden": true,
+        "sessionSurvives": true,
+        "fetchBodyAttempted": true,
+        "networkBodyAttempted": true,
+        "fetchBodyRefused": true,
+        "networkBodyRefused": true,
+        "extraLocation": true
+      }
+    },
+    {
+      "id": "C2.redirect-secret",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-start"
+        }
+      ],
+      "trigger": [
+        {
+          "redirectSecret": "headers",
+          "as": "redirect"
+        }
+      ],
+      "targets": ["ordinary"],
+      "observe": {
+        "live": {
+          "means": "redirect secret: live",
+          "check": {
+            "result": "redirect",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "rawRecorded": {
+          "means": "redirect secret: rawRecorded",
+          "check": {
+            "result": "redirect",
+            "path": "result.rawRecorded",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "secretHidden": {
+          "means": "redirect secret: secretHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.secretHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sessionSurvives": {
+          "means": "redirect secret: sessionSurvives",
+          "check": {
+            "result": "redirect",
+            "path": "result.sessionSurvives",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchBodyAttempted": {
+          "means": "redirect secret: fetchBodyAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchBodyAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkBodyAttempted": {
+          "means": "redirect secret: networkBodyAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchBodyRefused": {
+          "means": "redirect secret: fetchBodyRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchBodyRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkBodyRefused": {
+          "means": "redirect secret: networkBodyRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "redirectLocation": {
+          "means": "redirect secret: redirectLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.redirectLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "extraLocation": {
+          "means": "redirect secret: extraLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.extraLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "fetchLocation": {
+          "means": "redirect secret: fetchLocation",
+          "check": {
+            "result": "redirect",
+            "path": "result.fetchLocation",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the fixture served the registered ordinary redirect",
+      "liveCheck": {
+        "result": "redirect",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "rawRecorded": true,
+          "secretHidden": false,
+          "sessionSurvives": true,
+          "fetchBodyAttempted": true,
+          "networkBodyAttempted": true,
+          "redirectLocation": true,
+          "extraLocation": true,
+          "fetchLocation": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "rawRecorded": true,
+        "secretHidden": true,
+        "sessionSurvives": true,
+        "fetchBodyAttempted": true,
+        "networkBodyAttempted": true,
+        "fetchBodyRefused": true,
+        "networkBodyRefused": true,
+        "extraLocation": true
+      }
+    },
+    {
       "id": "C8.protected-error-page",
       "family": "C",
       "kind": "cdp",

@@ -26,7 +26,20 @@ function trigger(p) {
   return `<p>trigger</p><button onclick="go()">Go</button>${frame}<script>const to=${JSON.stringify(to)};function go(){const k=${JSON.stringify(kind)};if(k==='href'||k==='deferred')location.href=to;if(k==='replace')location.replace(to);if(k==='popup')window.open(to);if(k==='form'){const u=new URL(to);const f=document.createElement('form');f.action=u.origin+u.pathname;for(const [name,value] of u.searchParams){const i=document.createElement('input');i.type='hidden';i.name=name;i.value=value;f.append(i);}document.body.append(f);f.submit();}return 'went';}${kind === 'deferred' ? `setTimeout(go,${Number(p.get('defer') ?? 3000)});` : ''}</script>`;
 }
 
-function route(req, url, send, html) {
+function route(req, url, send, html, redirects) {
+  const secret =
+    redirects.get(`${url.hostname}${url.pathname}${url.search ?? ''}`) ??
+    redirects.get(`${url.hostname}${url.pathname}`) ??
+    redirects.get(url.pathname);
+  if (secret) {
+    if (!secret.to) return send(200, secret.body, 'text/plain');
+    return send(secret.code ?? 302, secret.body, 'text/plain', {
+      location: secret.to,
+      'content-location': secret.to,
+      refresh: `0;url=${secret.to}`,
+      link: `<${secret.to}>; rel=preconnect`,
+    });
+  }
   const p = url.searchParams;
   const routes = {
     '/beacon': () => send(204, ''),
@@ -95,6 +108,7 @@ function requestURL(req, scheme) {
 
 export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {
   let entries = [];
+  const redirects = new Map();
   const scheme = tls ? 'https' : 'http';
   const handler = (req, res) => {
     const url = requestURL(req, scheme);
@@ -123,8 +137,8 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
         headers
       );
     const wait = latency?.(url) ?? 0;
-    if (wait > 0) setTimeout(() => route(req, url, send, html), wait);
-    else route(req, url, send, html);
+    if (wait > 0) setTimeout(() => route(req, url, send, html, redirects), wait);
+    else route(req, url, send, html, redirects);
   };
   const server = tls ? createSecureServer(tls, handler) : createServer(handler);
   await new Promise((resolve, reject) => {
@@ -133,6 +147,12 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
   });
   const address = server.address();
   return {
+    redirects,
+    redirectSecret: async ({ path, host = '', search = '', remove, ...value }) => {
+      const key = `${host}${path}${search}`;
+      if (remove) redirects.delete(key);
+      else redirects.set(key, value);
+    },
     port: address.port,
     origin: `${scheme}://${host}:${address.port}`,
     log: () => structuredClone(entries),

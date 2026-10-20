@@ -14,6 +14,7 @@ import {
   steps,
 } from './guard-driver.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
+import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -609,9 +610,12 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
-    if ((step.extensionWorld || step.unparseable || step.errorPage) && !out.ok)
+    if (
+      (step.extensionWorld || step.unparseable || step.errorPage || step.redirectSecret) &&
+      !out.ok
+    )
       this.errors.push(
-        `${step.unparseable ? 'unparseable' : step.errorPage ? 'errorPage' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
+        `${step.redirectSecret ? 'redirectSecret' : step.unparseable ? 'unparseable' : step.errorPage ? 'errorPage' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
       );
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
@@ -661,6 +665,26 @@ class Execution {
     if (step.settle) {
       await this.settle(step.settle);
       return;
+    }
+    if (step.redirectSecret) {
+      this.internalSessions.add(session);
+      try {
+        return await outcome(
+          redirectSecret({
+            client: this.client,
+            reader: this.reader,
+            session,
+            targetId: this.pageTarget,
+            ordinary: this.vars.ordinary,
+            tag: this.vars.tag,
+            fixture: this.options.fixture,
+            mode: step.redirectSecret,
+            side: this.side,
+          })
+        );
+      } finally {
+        this.internalSessions.delete(session);
+      }
     }
     if (step.errorPage)
       return outcome(

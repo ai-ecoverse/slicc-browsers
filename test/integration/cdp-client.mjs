@@ -188,7 +188,9 @@ export async function connect(url) {
   const pending = new Map();
   const waiters = new Set();
   const events = [];
+  const messages = [];
   ws.addEventListener('message', ({ data }) => {
+    messages.push(String(data));
     const message = JSON.parse(data);
     if (message.id) {
       const entry = pending.get(message.id);
@@ -224,6 +226,7 @@ export async function connect(url) {
   });
   return {
     events,
+    messages,
     send: (method, params = {}, sessionId) =>
       new Promise((resolve, reject) => {
         const seq = ++id;

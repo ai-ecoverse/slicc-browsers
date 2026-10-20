@@ -142,6 +142,10 @@ for (const { name, case: c, expected } of corpus.cases ?? []) {
     if (e.tier < tier) fail(`${label}: ${e.id} is out of tier order`);
     tier = e.tier;
     if (e.endpoint) {
+      for (const tab of e.endpoint.sevenTabs) {
+        if (tab.url !== new URL(tab.url).origin || tab.title !== tab.url)
+          fail(`${label}: ${e.id} sevenTabs URL and title must be origin only`);
+      }
       const open = e.endpoint.sevenTabs.length > 0;
       if (e.endpoint.sevenOpen !== open)
         fail(`${label}: ${e.id} sevenOpen disagrees with sevenTabs`);
@@ -264,7 +268,8 @@ for (const v of guard.vectors ?? []) {
   if (v.observe?.hopped && !steps.some((step) => step.hops))
     gv(`${v.id}: hopped requires a hops step`);
   const runnable = steps.some(
-    (st) => st.cdp || st.page || st.extensionWorld || st.unparseable || st.errorPage
+    (st) =>
+      st.cdp || st.page || st.extensionWorld || st.unparseable || st.errorPage || st.redirectSecret
   );
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);

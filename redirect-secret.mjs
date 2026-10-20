@@ -2,6 +2,16 @@ import { load, outcome } from './guard-driver.mjs';
 import { redirectFragments } from './redirect-fragments.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const decodeBase64 = (text) =>
+  new TextDecoder().decode(Uint8Array.from(atob(text), (char) => char.charCodeAt(0)));
+const decodedBase64 = (value) =>
+  [...value.matchAll(/[A-Za-z0-9+/]{12,}={0,2}/g)].flatMap(([text]) => {
+    try {
+      return [decodeBase64(text)];
+    } catch {
+      return [];
+    }
+  });
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 const redirects = [301, 302, 303, 307, 308];
 const redirectHeaders = (to) => ({
@@ -45,8 +55,7 @@ export function containsSecret(value, marker) {
       try {
         decoded.push(JSON.parse(`"${value}"`));
       } catch {}
-      for (const match of value.matchAll(/[A-Za-z0-9+/]{12,}={0,2}/g))
-        decoded.push(Buffer.from(match[0], 'base64').toString('utf8'));
+      decoded.push(...decodedBase64(value));
       return decoded.some((text) => text !== value && visit(text, depth + 1));
     }
     if (value && typeof value === 'object')
@@ -212,7 +221,7 @@ class RedirectProbe {
     for (let i = 0; i < 32; i++) {
       const read = await this.send('IO.read', { handle });
       text += read.result?.base64Encoded
-        ? Buffer.from(read.result.data, 'base64').toString()
+        ? decodeBase64(read.result.data)
         : (read.result?.data ?? '');
       if (!read.ok || read.result.eof) break;
     }

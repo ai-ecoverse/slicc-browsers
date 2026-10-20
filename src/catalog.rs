@@ -175,8 +175,17 @@ impl Seven {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ErrorPageRule {
+    pub url: String,
+    pub target: String,
+    pub redact: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProtectedOrigins {
+    #[serde(default)]
+    pub error_page: ErrorPageRule,
     pub domains: Vec<String>,
     pub hosts: Vec<String>,
     pub schemes: Vec<String>,

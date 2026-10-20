@@ -15,7 +15,18 @@ const exercises = {
       !p.url('https://example.com/') &&
       p.url('http://127.0.0.1:5710/') &&
       p.unparseable('http://exa%20mple.sliccy.ai/') &&
-      !p.unparseable('https://example.com/')
+      !p.unparseable('https://example.com/') &&
+      !p.target({
+        url: 'https://seven.sliccy.ai/secret',
+        documentURL: 'chrome-error://chromewebdata/',
+        unreachableURL: 'https://seven.sliccy.ai/secret',
+      }) &&
+      p.target({
+        url: 'https://seven.sliccy.ai/secret',
+        documentURL: 'chrome-error://chromewebdata/',
+        unreachableURL: 'https://seven.sliccy.ai/secret',
+        previous: true,
+      })
     );
   },
   'seven.mjs': ({ isSevenLabel }) =>

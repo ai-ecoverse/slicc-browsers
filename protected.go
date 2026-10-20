@@ -19,23 +19,31 @@ const (
 	OpenerUnknown     = "unknown"
 )
 
+type ErrorPageRule struct {
+	URL    string `json:"url"`
+	Target string `json:"target"`
+	Redact string `json:"redact"`
+}
+
 type ProtectedOrigins struct {
-	Domains            []string `json:"domains"`
-	Hosts              []string `json:"hosts"`
-	Schemes            []string `json:"schemes"`
-	InnerSchemes       []string `json:"innerSchemes"`
-	AnySchemes         []string `json:"anySchemes"`
-	ProtectedSchemes   []string `json:"protectedSchemes"`
-	SchemeExceptions   []string `json:"schemeExceptions"`
-	AboutScheme        string   `json:"aboutScheme"`
-	TargetTypes        []string `json:"targetTypes"`
-	Inheriting         []string `json:"inheriting"`
-	Unparseable        string   `json:"unparseable"`
-	UnparseableRefusal string   `json:"unparseableRefusal"`
-	Refusal            string   `json:"refusal"`
+	ErrorPage          ErrorPageRule `json:"errorPage"`
+	Domains            []string      `json:"domains"`
+	Hosts              []string      `json:"hosts"`
+	Schemes            []string      `json:"schemes"`
+	InnerSchemes       []string      `json:"innerSchemes"`
+	AnySchemes         []string      `json:"anySchemes"`
+	ProtectedSchemes   []string      `json:"protectedSchemes"`
+	SchemeExceptions   []string      `json:"schemeExceptions"`
+	AboutScheme        string        `json:"aboutScheme"`
+	TargetTypes        []string      `json:"targetTypes"`
+	Inheriting         []string      `json:"inheriting"`
+	Unparseable        string        `json:"unparseable"`
+	UnparseableRefusal string        `json:"unparseableRefusal"`
+	Refusal            string        `json:"refusal"`
 }
 
 type ProtectedVectors struct {
+	ErrorPage          ErrorPageRule  `json:"errorPage"`
 	Unparseable        string         `json:"unparseable"`
 	UnparseableRefusal string         `json:"unparseableRefusal"`
 	Schema             int            `json:"schema"`
@@ -52,11 +60,14 @@ type URLVector struct {
 }
 
 type TargetVector struct {
-	URL       string `json:"url"`
-	Type      string `json:"type,omitempty"`
-	Previous  bool   `json:"previous,omitempty"`
-	Opener    string `json:"opener,omitempty"`
-	Protected bool   `json:"protected"`
+	DocumentURL    string `json:"documentURL,omitempty"`
+	UnreachableURL string `json:"unreachableURL,omitempty"`
+	Navigating     bool   `json:"navigating,omitempty"`
+	URL            string `json:"url"`
+	Type           string `json:"type,omitempty"`
+	Previous       bool   `json:"previous,omitempty"`
+	Opener         string `json:"opener,omitempty"`
+	Protected      bool   `json:"protected"`
 }
 
 type CookieVector struct {

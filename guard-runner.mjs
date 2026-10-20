@@ -13,6 +13,7 @@ import {
   result,
   steps,
 } from './guard-driver.mjs';
+import { protectedErrorPage } from './protected-error-page.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -115,6 +116,7 @@ class Execution {
     this.errors = [];
     this.notes = [];
     this.answers = [];
+    this.internalSessions = new Set();
     this.attachSettings = new Map();
     this.childSteps = [];
     this.deferred = [];
@@ -450,7 +452,10 @@ class Execution {
       for (const event of this.client.events.slice(this.eventStart)) {
         if (this.processed.has(event)) continue;
         this.processed.add(event);
-        if (event.method === 'Fetch.requestPaused' || event.method === 'Fetch.authRequired') {
+        if (
+          (event.method === 'Fetch.requestPaused' || event.method === 'Fetch.authRequired') &&
+          !this.internalSessions.has(event.sessionId)
+        ) {
           this.pending.push(
             this.answer(event).catch((error) => this.errors.push(String(error.message ?? error)))
           );
@@ -604,9 +609,9 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
-    if ((step.extensionWorld || step.unparseable) && !out.ok)
+    if ((step.extensionWorld || step.unparseable || step.errorPage) && !out.ok)
       this.errors.push(
-        `${step.unparseable ? 'unparseable' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
+        `${step.unparseable ? 'unparseable' : step.errorPage ? 'errorPage' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
       );
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
@@ -657,6 +662,21 @@ class Execution {
       await this.settle(step.settle);
       return;
     }
+    if (step.errorPage)
+      return outcome(
+        protectedErrorPage({
+          client: this.client,
+          reader: this.reader,
+          session,
+          targetId: this.pageTarget,
+          ordinary: this.vars.ordinary,
+          protectedOrigin: this.vars.seven,
+          tag: this.vars.tag,
+          internalSessions: this.internalSessions,
+          mode: step.errorPage,
+          side: this.side,
+        })
+      );
     if (step.unparseable)
       return outcome(
         unparseableURLs({

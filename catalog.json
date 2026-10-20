@@ -738,6 +738,11 @@
     "aboutScheme": "chrome",
     "targetTypes": ["browser_ui"],
     "inheriting": ["about:blank", "about:srcdoc"],
+    "errorPage": {
+      "url": "chrome-error://chromewebdata/",
+      "target": "previous",
+      "redact": "origin"
+    },
     "unparseable": "protected",
     "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
     "refusal": "slicc: refused: target is on seven's origin"

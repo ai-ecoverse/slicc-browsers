@@ -13,6 +13,72 @@ export function emulatedGuard(browser, options = {}) {
   const children = new Set();
   const closed = new Set();
   const shields = new Map();
+  const readyShields = new Map();
+  const sessions = new Map();
+  const decisions = new Map();
+  const frames = new Map();
+  const navigating = new Set();
+  let frameCursor = 0;
+  const learnFrames = () => {
+    for (const event of unguarded.events.slice(frameCursor)) {
+      frameCursor++;
+      const owner = shields.get(event.sessionId);
+      if (!owner || !catalog) continue;
+      if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
+        const f = event.params.frame;
+        frames.set(owner.targetId, f);
+        navigating.delete(owner.targetId);
+        const previous = decisions.get(owner.targetId) ?? false;
+        decisions.set(
+          owner.targetId,
+          f.unreachableUrl && f.url === options.protectedOrigins.errorPage?.url
+            ? options.unlockErrorPage
+              ? false
+              : previous
+            : catalog.url(f.url)
+        );
+      }
+      if (
+        event.method === 'Page.frameStartedNavigating' &&
+        event.params.frameId === frames.get(owner.targetId)?.id &&
+        !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
+      )
+        navigating.add(owner.targetId);
+      if (
+        event.method === 'Page.frameStoppedLoading' &&
+        event.params.frameId === frames.get(owner.targetId)?.id
+      )
+        navigating.delete(owner.targetId);
+    }
+  };
+  const redactInfo = (info) => {
+    if (!catalog?.url(info.url, { readOnly: true })) return info;
+    let origin;
+    try {
+      origin = new URL(info.url).origin;
+    } catch {
+      return info;
+    }
+    return { ...info, url: origin, title: origin };
+  };
+  const decision = async (targetId) => {
+    const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
+    learnFrames();
+    const f = frames.get(targetId);
+    const documentURL = f?.url;
+    const unreachableURL = f?.unreachableUrl;
+    const previous = decisions.get(targetId) ?? false;
+    const blocked = options.targetURLOnly
+      ? catalog.target(targetInfo)
+      : catalog.target({
+          ...targetInfo,
+          documentURL,
+          unreachableURL,
+          navigating: navigating.has(targetId),
+          previous: options.unlockErrorPage ? false : previous,
+        });
+    return blocked;
+  };
   const contexts = new Set();
   const extensionContexts = new Map();
   const cutSessions = new Set();
@@ -60,6 +126,9 @@ export function emulatedGuard(browser, options = {}) {
       flatten: true,
     });
     shields.set(sessionId, { targetId, child });
+    await unguarded.send('Page.enable', {}, sessionId);
+    const { frameTree } = await unguarded.send('Page.getFrameTree', {}, sessionId);
+    frames.set(targetId, frameTree.frame);
     await unguarded.send(
       'Fetch.enable',
       { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] },
@@ -72,7 +141,9 @@ export function emulatedGuard(browser, options = {}) {
     if (!owner) return;
     const { requestId, request } = event.params;
     const blocked =
-      hosts.includes(parseURL(request.url)?.host) || Boolean(catalog?.url(request.url));
+      hosts.includes(parseURL(request.url)?.host) ||
+      Boolean(catalog?.url(request.url)) ||
+      (options.failDocumentOrigins ?? []).some((origin) => request.url.startsWith(`${origin}/`));
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
@@ -122,16 +193,24 @@ export function emulatedGuard(browser, options = {}) {
           events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
           continue;
         }
+        const exposed =
+          event.params?.targetInfo && catalog
+            ? {
+                ...event,
+                params: { ...event.params, targetInfo: redactInfo(event.params.targetInfo) },
+              }
+            : event;
         if (!mentions(event) && !hidden(event)) {
-          events.push(event);
+          events.push(exposed);
           for (const waiter of waiters)
-            if (waiter.pred(event)) {
+            if (waiter.pred(exposed)) {
               waiters.delete(waiter);
-              waiter.resolve(event);
+              waiter.resolve(exposed);
             }
         }
         if (event.method !== 'Target.attachedToTarget') continue;
         const info = event.params.targetInfo;
+        sessions.set(event.params.sessionId, info.targetId);
         if (event.params.waitingForDebugger) children.add(event.params.sessionId);
         if (!pages.has(info.targetId) && !pages.has(info.openerId))
           foreign.add(event.params.sessionId);
@@ -141,12 +220,15 @@ export function emulatedGuard(browser, options = {}) {
         if (event.params.waitingForDebugger) children.add(event.params.sessionId);
         if (!pages.has(info.targetId) && !pages.has(info.openerId))
           foreign.add(event.params.sessionId);
-        await shield(
+        const ready = shield(
           info.targetId,
           event.params.waitingForDebugger ? event.params.sessionId : undefined,
           event.params.waitingForDebugger
         ).catch(() => {});
+        readyShields.set(info.targetId, ready);
+        await ready;
       }
+      learnFrames();
       for (const event of unguarded.events.slice(guardCursor)) {
         guardCursor++;
         if (event.method === 'Fetch.requestPaused') await decide(event);
@@ -169,6 +251,15 @@ export function emulatedGuard(browser, options = {}) {
           }, ms ?? 10000);
         }),
       send: async (method, params, sessionId) => {
+        const targetId = params?.targetId ?? sessions.get(sessionId);
+        if (
+          catalog &&
+          !options.catalogAttachOnly &&
+          targetId &&
+          (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
+          (await decision(targetId))
+        )
+          throw refusal('protected target');
         learnWorlds();
         if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
         if (catalog && !options.exposeExtensionWorlds && sessionId) {
@@ -259,7 +350,7 @@ export function emulatedGuard(browser, options = {}) {
           const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
             targetId: params.targetId,
           });
-          if (catalog.target(targetInfo))
+          if (await decision(params.targetId))
             throw catalog.unparseable(targetInfo.url)
               ? new Error(options.protectedOrigins.unparseableRefusal)
               : refusal('protected target');
@@ -343,22 +434,47 @@ export function emulatedGuard(browser, options = {}) {
         if (method === 'Target.createTarget' && result?.targetId) pages.add(result.targetId);
         if (method === 'Target.createBrowserContext' && result?.browserContextId)
           contexts.add(result.browserContextId);
-        if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos))
+        if (method === 'Target.attachToTarget' && result?.sessionId) {
+          sessions.set(result.sessionId, params.targetId);
+          if (!shielded.has(params.targetId)) {
+            const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
+              targetId: params.targetId,
+            });
+            if (targetInfo.type === 'page') {
+              shielded.add(params.targetId);
+              pages.add(params.targetId);
+              readyShields.set(
+                params.targetId,
+                shield(params.targetId).catch(() => {})
+              );
+            }
+          }
+          await readyShields.get(params.targetId);
+        }
+        if (method === 'Target.getTargetInfo' && catalog)
+          return { ...result, targetInfo: redactInfo(result.targetInfo) };
+        if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
+          const visible = [];
+          for (const info of result.targetInfos)
+            if (
+              !mentions(info) &&
+              !(options.hideTypes ?? []).includes(info.type) &&
+              (!catalog || !(await decision(info.targetId)))
+            )
+              visible.push(info);
           return {
             ...result,
-            targetInfos: result.targetInfos.filter(
-              (info) =>
-                !mentions(info) &&
-                !catalog?.target(info) &&
-                !(options.hideTypes ?? []).includes(info.type)
-            ),
+            targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
           };
+        }
         return result;
       },
     },
     stop: async () => {
       stopped = true;
       await watch;
+      for (const sessionId of shields.keys())
+        await unguarded.send('Target.detachFromTarget', { sessionId }).catch(() => {});
     },
   };
 }

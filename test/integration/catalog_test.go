@@ -238,6 +238,9 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 		}
 	}
 	po := sliccbrowsers.Default().ProtectedOrigins
+	if po.ErrorPage != v.ErrorPage || po.ErrorPage.URL != "chrome-error://chromewebdata/" || po.ErrorPage.Target != "previous" || po.ErrorPage.Redact != "origin" {
+		t.Fatalf("error-page rule: %+v / %+v", po.ErrorPage, v.ErrorPage)
+	}
 	if po.Unparseable != "protected" || v.Unparseable != po.Unparseable || v.UnparseableRefusal != po.UnparseableRefusal || po.UnparseableRefusal != "slicc: refused: slicc can't parse this URL, so it could be a protected page" {
 		t.Fatalf("unparseable rule: %+v / %+v", po, v)
 	}

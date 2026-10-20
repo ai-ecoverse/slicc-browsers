@@ -68,8 +68,23 @@ export function protectedOrigins(rules, extraOrigins = []) {
     );
   };
 
-  const target = ({ url: text, previous = false, opener, type }) => {
+  const target = ({
+    url: text,
+    previous = false,
+    opener,
+    type,
+    documentURL,
+    unreachableURL,
+    navigating = false,
+  }) => {
     if (type && (rules.targetTypes ?? []).includes(type)) return true;
+    if (
+      rules.errorPage &&
+      documentURL === rules.errorPage.url &&
+      unreachableURL === text &&
+      !navigating
+    )
+      return previous;
     if (inheriting(text)) return previous || opener === 'protected' || opener === 'unknown';
     return url(text);
   };

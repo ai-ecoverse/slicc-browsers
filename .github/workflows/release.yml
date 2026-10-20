@@ -59,8 +59,14 @@ jobs:
 
       - run: cargo build --target wasm32-wasip1 --all-features
 
-      - run: npx semantic-release 2>&1 | tee "$RUNNER_TEMP/semantic-release.log"
+      - name: semantic-release
         if: inputs.tag == ''
+        shell: bash
+        run: |
+          shim="$RUNNER_TEMP/git-retry"
+          mkdir -p "$shim"
+          ln -sf "$PWD/scripts/git-retry.mjs" "$shim/git"
+          REAL_GIT="$(command -v git)" PATH="$shim:$PATH" npx semantic-release 2>&1 | tee "$RUNNER_TEMP/semantic-release.log"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

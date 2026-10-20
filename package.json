@@ -73,7 +73,7 @@
     "trust:dry": "npx fledgling sync --dry-run -y --skip-publish",
     "release": "semantic-release",
     "test:guard": "npm run test:guard-integration && npm run test:guard-sweep",
-    "test:guard-integration": "node --test test/integration/guard-diag.test.mjs",
+    "test:guard-integration": "node --test test/integration/guard-diag.test.mjs test/integration/guard-adoption.test.mjs",
     "test:guard-sweep": "node scripts/test-guards.mjs",
     "test:gates": "node --test test/integration/gates.test.mjs",
     "test:guard-target": "node --test test/integration/guard-runner.test.mjs",

@@ -14875,35 +14875,18 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "paused": {
-          "means": "a Debugger.paused in the load listener of {target}/doc?n={tag}&listener=1",
+          "means": "a Debugger.paused in a window load listener, which only {target}/doc?n={tag}&listener=1 registers",
           "dependsOn": ["refused.3"],
           "check": {
-            "any": [
-              {
-                "event": "Debugger.paused",
-                "where": {
-                  "params": {
-                    "callFrames": {
-                      "$some": {
-                        "url": "{target}/doc?n={tag}&listener=1"
-                      }
-                    }
-                  }
-                },
-                "observer": "client"
-              },
-              {
-                "event": "Debugger.paused",
-                "where": {
-                  "params": {
-                    "data": {
-                      "url": "{target}/doc?n={tag}&listener=1"
-                    }
-                  }
-                },
-                "observer": "client"
+            "event": "Debugger.paused",
+            "where": {
+              "params": {
+                "reason": "EventListener",
+                "data": {
+                  "eventName": "listener:load"
+                }
               }
-            ],
+            },
             "observer": "client"
           }
         },
@@ -16040,10 +16023,10 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "slow": {
-          "means": "{target}/doc?n={tag} took at least 1000 ms to its first response byte",
+          "means": "{target}/doc?n={tag} took at least 1000 ms to load",
           "dependsOn": ["refused.3"],
           "check": {
-            "expression": "location.href === '{target}/doc?n={tag}' && performance.getEntriesByType('navigation')[0].responseStart >= 1000",
+            "expression": "location.href === '{target}/doc?n={tag}' && performance.getEntriesByType('navigation')[0].duration >= 1000",
             "equals": true,
             "via": "unguarded",
             "observer": "unguarded"

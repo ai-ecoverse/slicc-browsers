@@ -10,7 +10,8 @@ const { protectedOrigins } = JSON.parse(
   await readFile(new URL('../../catalog.json', import.meta.url))
 );
 const out = (x) => process.stdout.write(`DIAG ${JSON.stringify(x)}\n`);
-const ids = [
+const ids = [];
+const unused = [
   'E4.event-listener',
   'E6.network-conditions',
   'E6.network-state',
@@ -127,6 +128,32 @@ test('diag', { timeout: 600000 }, async () => {
     out({ step: 'online-now', v: await ev('String(navigator.onLine)') });
     await nav(`${targets.ordinary}/doc?n=diag-2`);
     out({ step: 'online-after', v: await ev('String(navigator.onLine)') });
+    const side = await browser.unguarded.send('Target.attachToTarget', { targetId, flatten: true });
+    await browser.unguarded.send('Page.enable', {}, side.sessionId);
+    await browser.unguarded.send(
+      'Fetch.enable',
+      { patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }] },
+      side.sessionId
+    );
+    const pump = setInterval(() => {
+      for (const e of browser.unguarded.events.splice(0))
+        if (e.method === 'Fetch.requestPaused')
+          browser.unguarded
+            .send('Fetch.continueRequest', { requestId: e.params.requestId }, e.sessionId)
+            .catch(() => {});
+    }, 20);
+    out({ step: 'side-online-now', v: await ev('String(navigator.onLine)') });
+    await c.send(
+      'Network.overrideNetworkState',
+      { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 },
+      sessionId
+    );
+    out({ step: 'side-online-reset', v: await ev('String(navigator.onLine)') });
+    await nav(`${targets.ordinary}/doc?n=diag-4`);
+    out({ step: 'side-online-after-same-site', v: await ev('String(navigator.onLine)') });
+    await nav(`${targets.seven}/doc?n=diag-5`);
+    out({ step: 'side-online-after-cross-site', v: await ev('String(navigator.onLine)') });
+    clearInterval(pump);
     await c.send('Debugger.enable', {}, sessionId);
     out({
       step: 'listener',

@@ -1,5 +1,6 @@
 {
   "schema": 1,
+  "errorPage": { "url": "chrome-error://chromewebdata/", "target": "previous", "redact": "origin" },
   "unparseable": "protected",
   "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
   "origins": ["http://127.0.0.1:5710", "https://seven.example.test"],
@@ -738,6 +739,42 @@
     }
   ],
   "targets": [
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "chrome-error://chromewebdata/",
+      "unreachableURL": "https://seven.sliccy.ai/other",
+      "protected": true
+    },
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "chrome-error://chromewebdata/",
+      "unreachableURL": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "navigating": true,
+      "protected": true
+    },
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "chrome-error://chromewebdata/",
+      "protected": true
+    },
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "chrome-error://chromewebdata/",
+      "unreachableURL": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "protected": false
+    },
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "chrome-error://chromewebdata/",
+      "unreachableURL": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "previous": true,
+      "protected": true
+    },
+    {
+      "url": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "documentURL": "https://seven.sliccy.ai/path?secret=query#fragment",
+      "protected": true
+    },
     {
       "url": "http://exa mple.sliccy.ai/",
       "protected": true

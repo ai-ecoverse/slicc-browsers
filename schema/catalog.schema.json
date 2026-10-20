@@ -227,6 +227,16 @@
           "uniqueItems": true,
           "items": { "type": "string", "pattern": "^about:[a-z]+$" }
         },
+        "errorPage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "target", "redact"],
+          "properties": {
+            "url": { "const": "chrome-error://chromewebdata/" },
+            "target": { "const": "previous" },
+            "redact": { "const": "origin" }
+          }
+        },
         "unparseable": { "const": "protected" },
         "unparseableRefusal": {
           "const": "slicc: refused: slicc can't parse this URL, so it could be a protected page"

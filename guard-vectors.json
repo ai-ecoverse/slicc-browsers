@@ -119,6 +119,464 @@
   },
   "vectors": [
     {
+      "id": "C8.protected-error-page",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "errorPage": "recover",
+          "requires": ["browserSession"],
+          "as": "errorPage"
+        }
+      ],
+      "targets": ["seven"],
+      "requires": ["browserSession"],
+      "observe": {
+        "live": {
+          "means": "protected error-page recover: live",
+          "check": {
+            "result": "errorPage",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "protected error-page recover: attached",
+          "check": {
+            "result": "errorPage",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "infoRedacted": {
+          "means": "protected error-page recover: infoRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.infoRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listRedacted": {
+          "means": "protected error-page recover: listRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.listRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsRedacted": {
+          "means": "protected error-page recover: eventsRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.eventsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "reload": {
+          "means": "protected error-page recover: reload",
+          "check": {
+            "result": "errorPage",
+            "path": "result.reload",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "blank": {
+          "means": "protected error-page recover: blank",
+          "check": {
+            "result": "errorPage",
+            "path": "result.blank",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "close": {
+          "means": "protected error-page recover: close",
+          "check": {
+            "result": "errorPage",
+            "path": "result.close",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer sees chrome-error://chromewebdata/ with unreachableUrl exactly matching targetInfo.url; real-document controls require a BackForwardCacheRestore commit",
+      "liveCheck": {
+        "result": "errorPage",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "attached": true,
+          "infoRedacted": false,
+          "listRedacted": false,
+          "eventsRedacted": false,
+          "reload": true,
+          "blank": true,
+          "close": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "attached": true,
+        "infoRedacted": true,
+        "listRedacted": true,
+        "eventsRedacted": true,
+        "reload": true,
+        "blank": true,
+        "close": true
+      }
+    },
+    {
+      "id": "C8.protected-document-restore",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "errorPage": "restore",
+          "requires": ["browserSession"],
+          "as": "errorPage"
+        }
+      ],
+      "targets": ["seven"],
+      "requires": ["browserSession"],
+      "observe": {
+        "live": {
+          "means": "protected error-page restore: live",
+          "check": {
+            "result": "errorPage",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "protected error-page restore: attached",
+          "check": {
+            "result": "errorPage",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "infoRedacted": {
+          "means": "protected error-page restore: infoRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.infoRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listRedacted": {
+          "means": "protected error-page restore: listRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.listRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsRedacted": {
+          "means": "protected error-page restore: eventsRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.eventsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "reload": {
+          "means": "protected error-page restore: reload",
+          "check": {
+            "result": "errorPage",
+            "path": "result.reload",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "blank": {
+          "means": "protected error-page restore: blank",
+          "check": {
+            "result": "errorPage",
+            "path": "result.blank",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "restored": {
+          "means": "protected error-page restore: restored",
+          "check": {
+            "result": "errorPage",
+            "path": "result.restored",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "protected error-page restore: evaluateRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "protected error-page restore: attachRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "protected error-page restore: closeRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer sees chrome-error://chromewebdata/ with unreachableUrl exactly matching targetInfo.url; real-document controls require a BackForwardCacheRestore commit",
+      "liveCheck": {
+        "result": "errorPage",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "attached": true,
+          "infoRedacted": false,
+          "listRedacted": false,
+          "eventsRedacted": false,
+          "reload": true,
+          "blank": true,
+          "restored": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false
+        }
+      },
+      "expected": {
+        "live": true,
+        "attached": true,
+        "infoRedacted": true,
+        "listRedacted": true,
+        "eventsRedacted": true,
+        "reload": true,
+        "blank": true,
+        "restored": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true
+      }
+    },
+    {
+      "id": "C8.protected-error-page-sticky",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "errorPage": "sticky",
+          "requires": ["browserSession"],
+          "as": "errorPage"
+        }
+      ],
+      "targets": ["seven"],
+      "requires": ["browserSession"],
+      "observe": {
+        "live": {
+          "means": "protected error-page sticky: live",
+          "check": {
+            "result": "errorPage",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "protected error-page sticky: attached",
+          "check": {
+            "result": "errorPage",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "infoRedacted": {
+          "means": "protected error-page sticky: infoRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.infoRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listRedacted": {
+          "means": "protected error-page sticky: listRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.listRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsRedacted": {
+          "means": "protected error-page sticky: eventsRedacted",
+          "check": {
+            "result": "errorPage",
+            "path": "result.eventsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "reload": {
+          "means": "protected error-page sticky: reload",
+          "check": {
+            "result": "errorPage",
+            "path": "result.reload",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "blank": {
+          "means": "protected error-page sticky: blank",
+          "check": {
+            "result": "errorPage",
+            "path": "result.blank",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "restored": {
+          "means": "protected error-page sticky: restored",
+          "check": {
+            "result": "errorPage",
+            "path": "result.restored",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "protected error-page sticky: evaluateRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "protected error-page sticky: attachRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "protected error-page sticky: closeRefused",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "stickyError": {
+          "means": "protected error-page sticky: stickyError",
+          "check": {
+            "result": "errorPage",
+            "path": "result.stickyError",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer sees chrome-error://chromewebdata/ with unreachableUrl exactly matching targetInfo.url; real-document controls require a BackForwardCacheRestore commit",
+      "liveCheck": {
+        "result": "errorPage",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "attached": true,
+          "infoRedacted": false,
+          "listRedacted": false,
+          "eventsRedacted": false,
+          "reload": true,
+          "blank": true,
+          "restored": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "stickyError": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "attached": true,
+        "infoRedacted": true,
+        "listRedacted": true,
+        "eventsRedacted": true,
+        "reload": true,
+        "blank": true,
+        "restored": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "stickyError": true
+      }
+    },
+    {
       "id": "C8.unparseable",
       "family": "C",
       "kind": "cdp",

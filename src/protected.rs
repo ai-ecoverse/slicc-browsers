@@ -7,6 +7,8 @@ pub const OPENER_UNKNOWN: &str = "unknown";
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Vectors {
+    #[serde(default)]
+    pub error_page: crate::ErrorPageRule,
     pub schema: u32,
     pub unparseable: String,
     pub unparseable_refusal: String,
@@ -25,6 +27,20 @@ pub struct UrlVector {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TargetVector {
+    #[serde(
+        default,
+        rename = "documentURL",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub document_url: Option<String>,
+    #[serde(
+        default,
+        rename = "unreachableURL",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub unreachable_url: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub navigating: bool,
     pub url: String,
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,

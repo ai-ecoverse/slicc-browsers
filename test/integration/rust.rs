@@ -169,6 +169,10 @@ fn the_protected_vectors_parse_and_round_trip() {
         .iter()
         .all(|t| t.opener.as_deref().is_none_or(|o| openers.contains(&o))));
     let po = catalog().protected_origins;
+    assert_eq!(po.error_page, v.error_page);
+    assert_eq!(po.error_page.url, "chrome-error://chromewebdata/");
+    assert_eq!(po.error_page.target, "previous");
+    assert_eq!(po.error_page.redact, "origin");
     assert_eq!(po.unparseable, "protected");
     assert_eq!(v.unparseable, po.unparseable);
     assert_eq!(v.unparseable_refusal, po.unparseable_refusal);

@@ -43,17 +43,26 @@ async function lockChecks({ client, session, targetId, result }) {
   result.closeRefused = refused(await outcome(client.send('Target.closeTarget', { targetId })));
 }
 
-async function redaction({ client, targetId, failedURL, protectedOrigin, start, result }) {
+async function redaction({
+  client,
+  targetId,
+  failedURL,
+  protectedOrigin,
+  start,
+  result,
+  browserSession,
+}) {
   const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
-  const list = await outcome(client.send('Target.getTargets'));
   const origin = new URL(failedURL).origin;
   result.infoRedacted =
     info.ok && info.result.targetInfo.url === origin && info.result.targetInfo.title === origin;
-  result.listRedacted =
-    list.ok &&
-    list.result.targetInfos.some(
-      (i) => i.targetId === targetId && i.url === origin && i.title === origin
-    );
+  const list = browserSession ? await outcome(client.send('Target.getTargets')) : undefined;
+  result.listRedacted = !list
+    ? 'not-supported'
+    : list.ok &&
+      list.result.targetInfos.some(
+        (i) => i.targetId === targetId && i.url === origin && i.title === origin
+      );
   await pause(100);
   const targetEvents = client.events
     .slice(start)
@@ -78,6 +87,7 @@ export async function protectedErrorPage({
   mode,
   side,
   internalSessions = new Set(),
+  browserSession = true,
 }) {
   const initial = `${protectedOrigin}/doc?n=${tag}-history`;
   const failedURL = `${protectedOrigin}/doc/path-secret-${tag}?query-secret=${tag}#fragment-secret-${tag}`;
@@ -156,7 +166,8 @@ export async function protectedErrorPage({
       throw new Error(
         `protected-error-page: missing error commit ${JSON.stringify(result.evidence)}`
       );
-    await redaction({ client, targetId, failedURL, protectedOrigin, start, result });
+    const seen = { client, targetId, failedURL, protectedOrigin, start, result };
+    await redaction({ ...seen, browserSession });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {

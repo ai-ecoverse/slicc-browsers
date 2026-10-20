@@ -133,12 +133,10 @@
       "trigger": [
         {
           "errorPage": "recover",
-          "requires": ["browserSession"],
           "as": "errorPage"
         }
       ],
       "targets": ["seven"],
-      "requires": ["browserSession"],
       "observe": {
         "live": {
           "means": "protected error-page recover: live",
@@ -169,6 +167,7 @@
         },
         "listRedacted": {
           "means": "protected error-page recover: listRedacted",
+          "requires": ["browserSession"],
           "check": {
             "result": "errorPage",
             "path": "result.listRedacted",
@@ -260,12 +259,10 @@
       "trigger": [
         {
           "errorPage": "restore",
-          "requires": ["browserSession"],
           "as": "errorPage"
         }
       ],
       "targets": ["seven"],
-      "requires": ["browserSession"],
       "observe": {
         "live": {
           "means": "protected error-page restore: live",
@@ -296,6 +293,7 @@
         },
         "listRedacted": {
           "means": "protected error-page restore: listRedacted",
+          "requires": ["browserSession"],
           "check": {
             "result": "errorPage",
             "path": "result.listRedacted",
@@ -420,12 +418,10 @@
       "trigger": [
         {
           "errorPage": "sticky",
-          "requires": ["browserSession"],
           "as": "errorPage"
         }
       ],
       "targets": ["seven"],
-      "requires": ["browserSession"],
       "observe": {
         "live": {
           "means": "protected error-page sticky: live",
@@ -456,6 +452,7 @@
         },
         "listRedacted": {
           "means": "protected error-page sticky: listRedacted",
+          "requires": ["browserSession"],
           "check": {
             "result": "errorPage",
             "path": "result.listRedacted",

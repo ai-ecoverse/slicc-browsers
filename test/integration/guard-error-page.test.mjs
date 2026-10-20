@@ -67,18 +67,87 @@ test('protected error pages remain drivable and redacted; real and already-prote
           assert.equal(
             row.guarded,
             mode === 'catalog' ||
-              (mode === 'unlock-error' && row.id !== 'C8.protected-error-page-sticky')
+              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
               ? 'pass'
               : 'fail',
             JSON.stringify(row)
           );
           if (mode === 'target-url-only') assert.equal(row.observations.guarded.reload, false);
           if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
-          if (mode === 'unlock-error' && row.id === 'C8.protected-error-page-sticky')
+          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
             assert.equal(row.observations.guarded.closeRefused, false);
         }
       } finally {
         await guard?.stop();
+        await browser.close();
+      }
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('page-session transports run every error-page field', {
+  timeout: 300000,
+}, async () => {
+  const fixture = await fixtureServer();
+  try {
+    for (const mode of ['catalog', 'plain', 'unlock-error']) {
+      const browser = await launch(fixture);
+      const guard =
+        mode === 'plain'
+          ? emulatedGuard(browser, { failDocumentOrigins: [origins(fixture).seven] })
+          : emulatedGuard(browser, {
+              protectedOrigins: rules,
+              unlockErrorPage: mode === 'unlock-error',
+            });
+      const pageless = [];
+      const client = {
+        events: guard.client.events,
+        send: (method, params, session) => {
+          if (
+            !session &&
+            (!method.startsWith('Target.') ||
+              method === 'Target.setAutoAttach' ||
+              method === 'Target.createBrowserContext' ||
+              (method === 'Target.getTargetInfo' && !params?.targetId))
+          )
+            pageless.push(method);
+          return guard.client.send(method, params, session);
+        },
+      };
+      try {
+        const execution = await run(
+          { ...data, vectors, variants: { prompt: 0 } },
+          {
+            client,
+            unguarded: browser.unguarded,
+            targets: origins(fixture),
+            fixture,
+            capabilities: {},
+          }
+        );
+        assert.deepEqual(pageless, []);
+        assert.equal(execution.results.length, vectors.length);
+        for (const row of execution.results) {
+          process.stdout.write(`page-session ${mode}: ${JSON.stringify(row)}\n`);
+          assert.equal(row.control, 'pass', JSON.stringify(row));
+          assert.equal(row.live, 'pass', JSON.stringify(row));
+          assert.equal(row.notSupported, undefined, JSON.stringify(row));
+          assert.equal(
+            row.guarded,
+            mode === 'catalog' ||
+              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
+              ? 'pass'
+              : 'fail',
+            JSON.stringify(row)
+          );
+          if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
+          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
+            assert.equal(row.observations.guarded.closeRefused, false);
+        }
+      } finally {
+        await guard.stop();
         await browser.close();
       }
     }

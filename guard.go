@@ -164,6 +164,7 @@ func (e *GuardExpected) UnmarshalJSON(b []byte) error {
 type GuardStep struct {
 	RedirectSecret string          `json:"redirectSecret,omitempty"`
 	ErrorPage      string          `json:"errorPage,omitempty"`
+	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
 	Text           string          `json:"text,omitempty"`

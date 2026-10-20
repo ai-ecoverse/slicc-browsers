@@ -100,6 +100,21 @@ test('real Chrome redirect-secret catalog passes and plain or parsed-headers-onl
             JSON.stringify({ mode, row, evidence })
           );
           assert.equal(row.live, 'pass', JSON.stringify({ mode, row, evidence }));
+          if (row.id !== 'C2.redirect-body') {
+            for (const key of [
+              'networkFragmentVisible',
+              'frameFragmentVisible',
+              'frameTreeFragmentVisible',
+              'resourceTreeFragmentVisible',
+            ])
+              assert.equal(row.observations.control[key], true, `${mode} ${row.id} control ${key}`);
+            if (mode === 'catalog')
+              assert.equal(
+                row.observations.guarded.fragmentsHidden,
+                true,
+                `${row.id} protected fragment fields`
+              );
+          }
         }
       } finally {
         await guard?.stop();

@@ -472,6 +472,51 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "fragmentsHidden": {
+          "means": "redirect fragment field: fragmentsHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.fragmentsHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkFragmentVisible": {
+          "means": "redirect fragment field: networkFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameFragmentVisible": {
+          "means": "redirect fragment field: frameFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.frameFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeFragmentVisible": {
+          "means": "redirect fragment field: frameTreeFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.frameTreeFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "resourceTreeFragmentVisible": {
+          "means": "redirect fragment field: resourceTreeFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.resourceTreeFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -493,7 +538,11 @@
           "networkBodyAttempted": true,
           "redirectLocation": true,
           "extraLocation": true,
-          "fetchLocation": true
+          "fetchLocation": true,
+          "networkFragmentVisible": true,
+          "frameFragmentVisible": true,
+          "frameTreeFragmentVisible": true,
+          "resourceTreeFragmentVisible": true
         }
       },
       "expected": {
@@ -505,7 +554,8 @@
         "networkBodyAttempted": true,
         "fetchBodyRefused": true,
         "networkBodyRefused": true,
-        "extraLocation": true
+        "extraLocation": true,
+        "fragmentsHidden": true
       }
     },
     {
@@ -626,6 +676,51 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "fragmentsHidden": {
+          "means": "redirect fragment field: fragmentsHidden",
+          "check": {
+            "result": "redirect",
+            "path": "result.fragmentsHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkFragmentVisible": {
+          "means": "redirect fragment field: networkFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameFragmentVisible": {
+          "means": "redirect fragment field: frameFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.frameFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeFragmentVisible": {
+          "means": "redirect fragment field: frameTreeFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.frameTreeFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "resourceTreeFragmentVisible": {
+          "means": "redirect fragment field: resourceTreeFragmentVisible",
+          "check": {
+            "result": "redirect",
+            "path": "result.resourceTreeFragmentVisible",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -647,7 +742,11 @@
           "networkBodyAttempted": true,
           "redirectLocation": true,
           "extraLocation": true,
-          "fetchLocation": true
+          "fetchLocation": true,
+          "networkFragmentVisible": true,
+          "frameFragmentVisible": true,
+          "frameTreeFragmentVisible": true,
+          "resourceTreeFragmentVisible": true
         }
       },
       "expected": {
@@ -659,7 +758,8 @@
         "networkBodyAttempted": true,
         "fetchBodyRefused": true,
         "networkBodyRefused": true,
-        "extraLocation": true
+        "extraLocation": true,
+        "fragmentsHidden": true
       }
     },
     {

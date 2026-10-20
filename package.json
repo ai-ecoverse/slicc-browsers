@@ -54,7 +54,8 @@
     "extension-world.mjs",
     "unparseable-url.mjs",
     "protected-error-page.mjs",
-    "redirect-secret.mjs"
+    "redirect-secret.mjs",
+    "redirect-fragments.mjs"
   ],
   "scripts": {
     "prepare": "lefthook install",
@@ -73,6 +74,7 @@
     "test:guard-sweep": "node scripts/test-guards.mjs",
     "test:gates": "node --test test/integration/gates.test.mjs",
     "test:guard-target": "node --test test/integration/guard-runner.test.mjs",
+    "test:unit:redirect": "mkdir -p coverage/unit && node --experimental-test-coverage --test --test-coverage-include=redirect-secret.mjs --test-coverage-include=redirect-fragments.mjs --test-reporter=lcov --test-reporter-destination=coverage/unit/redirect.lcov test/unit/guard-redirect-*.test.mjs && slicc-diff-cover coverage/unit/redirect.lcov",
     "test:unit:guard": "node --experimental-test-coverage --test --test-coverage-include=guard-runner.mjs --test-coverage-include=fixture-server.mjs --test-coverage-lines=100 test/unit/guard-*.test.mjs"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 import { load, outcome } from './guard-driver.mjs';
+import { redirectFragments } from './redirect-fragments.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
@@ -76,7 +77,9 @@ class RedirectProbe {
     ];
     this.plainURL = `${this.ordinary}/redirect-secret-body/${this.tag}-plain?code=${encodeURIComponent(this.marker)}`;
     this.destinations =
-      this.side === 'control' ? this.protectedURLs.map(() => this.plainURL) : this.protectedURLs;
+      this.side === 'control'
+        ? this.protectedURLs.map((url) => `${this.plainURL}${new URL(url).hash}`)
+        : this.protectedURLs;
   }
 
   async send(method, params = {}) {
@@ -192,6 +195,7 @@ class RedirectProbe {
         }
         await pause(250);
         await this.send('Page.getFrameTree');
+        await this.send('Page.getResourceTree');
         await this.send('Page.getNavigationHistory');
         await this.reset();
       }
@@ -371,6 +375,13 @@ class RedirectProbe {
       fetchBodyRefused: bodyRefused('Fetch.getResponseBody'),
       networkBodyRefused: bodyRefused('Network.getResponseBody'),
       extraInPlace,
+      ...redirectFragments({
+        messages,
+        events,
+        replies: this.responses,
+        protectedOrigins: this.protectedURLs.map((url) => new URL(url).origin),
+        contains: (value) => containsSecret(value, this.marker),
+      }),
       redirectLocation: ordinaryEvents.some(
         (event) =>
           event.method === 'Network.requestWillBeSent' &&

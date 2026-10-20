@@ -303,15 +303,8 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
     const vectors = data.vectors.filter(
       (v) =>
         v.id.startsWith('C8.') &&
-        ![
-          'C8.newtab',
-          'C8.network-error',
-          'C8.iframe-error',
-          'C8.unparseable',
-          'C8.protected-error-page',
-          'C8.protected-document-restore',
-          'C8.protected-error-page-sticky',
-        ].includes(v.id)
+        !['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.unparseable'].includes(v.id) &&
+        !v.id.startsWith('C8.protected-')
     );
     assert.equal(vectors.length, 6);
     const rows = async (client) =>

@@ -43,27 +43,30 @@ async function lockChecks({ client, session, targetId, result }) {
   result.closeRefused = refused(await outcome(client.send('Target.closeTarget', { targetId })));
 }
 
-async function redaction({
-  client,
-  targetId,
-  failedURL,
-  protectedOrigin,
-  start,
-  result,
-  browserSession,
-}) {
+async function redaction({ client, targetId, failedURL, protectedOrigin, start, result }) {
   const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
+  const list = await outcome(client.send('Target.getTargets'));
+  const before = client.events.length;
+  const again = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
   const origin = new URL(failedURL).origin;
-  result.infoRedacted =
-    info.ok && info.result.targetInfo.url === origin && info.result.targetInfo.title === origin;
-  const list = browserSession ? await outcome(client.send('Target.getTargets')) : undefined;
-  result.listRedacted = !list
-    ? 'not-supported'
-    : list.ok &&
-      list.result.targetInfos.some(
-        (i) => i.targetId === targetId && i.url === origin && i.title === origin
-      );
+  const only = (i) => i?.url === origin && i.title === origin;
+  const listed = list.ok ? list.result.targetInfos.find((i) => i.targetId === targetId) : undefined;
   await pause(100);
+  const attachedInfo = client.events
+    .slice(before)
+    .find(
+      (e) =>
+        e.method === 'Target.attachedToTarget' && e.params.sessionId === again.result?.sessionId
+    )?.params.targetInfo;
+  if (again.ok)
+    await outcome(client.send('Target.detachFromTarget', { sessionId: again.result.sessionId }));
+  result.infoRedacted = info.ok && only(info.result.targetInfo);
+  result.listRedacted = only(listed);
+  result.attachRedacted = only(attachedInfo);
+  result.fullURL =
+    info.result?.targetInfo?.url === failedURL &&
+    listed?.url === failedURL &&
+    attachedInfo?.url === failedURL;
   const targetEvents = client.events
     .slice(start)
     .filter(
@@ -72,11 +75,14 @@ async function redaction({
         e.params.targetInfo.url.includes(new URL(protectedOrigin).host)
     );
   result.eventsRedacted =
-    targetEvents.length > 0 &&
-    targetEvents.every(
-      (e) => e.params.targetInfo.url === origin && e.params.targetInfo.title === origin
-    );
+    targetEvents.length > 0 && targetEvents.every((e) => only(e.params.targetInfo));
 }
+
+const secrets = {
+  all: (tag) => `/doc/path-secret-${tag}?query-secret=${tag}#fragment-secret-${tag}`,
+  query: (tag) => `/doc?query-secret=${tag}`,
+  fragment: (tag) => `/doc#fragment-secret-${tag}`,
+};
 
 export async function protectedErrorPage({
   client,
@@ -87,10 +93,10 @@ export async function protectedErrorPage({
   mode,
   side,
   internalSessions = new Set(),
-  browserSession = true,
+  secret = 'all',
 }) {
   const initial = `${protectedOrigin}/doc?n=${tag}-history`;
-  const failedURL = `${protectedOrigin}/doc/path-secret-${tag}?query-secret=${tag}#fragment-secret-${tag}`;
+  const failedURL = `${protectedOrigin}${secrets[secret](tag)}`;
   const result = {};
   const start = client.events.length;
   const { targetId } = await reader.send('Target.createTarget', { url: initial, background: true });
@@ -166,8 +172,7 @@ export async function protectedErrorPage({
       throw new Error(
         `protected-error-page: missing error commit ${JSON.stringify(result.evidence)}`
       );
-    const seen = { client, targetId, failedURL, protectedOrigin, start, result };
-    await redaction({ ...seen, browserSession });
+    await redaction({ client, targetId, failedURL, protectedOrigin, start, result });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {
@@ -208,7 +213,7 @@ export async function protectedErrorPage({
     const beforeRestore = reader.events.length;
     await reader.send(
       'Runtime.evaluate',
-      { expression: `history.go(${index - currentIndex})` },
+      { expression: `setTimeout(() => history.go(${index - currentIndex}), 0)` },
       observer
     );
     result.restored = await until(() =>

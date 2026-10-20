@@ -689,7 +689,7 @@ class Execution {
           internalSessions: this.internalSessions,
           mode: step.errorPage,
           side: this.side,
-          browserSession: supported(['browserSession'], this.options.capabilities),
+          secret: step.secret,
         })
       );
     if (step.unparseable)

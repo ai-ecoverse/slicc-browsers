@@ -67,14 +67,14 @@ test('protected error pages remain drivable and redacted; real and already-prote
           assert.equal(
             row.guarded,
             mode === 'catalog' ||
-              (mode === 'unlock-error' && row.id !== 'C8.protected-error-page-sticky')
+              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
               ? 'pass'
               : 'fail',
             JSON.stringify(row)
           );
           if (mode === 'target-url-only') assert.equal(row.observations.guarded.reload, false);
           if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
-          if (mode === 'unlock-error' && row.id === 'C8.protected-error-page-sticky')
+          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
             assert.equal(row.observations.guarded.closeRefused, false);
         }
       } finally {
@@ -87,7 +87,7 @@ test('protected error pages remain drivable and redacted; real and already-prote
   }
 });
 
-test('page-session transports run the error-page rows, with only the target list not supported', {
+test('page-session transports run every error-page field', {
   timeout: 300000,
 }, async () => {
   const fixture = await fixtureServer();
@@ -108,7 +108,6 @@ test('page-session transports run the error-page rows, with only the target list
           if (
             !session &&
             (!method.startsWith('Target.') ||
-              method === 'Target.getTargets' ||
               method === 'Target.setAutoAttach' ||
               method === 'Target.createBrowserContext' ||
               (method === 'Target.getTargetInfo' && !params?.targetId))
@@ -134,18 +133,17 @@ test('page-session transports run the error-page rows, with only the target list
           process.stdout.write(`page-session ${mode}: ${JSON.stringify(row)}\n`);
           assert.equal(row.control, 'pass', JSON.stringify(row));
           assert.equal(row.live, 'pass', JSON.stringify(row));
-          assert.deepEqual(row.notSupported, ['listRedacted'], JSON.stringify(row));
-          assert.equal(row.observations.guarded.listRedacted, 'not-supported');
+          assert.equal(row.notSupported, undefined, JSON.stringify(row));
           assert.equal(
             row.guarded,
             mode === 'catalog' ||
-              (mode === 'unlock-error' && row.id !== 'C8.protected-error-page-sticky')
+              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
               ? 'pass'
               : 'fail',
             JSON.stringify(row)
           );
           if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
-          if (mode === 'unlock-error' && row.id === 'C8.protected-error-page-sticky')
+          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
             assert.equal(row.observations.guarded.closeRefused, false);
         }
       } finally {

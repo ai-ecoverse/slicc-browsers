@@ -38,19 +38,21 @@ test('real Chrome observers have no opener; absent discovery skips only events a
     for (const mode of ['declared', 'absent', 'lying-created', 'lying-changed']) {
       const browser = await launch(fixture);
       const guard = emulatedGuard(browser, { protectedOrigins: rules });
-      const extra = [];
+      const delivered = [];
+      let cursor = 0;
       const client = {
         get events() {
-          return [
-            ...guard.client.events.filter((event) => mode === 'declared' || !discoveryEvent(event)),
-            ...extra,
-          ];
+          for (const event of guard.client.events.slice(cursor)) {
+            cursor++;
+            if (mode === 'declared' || !discoveryEvent(event)) delivered.push(event);
+          }
+          return delivered;
         },
         send: async (method, params, session) => {
           if (mode !== 'declared') assert.notEqual(method, 'Target.setDiscoverTargets');
           const result = await guard.client.send(method, params, session);
           if (mode.startsWith('lying') && method === 'Target.getTargetInfo')
-            extra.push({
+            client.events.push({
               method:
                 mode === 'lying-created' ? 'Target.targetCreated' : 'Target.targetInfoChanged',
               params: { targetInfo: result.targetInfo },

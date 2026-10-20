@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
 
@@ -134,11 +135,11 @@ test('an exact blocked navigation is evidenced by a pre-action request and real 
     assert.equal(execution.results[0].live, 'pass', JSON.stringify(execution.results[0]));
     assert.equal(execution.results[0].guarded, 'pass');
     const logs = fixture.log();
-    assert(logs.some((entry) => new URL(entry.url).searchParams.get('step') === 'pre'));
+    assert(logs.some((entry) => parseURL(entry.url)?.searchParams.get('step') === 'pre'));
     assert(
       !logs.some(
         (entry) =>
-          new URL(entry.url).origin === targets.seven && new URL(entry.url).pathname === '/doc'
+          parseURL(entry.url)?.origin === targets.seven && parseURL(entry.url)?.pathname === '/doc'
       )
     );
   } finally {

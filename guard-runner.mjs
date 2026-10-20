@@ -7,11 +7,13 @@ import {
   isRefusal,
   loadedAfter,
   outcome,
+  owned,
+  parseURL,
   summary as report,
   result,
   steps,
 } from './guard-driver.mjs';
-import { unparseableURLs } from './unparseable-url.mjs';
+import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
@@ -233,13 +235,13 @@ class Execution {
   }
 
   async attemptCheck(c) {
-    const logs = (await this.options.fixture.log()).slice(this.requestStart);
+    const logs = owned((await this.options.fixture.log()).slice(this.requestStart), this.vars.tag);
     if (c.pre) {
       const url = address(c.pre);
       return logs.some((entry) => {
-        const request = new URL(entry.url);
+        const request = parseURL(entry.url);
         return (
-          request.pathname === '/live' &&
+          request?.pathname === '/live' &&
           request.searchParams.get('tag') === this.vars.tag &&
           request.searchParams.get('step') === 'pre' &&
           request.searchParams.get('to') === url
@@ -247,15 +249,16 @@ class Execution {
       });
     }
     const url = address(c.loaded);
+    const origin = parseURL(url)?.origin;
     return logs.some((entry) => {
-      const request = new URL(entry.url);
+      if (entry.url === url || canonicalURL(entry.url) === canonicalURL(url)) return true;
+      const request = parseURL(entry.url);
       return (
-        entry.url === url ||
-        (request.pathname === '/live' &&
-          request.origin === new URL(url).origin &&
-          request.searchParams.get('tag') === this.vars.tag &&
-          request.searchParams.get('to') === url &&
-          request.searchParams.get('step') !== 'pre')
+        request?.pathname === '/live' &&
+        request.origin === origin &&
+        request.searchParams.get('tag') === this.vars.tag &&
+        request.searchParams.get('to') === url &&
+        request.searchParams.get('step') !== 'pre'
       );
     });
   }
@@ -1035,22 +1038,27 @@ class Execution {
   async requestCheck(c, start = this.requestStart) {
     const logs = (await this.options.fixture.log()).slice(start);
     if (c.hops)
-      return c.hops.every((_, i) => logs.some((entry) => entry.url === hop(c.hops.slice(i), c.to)));
-    return logs.some((entry) => {
-      const url = new URL(entry.url);
+      return c.hops.every((_, i) =>
+        logs.some((entry) => entry?.url === hop(c.hops.slice(i), c.to))
+      );
+    const mine =
+      c.tagged === false
+        ? logs.filter((entry) => typeof entry?.url === 'string')
+        : owned(logs, this.vars.tag);
+    return mine.some((entry) => {
+      const url = parseURL(entry.url);
       if (c.beacon)
         return (
-          url.pathname === '/beacon' &&
+          url?.pathname === '/beacon' &&
           url.searchParams.get('tag') === this.vars.tag &&
           url.searchParams.get('origin') === c.beacon
         );
-      if (c.tagged !== false && !entry.url.includes(this.vars.tag)) return false;
-      if (c.origin && url.origin !== c.origin) return false;
+      if (c.origin && url?.origin !== c.origin) return false;
       if (c.served)
-        return c.served.startsWith('http') ? entry.url === c.served : url.pathname === c.served;
+        return c.served.startsWith('http') ? entry.url === c.served : url?.pathname === c.served;
       return (
-        (c.on.startsWith('http') ? entry.url === c.on : url.pathname === c.on) &&
-        entry.headers[c.header.toLowerCase()] === (c.value ?? this.vars.tag)
+        (c.on.startsWith('http') ? entry.url === c.on : url?.pathname === c.on) &&
+        entry.headers?.[c.header.toLowerCase()] === (c.value ?? this.vars.tag)
       );
     });
   }

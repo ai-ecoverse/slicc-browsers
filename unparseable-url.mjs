@@ -1,4 +1,4 @@
-import { outcome } from './guard-driver.mjs';
+import { outcome, owned, parseURL } from './guard-driver.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
@@ -14,17 +14,17 @@ export const rootURL = (root, host, path) =>
   `${root.protocol}//${host}${root.port ? `:${root.port}` : ''}${path}`;
 
 export function canonicalURL(value) {
-  try {
-    return new URL(value).href;
-  } catch {
-    const match = /^(https?:)\/\/([^/?#]+)(.*)$/.exec(value);
-    if (!match) return value;
-    const [, protocol, authority, path] = match;
-    const host = authority.replace(/:\d*$/, '').replaceAll(' ', '%20');
-    const port = /:(\d*)$/.exec(authority)?.[1];
-    const parsed = new URL(`${protocol}//example.test${port ? `:${port}` : ''}${path}`);
-    return rootURL(parsed, host, `${parsed.pathname}${parsed.search}${parsed.hash}`);
-  }
+  if (typeof value !== 'string') return value;
+  const direct = parseURL(value);
+  if (direct) return direct.href;
+  const match = /^(https?:)\/\/([^/?#]+)(.*)$/.exec(value);
+  if (!match) return value;
+  const [, protocol, authority, path] = match;
+  const host = authority.replace(/:\d*$/, '').replaceAll(' ', '%20');
+  const port = /:(\d*)$/.exec(authority)?.[1];
+  const parsed = parseURL(`${protocol}//example.test${port ? `:${port}` : ''}${path}`);
+  if (!parsed) return value;
+  return rootURL(parsed, host, `${parsed.pathname}${parsed.search}${parsed.hash}`);
 }
 
 async function document(reader, targetId, expected, allowNativeRejection = false) {
@@ -212,7 +212,7 @@ export async function unparseableURLs({
     };
     await pause(100);
     const requests = await fixture.log();
-    result.cookieRequest = requests.some((entry) =>
+    result.cookieRequest = owned(requests, tag).some((entry) =>
       entry.url.includes(`${tag}-create-`) || entry.url.includes(`${tag}-navigate-`)
         ? entry.headers.cookie?.includes(`${cookie}=${value}`)
         : false

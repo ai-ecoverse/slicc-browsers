@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
-import { expand, hop } from '../../guard-driver.mjs';
+import { expand, hop, parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
 
@@ -88,7 +88,7 @@ for (const page of ['href', 'open'])
             assert.equal(row.live, 'pass', JSON.stringify(row));
             const pre = fixture
               .log()
-              .find((entry) => new URL(entry.url).searchParams.get('step') === 'pre');
+              .find((entry) => parseURL(entry.url)?.searchParams.get('step') === 'pre');
             assert(pre, 'the chain still requires the pre-action beacon');
             const frameErrors = browser.client.events.filter(
               (event) => event.method === 'Page.frameNavigated' && event.params.frame.unreachableUrl

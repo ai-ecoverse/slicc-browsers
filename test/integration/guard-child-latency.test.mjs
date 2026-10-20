@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
 
@@ -35,7 +36,7 @@ function slowChildGuard(client, unguarded, protectedHosts) {
     const guard = guards.get(event.sessionId);
     if (!guard) return;
     const { requestId, request } = event.params;
-    if (protectedHosts.includes(new URL(request.url).host)) {
+    if (protectedHosts.includes(parseURL(request.url)?.host)) {
       closed.add(guard.child);
       await unguarded
         .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)

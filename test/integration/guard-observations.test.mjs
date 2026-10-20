@@ -5,6 +5,7 @@ import { createServer } from 'node:http';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
 
@@ -87,7 +88,7 @@ test('auth observations use request evidence without a plain baseline', async ()
       assert.equal(row.observations.guarded.refused, false);
     }
     const requests = await fixture.log();
-    assert(!requests.some(({ url }) => new URL(url).searchParams.has('plain')));
+    assert(!requests.some(({ url }) => parseURL(url)?.searchParams.has('plain')));
   } finally {
     await fixture.close();
   }

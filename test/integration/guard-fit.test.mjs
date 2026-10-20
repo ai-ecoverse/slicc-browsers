@@ -3,6 +3,7 @@ import { createHash, X509Certificate } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { launch, origins } from './cdp-client.mjs';
 
@@ -63,11 +64,11 @@ test('HTTPS fixture URLs certify served, redirect hops and guarded liveness', as
       assert.equal(row.live, 'pass', JSON.stringify(row));
       assert(fixture.origin.startsWith('https://'));
       assert(fixture.log().every((entry) => entry.url.startsWith('https://')));
-      assert(fixture.log().some((entry) => new URL(entry.url).origin === targets.own));
+      assert(fixture.log().some((entry) => parseURL(entry.url)?.origin === targets.own));
       assert(
         fixture.log().some((entry) => {
-          const url = new URL(entry.url);
-          return url.pathname === '/live' && url.searchParams.get('to')?.startsWith(targets.own);
+          const url = parseURL(entry.url);
+          return url?.pathname === '/live' && url.searchParams.get('to')?.startsWith(targets.own);
         })
       );
     } finally {

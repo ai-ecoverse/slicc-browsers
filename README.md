@@ -283,6 +283,8 @@ It exports:
 - `instrument(client, sessionId, log, tag)`, `load(client, sessionId, url)` and `popup(client, openerId)`;
 - `judge(vector, side, observed)`: `{ pass, refused, skipped, mismatches }`, where `refused` lists the leg's refusals and `skipped` the observations that depend on them or explicitly record unavailable observation capabilities;
 - `result(vector, run)`: a report row from `{ target, variant, transport, via?, capabilities?, control, guarded, live }`. `capabilities` is the transport's; without it, the transport has them all;
+- `parseURL(value, base?)`: a `URL`, or `null` for anything `new URL` rejects or a non-string; every parse of a fixture log entry or a Chrome-reported URL in the runner, the fixture and `protected.mjs` goes through it, so an unparseable entry never throws;
+- `owned(entries, tag)`: the fixture log entries whose raw URL contains `tag`, the row's attribution through its `n=`, `tag=` or `to=` query;
 - `summary({ guard, sha, set, results })`: `set` is the parsed `guard-vectors.json`. It returns `{ set, schemaVersion, guard, sha, variants, targets, transports, results, skipped, notRun, missing, pass, line }`. `missing` lists each `{ id, target, variant, transport }` without a row, for every vector whose `scope` is `any` or the guard, every target it lists, every variant in `variants` or `results`, and every transport in `results`; `pass` needs it empty, where `line` is `GUARD-PASS <guard>@<sha> (vectors @ai-ecoverse/slicc-browsers@X.Y.Z)` or `GUARD-FAIL …`.
 
 **`npm run validate`** checks that:
@@ -436,6 +438,14 @@ Beacon settlement uses only requests recorded after the page action starts. For
 redirect chains it also requires the exact final destination request in the
 fixture log. A setup beacon on the same origin and tag cannot settle an unfinished
 redirect chain. This does not change the observations used to judge either leg.
+
+The fixture log is shared by every row in a run, and `C8.unparseable` leaves entries such
+as `http://exa%20mple.sliccy.ai:<port>/doc?n=<tag>-create-0` that `new URL` rejects. A
+row reads only the entries that carry its own tag; a tagged `liveCheck`, `served`,
+`on` or `beacon` check never sees another row's entries, and an entry that does not
+parse is matched only by its raw or canonical string, never parsed into a throw.
+`hops` checks compare exact URLs. `"tagged": false` reads every entry and skips the ones
+that don't parse.
 
 The separately exported Node module `@ai-ecoverse/slicc-browsers/fixture` exposes
 `fixtureServer({ host, port, tls, latency })`, defaulting to a random loopback port. `latency(url)` returns milliseconds to hold that response, for timing tests.

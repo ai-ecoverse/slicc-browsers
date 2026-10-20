@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
+import { parseURL } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { connect, launch, origins } from './cdp-client.mjs';
 
@@ -207,7 +208,7 @@ for (const [scale, passes] of [
     const late = {
       log: () =>
         fixture.log().filter((entry) => {
-          if (!new URL(entry.url).pathname.startsWith('/beacon')) return true;
+          if (!parseURL(entry.url)?.pathname.startsWith('/beacon')) return true;
           if (!seen.has(entry.url)) seen.set(entry.url, Date.now());
           return Date.now() - seen.get(entry.url) >= 8000;
         }),

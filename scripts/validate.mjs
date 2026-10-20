@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -339,6 +340,20 @@ const ports = /:922[2-9](?!\d)/;
 for (const u of strings(guard)) {
   if (reserved.test(u) || ports.test(u)) gv(`never use ports 9222-9229 (${u})`);
 }
+
+const isolated = spawnSync(
+  process.execPath,
+  [
+    '--experimental-vm-modules',
+    '--no-warnings',
+    join(root, 'scripts/self-contained.mjs'),
+    ...['protected.mjs', 'seven.mjs'].map((f) => join(root, f)),
+  ],
+  { encoding: 'utf8' }
+);
+if (isolated.status !== 0)
+  for (const line of `${isolated.stderr}${isolated.error?.message ?? ''}`.trim().split('\n'))
+    fail(line);
 
 if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);

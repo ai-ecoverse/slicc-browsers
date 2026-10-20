@@ -140,5 +140,11 @@ test('a blocking guard passes every executable E4 and E6 row', { timeout: 900000
     .map(({ id }) => id)
     .filter((id) => id === 'E4' || id.startsWith('E4.') || id.startsWith('E6.'));
   assert.equal(ids.length, 17);
-  for (const id of ids) passes(await row(id, {}));
+  const failures = [];
+  for (const id of ids) {
+    const result = await row(id, { exposeExtensionWorlds: true });
+    if (result.control !== 'pass' || result.guarded !== 'pass' || result.live !== 'pass')
+      failures.push(result);
+  }
+  assert.deepEqual(failures, []);
 });

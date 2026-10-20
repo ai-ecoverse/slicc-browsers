@@ -91,18 +91,19 @@ test('a missing redirect registration endpoint remains an explicit summary failu
   }
 });
 
-test('the bundled fixture document carries a load listener on its own line only when asked', async () => {
+test('the bundled fixture document carries a source-mapped load listener on its own line only when asked', async () => {
   const fixture = await fixtureServer();
   try {
     const plain = await (await fetch(`${fixture.origin}/doc?n=plain`)).text();
     assert(!plain.includes('<script>'));
     const listened = await (await fetch(`${fixture.origin}/doc?n=tagged&listener=1`)).text();
     const lines = listened.split('\n');
-    assert.equal(lines.length, 3);
+    assert.equal(lines.length, 4);
     assert(lines[0].endsWith('<script>'));
     assert.match(lines[1], /^addEventListener\('load', /);
-    assert(lines[2].startsWith('</script>'));
-    assert(lines[2].includes('/live?tag=tagged&'));
+    assert.equal(lines[2], '//# sourceMappingURL=/listener.js.map');
+    assert(lines[3].startsWith('</script>'));
+    assert(lines[3].includes('/live?tag=tagged&'));
   } finally {
     await fixture.close();
   }

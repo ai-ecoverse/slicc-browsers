@@ -13,7 +13,7 @@ function document(url, html) {
   const p = url.searchParams;
   const csp = p.has('csp') || url.pathname === '/csp';
   const listener = p.has('listener')
-    ? "<script>\naddEventListener('load', function () { document.body.dataset.listened = 'true'; });\n</script>"
+    ? "<script>\naddEventListener('load', function () { document.body.dataset.listened = 'true'; });\n//# sourceMappingURL=/listener.js.map\n</script>"
     : '';
   return html(
     'doc',

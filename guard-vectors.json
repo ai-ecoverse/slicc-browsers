@@ -14686,22 +14686,22 @@
         },
         {
           "cdp": "Debugger.enable"
+        },
+        {
+          "cdp": "Debugger.setInstrumentationBreakpoint",
+          "params": {
+            "instrumentation": "beforeScriptWithSourceMapExecution"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
           "page": "href",
           "url": "{target}/doc?n={tag}&listener=1"
-        },
-        {
-          "cdp": "Debugger.setInstrumentationBreakpoint",
-          "params": {
-            "instrumentation": "beforeScriptExecution"
-          },
-          "refusable": true,
-          "refusal": {
-            "match": "refused"
-          }
         },
         {
           "settle": {
@@ -14721,7 +14721,7 @@
       "observe": {
         "paused": {
           "means": "a Debugger.paused before the script of {target}/doc?n={tag}&listener=1",
-          "dependsOn": ["refused.4"],
+          "dependsOn": ["refused.3"],
           "check": {
             "any": [
               {

@@ -621,6 +621,8 @@ class Execution {
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
+    if (step.extensionWorld && out.result?.incomplete)
+      this.errors.push(`extensionWorld ${step.extensionWorld}: ${out.result.incomplete}`);
     if ((step.extensionWorld || step.unparseable || step.errorPage) && !out.ok)
       this.errors.push(
         `${step.unparseable ? 'unparseable' : step.errorPage ? 'errorPage' : 'extensionWorld'}: ${out.error?.message ?? 'probe failed'}`
@@ -714,6 +716,7 @@ class Execution {
           origin: this.vars.ordinary,
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
+          pauseMs: this.bound(this.side === 'control' ? 5000 : 1500, this.side !== 'control'),
           extensionId: this.options.extensionWorldId,
         })
       );
@@ -916,6 +919,8 @@ class Execution {
     const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
       name
     ];
+    if (check?.result && at(this.calls[check.result], check.path) === 'incomplete')
+      return 'incomplete';
     if (want !== true || check?.observer !== 'fixture') return this.check(check);
     let seen = false;
     await this.poll(async () => {

@@ -73,7 +73,17 @@ async function drivable(client, session, live) {
   };
 }
 
-async function debuggerWorld({ client, reader, session, observer, world, events, live }) {
+async function debuggerWorld({
+  client,
+  reader,
+  session,
+  observer,
+  world,
+  events,
+  live,
+  side,
+  pauseMs,
+}) {
   const debug = await outcome(client.send('Debugger.enable', {}, session));
   const probe = outcome(
     reader.send(
@@ -87,7 +97,7 @@ async function debuggerWorld({ client, reader, session, observer, world, events,
       observer
     )
   );
-  const deadline = Date.now() + 1500;
+  const deadline = Date.now() + pauseMs;
   while (
     debug.ok &&
     !events().some((event) => event.method === 'Debugger.paused') &&
@@ -123,9 +133,11 @@ async function debuggerWorld({ client, reader, session, observer, world, events,
         event.method === 'Debugger.scriptParsed' && event.params.executionContextId === world.id
     ) || Boolean(paused);
   await outcome(client.send('Debugger.disable', {}, session));
+  const incomplete = side === 'control' && debug.ok && !paused;
   return {
     exists: true,
-    reachable: reached,
+    reachable: incomplete ? 'incomplete' : reached,
+    ...(incomplete ? { incomplete: `no Debugger.paused within ${pauseMs}ms` } : {}),
     protected: refused(debug) || frameRefused || !exposed,
     alive: await live(),
   };
@@ -310,6 +322,7 @@ export async function extensionWorld({
   side,
   controls,
   extensionId = DEFAULT_EXTENSION_WORLD_ID,
+  pauseMs = side === 'control' ? 5000 : 1500,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -370,7 +383,18 @@ export async function extensionWorld({
       await outcome(client.send('Debugger.disable', {}, session));
       return { exists: true, listed, leaks, defaultSeen, alive: enabled.ok && (await live()) };
     }
-    const input = { client, reader, session, observer, world, events, live, side, controls };
+    const input = {
+      client,
+      reader,
+      session,
+      observer,
+      world,
+      events,
+      live,
+      side,
+      controls,
+      pauseMs,
+    };
     if (mode === 'drivable') return await drivable(client, session, live);
     if (mode === 'debugger') return await debuggerWorld(input);
     return await selectWorld(input);

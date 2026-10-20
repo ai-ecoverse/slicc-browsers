@@ -16480,7 +16480,7 @@
       "setup": [
         {
           "page": "tab",
-          "url": "{ordinary}/doc?n=start-{tag}"
+          "url": "{cross}/doc?n=start-{tag}"
         },
         {
           "cdp": "Page.enable"

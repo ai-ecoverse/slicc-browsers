@@ -127,9 +127,12 @@ test('a Target.createBrowserContext that times out once is retried, and the row 
     );
     assert.equal(results[0].control, 'pass', JSON.stringify(results[0]));
     assert.equal(results[0].guarded, 'pass', JSON.stringify(results[0]));
-    assert.deepEqual(results[0].notes, [
-      'control Target.createBrowserContext retried once after: CDP timeout Target.createBrowserContext',
-    ]);
+    assert.deepEqual(
+      results[0].notes.filter((note) => !note.includes('observer target')),
+      [
+        'control Target.createBrowserContext retried once after: CDP timeout Target.createBrowserContext',
+      ]
+    );
   } finally {
     client.close();
     await browser.close();

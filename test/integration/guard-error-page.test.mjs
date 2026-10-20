@@ -57,7 +57,7 @@ test('protected error pages remain drivable and redacted; real and already-prote
             unguarded: browser.unguarded,
             targets: origins(fixture),
             fixture,
-            capabilities: { browserSession: true, browserContexts: true },
+            capabilities: { browserSession: true, browserContexts: true, discovery: true },
           }
         );
         for (const row of execution.results) {
@@ -124,7 +124,7 @@ test('page-session transports run every error-page field', {
             unguarded: browser.unguarded,
             targets: origins(fixture),
             fixture,
-            capabilities: {},
+            capabilities: { discovery: true },
           }
         );
         assert.deepEqual(pageless, []);

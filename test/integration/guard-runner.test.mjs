@@ -83,6 +83,7 @@ test('the reference runner checks real Chromium effects without a guard', {
             browserContexts: true,
             chromeUrlsAttach: true,
             extensionWorld: true,
+            discovery: true,
           },
           parallel: width,
           variant: process.env.GUARD_VARIANT ?? Object.keys(set.variants),

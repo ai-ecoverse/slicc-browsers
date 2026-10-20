@@ -1,4 +1,5 @@
 import { outcome } from './guard-driver.mjs';
+import { createObserverTarget } from './observer-target.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
@@ -43,7 +44,15 @@ async function lockChecks({ client, session, targetId, result }) {
   result.closeRefused = refused(await outcome(client.send('Target.closeTarget', { targetId })));
 }
 
-async function redaction({ client, targetId, failedURL, protectedOrigin, start, result }) {
+async function redaction({
+  client,
+  targetId,
+  failedURL,
+  protectedOrigin,
+  start,
+  result,
+  discovery,
+}) {
   const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
   const list = await outcome(client.send('Target.getTargets'));
   const before = client.events.length;
@@ -71,11 +80,13 @@ async function redaction({ client, targetId, failedURL, protectedOrigin, start, 
     .slice(start)
     .filter(
       (e) =>
+        ['Target.targetCreated', 'Target.targetInfoChanged'].includes(e.method) &&
         e.params?.targetInfo?.targetId === targetId &&
         e.params.targetInfo.url.includes(new URL(protectedOrigin).host)
     );
-  result.eventsRedacted =
-    targetEvents.length > 0 && targetEvents.every((e) => only(e.params.targetInfo));
+  result.eventsRedacted = discovery
+    ? targetEvents.length > 0 && targetEvents.every((e) => only(e.params.targetInfo))
+    : 'not-supported';
 }
 
 const secrets = {
@@ -94,12 +105,19 @@ export async function protectedErrorPage({
   side,
   internalSessions = new Set(),
   secret = 'all',
+  discovery = true,
+  notes = [],
 }) {
   const initial = `${protectedOrigin}/doc?n=${tag}-history`;
   const failedURL = `${protectedOrigin}${secrets[secret](tag)}`;
   const result = {};
+  if (!discovery) notes.push('eventsRedacted: not-supported:discovery');
   const start = client.events.length;
-  const { targetId } = await reader.send('Target.createTarget', { url: initial, background: true });
+  const { targetId } = await createObserverTarget(
+    reader,
+    { url: initial, background: true },
+    notes
+  );
   let session;
   let observer;
   let failing = false;
@@ -142,7 +160,7 @@ export async function protectedErrorPage({
     if (!session) return { live: false, attached: false };
     await client.send('Page.enable', {}, session);
     await client.send('Runtime.enable', {}, session);
-    await client.send('Target.setDiscoverTargets', { discover: true });
+    if (discovery) await client.send('Target.setDiscoverTargets', { discover: true });
     if (side === 'control') {
       failing = true;
       await reader.send(
@@ -172,7 +190,7 @@ export async function protectedErrorPage({
       throw new Error(
         `protected-error-page: missing error commit ${JSON.stringify(result.evidence)}`
       );
-    await redaction({ client, targetId, failedURL, protectedOrigin, start, result });
+    await redaction({ client, targetId, failedURL, protectedOrigin, start, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {

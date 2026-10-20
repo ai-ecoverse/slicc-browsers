@@ -302,7 +302,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}

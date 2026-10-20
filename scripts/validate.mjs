@@ -364,6 +364,13 @@ if (isolated.status !== 0)
   for (const line of `${isolated.stderr}${isolated.error?.message ?? ''}`.trim().split('\n'))
     fail(line);
 
+const browser = spawnSync(
+  process.execPath,
+  ['--experimental-vm-modules', '--no-warnings', join(root, 'scripts/browser-runner.mjs')],
+  { encoding: 'utf8' }
+);
+if (browser.status !== 0) fail(`${browser.stderr}${browser.error?.message ?? ''}`.trim());
+
 if (problems.length > 0) {
   process.stderr.write(`${problems.join('\n')}\n`);
   process.exit(1);

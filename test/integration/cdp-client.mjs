@@ -70,13 +70,21 @@ function watchdog(child, directory) {
   return dog;
 }
 
-export async function launch(fixture, { spki, signal } = {}) {
+export async function launch(fixture, { spki, signal, allowOrigin } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
   const child = spawn(
     chromium.executablePath(),
     [
       '--headless',
       '--use-mock-keychain',
+      ...(allowOrigin
+        ? [
+            `--remote-allow-origins=${allowOrigin}`,
+            '--disable-background-timer-throttling',
+            '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows',
+          ]
+        : []),
       ...(spki ? [`--ignore-certificate-errors-spki-list=${spki}`] : []),
       '--no-sandbox',
       '--disable-gpu',

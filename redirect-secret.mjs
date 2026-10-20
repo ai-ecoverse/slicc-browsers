@@ -4,14 +4,21 @@ import { redirectFragments } from './redirect-fragments.mjs';
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const decodeBase64 = (text) =>
   new TextDecoder().decode(Uint8Array.from(atob(text), (char) => char.charCodeAt(0)));
+const base64Slices = (value) => {
+  const normalized = value.replaceAll('-', '+').replaceAll('_', '/').replace(/=+$/, '');
+  const candidates = [];
+  for (let offset = 0; offset < 4; offset++) {
+    const part = normalized.slice(offset);
+    const usable = part.slice(0, part.length - (part.length % 4 === 1 ? 1 : 0));
+    candidates.push(usable.padEnd(Math.ceil(usable.length / 4) * 4, '='));
+    candidates.push(part.slice(0, Math.floor(part.length / 4) * 4));
+  }
+  return [...new Set(candidates)].filter(Boolean);
+};
 const decodedBase64 = (value) =>
-  [...value.matchAll(/[A-Za-z0-9+/]{12,}={0,2}/g)].flatMap(([text]) => {
-    try {
-      return [decodeBase64(text)];
-    } catch {
-      return [];
-    }
-  });
+  [...value.matchAll(/[A-Za-z0-9+/_-]{12,}={0,2}/g)].flatMap(([text]) =>
+    base64Slices(text).map(decodeBase64)
+  );
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 const redirects = [301, 302, 303, 307, 308];
 const redirectHeaders = (to) => ({

@@ -41,6 +41,11 @@ export async function browserRunner(entry) {
   const redirect = modules.get(resolve(dirname(entry), 'redirect-secret.mjs'));
   if (!redirect?.namespace.containsSecret(encoded, marker))
     throw new Error('browser-runner: encoded body exercise failed');
+  for (const prefix of ['A', 'AA', 'AAA']) {
+    const embedded = `${prefix}${encoded.replace(/=+$/, '').replaceAll('+', '-').replaceAll('/', '_')}AA`;
+    if (!redirect.namespace.containsSecret(embedded, marker))
+      throw new Error('browser-runner: embedded base64url exercise failed');
+  }
   const events = [];
   const client = {
     events,

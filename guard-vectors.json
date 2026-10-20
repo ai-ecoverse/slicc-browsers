@@ -14528,8 +14528,8 @@
         {
           "cdp": "Debugger.setBreakpointByUrl",
           "params": {
-            "urlRegex": "/doc\\?n={tag}&listener=1",
-            "lineNumber": 1,
+            "urlRegex": "/listener\\.js\\?n={tag}$",
+            "lineNumber": 0,
             "condition": "(() => { {beacon} return false; })()"
           },
           "refusable": true,
@@ -14556,7 +14556,7 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "condition": {
-          "means": "a beacon from the breakpoint condition evaluated in {target}/doc?n={tag}&listener=1",
+          "means": "a beacon from the breakpoint condition evaluated in {target}/listener.js?n={tag}",
           "dependsOn": ["refused.3"],
           "check": {
             "beacon": "{target}",
@@ -14564,7 +14564,7 @@
           }
         },
         "paused": {
-          "means": "a Debugger.paused in {target}/doc?n={tag}&listener=1",
+          "means": "a Debugger.paused in {target}/listener.js?n={tag}",
           "dependsOn": ["refused.3"],
           "check": {
             "any": [
@@ -14574,7 +14574,7 @@
                   "params": {
                     "callFrames": {
                       "$some": {
-                        "url": "{target}/doc?n={tag}&listener=1"
+                        "url": "{target}/listener.js?n={tag}"
                       }
                     }
                   }
@@ -14586,7 +14586,7 @@
                 "where": {
                   "params": {
                     "data": {
-                      "url": "{target}/doc?n={tag}&listener=1"
+                      "url": "{target}/listener.js?n={tag}"
                     }
                   }
                 },
@@ -14720,7 +14720,7 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "paused": {
-          "means": "a Debugger.paused before the script of {target}/doc?n={tag}&listener=1",
+          "means": "a Debugger.paused before {target}/listener.js?n={tag}, which names a source map in its SourceMap header",
           "dependsOn": ["refused.3"],
           "check": {
             "any": [
@@ -14730,7 +14730,7 @@
                   "params": {
                     "callFrames": {
                       "$some": {
-                        "url": "{target}/doc?n={tag}&listener=1"
+                        "url": "{target}/listener.js?n={tag}"
                       }
                     }
                   }
@@ -14742,7 +14742,7 @@
                 "where": {
                   "params": {
                     "data": {
-                      "url": "{target}/doc?n={tag}&listener=1"
+                      "url": "{target}/listener.js?n={tag}"
                     }
                   }
                 },

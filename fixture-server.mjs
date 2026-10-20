@@ -13,7 +13,7 @@ function document(url, html) {
   const p = url.searchParams;
   const csp = p.has('csp') || url.pathname === '/csp';
   const listener = p.has('listener')
-    ? "<script>\naddEventListener('load', function () { document.body.dataset.listened = 'true'; });\n//# sourceMappingURL=/listener.js.map\n</script>"
+    ? `<script src="/listener.js?n=${encodeURIComponent(p.get('n') ?? '')}"></script>`
     : '';
   return html(
     'doc',
@@ -56,6 +56,13 @@ function route(req, url, send, html, redirects) {
         200,
         `globalThis.vectorScript=${JSON.stringify(`real-${p.get('n') ?? ''}`)}`,
         'text/javascript'
+      ),
+    '/listener.js': () =>
+      send(
+        200,
+        "addEventListener('load', function () { document.body.dataset.listened = 'true'; });",
+        'text/javascript',
+        { sourcemap: '/listener.js.map' }
       ),
     '/page': () => html('trigger', trigger(p)),
     '/api/cookies': () => send(200, req.headers.cookie ?? 'none', 'text/plain'),

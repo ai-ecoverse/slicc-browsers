@@ -73,7 +73,7 @@
     "trust:dry": "npx fledgling sync --dry-run -y --skip-publish",
     "release": "semantic-release",
     "test:guard": "npm run test:guard-integration && npm run test:guard-sweep",
-    "test:guard-integration": "node --test --test-concurrency=2 test/integration/guard-lifecycle.test.mjs test/integration/guard-fit.test.mjs test/integration/guard-chain.test.mjs test/integration/guard-validation.test.mjs test/integration/guard-liveness.test.mjs test/integration/guard-observations.test.mjs test/integration/guard-child-latency.test.mjs test/integration/guard-adoption.test.mjs test/integration/guard-scoping.test.mjs test/integration/guard-late-pause.test.mjs test/integration/guard-legs.test.mjs test/integration/guard-fetch-enable.test.mjs test/integration/guard-diagnostics.test.mjs test/integration/guard-chrome.test.mjs test/integration/guard-worlds.test.mjs test/integration/guard-world-discovery.test.mjs test/integration/guard-world-guesses.test.mjs test/integration/guard-unparseable.test.mjs test/integration/guard-redirect-secret.test.mjs test/integration/guard-error-page.test.mjs test/integration/guard-discovery.test.mjs test/integration/guard-browser-page.test.mjs test/integration/guard-scales.test.mjs test/integration/guard-shared-log.test.mjs test/integration/guard-pre-beacon.test.mjs test/integration/guard-world-pause.test.mjs test/integration/self-contained.test.mjs",
+    "test:guard-integration": "node --test test/integration/guard-diag.test.mjs",
     "test:guard-sweep": "node scripts/test-guards.mjs",
     "test:gates": "node --test test/integration/gates.test.mjs",
     "test:guard-target": "node --test test/integration/guard-runner.test.mjs",

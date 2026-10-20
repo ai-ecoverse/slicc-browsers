@@ -108,16 +108,22 @@ function requestURL(req, scheme) {
 
 export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {
   let entries = [];
+  const history = [];
   const redirects = new Map();
+  const redirectSecret = async ({ path, host = '', search = '', remove, ...value }) => {
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      (!remove && typeof value.body !== 'string')
+    )
+      throw new Error('invalid redirect registration');
+    const key = `${host}${path}${search}`;
+    if (remove) redirects.delete(key);
+    else redirects.set(key, value);
+  };
   const scheme = tls ? 'https' : 'http';
-  const handler = (req, res) => {
+  const handler = async (req, res) => {
     const url = requestURL(req, scheme);
-    entries.push({
-      url: url.href,
-      method: req.method,
-      headers: { ...req.headers },
-      time: Date.now(),
-    });
     const p = url.searchParams;
     const cors = {
       'access-control-allow-origin': req.headers.origin ?? '*',
@@ -136,6 +142,30 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
         'text/html',
         headers
       );
+    if (req.method === 'GET' && url.pathname === '/log') {
+      const from = Number(p.get('since') ?? 0);
+      if (!Number.isInteger(from) || from < 0 || from > history.length)
+        return send(400, 'invalid log cursor', 'text/plain');
+      return send(200, JSON.stringify({ from, entries: history.slice(from) }), 'application/json');
+    }
+    if (req.method === 'POST' && url.pathname === '/redirect') {
+      try {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        await redirectSecret(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+        return send(204, '', 'text/plain');
+      } catch {
+        return send(400, 'invalid redirect registration', 'text/plain');
+      }
+    }
+    const entry = {
+      url: url.href,
+      method: req.method,
+      headers: { ...req.headers },
+      time: Date.now(),
+    };
+    entries.push(entry);
+    history.push(entry);
     const wait = latency?.(url) ?? 0;
     if (wait > 0) setTimeout(() => route(req, url, send, html, redirects), wait);
     else route(req, url, send, html, redirects);
@@ -148,11 +178,7 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
   const address = server.address();
   return {
     redirects,
-    redirectSecret: async ({ path, host = '', search = '', remove, ...value }) => {
-      const key = `${host}${path}${search}`;
-      if (remove) redirects.delete(key);
-      else redirects.set(key, value);
-    },
+    redirectSecret,
     port: address.port,
     origin: `${scheme}://${host}:${address.port}`,
     log: () => structuredClone(entries),

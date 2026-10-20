@@ -1,3 +1,7 @@
+import { fixtureClient, prepareFixture } from './fixture-client.mjs';
+
+export { fixtureClient };
+
 import { extensionWorld } from './extension-world.mjs';
 import {
   beacon,
@@ -1635,6 +1639,7 @@ export function run(set, options) {
 
 async function runAll(set, options, flights) {
   const opts = { capabilities: {}, variant: Object.keys(set.variants), parallel: 1, ...options };
+  opts.fixture = prepareFixture(set, opts);
   opts.targets = {
     ...Object.fromEntries(
       Object.entries(set.targets ?? {})

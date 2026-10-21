@@ -254,13 +254,15 @@ class RedirectProbe {
   async land(url, start) {
     const path = new URL(url).pathname;
     await pause(250);
-    await waitFor(
+    if (this.stalled) return;
+    const landed = await waitFor(
       async () =>
         (await this.fixture.log()).some((entry) => entry.url.includes(path)) &&
         !this.open(this.client.events.slice(start), (seen) => seen === url).length,
       Math.round(2000 * this.scale),
       50
     );
+    this.stalled = !landed && this.side === 'guarded';
   }
 
   async terminated() {

@@ -242,8 +242,10 @@ test.describe('C2 redirect network-body carrier and request termination', {
     assert.match(out.incomplete, /^redirect-secret: control requests N1, .*N16 unterminated$/);
   });
 
-  test('a guarded request that never terminates still fails after the scaled wait', async () => {
-    const out = await probe({ network: 'silent' }, undefined, { settleScale: 0.25 });
+  test('a guarded request that never terminates still fails, waiting the bound for one hop only', async () => {
+    const start = Date.now();
+    const out = await probe({ network: 'silent' });
+    assert.ok(Date.now() - start < 30000, `took ${Date.now() - start} ms`);
     assert.equal(out.requestsTerminated, false);
     assert.deepEqual(deliveries(out), ['unterminated']);
     assert.equal(out.incomplete, undefined);

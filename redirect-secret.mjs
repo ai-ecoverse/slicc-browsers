@@ -20,6 +20,12 @@ const decodedBase64 = (value) =>
     base64Slices(text).map(decodeBase64)
   );
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
+const gone = (out) =>
+  !out.ok &&
+  !refused(out) &&
+  /session with given id not found|no session with given id|\bsession (?:has been |is |was )?(?:closed|detached)|\btarget closed|target page, context or browser has been closed|\b(?:cdp|connection|transport|websocket|socket) (?:has been |is |was )?closed|websocket is not open/i.test(
+    out.error?.message ?? ''
+  );
 const redirects = [301, 302, 303, 307, 308];
 const redirectHeaders = (to) => ({
   location: to,
@@ -85,6 +91,7 @@ class RedirectProbe {
     this.messagesStart = this.client.messages?.length;
     this.eventsStart = this.client.events.length;
     this.cursor = this.eventsStart;
+    this.detachScan = this.eventsStart;
     this.responses = [];
     this.attempts = [];
     this.jobs = new Set();
@@ -107,8 +114,41 @@ class RedirectProbe {
         : this.protectedURLs;
   }
 
+  ended() {
+    const events = this.client.events;
+    for (; !this.end && this.detachScan < events.length; this.detachScan++) {
+      const event = events[this.detachScan];
+      if (event.method === 'Target.detachedFromTarget' && event.params?.sessionId === this.session)
+        this.end = 'Target.detachedFromTarget';
+    }
+    return Boolean(this.end);
+  }
+
+  cut() {
+    return Boolean(this.end) && !this.complete;
+  }
+
+  async lost() {
+    if (!this.ended()) await this.send('Runtime.evaluate', { expression: 'void 0' });
+    return this.ended();
+  }
+
+  answers(method) {
+    const all = this.attempts.filter((entry) => entry.method === method);
+    const answered = all.filter((entry) => !(this.end && (entry.pending || entry.ended)));
+    const short =
+      Boolean(this.end) && (!this.complete || !answered.length || answered.length < all.length);
+    return { answered, short };
+  }
+
   async send(method, params = {}) {
+    if (this.ended())
+      return { ok: false, ended: true, error: { message: `session ended (${this.end})` } };
     const out = await outcome(this.client.send(method, params, this.session));
+    if (gone(out)) {
+      this.end ??= out.error.message;
+      return { ...out, ended: true };
+    }
     this.responses.push({ method, ...out });
     return out;
   }
@@ -151,7 +191,7 @@ class RedirectProbe {
 
   async networkBody(requestId, source) {
     this.learned[source].add(requestId);
-    if (this.networkBodies.has(requestId)) return;
+    if (this.networkBodies.has(requestId) || this.ended()) return;
     this.networkBodies.add(requestId);
     const entry = { method: 'Network.getResponseBody', source, pending: true };
     this.attempts.push(entry);
@@ -191,15 +231,17 @@ class RedirectProbe {
         carriers.filter((entry) => entry === carrier).length,
       ])
     );
-    const attempts = this.attempts.filter((entry) => entry.method === 'Network.getResponseBody');
+    const { answered: attempts, short } = this.answers('Network.getResponseBody');
     const refusedAll = attempts.length > 0 && attempts.every(refused);
     const proven = path === 'network' || this.side !== 'guarded' || this.controls?.networkEvents;
     const reason =
       path === 'none'
         ? 'no network id for the redirect'
-        : proven
-          ? undefined
-          : 'control did not prove the redirect Network events';
+        : !proven
+          ? 'control did not prove the redirect Network events'
+          : short
+            ? `session ended (${this.end}) before every network body read was answered`
+            : undefined;
     if (reason && (!attempts.length || refusedAll))
       return {
         networkBodyPath: path,
@@ -254,11 +296,12 @@ class RedirectProbe {
   async land(url, start) {
     const path = new URL(url).pathname;
     await pause(250);
-    if (this.stalled) return;
+    if (this.stalled || this.ended()) return;
     const landed = await waitFor(
       async () =>
-        (await this.fixture.log()).some((entry) => entry.url.includes(path)) &&
-        !this.open(this.client.events.slice(start), (seen) => seen === url).length,
+        this.ended() ||
+        ((await this.fixture.log()).some((entry) => entry.url.includes(path)) &&
+          !this.open(this.client.events.slice(start), (seen) => seen === url).length),
       Math.round(2000 * this.scale),
       50
     );
@@ -267,7 +310,7 @@ class RedirectProbe {
 
   async terminated() {
     await waitFor(
-      () => !this.open(this.client.events.slice(this.eventsStart)).length,
+      () => this.ended() || !this.open(this.client.events.slice(this.eventsStart)).length,
       Math.round(5000 * this.scale),
       50
     );
@@ -300,13 +343,15 @@ class RedirectProbe {
     );
     const deliveries = Object.values(hops).map((entry) => entry.delivery);
     const open = Object.keys(hops).filter((id) => hops[id].delivery === 'unterminated');
-    const missing = open.length > 0 && this.side === 'control';
+    const missing = (open.length > 0 && (this.side === 'control' || this.end)) || this.cut();
+    const who = this.end ? `session ended (${this.end}) with requests` : 'control requests';
+    const detail = open.length
+      ? `${who} ${open.join(', ')} unterminated`
+      : `session ended (${this.end}) before every request was issued`;
     return {
       hops,
       requestsTerminated: missing ? 'incomplete' : !open.length,
-      ...(missing
-        ? { incomplete: `redirect-secret: control requests ${open.join(', ')} unterminated` }
-        : {}),
+      ...(missing ? { incomplete: `redirect-secret: ${detail}` } : {}),
       hopsRedacted: !deliveries.some((delivery) => ['raw', 'ordinary'].includes(delivery)),
     };
   }
@@ -388,6 +433,7 @@ class RedirectProbe {
   async headers() {
     for (const [index, to] of this.destinations.entries()) {
       for (const kind of ['navigate', 'href', 'fetch', 'xhr']) {
+        if (this.ended()) return;
         const code = this.mode === 'mix' ? [301, 303, 307, 308][index] : 302;
         const url = await this.register(`${index}-${kind}`, to, code);
         const start = this.client.events.length;
@@ -439,9 +485,9 @@ class RedirectProbe {
     const snapshot = await this.send('Page.captureSnapshot', { format: 'mhtml' });
     const dom = await this.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
     this.responses.push({
-      resourceContentAttempted: true,
-      snapshotAttempted: true,
-      domSnapshotAttempted: true,
+      resourceContentAttempted: !resource.ended,
+      snapshotAttempted: !snapshot.ended,
+      domSnapshotAttempted: !dom.ended,
       ordinaryResource: this.contains(resource),
       ordinarySnapshot: this.contains(snapshot),
       ordinaryDOM: this.contains(dom),
@@ -455,16 +501,21 @@ class RedirectProbe {
     await this.send('Runtime.evaluate', {
       expression: `fetch(${JSON.stringify(this.holdURL)}).catch(()=>{});void 0`,
     });
-    if (!(await waitFor(() => Boolean(this.held), 5000, 10)))
+    await waitFor(() => Boolean(this.held) || this.ended(), 5000, 10);
+    if (!this.held) {
+      this.holdURL = undefined;
+      if (await this.lost()) return;
       throw new Error('redirect body: Fetch override pause missing');
+    }
     const requestId = this.held.params.requestId;
     const out = await this.send('Fetch.continueRequest', { requestId, url });
+    this.holdURL = undefined;
+    if (out.ended) return;
     this.responses.push({
       overrideMethod: 'Fetch.continueRequest',
       overrideRefused: refused(out),
       overrideWorked: out.ok,
     });
-    this.holdURL = undefined;
     if (!out.ok) await this.send('Fetch.continueRequest', { requestId });
     await pause(500);
   }
@@ -475,6 +526,15 @@ class RedirectProbe {
     const tree = await this.send('Page.getFrameTree');
     const frameId = tree.result?.frameTree.frame.id;
     const start = (await this.fixture.log()).length;
+    await this.reads(url, to, frameId);
+    this.responses.push({
+      cookieSent: (await this.fixture.log())
+        .slice(start)
+        .some((entry) => entry.headers.cookie?.includes(`${this.cookie}=`)),
+    });
+  }
+
+  async reads(url, to, frameId) {
     const resource = await this.send('Network.loadNetworkResource', {
       frameId,
       url,
@@ -496,18 +556,21 @@ class RedirectProbe {
           event.params.type === 'XHR' &&
           event.params.request.url === url
       );
-    if (!xhr) throw new Error('redirect body: XHR request was not observed');
-    await this.send('Network.replayXHR', { requestId: xhr.params.requestId });
-    this.responses.push({ replayAttempted: true });
+    if (!xhr) {
+      if (await this.lost()) return;
+      throw new Error('redirect body: XHR request was not observed');
+    }
+    const replay = await this.send('Network.replayXHR', { requestId: xhr.params.requestId });
+    this.responses.push({ replayAttempted: !replay.ended });
     await pause(500);
-    await this.snapshots(url, to, frameId);
-    await this.iframe();
-    await this.override(url);
-    this.responses.push({
-      cookieSent: (await this.fixture.log())
-        .slice(start)
-        .some((entry) => entry.headers.cookie?.includes(`${this.cookie}=`)),
-    });
+    for (const step of [
+      () => this.snapshots(url, to, frameId),
+      () => this.iframe(),
+      () => this.override(url),
+    ]) {
+      if (this.ended()) return;
+      await step();
+    }
   }
 
   async iframe() {
@@ -521,15 +584,15 @@ class RedirectProbe {
     const snapshot = await this.send('Page.captureSnapshot', { format: 'mhtml' });
     const dom = await this.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
     this.responses.push({
-      iframeSnapshotAttempted: true,
+      iframeSnapshotAttempted: !snapshot.ended && !dom.ended,
       ordinaryIframeSnapshot: this.contains(snapshot),
       ordinaryIframeDOM: this.contains(dom),
     });
   }
 
   async evidence() {
-    await pause(8000);
-    this.tap();
+    if (!this.ended()) await pause(8000);
+    if (!this.ended()) this.tap();
     if (this.side === 'control' && this.controls)
       this.controls.networkEvents = this.learned.network.size > 0;
     await this.send('Fetch.disable');
@@ -560,20 +623,24 @@ class RedirectProbe {
         event.method === 'Network.responseReceivedExtraInfo' &&
         redirects.includes(event.params.statusCode)
     );
+    const extraHeld = extra.every((event) => {
+      const headers = event.params.headers;
+      const origin = headers.location ?? headers.Location;
+      return (
+        this.protectedURLs.some((url) => new URL(url).origin === origin) &&
+        headersMatch(headers, origin) &&
+        headersTextMatch(event.params.headersText, origin)
+      );
+    });
     const extraInPlace =
-      extra.length >= this.destinations.length * 4 &&
-      extra.every((event) => {
-        const headers = event.params.headers;
-        const origin = headers.location ?? headers.Location;
-        return (
-          this.protectedURLs.some((url) => new URL(url).origin === origin) &&
-          headersMatch(headers, origin) &&
-          headersTextMatch(event.params.headersText, origin)
-        );
-      });
+      extraHeld &&
+      (extra.length >= this.destinations.length * 4 || (this.end ? 'incomplete' : false));
+    const unseen = this.end ? 'incomplete' : false;
     const found = (key) => this.responses.some((entry) => entry[key]);
-    const fetchAttempts = this.attempts.filter((entry) => entry.method === 'Fetch.getResponseBody');
-    return {
+    const fetchReads = this.answers('Fetch.getResponseBody');
+    const fetchLeaked = fetchReads.answered.some((entry) => !refused(entry));
+    const overrides = this.responses.filter((entry) => entry.overrideMethod);
+    const evidence = {
       live: (await this.fixture.log()).some((entry) =>
         entry.url.includes(`/redirect-secret/${this.tag}`)
       ),
@@ -587,8 +654,13 @@ class RedirectProbe {
         ),
       secretHidden: !replyLeaks.includes(true),
       sessionSurvives: survives.ok && survives.result?.result?.value === 'doc',
-      fetchBodyAttempted: fetchAttempts.length > 0,
-      fetchBodyRefused: fetchAttempts.length > 0 && fetchAttempts.every(refused),
+      sessionEnded: this.ended(),
+      fetchBodyAttempted: fetchReads.short ? 'incomplete' : fetchReads.answered.length > 0,
+      fetchBodyRefused: fetchLeaked
+        ? false
+        : fetchReads.short
+          ? 'incomplete'
+          : fetchReads.answered.length > 0,
       ...this.legs(events),
       extraInPlace,
       ...redirectFragments({
@@ -632,26 +704,23 @@ class RedirectProbe {
           'iframeSnapshotAttempted',
           'ordinaryIframeSnapshot',
           'ordinaryIframeDOM',
-        ].map((key) => [key, found(key)])
+        ].map((key) => [key, found(key) || unseen])
       ),
-      overridesRefused:
-        this.responses.some((entry) => entry.overrideMethod) &&
-        this.responses
-          .filter((entry) => entry.overrideMethod)
-          .every((entry) => entry.overrideRefused),
-      overridesWorked:
-        this.responses.some((entry) => entry.overrideMethod) &&
-        this.responses
-          .filter((entry) => entry.overrideMethod)
-          .every((entry) => entry.overrideWorked),
+      overridesRefused: overrides.length
+        ? overrides.every((entry) => entry.overrideRefused)
+        : unseen,
+      overridesWorked: overrides.length ? overrides.every((entry) => entry.overrideWorked) : unseen,
     };
+    if (!this.end || !Object.values(evidence).includes('incomplete')) return evidence;
+    const incomplete = [evidence.incomplete, `redirect-secret: session ended (${this.end})`];
+    return { ...evidence, incomplete: incomplete.filter(Boolean).join('; ') };
   }
 
   async close() {
     this.stopped = true;
     await this.watching;
     await this.settle();
-    await outcome(this.client.send('Fetch.disable', {}, this.session));
+    if (!this.ended()) await outcome(this.client.send('Fetch.disable', {}, this.session));
     if (this.observer) {
       await outcome(
         this.reader.send(
@@ -680,7 +749,11 @@ export async function redirectSecret(options) {
     await probe.setup();
     if (options.mode === 'body') await probe.body();
     else await probe.headers();
-    return await probe.evidence();
+    probe.complete = !probe.ended();
+    const evidence = await probe.evidence();
+    if (probe.end && options.side !== 'guarded')
+      throw new Error(`redirect-secret: ${options.side} session ended (${probe.end})`);
+    return evidence;
   } finally {
     await probe.close();
   }

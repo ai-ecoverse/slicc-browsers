@@ -8,6 +8,7 @@ import {
   canary,
   expand,
   hop,
+  inapplicable,
   isRefusal,
   knownOrigins,
   loadedAfter,
@@ -1289,10 +1290,7 @@ const needsObserver = (vector) =>
   );
 
 const inactive = (vector, target, capabilities) =>
-  vector.skip?.target === target ||
-  vector.observable?.[target] === false ||
-  !supported(vector.requires, capabilities) ||
-  (vector.scope !== 'any' && vector.scope !== capabilities.scope);
+  inapplicable(vector, target, capabilities.scope) || !supported(vector.requires, capabilities);
 
 const allSteps = (list) => list.flatMap((step) => [step, ...allSteps(step.children ?? [])]);
 const browserContextStep = (vector, capabilities) =>

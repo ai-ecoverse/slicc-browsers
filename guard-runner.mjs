@@ -740,6 +740,7 @@ class Execution {
             fixture: this.options.fixture,
             mode: step.redirectSecret,
             side: this.side,
+            settleScale: this.scale,
             controls: (this.clients.redirectSecretControls ??= {}),
           })
         );

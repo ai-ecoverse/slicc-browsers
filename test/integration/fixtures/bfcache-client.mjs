@@ -185,7 +185,7 @@ export function bfcacheClients({ guard = 'none', missing, hooks = true } = {}) {
             },
           };
         } else if (method === 'Page.captureScreenshot') {
-          answer = { data: btoa(target.state.marker) };
+          answer = { data: btoa('\x89PNG\r\n\x1a\n' + target.state.marker) };
         } else if (method === 'Network.loadNetworkResource') {
           answer = { resource: { stream: 'fixture-stream' } };
         } else if (method === 'IO.read') {

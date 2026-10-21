@@ -1,5 +1,6 @@
 import { outcome, waitFor } from './guard-driver.mjs';
 import { createObserverTarget } from './observer-target.mjs';
+import { containsSecret } from './redirect-secret.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refusal = (out) =>
@@ -9,6 +10,13 @@ const refusal = (out) =>
   );
 const value = (out) =>
   out.ok && !out.result?.exceptionDetails ? out.result?.result?.value : undefined;
+const png = (data) => {
+  try {
+    return typeof data === 'string' && atob(data).startsWith('\x89PNG\r\n\x1a\n');
+  } catch {
+    return false;
+  }
+};
 const methods = [
   'Runtime.evaluate',
   'Runtime.callFunctionOn',
@@ -140,6 +148,7 @@ class Restore {
       this.delayClient.inboundDelay({ targetId, sessionId: session, ms, side, client, gate: true })
     );
     this.delay = installed.result;
+    this.gate = this.delay;
     const delay = this.delay;
     this.result.delay.seeding = {
       protectedObserved: delay?.protectedObserved,
@@ -261,6 +270,11 @@ class Restore {
           event.params?.context?.auxData?.isDefault &&
           event.params.context.auxData.frameId === f?.id
       )?.params.context.id;
+    this.result.screenshotProof = {
+      capturedAt: Date.now(),
+      url: f?.url,
+      reply: await this.read('Page.captureScreenshot', { format: 'png' }),
+    };
     const resource = await this.read('Network.loadNetworkResource', {
       frameId: f?.id,
       url: this.url,
@@ -278,12 +292,7 @@ class Restore {
     this.result.delay.release = released;
     this.delay = undefined;
     await trigger;
-    if (this.side === 'control')
-      await waitFor(
-        () => this.result.probes.every((probe) => probe.outcome !== 'no answer'),
-        this.budget
-      );
-    else await pause(100);
+    await this.settleProbes();
     if (
       !released.ok ||
       !(released.result?.delayedEvents > 0) ||
@@ -293,18 +302,33 @@ class Restore {
       this.missingEvidence('held restore events not proven');
   }
 
-  async audit() {
+  async settleProbes() {
+    await waitFor(
+      () => this.result.probes.every((probe) => probe.answeredAt !== undefined),
+      this.budget
+    );
+    await this.audit(true);
+    if (
+      this.result.probes.some(
+        (probe) =>
+          probe.answeredAt === undefined && !(this.finalAuditComplete && probe.forwarded === false)
+      )
+    )
+      this.missingEvidence('probe replies or terminal non-forwarding evidence unavailable');
+  }
+
+  async audit(final = false) {
     if (!this.forwardAudit) {
       this.result.commandsUnforwarded = 'not-supported';
       this.notes.push('commandsUnforwarded: not-supported:forwardAudit');
       return;
     }
     const audit = await outcome(
-      typeof this.delay.audit === 'function'
-        ? this.delay.audit({ probes: this.result.probes })
+      typeof this.gate.audit === 'function'
+        ? this.gate.audit({ probes: this.result.probes, final })
         : Promise.reject(new Error('forwarding audit unavailable'))
     );
-    this.result.delay.audit = audit;
+    this.result.delay[final ? 'finalAudit' : 'audit'] = audit;
     const entries = Array.isArray(audit.result?.probes) ? audit.result.probes : [];
     const complete =
       audit.ok &&
@@ -320,8 +344,11 @@ class Restore {
         ? true
         : matches.find((entry) => entry.forwarded === false)?.forwarded;
     }
-    const forwarded = this.result.probes.some((probe) => probe.protectedCurrent && probe.forwarded);
+    const forwarded =
+      this.result.commandsUnforwarded === false ||
+      this.result.probes.some((probe) => probe.forwarded);
     this.result.commandsUnforwarded = forwarded ? false : complete ? true : 'incomplete';
+    if (final) this.finalAuditComplete = complete;
     if (!complete) this.missingEvidence('forwarding audit unavailable');
   }
 
@@ -346,19 +373,18 @@ class Restore {
         .filter((event) => event.sessionId === this.session),
       ...(this.client.messages?.slice(this.messageStart) ?? []),
     ];
-    result.markerHidden = !JSON.stringify(delivered).includes(marker);
-    result.originHidden = !JSON.stringify(
-      result.probes
-        .filter((item) => ['Runtime.evaluate', 'Runtime.callFunctionOn'].includes(item.method))
-        .map((item) => item.reply)
-    ).includes(protectedOrigin);
+    result.markerHidden = !containsSecret(delivered, marker);
+    result.originHidden = !containsSecret(
+      result.probes.map((item) => item.reply),
+      protectedOrigin
+    );
     result.sideEffectAbsent = this.effects([result.beforeRelease, state]);
     if (result.sideEffectAbsent === 'incomplete')
       this.missingEvidence('side-effect read unavailable');
     const protectedProbes = result.probes.filter((item) => item.protectedCurrent);
     result.probesRefusedOrUnforwarded =
-      protectedProbes.length > 0 &&
-      protectedProbes.every((item) => ['refused', 'no answer'].includes(item.outcome));
+      result.probes.length > 0 &&
+      result.probes.every((item) => ['refused', 'no answer'].includes(item.outcome));
     result.probeRanInProtected = protectedProbes.some(
       (item) =>
         item.method === 'Runtime.evaluate' &&
@@ -367,18 +393,28 @@ class Restore {
     );
     result.touched = state?.touched === 1;
     result.methodsProven = methods.every((method) =>
-      protectedProbes.some(
-        (item) =>
-          item.method === method &&
-          item.reply.ok &&
-          (method === 'Input.dispatchKeyEvent'
-            ? state?.keys > 0
-            : ['Page.captureScreenshot', 'IO.read'].includes(method)
-              ? Boolean(item.reply.result?.data)
-              : JSON.stringify(item.reply).includes(marker))
-      )
+      protectedProbes.some((item) => item.method === method && this.proven(item, state))
     );
     if (this.side === 'control') this.control();
+  }
+
+  proven(probe, state) {
+    if (!probe.reply.ok || probe.reply.result?.exceptionDetails) return false;
+    if (probe.method === 'Input.dispatchKeyEvent') return state?.keys > 0;
+    if (probe.method === 'IO.read')
+      return (
+        this.stream &&
+        probe.params.handle === this.stream &&
+        containsSecret(probe.reply.result?.data, this.marker)
+      );
+    if (probe.method === 'Page.captureScreenshot') {
+      const proof = this.result.screenshotProof;
+      const data = probe.reply.result?.data;
+      return (
+        proof?.url === this.url && proof.reply.ok && png(data) && data === proof.reply.result?.data
+      );
+    }
+    return containsSecret(probe.reply, this.marker);
   }
 
   effects(states) {

@@ -1748,8 +1748,7 @@ function settleIncomplete(row, vector, base, legs) {
     live: legs.control.live === true && [true, 'incomplete'].includes(legs.guarded.live),
   });
   for (const side of ['control', 'guarded'])
-    if (legs[side].incomplete?.length && row[side] === 'fail' && filled[side] === 'pass')
-      row[side] = 'incomplete';
+    if (legs[side].incomplete?.length && filled[side] === 'pass') row[side] = 'incomplete';
   if (legs.guarded.live === 'incomplete' && filled.live === 'pass') row.live = 'incomplete';
   row.why = [filled.why, `incomplete: ${incomplete.join('; ')}`].filter(Boolean).join('; ');
 }

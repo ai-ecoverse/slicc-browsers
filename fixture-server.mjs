@@ -12,9 +12,12 @@ const escape = (value) =>
 function document(url, html) {
   const p = url.searchParams;
   const csp = p.has('csp') || url.pathname === '/csp';
+  const listener = p.has('listener')
+    ? `<script src="/listener.js?n=${encodeURIComponent(p.get('n') ?? '')}"></script>`
+    : '';
   return html(
     'doc',
-    `<p>document ${escape(p.get('n') ?? '')}</p>${csp ? '<script>document.title="inline"; document.body.dataset.inline="true"</script>' : ''}`,
+    `<p>document ${escape(p.get('n') ?? '')}</p>${listener}${csp ? '<script>document.title="inline"; document.body.dataset.inline="true"</script>' : ''}`,
     csp ? { 'content-security-policy': "script-src 'none'" } : {}
   );
 }
@@ -53,6 +56,13 @@ function route(req, url, send, html, redirects) {
         200,
         `globalThis.vectorScript=${JSON.stringify(`real-${p.get('n') ?? ''}`)}`,
         'text/javascript'
+      ),
+    '/listener.js': () =>
+      send(
+        200,
+        "addEventListener('load', function () { document.body.dataset.listened = 'true'; });",
+        'text/javascript',
+        { sourcemap: '/listener.js.map' }
       ),
     '/page': () => html('trigger', trigger(p)),
     '/api/cookies': () => send(200, req.headers.cookie ?? 'none', 'text/plain'),

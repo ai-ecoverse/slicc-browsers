@@ -90,3 +90,19 @@ test('a missing redirect registration endpoint remains an explicit summary failu
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('the bundled fixture document loads a source-mapped load listener script only when asked', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const plain = await (await fetch(`${fixture.origin}/doc?n=plain`)).text();
+    assert(!plain.includes('<script'));
+    const listened = await (await fetch(`${fixture.origin}/doc?n=a%20b&listener=1`)).text();
+    assert(listened.includes('<script src="/listener.js?n=a%20b"></script>'));
+    const script = await fetch(`${fixture.origin}/listener.js?n=a%20b`);
+    assert.equal(script.headers.get('sourcemap'), '/listener.js.map');
+    assert.match(script.headers.get('content-type'), /^text\/javascript/);
+    assert.match(await script.text(), /^addEventListener\('load', /);
+  } finally {
+    await fixture.close();
+  }
+});

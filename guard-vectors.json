@@ -14512,26 +14512,454 @@
     {
       "id": "E4",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Debugger.enable plus setBreakpointByUrl with a condition, setInstrumentationBreakpoint, DOMDebugger.setEventListenerBreakpoint"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Debugger.enable"
+        },
+        {
+          "cdp": "Debugger.setBreakpointByUrl",
+          "params": {
+            "urlRegex": "/listener\\.js\\?n={tag}$",
+            "lineNumber": 0,
+            "condition": "(() => { {beacon} return false; })()"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}&listener=1"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
+        },
+        {
+          "cdp": "Debugger.disable"
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "condition": {
+          "means": "a beacon from the breakpoint condition evaluated in {target}/listener.js?n={tag}",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "paused": {
+          "means": "a Debugger.paused in {target}/listener.js?n={tag}",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "event": "Debugger.paused",
+                "where": {
+                  "params": {
+                    "callFrames": {
+                      "$some": {
+                        "url": "{target}/listener.js?n={tag}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Debugger.paused",
+                "where": {
+                  "params": {
+                    "data": {
+                      "url": "{target}/listener.js?n={tag}"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}&listener=1",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "condition": true
+        }
       },
-      "expected": "the condition is never evaluated in the protected document and there's no Debugger.paused for it."
+      "expected": {
+        "condition": false,
+        "paused": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}&listener=1",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E4.instrumentation",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Debugger.enable"
+        },
+        {
+          "cdp": "Debugger.setInstrumentationBreakpoint",
+          "params": {
+            "instrumentation": "beforeScriptWithSourceMapExecution"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}&listener=1"
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}&listener=1",
+            "ms": 5000
+          }
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "cdp": "Debugger.disable"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "paused": {
+          "means": "a Debugger.paused before {target}/listener.js?n={tag}, which names a source map in its SourceMap header",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "any": [
+              {
+                "event": "Debugger.paused",
+                "where": {
+                  "params": {
+                    "callFrames": {
+                      "$some": {
+                        "url": "{target}/listener.js?n={tag}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Debugger.paused",
+                "where": {
+                  "params": {
+                    "data": {
+                      "url": "{target}/listener.js?n={tag}"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}&listener=1",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "paused": true
+        }
+      },
+      "expected": {
+        "paused": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}&listener=1",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E4.event-listener",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Debugger.enable"
+        },
+        {
+          "cdp": "DOMDebugger.setEventListenerBreakpoint",
+          "params": {
+            "eventName": "load"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}&listener=1"
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}&listener=1",
+            "ms": 5000
+          }
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "cdp": "Debugger.disable"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "paused": {
+          "means": "a Debugger.paused in a window load listener, which only {target}/doc?n={tag}&listener=1 registers",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "event": "Debugger.paused",
+            "where": {
+              "params": {
+                "reason": "EventListener",
+                "data": {
+                  "eventName": "listener:load"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}&listener=1",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "paused": true
+        }
+      },
+      "expected": {
+        "paused": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}&listener=1",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}&listener=1",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}&listener=1",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E5",
@@ -14560,251 +14988,1733 @@
     {
       "id": "E6.headers",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.setExtraHTTPHeaders set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setExtraHTTPHeaders",
+          "params": {
+            "headers": {
+              "x-probe": "{tag}"
+            }
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
         },
         {
-          "text": "as C4"
+          "settle": {
+            "ms": 1500
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "header": {
+          "means": "the request for {target}/doc?n={tag} carried x-probe",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "x-probe",
+            "on": "{target}/doc?n={tag}",
+            "value": "{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "header": true
+        }
       },
-      "expected": "Network.setExtraHTTPHeaders is not applied to the protected document or its requests",
-      "appliesTo": ["href", "iframe"],
+      "expected": {
+        "header": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E6.headers.iframe",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setExtraHTTPHeaders",
+          "params": {
+            "headers": {
+              "x-probe": "{tag}"
+            }
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "header": {
+          "means": "the request for {target}/doc?n={tag} carried x-probe",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "x-probe",
+            "on": "{target}/doc?n={tag}",
+            "value": "{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "header": true
+        }
+      },
+      "expected": {
+        "header": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["iframe"],
+      "observable": {
+        "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
       "id": "E6.ua-network",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.setUserAgentOverride set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setUserAgentOverride",
+          "params": {
+            "userAgent": "slicc-probe-{tag}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
         },
         {
-          "text": "as C4"
+          "settle": {
+            "ms": 1500
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "agent": {
+          "means": "the request for {target}/doc?n={tag} carried the overridden User-Agent",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "user-agent",
+            "on": "{target}/doc?n={tag}",
+            "value": "slicc-probe-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "agent": true
+        }
       },
-      "expected": "Network.setUserAgentOverride is not applied to the protected document or its requests",
-      "appliesTo": ["href", "iframe"],
+      "expected": {
+        "agent": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E6.ua-network.iframe",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setUserAgentOverride",
+          "params": {
+            "userAgent": "slicc-probe-{tag}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "agent": {
+          "means": "the request for {target}/doc?n={tag} carried the overridden User-Agent",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "user-agent",
+            "on": "{target}/doc?n={tag}",
+            "value": "slicc-probe-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "agent": true
+        }
+      },
+      "expected": {
+        "agent": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["iframe"],
+      "observable": {
+        "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
       "id": "E6.ua-emulation",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Emulation.setUserAgentOverride set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Emulation.setUserAgentOverride",
+          "params": {
+            "userAgent": "slicc-probe-{tag}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
         },
         {
-          "text": "as C4"
+          "settle": {
+            "ms": 1500
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "agent": {
+          "means": "the request for {target}/doc?n={tag} carried the overridden User-Agent",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "user-agent",
+            "on": "{target}/doc?n={tag}",
+            "value": "slicc-probe-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "agent": true
+        }
       },
-      "expected": "Emulation.setUserAgentOverride is not applied to the protected document or its requests",
-      "appliesTo": ["href", "iframe"],
+      "expected": {
+        "agent": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
       "observable": {
         "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E6.ua-emulation.iframe",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Emulation.setUserAgentOverride",
+          "params": {
+            "userAgent": "slicc-probe-{tag}"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "agent": {
+          "means": "the request for {target}/doc?n={tag} carried the overridden User-Agent",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "user-agent",
+            "on": "{target}/doc?n={tag}",
+            "value": "slicc-probe-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "agent": true
+        }
+      },
+      "expected": {
+        "agent": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["iframe"],
+      "observable": {
+        "own": false
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       }
     },
     {
       "id": "E6.cache-disabled",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.setCacheDisabled set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setCacheDisabled",
+          "params": {
+            "cacheDisabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
         },
         {
-          "text": "as C4"
+          "settle": {
+            "ms": 1500
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "uncached": {
+          "means": "the request for {target}/doc?n={tag} carried Pragma: no-cache",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "pragma",
+            "on": "{target}/doc?n={tag}",
+            "value": "no-cache",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "uncached": true
+        }
       },
-      "expected": "Network.setCacheDisabled is not applied to the protected document or its requests",
-      "appliesTo": ["href", "iframe"]
+      "expected": {
+        "uncached": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E6.cache-disabled.iframe",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setCacheDisabled",
+          "params": {
+            "cacheDisabled": true
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "uncached": {
+          "means": "the request for {target}/doc?n={tag} carried Pragma: no-cache",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "header": "pragma",
+            "on": "{target}/doc?n={tag}",
+            "value": "no-cache",
+            "observer": "fixture"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "uncached": true
+        }
+      },
+      "expected": {
+        "uncached": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["iframe"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E6.network-conditions",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.emulateNetworkConditions set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.emulateNetworkConditions",
+          "params": {
+            "offline": false,
+            "latency": 1500,
+            "downloadThroughput": -1,
+            "uploadThroughput": -1
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
         },
         {
-          "text": "as C4"
+          "settle": {
+            "ms": 8000
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "slow": {
+          "means": "{target}/doc?n={tag} took at least 1000 ms to load",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "expression": "location.href === '{target}/doc?n={tag}' && performance.getEntriesByType('navigation')[0].duration >= 1000",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "slow": true
+        }
       },
-      "expected": "Network.emulateNetworkConditions is not applied to the protected document or its requests",
-      "appliesTo": ["href", "iframe"]
+      "expected": {
+        "slow": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
+      "id": "E6.network-conditions.iframe",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.emulateNetworkConditions",
+          "params": {
+            "offline": false,
+            "latency": 1500,
+            "downloadThroughput": -1,
+            "uploadThroughput": -1
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "framed",
+          "from": "{ordinary}",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 8000
+          }
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "slow": {
+          "means": "the parent's resource timing shows {target}/doc?n={tag} took at least 1000 ms",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "expression": "(() => { const e = performance.getEntriesByType('resource').find((x) => x.name === '{target}/doc?n={tag}'); return Boolean(e) && e.duration >= 1000; })()",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "slow": true
+        }
+      },
+      "expected": {
+        "slow": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["iframe"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E6.locale",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Emulation.setLocaleOverride set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setLocaleOverride",
+          "params": {
+            "locale": "fr-CH"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "locale": {
+          "means": "{target}/doc?n={tag} formats in the fr-CH locale",
+          "dependsOn": ["refused.2"],
+          "check": {
+            "expression": "(location.href === '{target}/doc?n={tag}') ? Intl.DateTimeFormat().resolvedOptions().locale : 'elsewhere'",
+            "equals": "fr-CH",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "locale": true
+        }
       },
-      "expected": "Emulation.setLocaleOverride is not applied to the protected document or its requests",
-      "appliesTo": ["href"]
+      "expected": {
+        "locale": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E6.timezone",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Emulation.setTimezoneOverride set on the session before the trigger"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setTimezoneOverride",
+          "params": {
+            "timezoneId": "Pacific/Chatham"
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "timezone": {
+          "means": "{target}/doc?n={tag} runs in the Pacific/Chatham time zone",
+          "dependsOn": ["refused.2"],
+          "check": {
+            "expression": "(location.href === '{target}/doc?n={tag}') ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'elsewhere'",
+            "equals": "Pacific/Chatham",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "timezone": true
+        }
       },
-      "expected": "Emulation.setTimezoneOverride is not applied to the protected document or its requests",
-      "appliesTo": ["href"]
+      "expected": {
+        "timezone": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E6.network-state",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.overrideNetworkState set on the session before the trigger"
+          "page": "tab",
+          "url": "{cross}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.overrideNetworkState",
+          "params": {
+            "offline": true,
+            "latency": 0,
+            "downloadThroughput": -1,
+            "uploadThroughput": -1
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "offline": {
+          "means": "{target}/doc?n={tag} reports navigator.onLine false",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "expression": "(location.href === '{target}/doc?n={tag}') ? String(navigator.onLine) : 'elsewhere'",
+            "equals": "false",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "offline": true
+        }
       },
-      "expected": "Network.overrideNetworkState is not applied to the protected document or its requests",
-      "appliesTo": ["href"]
+      "expected": {
+        "offline": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "E6.blocked-urls",
       "family": "E",
-      "kind": "text",
+      "kind": "cdp",
       "scope": "any",
       "setup": [
         {
-          "text": "Network.setBlockedURLs set on the session before the trigger; observe a subresource, since setBlockedURLs does not block navigation"
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Network.enable"
+        },
+        {
+          "cdp": "Network.setBlockedURLs",
+          "params": {
+            "urls": ["*/data?n={tag}-blocked*"]
+          },
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "trigger": [
         {
-          "text": "as C1"
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "blocked": {
+          "means": "a subresource of {target}/doc?n={tag} on the blocked list failed",
+          "dependsOn": ["refused.3"],
+          "check": {
+            "expression": "(location.href === '{target}/doc?n={tag}') ? fetch('{target}/data?n={tag}-blocked').then(() => 'loaded', () => 'blocked') : 'elsewhere'",
+            "equals": "blocked",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
         "via": "guard",
-        "expected": "the same setup and trigger against a plain, unprotected test origin must SUCCEED."
+        "expected": {
+          "blocked": true
+        }
       },
-      "expected": "Network.setBlockedURLs is not applied to the protected document or its requests",
-      "appliesTo": ["href"]
+      "expected": {
+        "blocked": false,
+        "served": "either"
+      },
+      "designDependent": ["served"],
+      "appliesTo": ["href"],
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
     },
     {
       "id": "B1",

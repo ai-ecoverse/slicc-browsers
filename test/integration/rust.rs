@@ -295,5 +295,24 @@ fn the_guard_vectors_parse_and_round_trip() {
         .iter()
         .filter(|s| s.cdp.as_deref().is_some_and(|m| m.starts_with("Storage.")))
         .all(|s| s.session.as_deref() == Some(guard::SESSION_PAGE_OR_BROWSER)));
+    let executable: Vec<_> = v
+        .vectors
+        .iter()
+        .filter(|x| x.id == "E4" || x.id.starts_with("E4.") || x.id.starts_with("E6."))
+        .collect();
+    assert_eq!(executable.len(), 17);
+    for vector in executable {
+        assert_eq!(vector.kind, guard::KIND_CDP, "{}", vector.id);
+        assert!(vector.live_check.is_some(), "{}", vector.id);
+        assert_eq!(vector.applies_to.len(), 1, "{}", vector.id);
+        let guard::Expected::Checks(control) = &vector.control.expected else {
+            panic!("{} has a text control", vector.id);
+        };
+        assert!(
+            control.values().any(|o| *o == guard::Outcome::Is(true)),
+            "{}",
+            vector.id
+        );
+    }
     assert!(slicc_browsers::GUARD_VECTORS_SCHEMA.contains("/schema/guard-vectors.schema.json"));
 }

@@ -341,6 +341,23 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			}
 		}
 	}
+	executable := 0
+	for _, g := range v.Vectors {
+		if g.ID != "E4" && !strings.HasPrefix(g.ID, "E4.") && !strings.HasPrefix(g.ID, "E6.") {
+			continue
+		}
+		executable++
+		positive := false
+		for _, o := range g.Control.Expected.Checks {
+			positive = positive || (o.Value && !o.Either)
+		}
+		if g.Kind != sliccbrowsers.GuardKindCDP || len(g.LiveCheck) == 0 || !positive || len(g.AppliesTo) != 1 {
+			t.Fatalf("%s is not executable with a positive control: %+v", g.ID, g)
+		}
+	}
+	if executable != 17 {
+		t.Fatalf("%d executable E4 and E6 vectors", executable)
+	}
 	s, ok := decode(t, sliccbrowsers.GuardVectorsSchemaJSON()).(map[string]any)
 	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/guard-vectors.schema.json") {
 		t.Fatalf("guard schema: %v", s["$id"])

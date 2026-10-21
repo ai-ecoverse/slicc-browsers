@@ -293,7 +293,7 @@ class RedirectProbe {
     ).sessionId;
     this.watching = this.watch();
     await this.reader.send('Page.enable', {}, this.observer);
-    await this.reader.send('Network.enable', {}, this.observer);
+    if (this.side === 'guarded') await this.reader.send('Network.enable', {}, this.observer);
     await this.reader.send('Storage.setCookies', {
       cookies: [
         {
@@ -479,8 +479,13 @@ class RedirectProbe {
       expression: 'document.title',
       returnByValue: true,
     });
-    const events = this.client.events.slice(this.eventsStart);
-    const messages = this.client.messages?.slice(this.messagesStart) ?? [];
+    const tapped = `"sessionId":"${this.observer}"`;
+    const events = this.client.events
+      .slice(this.eventsStart)
+      .filter((event) => event.sessionId !== this.observer);
+    const messages = (this.client.messages?.slice(this.messagesStart) ?? []).filter(
+      (message) => !message.includes(tapped)
+    );
     const eventLeaks = await this.scan(events);
     const ordinaryEvents = events.filter(
       (event, index) =>

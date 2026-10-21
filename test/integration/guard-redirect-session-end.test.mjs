@@ -5,7 +5,14 @@ import { redirectSecret } from '../../redirect-secret.mjs';
 const ordinary = 'http://ordinary.example.test:4180';
 const refusal = () => new Error('slicc: refused: protected redirect');
 
-function fake({ end = 'override', how = 'detach', leak = false }) {
+function fake({
+  end = 'override',
+  how = 'detach',
+  leak = false,
+  at = 3,
+  paused = false,
+  navError = false,
+}) {
   const routes = new Map();
   const log = [];
   let next = 0;
@@ -25,6 +32,10 @@ function fake({ end = 'override', how = 'detach', leak = false }) {
     if (how === 'detach') emit(undefined, 'Target.detachedFromTarget', { sessionId: 'S1' });
   };
   const handle = (method, params) => {
+    if (method === 'Page.getFrameTree' && navError) {
+      navError = false;
+      throw new Error('Inspected target navigated or closed');
+    }
     if (method === 'Page.getFrameTree')
       return { frameTree: { frame: { id: 'F1', url: ordinary } } };
     if (method === 'Network.loadNetworkResource') {
@@ -34,18 +45,28 @@ function fake({ end = 'override', how = 'detach', leak = false }) {
     if (method === 'IO.read')
       return { data: leak ? `body ${marker}` : 'refused', base64Encoded: false, eof: true };
     if (method === 'Page.navigate') {
-      if (end === 'navigate' && ++navigations === 3) finish();
+      log.push({ url: params.url, headers: {} });
+      if (paused && navigations === 0)
+        emit('S1', 'Fetch.requestPaused', {
+          requestId: 'P1',
+          request: { url: params.url },
+          responseStatusCode: 302,
+        });
+      if (++navigations === at && end === 'navigate') finish();
       return { frameId: 'F1' };
     }
     if (method === 'Runtime.evaluate') {
       const url = params.expression.match(/"(http[^"]+)"/)?.[1];
+      if (url) log.push({ url, headers: {} });
       if (url?.includes('-override') && end === 'override') finish();
-      else if (url && params.expression.includes('XMLHttpRequest'))
+      else if (url && params.expression.includes('XMLHttpRequest')) {
         emit('S1', 'Network.requestWillBeSent', {
           requestId: `X${++next}`,
           type: 'XHR',
           request: { url },
         });
+        if (end === 'replay' && url.includes('-body')) finish();
+      }
       return { result: { type: 'string', value: 'doc' } };
     }
     if (method === 'Fetch.getResponseBody' || method === 'Network.getResponseBody') throw refusal();
@@ -136,6 +157,36 @@ test.describe('C2 redirect vectors when the guard ends the guarded session', {
     assert.equal(out.fetchBodyRefused, 'incomplete');
     assert.equal(out.networkBodyAttempted, 'incomplete');
     assert.equal(out.extraLocation, 'incomplete');
+  });
+
+  test('an end on the first navigation leaves requestsTerminated incomplete', async () => {
+    const out = await probe({ end: 'navigate', at: 1 }, { mode: 'headers' });
+    assert.equal(out.sessionEnded, true);
+    assert.equal(out.requestsTerminated, 'incomplete');
+    assert.equal(out.hopsRedacted, true);
+  });
+
+  test('one refused Fetch body read before the end does not pass the fetch-body checks', async () => {
+    const out = await probe({ end: 'navigate', at: 2, paused: true }, { mode: 'headers' });
+    assert.equal(out.sessionEnded, true);
+    assert.equal(out.fetchBodyAttempted, 'incomplete');
+    assert.equal(out.fetchBodyRefused, 'incomplete');
+  });
+
+  test('commands the probe never sent after the end are not counted as attempted', async () => {
+    const replay = await probe({ end: 'replay' });
+    assert.equal(replay.replayAttempted, 'incomplete');
+    const snapshots = await probe({ end: 'navigate', at: 1 });
+    assert.equal(snapshots.replayAttempted, true);
+    assert.equal(snapshots.resourceContentAttempted, 'incomplete');
+    assert.equal(snapshots.snapshotAttempted, 'incomplete');
+    assert.equal(snapshots.domSnapshotAttempted, 'incomplete');
+    assert.equal(snapshots.iframeSnapshotAttempted, 'incomplete');
+  });
+
+  test('an inspected-target navigation error on the control is not a session end', async () => {
+    const out = await probe({ end: 'never', navError: true }, { mode: 'headers', side: 'control' });
+    assert.equal(out.sessionEnded, false);
   });
 
   test('a session end on the control leg is an error, never a pass', async () => {

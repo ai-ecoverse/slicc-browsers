@@ -6,11 +6,12 @@ import { redirectSecret } from '../../redirect-secret.mjs';
 const ordinary = 'http://ordinary.example.test:4180';
 const refusal = () => new Error('slicc: refused: protected redirect body');
 
-function fake({ network, fetch = true, leak = false, raw = false, tap = true }) {
+function fake({ network, fetch = true, leak = false, raw = false, tap = true, late = false }) {
   const routes = new Map();
   const log = [];
   let next = 0;
   let count = 0;
+  const held = [];
   const make = () => ({ events: [], messages: [] });
   const client = make();
   const reader = make();
@@ -48,8 +49,12 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
         responseHeaders: [{ name: 'location', value: to.origin }],
       });
     if (['redact', 'hop-only'].includes(network)) {
-      emit(client, 'S1', 'Network.requestWillBeSent', hop);
-      emit(client, 'S1', 'Network.loadingFinished', { requestId: id });
+      const end = () => {
+        emit(client, 'S1', 'Network.requestWillBeSent', hop);
+        emit(client, 'S1', 'Network.loadingFinished', { requestId: id });
+      };
+      if (late && count === 16) held.push(end);
+      else end();
     }
     if (network === 'failed')
       emit(client, 'S1', 'Network.loadingFailed', {
@@ -67,6 +72,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
       waiting.get(n)?.(refusal());
     }
     if (method === 'Page.navigate') request(params.url);
+    if (method === 'Fetch.disable') for (const end of held.splice(0)) setTimeout(end, 1500);
     if (method === 'Runtime.evaluate') {
       const url = params.expression.match(/"(http[^"]+)"/)?.[1];
       if (url) request(url);
@@ -75,6 +81,8 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
     if (method === 'Fetch.getResponseBody') throw refusal();
     if (method === 'Network.getResponseBody') {
       if (leak === 'hang') return new Promise(() => {});
+      if (leak === 'slow')
+        return new Promise((resolve, reject) => setTimeout(() => reject(refusal()), 300));
       if (leak === 'after-continue' && !continued.has(params.requestId.slice(1)))
         return new Promise((resolve, reject) => waiting.set(params.requestId.slice(1), reject));
       if (leak === 'even' ? Number(params.requestId.slice(1)) % 2 === 0 : leak)
@@ -110,17 +118,19 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
   return { client, reader, fixture };
 }
 
-const probe = (options, controls = { networkEvents: true }) => {
+const probe = (options, controls = { networkEvents: true }, leg = {}) => {
   const browser = fake(options);
   return redirectSecret({
+    ...leg,
     ...browser,
     session: 'S1',
     targetId: 'T1',
     ordinary,
     tag: `t${Math.random().toString(36).slice(2, 8)}`,
     mode: 'headers',
-    side: 'guarded',
+    side: leg.side ?? 'guarded',
     controls,
+    settleScale: leg.settleScale,
   });
 };
 
@@ -211,6 +221,50 @@ test.describe('C2 redirect network-body carrier and request termination', {
     assert.equal(out.requestsTerminated, false);
     assert.deepEqual(deliveries(out), ['unterminated']);
     assert.deepEqual(terminals(out), [null]);
+  });
+
+  test('a control request whose terminal event lands after the tail is awaited, not failed', async () => {
+    const out = await probe({ network: 'redact', late: true }, {}, { side: 'control' });
+    assert.equal(out.requestsTerminated, true);
+    assert.equal(Object.keys(out.hops).length, 16);
+    assert.deepEqual(terminals(out), ['Network.requestWillBeSent']);
+    assert.equal(out.incomplete, undefined);
+  });
+
+  test('a guarded request whose terminal event lands after the tail is awaited too', async () => {
+    const out = await probe({ network: 'redact', late: true });
+    assert.equal(out.requestsTerminated, true);
+    assert.deepEqual(deliveries(out), ['redacted']);
+  });
+
+  test('a body read started by a late terminal event is drained before the evidence', async () => {
+    const out = await probe({
+      network: 'redact',
+      late: true,
+      fetch: false,
+      tap: false,
+      leak: 'slow',
+    });
+    assert.equal(out.requestsTerminated, true);
+    assert.equal(out.networkBodyPath, 'network');
+    assert.equal(out.networkBodyCarriers.network, 16);
+    assert.equal(out.networkBodyRefused, true);
+  });
+
+  test('a control request that never terminates is missing evidence, not a control failure', async () => {
+    const out = await probe({ network: 'silent' }, {}, { side: 'control', settleScale: 0.25 });
+    assert.equal(out.requestsTerminated, 'incomplete');
+    assert.deepEqual(deliveries(out), ['unterminated']);
+    assert.match(out.incomplete, /^redirect-secret: control requests N1, .*N16 unterminated$/);
+  });
+
+  test('a guarded request that never terminates still fails, waiting the bound for one hop only', async () => {
+    const start = Date.now();
+    const out = await probe({ network: 'silent' });
+    assert.ok(Date.now() - start < 30000, `took ${Date.now() - start} ms`);
+    assert.equal(out.requestsTerminated, false);
+    assert.deepEqual(deliveries(out), ['unterminated']);
+    assert.equal(out.incomplete, undefined);
   });
 
   test('a redact-in-place transport terminates with an origin-only redirect', async () => {

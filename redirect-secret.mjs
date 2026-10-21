@@ -92,6 +92,7 @@ class RedirectProbe {
     this.learned = { network: new Set(), fetch: new Set(), tap: new Set() };
     this.registrations = [];
     this.seen = new Map();
+    this.scale = this.settleScale ?? 1;
     this.protectedURLs = [
       `https://seven.sliccy.ai/auth/callback?code=${encodeURIComponent(this.marker)}&state=${encodeURIComponent(this.marker)}`,
       `https://vault.sliccy.ai/oauth/mcp-callback?code=${encodeURIComponent(this.marker)}`,
@@ -215,31 +216,69 @@ class RedirectProbe {
     };
   }
 
-  hops(events) {
+  requests(events, match = (url) => url?.startsWith(this.prefix)) {
     const own = events.filter((event) => event.sessionId === this.session);
     const seen = new Set(
       own
         .filter(
           (event) =>
             event.method === 'Network.requestWillBeSent' &&
-            (event.params.redirectResponse
-              ? event.params.redirectResponse.url?.startsWith(this.prefix)
-              : event.params.request?.url?.startsWith(this.prefix))
+            match(
+              event.params.redirectResponse
+                ? event.params.redirectResponse.url
+                : event.params.request?.url
+            )
         )
         .map((event) => event.params.requestId)
     );
-    const protectedOrigins = this.protectedURLs.map((url) => new URL(url).origin);
-    const hops = Object.fromEntries(
-      [...seen].map((requestId) => {
-        const mine = own.filter((event) => event.params?.requestId === requestId);
-        const hop = mine.find(
+    return [...seen].map((requestId) => {
+      const mine = own.filter((event) => event.params?.requestId === requestId);
+      return {
+        requestId,
+        hop: mine.find(
           (event) =>
             event.method === 'Network.requestWillBeSent' &&
-            event.params.redirectResponse?.url?.startsWith(this.prefix)
-        );
-        const end = mine.find((event) =>
+            match(event.params.redirectResponse?.url)
+        ),
+        end: mine.find((event) =>
           ['Network.loadingFinished', 'Network.loadingFailed'].includes(event.method)
-        );
+        ),
+      };
+    });
+  }
+
+  open(events, match) {
+    return this.requests(events, match).filter(({ hop, end }) => !hop && !end);
+  }
+
+  async land(url, start) {
+    const path = new URL(url).pathname;
+    await pause(250);
+    if (this.stalled) return;
+    const landed = await waitFor(
+      async () =>
+        (await this.fixture.log()).some((entry) => entry.url.includes(path)) &&
+        !this.open(this.client.events.slice(start), (seen) => seen === url).length,
+      Math.round(2000 * this.scale),
+      50
+    );
+    this.stalled = !landed && this.side === 'guarded';
+  }
+
+  async terminated() {
+    await waitFor(
+      () => !this.open(this.client.events.slice(this.eventsStart)).length,
+      Math.round(5000 * this.scale),
+      50
+    );
+    await waitFor(() => this.cursor >= this.client.events.length, 1000, 5);
+    await this.settle();
+  }
+
+  hops(events) {
+    const protectedOrigins = this.protectedURLs.map((url) => new URL(url).origin);
+    const hops = Object.fromEntries(
+      this.requests(events).map(({ requestId, hop, end }) => {
         const url = hop?.params.request?.url ?? '';
         const origin = protectedOrigins.find((value) => url.startsWith(value));
         return [
@@ -260,11 +299,23 @@ class RedirectProbe {
       })
     );
     const deliveries = Object.values(hops).map((entry) => entry.delivery);
+    const open = Object.keys(hops).filter((id) => hops[id].delivery === 'unterminated');
+    const missing = open.length > 0 && this.side === 'control';
     return {
       hops,
-      requestsTerminated: !deliveries.includes('unterminated'),
+      requestsTerminated: missing ? 'incomplete' : !open.length,
+      ...(missing
+        ? { incomplete: `redirect-secret: control requests ${open.join(', ')} unterminated` }
+        : {}),
       hopsRedacted: !deliveries.some((delivery) => ['raw', 'ordinary'].includes(delivery)),
     };
+  }
+
+  legs(events) {
+    const network = this.networkLeg();
+    const hops = this.hops(events);
+    const incomplete = [network.incomplete, hops.incomplete].filter(Boolean).join('; ');
+    return { ...network, ...hops, ...(incomplete ? { incomplete } : {}) };
   }
 
   async register(key, to, code = 302) {
@@ -339,6 +390,7 @@ class RedirectProbe {
       for (const kind of ['navigate', 'href', 'fetch', 'xhr']) {
         const code = this.mode === 'mix' ? [301, 303, 307, 308][index] : 302;
         const url = await this.register(`${index}-${kind}`, to, code);
+        const start = this.client.events.length;
         if (kind === 'navigate') await this.send('Page.navigate', { url });
         else {
           await this.reset();
@@ -350,7 +402,7 @@ class RedirectProbe {
                 : this.xhrExpression(url);
           await this.send('Runtime.evaluate', { expression });
         }
-        await pause(250);
+        await this.land(url, start);
         await this.send('Page.getFrameTree');
         await this.send('Page.getResourceTree');
         await this.send('Page.getNavigationHistory');
@@ -487,6 +539,7 @@ class RedirectProbe {
       returnByValue: true,
     });
     await this.settle();
+    await this.terminated();
     const tapped = `"sessionId":"${this.observer}"`;
     const events = this.client.events
       .slice(this.eventsStart)
@@ -536,8 +589,7 @@ class RedirectProbe {
       sessionSurvives: survives.ok && survives.result?.result?.value === 'doc',
       fetchBodyAttempted: fetchAttempts.length > 0,
       fetchBodyRefused: fetchAttempts.length > 0 && fetchAttempts.every(refused),
-      ...this.networkLeg(),
-      ...this.hops(events),
+      ...this.legs(events),
       extraInPlace,
       ...redirectFragments({
         messages,

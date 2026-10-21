@@ -111,10 +111,37 @@ export async function load(client, sessionId, url, ms = 20000) {
   const start = client.events.length;
   const { loaderId } = await client.send('Page.navigate', { url }, sessionId);
   if (!loaderId) return;
-  const deadline = Date.now() + ms;
-  while (!loadedAfter(client.events.slice(start), sessionId, loaderId)) {
-    if (Date.now() > deadline) throw new Error(`load of ${url} timed out`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
+  if (!(await waitFor(() => loadedAfter(client.events.slice(start), sessionId, loaderId), ms)))
+    throw new Error(`load of ${url} timed out`);
+}
+
+export async function waitFor(check, ms, step = 25) {
+  const start = Date.now();
+  const limit = start + ms + Math.max(ms * 4, 30000);
+  let deadline = start + ms;
+  let last = start;
+  const beat = () => {
+    const now = Date.now();
+    const gap = now - last;
+    if (gap > Math.max(step * 4, 1000)) deadline = Math.min(limit, deadline + gap - step);
+    last = now;
+  };
+  let timer;
+  const tick = () => {
+    beat();
+    timer = setTimeout(tick, step);
+  };
+  timer = setTimeout(tick, step);
+  try {
+    for (;;) {
+      if (await check()) return true;
+      beat();
+      if (Date.now() > deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, step));
+      beat();
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 

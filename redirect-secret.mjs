@@ -89,6 +89,7 @@ class RedirectProbe {
     this.attempts = [];
     this.jobs = new Set();
     this.networkBodies = new Set();
+    this.learned = { network: new Set(), fetch: new Set(), tap: new Set() };
     this.registrations = [];
     this.seen = new Map();
     this.protectedURLs = [
@@ -97,6 +98,7 @@ class RedirectProbe {
       `https://seven.sliccy.ai/auth/callback#access_token=${encodeURIComponent(this.marker)}&state=${encodeURIComponent(this.marker)}`,
       `https://vault.sliccy.ai/oauth/mcp-callback#access_token=${encodeURIComponent(this.marker)}`,
     ];
+    this.prefix = new URL(`${this.ordinary}/redirect-secret/${this.tag}-`).href;
     this.plainURL = `${this.ordinary}/redirect-secret-body/${this.tag}-plain?code=${encodeURIComponent(this.marker)}`;
     this.destinations =
       this.side === 'control'
@@ -119,6 +121,7 @@ class RedirectProbe {
     if (redirects.includes(event.params.responseStatusCode)) {
       const out = await this.send('Fetch.getResponseBody', { requestId: event.params.requestId });
       this.attempts.push({ method: 'Fetch.getResponseBody', ...out });
+      if (event.params.networkId) this.track(this.networkBody(event.params.networkId, 'fetch'));
     }
     if (
       this.holdURL &&
@@ -139,17 +142,128 @@ class RedirectProbe {
         if (event.method === 'Fetch.requestPaused') this.track(this.fetchPause(event));
         const response = event.params?.redirectResponse ?? event.params?.response;
         if (!response || !redirects.includes(response.status)) continue;
-        const requestId = event.params.requestId;
-        if (this.networkBodies.has(requestId)) continue;
-        this.networkBodies.add(requestId);
-        this.track(
-          this.send('Network.getResponseBody', { requestId }).then((out) => {
-            this.attempts.push({ method: 'Network.getResponseBody', ...out });
-          })
-        );
+        this.track(this.networkBody(event.params.requestId, 'network'));
       }
       await pause(5);
     }
+  }
+
+  async networkBody(requestId, source) {
+    this.learned[source].add(requestId);
+    if (this.networkBodies.has(requestId)) return;
+    this.networkBodies.add(requestId);
+    const entry = { method: 'Network.getResponseBody', source, pending: true };
+    this.attempts.push(entry);
+    const out = await this.send('Network.getResponseBody', { requestId });
+    delete entry.pending;
+    Object.assign(entry, out);
+  }
+
+  async settle() {
+    for (let i = 0; i < 500 && this.jobs.size; i++) await pause(10);
+  }
+
+  tap() {
+    for (const event of this.reader.events ?? []) {
+      if (event.sessionId !== this.observer) continue;
+      const response = event.params?.redirectResponse ?? event.params?.response;
+      if (response?.url?.startsWith(this.prefix) && redirects.includes(response.status))
+        this.track(this.networkBody(event.params.requestId, 'tap'));
+    }
+  }
+
+  networkLeg() {
+    const carriers = [...this.networkBodies].map((id) =>
+      this.learned.network.has(id)
+        ? 'network'
+        : this.learned.fetch.has(id)
+          ? 'fetch-networkId'
+          : 'withheld+tap'
+    );
+    const path =
+      ['withheld+tap', 'fetch-networkId', 'network'].find((carrier) =>
+        carriers.includes(carrier)
+      ) ?? 'none';
+    const networkBodyCarriers = Object.fromEntries(
+      [...new Set(carriers)].map((carrier) => [
+        carrier,
+        carriers.filter((entry) => entry === carrier).length,
+      ])
+    );
+    const attempts = this.attempts.filter((entry) => entry.method === 'Network.getResponseBody');
+    const refusedAll = attempts.length > 0 && attempts.every(refused);
+    const proven = path === 'network' || this.side !== 'guarded' || this.controls?.networkEvents;
+    const reason =
+      path === 'none'
+        ? 'no network id for the redirect'
+        : proven
+          ? undefined
+          : 'control did not prove the redirect Network events';
+    if (reason && (!attempts.length || refusedAll))
+      return {
+        networkBodyPath: path,
+        networkBodyCarriers,
+        networkBodyAttempted: 'incomplete',
+        networkBodyRefused: 'incomplete',
+        incomplete: `redirect-secret: network body leg ${reason}`,
+      };
+    return {
+      networkBodyPath: path,
+      networkBodyCarriers,
+      networkBodyAttempted: attempts.length > 0,
+      networkBodyRefused: refusedAll,
+    };
+  }
+
+  hops(events) {
+    const own = events.filter((event) => event.sessionId === this.session);
+    const seen = new Set(
+      own
+        .filter(
+          (event) =>
+            event.method === 'Network.requestWillBeSent' &&
+            !event.params.redirectResponse &&
+            event.params.request?.url?.startsWith(this.prefix)
+        )
+        .map((event) => event.params.requestId)
+    );
+    const protectedOrigins = this.protectedURLs.map((url) => new URL(url).origin);
+    const hops = Object.fromEntries(
+      [...seen].map((requestId) => {
+        const mine = own.filter((event) => event.params?.requestId === requestId);
+        const hop = mine.find(
+          (event) =>
+            event.method === 'Network.requestWillBeSent' &&
+            event.params.redirectResponse?.url?.startsWith(this.prefix)
+        );
+        const end = mine.find((event) =>
+          ['Network.loadingFinished', 'Network.loadingFailed'].includes(event.method)
+        );
+        const url = hop?.params.request?.url ?? '';
+        const origin = protectedOrigins.find((value) => url.startsWith(value));
+        return [
+          requestId,
+          {
+            delivery: !hop
+              ? end
+                ? 'withheld'
+                : 'unterminated'
+              : !origin
+                ? 'ordinary'
+                : [origin, `${origin}/`].includes(url)
+                  ? 'redacted'
+                  : 'raw',
+            terminal: (hop ?? end)?.method ?? null,
+          },
+        ];
+      })
+    );
+    const deliveries = Object.values(hops).map((entry) => entry.delivery);
+    return {
+      hops,
+      requestsTerminated: !deliveries.includes('unterminated'),
+      hopsRedacted: !deliveries.some((delivery) => ['raw', 'ordinary'].includes(delivery)),
+    };
   }
 
   async register(key, to, code = 302) {
@@ -186,6 +300,7 @@ class RedirectProbe {
     ).sessionId;
     this.watching = this.watch();
     await this.reader.send('Page.enable', {}, this.observer);
+    if (this.side === 'guarded') await this.reader.send('Network.enable', {}, this.observer);
     await this.reader.send('Storage.setCookies', {
       cookies: [
         {
@@ -361,14 +476,23 @@ class RedirectProbe {
 
   async evidence() {
     await pause(8000);
+    this.tap();
+    if (this.side === 'control' && this.controls)
+      this.controls.networkEvents = this.learned.network.size > 0;
     await this.send('Fetch.disable');
     await this.reset('survive');
     const survives = await this.send('Runtime.evaluate', {
       expression: 'document.title',
       returnByValue: true,
     });
-    const events = this.client.events.slice(this.eventsStart);
-    const messages = this.client.messages?.slice(this.messagesStart) ?? [];
+    await this.settle();
+    const tapped = `"sessionId":"${this.observer}"`;
+    const events = this.client.events
+      .slice(this.eventsStart)
+      .filter((event) => event.sessionId !== this.observer);
+    const messages = (this.client.messages?.slice(this.messagesStart) ?? []).filter(
+      (message) => !message.includes(tapped)
+    );
     const eventLeaks = await this.scan(events);
     const ordinaryEvents = events.filter(
       (event, index) =>
@@ -394,10 +518,7 @@ class RedirectProbe {
         );
       });
     const found = (key) => this.responses.some((entry) => entry[key]);
-    const attempted = (method) => this.attempts.some((entry) => entry.method === method);
-    const bodyRefused = (method) =>
-      this.attempts.filter((entry) => entry.method === method).length > 0 &&
-      this.attempts.filter((entry) => entry.method === method).every(refused);
+    const fetchAttempts = this.attempts.filter((entry) => entry.method === 'Fetch.getResponseBody');
     return {
       live: (await this.fixture.log()).some((entry) =>
         entry.url.includes(`/redirect-secret/${this.tag}`)
@@ -412,10 +533,10 @@ class RedirectProbe {
         ),
       secretHidden: !replyLeaks.includes(true),
       sessionSurvives: survives.ok && survives.result?.result?.value === 'doc',
-      fetchBodyAttempted: attempted('Fetch.getResponseBody'),
-      networkBodyAttempted: attempted('Network.getResponseBody'),
-      fetchBodyRefused: bodyRefused('Fetch.getResponseBody'),
-      networkBodyRefused: bodyRefused('Network.getResponseBody'),
+      fetchBodyAttempted: fetchAttempts.length > 0,
+      fetchBodyRefused: fetchAttempts.length > 0 && fetchAttempts.every(refused),
+      ...this.networkLeg(),
+      ...this.hops(events),
       extraInPlace,
       ...redirectFragments({
         messages,
@@ -476,7 +597,7 @@ class RedirectProbe {
   async close() {
     this.stopped = true;
     await this.watching;
-    await Promise.allSettled([...this.jobs]);
+    await this.settle();
     await outcome(this.client.send('Fetch.disable', {}, this.session));
     if (this.observer) {
       await outcome(

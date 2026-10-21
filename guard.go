@@ -43,6 +43,9 @@ const (
 	GuardCapChromeURLsAttach = "chromeUrlsAttach"
 	GuardCapExtensionWorld   = "extensionWorld"
 	GuardCapDiscovery        = "discovery"
+	GuardCapClientExit       = "clientExit"
+	GuardClientExit          = "exit"
+	GuardPageScript          = "script"
 	GuardSessionPage         = "page"
 	GuardSessionBrowser      = "browser"
 	GuardSessionEither       = "page-or-browser"
@@ -163,6 +166,7 @@ func (e *GuardExpected) UnmarshalJSON(b []byte) error {
 }
 
 type GuardStep struct {
+	Client         string          `json:"client,omitempty"`
 	RedirectSecret string          `json:"redirectSecret,omitempty"`
 	ErrorPage      string          `json:"errorPage,omitempty"`
 	Secret         string          `json:"secret,omitempty"`

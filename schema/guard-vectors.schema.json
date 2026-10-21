@@ -87,7 +87,8 @@
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",
-        "discovery"
+        "discovery",
+        "clientExit"
       ],
       "properties": {
         "autoAttach": {
@@ -107,7 +108,8 @@
         "chromeUrlsAttach": {
           "type": "string",
           "minLength": 1
-        }
+        },
+        "clientExit": { "type": "string", "minLength": 1 }
       }
     },
     "placeholders": {
@@ -136,7 +138,8 @@
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",
-        "discovery"
+        "discovery",
+        "clientExit"
       ]
     },
     "requires": {
@@ -233,10 +236,10 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[CEB][1-9](\\.[A-Za-z0-9-]+)*$"
+          "pattern": "^[CEBX][1-9](\\.[A-Za-z0-9-]+)*$"
         },
         "family": {
-          "enum": ["C", "E", "B"]
+          "enum": ["C", "E", "B", "X"]
         },
         "kind": {
           "enum": ["cdp", "text"]
@@ -485,6 +488,14 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["client"],
+          "properties": {
+            "client": { "const": "exit" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["text"],
           "properties": {
             "text": {
@@ -561,6 +572,7 @@
                 "fetch",
                 "xhr",
                 "image",
+                "script",
                 "eval"
               ]
             },
@@ -805,6 +817,9 @@
             },
             "observer": {
               "const": "fixture"
+            },
+            "exit": {
+              "enum": ["before", "after"]
             }
           }
         },
@@ -824,6 +839,9 @@
             },
             "tagged": {
               "type": "boolean"
+            },
+            "exit": {
+              "enum": ["before", "after"]
             }
           }
         },
@@ -843,6 +861,9 @@
             },
             "observer": {
               "const": "fixture"
+            },
+            "exit": {
+              "enum": ["before", "after"]
             }
           }
         },

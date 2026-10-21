@@ -297,12 +297,12 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []string{"C1.script-nav", "C5.guessed-id", "C6.storage", "C1.href", "C6.clearDataForOrigin", "E6.headers", "E6.locale", "C5.guessed-id.continue-with-auth", "B7"} {
+	for _, id := range []string{"C5.script", "X1.after-exit", "C1.script-nav", "C5.guessed-id", "C6.storage", "C1.href", "C6.clearDataForOrigin", "E6.headers", "E6.locale", "C5.guessed-id.continue-with-auth", "B7"} {
 		if !ids[id] {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery, sliccbrowsers.GuardCapClientExit} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}
@@ -334,6 +334,20 @@ func TestTheGuardVectorsParse(t *testing.T) {
 		case "C3.popup":
 			if !slices.Contains(g.Requires, sliccbrowsers.GuardCapAutoAttach) || !slices.Contains(g.Observe["attached"].Requires, sliccbrowsers.GuardCapAutoAttach) {
 				t.Fatalf("C3.popup requires %v", g.Requires)
+			}
+		case "C5.script":
+			if g.Family != "C" || g.Trigger[0].Page != sliccbrowsers.GuardPageScript || len(g.LiveCheck) == 0 || !g.Control.Expected.Checks["fulfilled"].Value || !g.Expected.Checks["answered"].Value {
+				t.Fatalf("C5.script %+v", g)
+			}
+		case "X1.after-exit":
+			exits := 0
+			for _, s := range g.Trigger {
+				if s.Client == sliccbrowsers.GuardClientExit {
+					exits++
+				}
+			}
+			if g.Family != "X" || exits != 1 || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapClientExit}) || len(g.LiveCheck) == 0 || !g.Control.Expected.Checks["served"].Value || !g.Expected.Checks["served"].Value || g.Expected.Checks["paused"].Value {
+				t.Fatalf("X1.after-exit %+v", g)
 			}
 		case "E3.bypass-csp":
 			if !slices.Equal(g.Observe["inline"].DependsOn, []string{"refused.2"}) || g.Observe["served"].DependsOn == nil {

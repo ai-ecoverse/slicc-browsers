@@ -185,6 +185,9 @@ Every CDP guard runs the vectors in `guard-vectors.json` (schema `schema/guard-v
 - the cert lane's E and B rows;
 - `C5.continue-request` and `C5.continue-response`, added next to `C5.document`;
 - the `C8` rows for privileged pages: `C8.navigate` (a page navigates to `chrome://settings`, `chrome://password-manager`, an extension page or `file:///`; refused), `C8.view-source` (the same through `view-source:`; refused), `C8.create` (`Target.createTarget` straight on those pages; refused), `C8.browser-ui-listed` (`Target.getTargets` lists no `browser_ui` target) and `C8.browser-ui-attach` (`Target.attachToTarget` by a `browser_ui` target's id; refused). All five have an unguarded control, since the guard refuses them only on the privileged target. Two cases aren't rows, because Chrome itself blocks them, so an unguarded client can't tell a guard from none: a page's `window.open('chrome://settings')`, and an `about:` alias such as `about:settings`, which `Page.navigate` and `Target.createTarget` both turn into `about:blank#blocked`. The `about:` aliases are in `protected.json` instead.
+- slicc-cdp's owner vectors in `test/integration/guard-native.test.mjs` at `d85ac3c`: `C5.script`, a protected script subresource under the client's own `Fetch.enable` `*` at both stages (the guard neither pauses it for the client nor lets the client fulfil it, and the page runs the stand-in's real `/script`, while the control's paused request carries its headers as an object with `User-Agent` and runs the forged script), and `X1.after-exit`, the client lifecycle row below.
+
+`X1.after-exit` (family `X`, client lifecycle) needs `clientExit`. Through the guard, the client opens an ordinary tab, registers `Page.addScriptToEvaluateOnNewDocument` with `{beacon}`, `Network.setExtraHTTPHeaders` with `x-probe: {tag}` and `Fetch.enable` `*` with a rule that fulfils the destination with a forged `FULFILLED` page, then loads the `/page` trigger whose `go()` navigates to `{target}/canary/{tag}`. Before the exit it must see its init-script beacon, its header on the trigger request and the trigger's `Fetch.requestPaused`: those are the positive evidence on both legs. Then the client exits, the unguarded observer calls `go()`, and the destination must be served and read as the real `canary` document, with no beacon from `{target}`, no `x-probe` on its request, no forged body and no `Fetch.requestPaused` for it reaching the client: nothing the client registered may outlive it. The control runs the same on `{plain}` through the guard, and expects the same, since an ordinary navigation after the exit must be just as clean. A guard that keeps its upstream session, or its own init scripts, headers or interception, past the client's exit fails the row.
 
 The `C9` foreign extension isolated-world family requires `extensionWorld`: a browser hosting a foreign content-script extension on the ordinary fixture page. `C9.world-hidden` requires the page default context to remain visible after `Runtime.enable`, while the extension context and Runtime/Debugger identifiers remain hidden without cutting or detaching the session. `C9.world-select` probes numeric and unique context selectors, object and argument handles, promises, properties, named bindings and DOM node resolution; each command selecting the hidden world must fail with the `slicc: refused:` prefix, never an ordinary browser error. Numeric guesses also sweep ids 1–32: an id not exposed to this client must be refused, while every exposed numeric context must remain usable; none of those guarded probes may reach the fixture content-script marker. The marker combines the content script’s global lexical `root` binding with its extension-id DOM marker and `chrome.runtime.id`, and is independently required to be absent from the page default world. `C9.world-debugger` pauses inside that content script: the control must reach its frame, while the guard must refuse or hide it. The control waits up to 5000 ms (scaled by `settleScale`) for `Debugger.paused`; when it never pauses, `reachable` records `"incomplete"`, not `false`, and the row fails with `extensionWorld debugger: no Debugger.paused within <ms>ms`. The guarded leg waits up to 1500 ms, scaled by `refusalScale`. `C9.page-drivable` evaluates `self.origin`, captures a DOM snapshot and dispatches an Input click on the same ordinary page; cutting the entire session fails this regression row. All four use an unguarded control, the default browser context and observer discovery of the real extension world, not an invented isolated world. Protected default contexts remain session-cutting evidence; hiding a foreign isolated world does not weaken any seven-origin row.
 
@@ -213,11 +216,11 @@ A client may register `Fetch.enable` patterns naming a protected origin in eithe
 - `setVersion`: the package version. The release flow stamps it into the npm package and the crate (`scripts/set-crate-version.mjs`). In git, and so in the Go module, it reads `0.0.0`; Go code gets the version from the module.
 - `targets`: the names a runner maps to a scheme, host and port: `seven`, `vault`, `vault-x` (a vault branch preview), `apex`, `own` (the client page's origin, `{client}`), `ordinary`, `ordinary-same-site`, `chrome-newtab`, `chrome-new-tab-page`, `chrome-settings`, `chrome-passwords`, `chrome-search`, `network-error`, `chrome-extension-page` and `file-root`. Each has a `description` and, for the protected ones, a default `host`. `chrome-newtab` (`chrome://newtab/`), `chrome-new-tab-page` (`chrome://new-tab-page/`), `chrome-settings` (`chrome://settings/`), `chrome-passwords` (`chrome://password-manager/`), `chrome-search` (`chrome-search://most-visited/`), `network-error` (`http://nonexistent.invalid/`), `chrome-extension-page` (a page of Chrome's built-in PDF viewer extension) and `file-root` (`file:///`) carry a `url`, which the runner uses unless `targets` maps the name to something else. No other URL in the file is one a runner must use.
 - `variants`: the detach variants in ms. `prompt` and `lagging` are documented; a runner may add others, such as `lagging-8s`, and reports the name it ran.
-- `capabilities`: what a transport may lack. `autoAttach` covers `Target.setAutoAttach`, `children` steps and child sessions; `browserSession` covers calls on the browser session; `browserContexts` covers `Target.createBrowserContext` and `Target.disposeBrowserContext`; `extensionWorld` means it can host a foreign content-script extension isolated world on the ordinary fixture; `discovery` means session-less `Target.setDiscoverTargets` and `Target.targetCreated`/`Target.targetInfoChanged` delivery; `chromeUrlsAttach` means the transport can attach to and drive `chrome://` pages. CDP over a DevTools port can; `chrome.debugger` can't, since Chrome refuses it every `chrome://` page, even with `--extensions-on-chrome-urls`.
+- `capabilities`: what a transport may lack. `autoAttach` covers `Target.setAutoAttach`, `children` steps and child sessions; `browserSession` covers calls on the browser session; `browserContexts` covers `Target.createBrowserContext` and `Target.disposeBrowserContext`; `extensionWorld` means it can host a foreign content-script extension isolated world on the ordinary fixture; `discovery` means session-less `Target.setDiscoverTargets` and `Target.targetCreated`/`Target.targetInfoChanged` delivery; `chromeUrlsAttach` means the transport can attach to and drive `chrome://` pages. CDP over a DevTools port can; `chrome.debugger` can't, since Chrome refuses it every `chrome://` page, even with `--extensions-on-chrome-urls`. `clientExit` means the harness can close the guarded client in the middle of a row: the client has `close()`, the `clientFactory` makes a fresh guarded client for the next leg, and an unguarded observer independent of the client outlives it.
 - `placeholders`: every `{name}` used in the vectors, with what it stands for. `{client}` is the client page's origin, which the runner maps.
 
 **A vector** has:
-- `id`, and `family` (`C`, `E` or `B`, the id's first letter);
+- `id`, and `family` (`C`, `E`, `B` or `X`, the id's first letter);
 - `kind`: `cdp` (runnable steps) or `text` (rows in words, which runners report as `not-run`, never `pass`);
 - `scope`: `any`, or the one guard the vector is for;
 - `setup` and `trigger`, both lists of steps;
@@ -238,7 +241,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
   - `open`: `window.open` with a user gesture;
   - `iframe`: add an iframe;
   - `framed`: load the `/framed` page from `from`, with `url` in an iframe;
-  - `fetch`, `xhr`, `image`: load `url` and name the body (`width N` for an image, or `<status> <body>` with `status`); `background` doesn't wait;
+  - `fetch`, `xhr`, `image`, `script`: load `url` and name the body (`width N` for an image, `String(globalThis.vectorScript)` after a `<script src>` loads, `error` when it fails, or `<status> <body>` with `status`); `background` doesn't wait;
   - `eval`: evaluate `expression`.
   `hops` routes `url` through `/hop` on each `origin`, with its `code`.
 - `{ "answer": { "url", "stage"?, "cdp"?, "params"?, "hold"? } }`: answer each paused request or auth challenge for `url` with that call; `hold` leaves it paused. Every other paused request continues unchanged.
@@ -247,6 +250,7 @@ Any `cdp`, `page` or `children` step can take `requires`, the capabilities it ne
 - `{ "wait": ms }`.
 - `{ "paused": { "url", "ms" } }`: wait until the client has seen the pause that an `answer` rule for `url` matches (`Fetch.requestPaused` at the rule's stage, or `Fetch.authRequired` for a `Fetch.continueWithAuth` rule). It waits up to `ms`. On the control leg, a pause that never comes fails the row with `paused: no pause for <url> within <ms>ms`. On the guarded leg the guard may hide that pause, so the step waits the full `ms` and doesn't fail. The C5 guessed-id vectors and `C5.auth` use it before their second request, so the probe's interception id falls between the two ids the guess spans.
 - `{ "guess": { "between", "cdp", "params" }, "as" }`: the call for each request id between the ids paused for the two URLs.
+- `{ "client": "exit" }`: the guarded client exits. The runner calls its `close()`, waits up to 5000 ms (scaled by `settleScale`) for the page target to be no longer attached, noting in `notes` when it stays attached, attaches its unguarded observer to the page, and runs every later step of the leg through that observer. Observations still read the exited client's events. It runs only at the top level of `setup` or `trigger`, and the vector requires `clientExit`.
 - `{ "text": … }`: a step in words.
 
 Popups are observed by `Target.targetCreated` with the opener's `openerId`, or by the child's `Target.attachedToTarget`, never by the URL: a popup waiting for the debugger can still be `about:blank`.
@@ -256,6 +260,8 @@ Popups are observed by `Target.targetCreated` with the opener's `openerId`, or b
 - `/hop?code=&to=` and `/framed?src=`;
 - `/listener.js`: one line registering a window `load` listener, served with `SourceMap: /listener.js.map`;
 - `/data?n=`: `real-<n>`, with CORS;
+- `/script?n=`: a script setting `globalThis.vectorScript` to `real-<n>`;
+- `/page?k=&to=`: a trigger page whose `go()` sends the page to `to` (`k=href`, `replace`, `popup` or `form`), and `/canary/<tag>`: a document titled `canary` with the marker;
 - `/img`: a 1×1 PNG;
 - `/auth`: Basic `u`:`p`, then `authed`;
 - `/rewritten` (title `rewritten`);
@@ -325,6 +331,7 @@ It exports:
 - `observe` defines every expected name;
 - in a vector with a refusable step, every observation, except an `as` of a step before the first refusable one, has `dependsOn`, and each name in it is a refusable step's refusal name;
 - every `Target.setAutoAttach`, `children`, child-session, browser-session and browser-context step has the matching `requires`, and a vector's `requires` includes its steps' requirements; observation-only requirements can remain local;
+- a client exit step is top-level and its vector requires `clientExit`, and only a vector with a client exit step scopes a check with `exit`;
 - every `{name}` is in `placeholders`;
 - no URL uses a port from 9222 to 9229.
 
@@ -348,7 +355,7 @@ means guarded transport only; rows requiring an observer report
 `skips`, the number of skipped rows per reason, and appends
 `skips <n> (<reason>=<count>, ...)` to `line` whenever any row was skipped, so a
 certification line never reads skipped rows as coverage.
-`clientFactory({ variant, detachDelay, vector, target, slot })` is called per row
+`clientFactory({ variant, detachDelay, vector, target, slot, leg? })` is called per row
 and may return either a client or `{ client, unguarded, close, transportVariant }`.
 The factory can configure the guard's own transport delay from this metadata;
 the runner never reaches into the guard. `transportVariant: true` acknowledges
@@ -363,6 +370,15 @@ of supported names, and a capability that isn't declared is unsupported: a CDP
 transport over a DevTools port declares `chromeUrlsAttach: true`, and an
 extension on `chrome.debugger` leaves it out, so `C8.newtab` is skipped with
 `not-supported:chromeUrlsAttach`. `capabilities.scope` selects owner-specific rows; pass the same name as `guard` to `summary()`.
+A row with a client exit step needs `clientExit` declared, a `clientFactory` and an
+unguarded observer that isn't the guarded client: without the capability or the factory
+it is `skip` with `not-supported:clientExit`, and without such an observer, with
+`not-supported:unguarded-observer`, since nothing could watch the page after the exit.
+When the control leg exits, the runner calls `clientFactory` again with `leg: "guarded"`
+for the guarded leg's clients and releases them with their `close` after the row. If
+that call fails, or its observer is the client, the guarded leg is `incomplete`, with
+`clientFactory: <reason>` or `client exit: <reason>` in `incomplete`, never a pass. A
+leg whose client can't exit (it has no `close()`) fails with `client exit: <reason>`.
 
 Map `ordinary`, `ordinary-same-site`, `seven`, `vault`, `vault-x`, `apex`, `own`
 and `client` to origins. `chrome-newtab`, `chrome-new-tab-page`, `chrome-settings`, `chrome-passwords`, `chrome-search`, `network-error`, `chrome-extension-page` and `file-root` default to their `url`.
@@ -410,7 +426,9 @@ Checks include: `beacon`, `served`, `header` with
 `compare`, `refused`, `reached`, `attached`, `delivered`, `title`, `expression`,
 `hops` (each exact nested redirect URL), `detached`, `loaded`, `pre`, `blocked`,
 `history`, `frameBlocked`, `registration`, `state` and `filtered`. The diagnostic `executed` and `live`
-checks are not valid liveness proofs.
+checks are not valid liveness proofs. A `beacon`, `served` or `header` check with
+`exit: "before"` reads only the requests logged before the leg's client exit, and with
+`exit: "after"` only those logged after it; on a leg that never exited it is false.
 Compose checks with `all`, `any` or `not`. Predicates support nested partial
 objects, `$contains`, `$regex`, `$some`, nonempty `$every`, and `$encoded` with
 `{ value, prefix }` for a base64-encoded value with an optional prefix. Reads of titles and
@@ -497,7 +515,7 @@ Without `tls`, the server and logged URLs remain HTTP. It returns
 The server serves document, frame, redirect, CSP, authentication, data, image,
 canary and beacon paths. Configure host resolution in your test browser, not in
 the runner. `npm run test:guard` exercises Chromium twice with no guard, one target per
-invocation: controls must pass and guarded protection expectations must fail; the `C8.newtab` reachability control must instead pass both legs. For a single
+invocation: controls must pass and guarded protection expectations must fail; the `C8.newtab` reachability control and `X1.after-exit`, whose plain client leaves nothing behind when it exits, must instead pass both legs. For a single
 target use `GUARD_TARGET=seven npm run test:guard-target`. The fixture also serves
 `/live` image requests from stand-in documents, independently of injected code.
 

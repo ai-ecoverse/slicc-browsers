@@ -21,6 +21,11 @@
       "repo": "cert lane",
       "ref": "guard-rows.md",
       "path": "E1-E6, B1-B7"
+    },
+    {
+      "repo": "ai-ecoverse/slicc-cdp",
+      "ref": "d85ac3c93d398cbadefda9fc8602f5bbd686b5c6",
+      "path": "test/integration/guard-native.test.mjs"
     }
   ],
   "targets": {
@@ -92,7 +97,8 @@
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
     "discovery": "session-less Target.setDiscoverTargets and targetCreated/targetInfoChanged delivery; absent transports must emit neither event",
-    "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't"
+    "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't",
+    "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -9985,6 +9991,172 @@
       }
     },
     {
+      "id": "C5.script",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a plain page whose own Fetch.enable pauses every request at both stages, and fulfils the probe's script with a forged one"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=fetcher-{tag}"
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*",
+                "requestStage": "Request"
+              },
+              {
+                "urlPattern": "*",
+                "requestStage": "Response"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/script?n={tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/javascript"
+                },
+                {
+                  "name": "access-control-allow-origin",
+                  "value": "*"
+                }
+              ],
+              "body": "Z2xvYmFsVGhpcy52ZWN0b3JTY3JpcHQ9J2Z1bGZpbGxlZCc="
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "script",
+          "url": "{target}/script?n={tag}",
+          "as": "body"
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "observe": {
+        "seen": {
+          "means": "a Fetch.requestPaused for {target}/script?n={tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/script?n={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "headers": {
+          "means": "the Fetch.requestPaused for {target}/script?n={tag} carried its request headers as an object with User-Agent",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/script?n={tag}",
+                  "headers": {
+                    "$regex": "^\\{.*\"[Uu]ser-[Aa]gent\":"
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "fulfilled": {
+          "means": "body is 'fulfilled'",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "fulfilled",
+            "observer": "client"
+          }
+        },
+        "answered": {
+          "means": "body is 'real-{tag}', the stand-in's own script",
+          "check": {
+            "result": "body",
+            "path": "result.result.value",
+            "equals": "real-{tag}",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "seen": true,
+          "headers": true,
+          "fulfilled": true,
+          "answered": false
+        }
+      },
+      "expected": {
+        "seen": false,
+        "headers": false,
+        "fulfilled": false,
+        "answered": true
+      },
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/script?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/script?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/script?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/script?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      }
+    },
+    {
       "id": "C5.auth",
       "family": "C",
       "kind": "cdp",
@@ -17808,6 +17980,209 @@
           }
         ],
         "observer": "client"
+      }
+    },
+    {
+      "id": "X1.after-exit",
+      "family": "X",
+      "kind": "cdp",
+      "scope": "any",
+      "requires": ["clientExit"],
+      "setup": [
+        {
+          "text": "a plain page whose client registers an init script, an x-probe header and Fetch.enable '*' that fulfils the destination with a forged body, then loads a trigger page whose navigation into {target} is pending when the client exits"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=exit-{tag}"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "{beacon}"
+          }
+        },
+        {
+          "cdp": "Network.setExtraHTTPHeaders",
+          "params": {
+            "headers": {
+              "x-probe": "{tag}"
+            }
+          }
+        },
+        {
+          "cdp": "Fetch.enable",
+          "params": {
+            "patterns": [
+              {
+                "urlPattern": "*"
+              }
+            ]
+          }
+        },
+        {
+          "answer": {
+            "url": "{target}/canary/{tag}",
+            "stage": "Request",
+            "cdp": "Fetch.fulfillRequest",
+            "params": {
+              "responseCode": 200,
+              "responseHeaders": [
+                {
+                  "name": "content-type",
+                  "value": "text/html"
+                }
+              ],
+              "body": "PCFkb2N0eXBlIGh0bWw+PHRpdGxlPmZvcmdlZDwvdGl0bGU+PHA+RlVMRklMTEVEPC9wPg=="
+            }
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{ordinary}/page?k=href&to={target}/canary/{tag}&tag={tag}"
+        },
+        {
+          "settle": {
+            "beacon": "{ordinary}",
+            "required": true
+          }
+        },
+        {
+          "client": "exit"
+        },
+        {
+          "page": "eval",
+          "expression": "go()"
+        },
+        {
+          "settle": {
+            "title": "canary",
+            "ms": 5000
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "observe": {
+        "instrumented": {
+          "means": "the client's init script sent its beacon from {ordinary} before the exit",
+          "check": {
+            "beacon": "{ordinary}",
+            "exit": "before",
+            "observer": "fixture"
+          }
+        },
+        "headed": {
+          "means": "the trigger page's request carried the client's x-probe header before the exit",
+          "check": {
+            "header": "x-probe",
+            "on": "/page",
+            "exit": "before",
+            "observer": "fixture"
+          }
+        },
+        "intercepted": {
+          "means": "a Fetch.requestPaused for the trigger page reached the client before the exit",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{ordinary}/page?k=href&to={target}/canary/{tag}&tag={tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "served": {
+          "means": "the stand-in served {target}/canary/{tag} after the exit",
+          "check": {
+            "served": "{target}/canary/{tag}",
+            "exit": "after",
+            "observer": "fixture"
+          }
+        },
+        "document": {
+          "means": "the unguarded observer reads {target}'s real document, title 'canary'",
+          "check": {
+            "title": "canary",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "forged": {
+          "means": "the unguarded observer reads the client's forged FULFILLED body",
+          "check": {
+            "expression": "document.body ? document.body.innerText.includes('FULFILLED') : false",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "scripted": {
+          "means": "the client's init script sent a beacon from {target} after the exit",
+          "check": {
+            "beacon": "{target}",
+            "exit": "after",
+            "observer": "fixture"
+          }
+        },
+        "probed": {
+          "means": "a request for {target}/canary/{tag} carried the client's x-probe header after the exit",
+          "check": {
+            "header": "x-probe",
+            "on": "{target}/canary/{tag}",
+            "exit": "after",
+            "observer": "fixture"
+          }
+        },
+        "paused": {
+          "means": "a Fetch.requestPaused for {target}/canary/{tag} reached the client",
+          "check": {
+            "event": "Fetch.requestPaused",
+            "where": {
+              "params": {
+                "request": {
+                  "url": "{target}/canary/{tag}"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in serves {target}'s document after the client exits",
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "instrumented": true,
+          "headed": true,
+          "intercepted": true,
+          "served": true,
+          "document": true,
+          "forged": false,
+          "scripted": false,
+          "probed": false,
+          "paused": false
+        }
+      },
+      "expected": {
+        "instrumented": true,
+        "headed": true,
+        "intercepted": true,
+        "served": true,
+        "document": true,
+        "forged": false,
+        "scripted": false,
+        "probed": false,
+        "paused": false
+      },
+      "liveCheck": {
+        "loaded": "{target}/canary/{tag}",
+        "observer": "fixture"
       }
     }
   ]

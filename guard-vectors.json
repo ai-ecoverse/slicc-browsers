@@ -309,6 +309,24 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "requestsTerminated": {
+          "means": "redirect secret: every seen redirect request ends, no unterminated request",
+          "check": {
+            "result": "redirect",
+            "path": "result.requestsTerminated",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "hopsRedacted": {
+          "means": "redirect secret: every protected hop is origin-only, never the raw URL",
+          "check": {
+            "result": "redirect",
+            "path": "result.hopsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -337,7 +355,8 @@
           "resourceContentAttempted": true,
           "snapshotAttempted": true,
           "domSnapshotAttempted": true,
-          "overridesWorked": true
+          "overridesWorked": true,
+          "requestsTerminated": true
         }
       },
       "expected": {
@@ -352,7 +371,9 @@
         "snapshotAttempted": true,
         "domSnapshotAttempted": true,
         "overridesRefused": true,
-        "iframeSnapshotAttempted": true
+        "iframeSnapshotAttempted": true,
+        "requestsTerminated": true,
+        "hopsRedacted": true
       }
     },
     {
@@ -518,6 +539,24 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "requestsTerminated": {
+          "means": "redirect secret: every seen redirect request ends, no unterminated request",
+          "check": {
+            "result": "redirect",
+            "path": "result.requestsTerminated",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "hopsRedacted": {
+          "means": "redirect secret: every protected hop is origin-only, never the raw URL",
+          "check": {
+            "result": "redirect",
+            "path": "result.hopsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -543,7 +582,8 @@
           "networkFragmentVisible": true,
           "frameFragmentVisible": true,
           "frameTreeFragmentVisible": true,
-          "resourceTreeFragmentVisible": true
+          "resourceTreeFragmentVisible": true,
+          "requestsTerminated": true
         }
       },
       "expected": {
@@ -556,7 +596,9 @@
         "fetchBodyRefused": true,
         "networkBodyRefused": true,
         "extraLocation": true,
-        "fragmentsHidden": true
+        "fragmentsHidden": true,
+        "requestsTerminated": true,
+        "hopsRedacted": true
       }
     },
     {
@@ -722,6 +764,24 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "requestsTerminated": {
+          "means": "redirect secret: every seen redirect request ends, no unterminated request",
+          "check": {
+            "result": "redirect",
+            "path": "result.requestsTerminated",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "hopsRedacted": {
+          "means": "redirect secret: every protected hop is origin-only, never the raw URL",
+          "check": {
+            "result": "redirect",
+            "path": "result.hopsRedacted",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -747,7 +807,8 @@
           "networkFragmentVisible": true,
           "frameFragmentVisible": true,
           "frameTreeFragmentVisible": true,
-          "resourceTreeFragmentVisible": true
+          "resourceTreeFragmentVisible": true,
+          "requestsTerminated": true
         }
       },
       "expected": {
@@ -760,7 +821,9 @@
         "fetchBodyRefused": true,
         "networkBodyRefused": true,
         "extraLocation": true,
-        "fragmentsHidden": true
+        "fragmentsHidden": true,
+        "requestsTerminated": true,
+        "hopsRedacted": true
       }
     },
     {

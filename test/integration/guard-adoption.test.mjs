@@ -12,7 +12,7 @@ const { protectedOrigins } = JSON.parse(
   await readFile(new URL('../../catalog.json', import.meta.url))
 );
 
-async function row(id, options) {
+async function row(id, options, timeouts) {
   const fixture = await fixtureServer();
   try {
     const browser = await launch(fixture);
@@ -26,11 +26,21 @@ async function row(id, options) {
       },
       ...options,
     });
+    const client = timeouts
+      ? {
+          ...guard.client,
+          send: (method, params, sessionId) =>
+            guard.client.send(method, params, sessionId).catch((error) => {
+              if (/timed out/i.test(error.message)) timeouts.push(`${id}: ${method}`);
+              throw error;
+            }),
+        }
+      : guard.client;
     try {
       const vector = { ...data.vectors.find((v) => v.id === id), targets: ['seven'] };
       const execution = await run(
         { ...data, vectors: [vector], variants: { prompt: 0 } },
-        { client: guard.client, unguarded: browser.unguarded, targets, fixture, capabilities }
+        { client, unguarded: browser.unguarded, targets, fixture, capabilities }
       );
       return execution.results[0];
     } finally {
@@ -144,10 +154,12 @@ test('a blocking guard passes every executable E4 and E6 row but E6.network-stat
     .filter((id) => id !== 'E6.network-state');
   assert.equal(ids.length, 16);
   const failures = [];
+  const timeouts = [];
   for (const id of ids) {
-    const result = await row(id, { exposeExtensionWorlds: true });
+    const result = await row(id, { exposeExtensionWorlds: true }, timeouts);
     if (result.control !== 'pass' || result.guarded !== 'pass' || result.live !== 'pass')
       failures.push(result);
   }
   assert.deepEqual(failures, []);
+  assert.deepEqual(timeouts, []);
 });

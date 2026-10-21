@@ -15,23 +15,25 @@ const narrowed = (vector) => {
 };
 const set = { ...full, vectors: full.vectors.map(narrowed).filter(Boolean) };
 
+const targets = {
+  ordinary: 'http://ordinary.test/',
+  'ordinary-same-site': 'http://same.ordinary.test/',
+  seven: 'http://seven.test/',
+  vault: 'http://vault.test/',
+  'vault-x': 'http://x.vault.test/',
+  apex: null,
+  own: 'http://own.test/',
+  client: 'http://client.test/',
+  log: 'http://log.test/',
+};
+
 const genuine = async () => {
   const client = { transport: 'cdp', events: [], messages: [], send: async () => ({}) };
   const execution = await run(set, {
     client,
     clientFactory: () => client,
     capabilities,
-    targets: {
-      ordinary: 'http://ordinary.test/',
-      'ordinary-same-site': 'http://same.ordinary.test/',
-      seven: 'http://seven.test/',
-      vault: 'http://vault.test/',
-      'vault-x': 'http://x.vault.test/',
-      apex: null,
-      own: 'http://own.test/',
-      client: 'http://client.test/',
-      log: 'http://log.test/',
-    },
+    targets,
     fixture: { log: async () => [] },
   });
   return execution;
@@ -154,4 +156,64 @@ test('a skip naming an origin only a later any branch uses fails the run', async
   const report = forge('ordinary-same-site');
   assert.equal(report.pass, false);
   assert.ok(report.forged.some((f) => f.id === row.id && f.why.includes('ordinary-same-site')));
+});
+
+test('a forged not-applicable skip on a runnable row fails the run', async () => {
+  const execution = await genuine();
+  const index = execution.results.findIndex((r) => r.reason === 'not-applicable:no-apex-origin');
+  const row = execution.results[index];
+  const results = execution.results.with(index, { ...row, reason: 'not-applicable' });
+  const report = driverSummary({ guard: 'reference', sha: 'test', set, results });
+  assert.equal(report.pass, false);
+  assert.match(report.line, /^GUARD-FAIL .* forged 1$/);
+  assert.deepEqual(
+    report.forged.map((f) => [f.id, f.target, f.why]),
+    [[row.id, row.target, 'skip with a reason the runner never gives: not-applicable']]
+  );
+  const vector = full.vectors.find((v) => v.id === 'C2.redirect-body');
+  const one = { ...full, vectors: [{ ...vector, targets: ['ordinary'] }] };
+  const forged = Object.keys(full.variants).map((variant) => ({
+    id: vector.id,
+    target: 'ordinary',
+    variant,
+    transport: 'cdp',
+    control: 'skip',
+    guarded: 'skip',
+    live: 'skip',
+    reason: 'not-applicable',
+  }));
+  const body = driverSummary({ guard: 'reference', sha: 'test', set: one, results: forged });
+  assert.equal(body.pass, false);
+  assert.equal(body.forged.length, forged.length);
+});
+
+test('a genuine not-applicable row for an unobservable target or another scope still passes', async () => {
+  const vectors = full.vectors
+    .filter((v) => v.observable?.own === false && !v.requires && v.kind !== 'text')
+    .map((v) => ({ ...v, targets: ['own'] }));
+  const { observable: _, ...observed } = vectors[0];
+  const scoped = { ...observed, id: 'scoped.other', scope: 'other-guard' };
+  const one = { ...full, vectors: [...vectors, scoped] };
+  const client = { transport: 'cdp', events: [], messages: [], send: async () => ({}) };
+  const execution = await run(one, {
+    client,
+    capabilities,
+    targets,
+    fixture: { log: async () => [] },
+  });
+  assert.ok(execution.results.length > 0);
+  assert.ok(execution.results.every((r) => r.reason === 'not-applicable'));
+  const report = execution.summary({ guard: 'reference', sha: 'test' });
+  assert.deepEqual(report.forged, []);
+  assert.equal(report.pass, true);
+  const elsewhere = driverSummary({
+    guard: 'other-guard',
+    sha: 'test',
+    set: one,
+    results: execution.results,
+  });
+  assert.deepEqual(
+    elsewhere.forged.map((f) => f.id),
+    Object.keys(full.variants).map(() => 'scoped.other')
+  );
 });

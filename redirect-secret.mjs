@@ -1,4 +1,4 @@
-import { load, outcome } from './guard-driver.mjs';
+import { load, outcome, waitFor } from './guard-driver.mjs';
 import { redirectFragments } from './redirect-fragments.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,27 +47,32 @@ const headersTextMatch = (text, to) =>
       )
   );
 
-export function containsSecret(value, marker) {
+export function containsSecret(value, marker, seen = new Map()) {
   const visit = (value, depth = 0) => {
     if (typeof value === 'string') {
-      if (value.includes(marker)) return true;
-      if (depth >= 8) return false;
-      const decoded = [];
-      try {
-        decoded.push(decodeURIComponent(value));
-      } catch {}
-      try {
-        decoded.push(JSON.parse(value));
-      } catch {}
-      try {
-        decoded.push(JSON.parse(`"${value}"`));
-      } catch {}
-      decoded.push(...decodedBase64(value));
-      return decoded.some((text) => text !== value && visit(text, depth + 1));
+      const key = `${depth}:${value}`;
+      if (!seen.has(key)) seen.set(key, text(value, depth));
+      return seen.get(key);
     }
     if (value && typeof value === 'object')
       return Object.values(value).some((v) => visit(v, depth));
     return false;
+  };
+  const text = (value, depth) => {
+    if (value.includes(marker)) return true;
+    if (depth >= 8) return false;
+    const decoded = [];
+    try {
+      decoded.push(decodeURIComponent(value));
+    } catch {}
+    try {
+      decoded.push(JSON.parse(value));
+    } catch {}
+    try {
+      decoded.push(JSON.parse(`"${value}"`));
+    } catch {}
+    decoded.push(...decodedBase64(value));
+    return decoded.some((text) => text !== value && visit(text, depth + 1));
   };
   return visit(value);
 }
@@ -85,6 +90,7 @@ class RedirectProbe {
     this.jobs = new Set();
     this.networkBodies = new Set();
     this.registrations = [];
+    this.seen = new Map();
     this.protectedURLs = [
       `https://seven.sliccy.ai/auth/callback?code=${encodeURIComponent(this.marker)}&state=${encodeURIComponent(this.marker)}`,
       `https://vault.sliccy.ai/oauth/mcp-callback?code=${encodeURIComponent(this.marker)}`,
@@ -158,7 +164,23 @@ class RedirectProbe {
     await load(this.reader, this.observer, `${this.ordinary}/doc?n=${this.tag}-${suffix}`);
   }
 
-  async setup() {
+  contains(value) {
+    return containsSecret(value, this.marker, this.seen);
+  }
+
+  async scan(items) {
+    const flags = [];
+    let slice = Date.now();
+    for (const item of items) {
+      flags.push(this.contains(item));
+      if (Date.now() - slice < 10) continue;
+      await pause(0);
+      slice = Date.now();
+    }
+    return flags;
+  }
+
+  async observe() {
     this.observer = (
       await this.reader.send('Target.attachToTarget', { targetId: this.targetId, flatten: true })
     ).sessionId;
@@ -176,6 +198,9 @@ class RedirectProbe {
         },
       ],
     });
+  }
+
+  async setup() {
     for (const domain of ['Page', 'Network', 'Runtime', 'Log', 'Audits'])
       await this.send(`${domain}.enable`);
     await this.send('Fetch.enable', {
@@ -249,9 +274,9 @@ class RedirectProbe {
       resourceContentAttempted: true,
       snapshotAttempted: true,
       domSnapshotAttempted: true,
-      ordinaryResource: containsSecret(resource, this.marker),
-      ordinarySnapshot: containsSecret(snapshot, this.marker),
-      ordinaryDOM: containsSecret(dom, this.marker),
+      ordinaryResource: this.contains(resource),
+      ordinarySnapshot: this.contains(snapshot),
+      ordinaryDOM: this.contains(dom),
     });
   }
 
@@ -262,9 +287,8 @@ class RedirectProbe {
     await this.send('Runtime.evaluate', {
       expression: `fetch(${JSON.stringify(this.holdURL)}).catch(()=>{});void 0`,
     });
-    const deadline = Date.now() + 5000;
-    while (!this.held && Date.now() < deadline) await pause(10);
-    if (!this.held) throw new Error('redirect body: Fetch override pause missing');
+    if (!(await waitFor(() => Boolean(this.held), 5000, 10)))
+      throw new Error('redirect body: Fetch override pause missing');
     const requestId = this.held.params.requestId;
     const out = await this.send('Fetch.continueRequest', { requestId, url });
     this.responses.push({
@@ -330,8 +354,8 @@ class RedirectProbe {
     const dom = await this.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
     this.responses.push({
       iframeSnapshotAttempted: true,
-      ordinaryIframeSnapshot: containsSecret(snapshot, this.marker),
-      ordinaryIframeDOM: containsSecret(dom, this.marker),
+      ordinaryIframeSnapshot: this.contains(snapshot),
+      ordinaryIframeDOM: this.contains(dom),
     });
   }
 
@@ -345,11 +369,13 @@ class RedirectProbe {
     });
     const events = this.client.events.slice(this.eventsStart);
     const messages = this.client.messages?.slice(this.messagesStart) ?? [];
+    const eventLeaks = await this.scan(events);
     const ordinaryEvents = events.filter(
-      (event) =>
-        containsSecret(event, this.marker) &&
-        JSON.stringify(event).includes(new URL(this.plainURL).host)
+      (event, index) =>
+        eventLeaks[index] && JSON.stringify(event).includes(new URL(this.plainURL).host)
     );
+    const replies = [...messages, ...this.responses];
+    const replyLeaks = await this.scan(replies);
     const extra = events.filter(
       (event) =>
         event.sessionId === this.session &&
@@ -377,14 +403,14 @@ class RedirectProbe {
         entry.url.includes(`/redirect-secret/${this.tag}`)
       ),
       rawRecorded: this.messagesStart !== undefined && messages.length > events.length,
-      leakChannels: [...messages, ...this.responses]
-        .filter((message) => containsSecret(message, this.marker))
+      leakChannels: replies
+        .filter((_, index) => replyLeaks[index])
         .map((message) =>
           typeof message === 'string'
             ? (JSON.parse(message).method ?? 'reply')
             : (message.method ?? 'reply')
         ),
-      secretHidden: !containsSecret([...messages, ...this.responses], this.marker),
+      secretHidden: !replyLeaks.includes(true),
       sessionSurvives: survives.ok && survives.result?.result?.value === 'doc',
       fetchBodyAttempted: attempted('Fetch.getResponseBody'),
       networkBodyAttempted: attempted('Network.getResponseBody'),
@@ -396,7 +422,7 @@ class RedirectProbe {
         events,
         replies: this.responses,
         protectedOrigins: this.protectedURLs.map((url) => new URL(url).origin),
-        contains: (value) => containsSecret(value, this.marker),
+        contains: (value) => this.contains(value),
       }),
       redirectLocation: ordinaryEvents.some(
         (event) =>
@@ -472,6 +498,11 @@ export async function redirectSecret(options) {
     throw new Error('redirectSecret fixture registration required');
   const probe = new RedirectProbe(options);
   try {
+    const observed = await outcome(probe.observe());
+    if (!observed.ok)
+      return {
+        incomplete: `redirect-secret: observer setup failed: ${observed.error.message}`,
+      };
     await probe.setup();
     if (options.mode === 'body') await probe.body();
     else await probe.headers();

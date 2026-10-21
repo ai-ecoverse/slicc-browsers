@@ -23,7 +23,7 @@ export function distTag(version, ref, latest) {
   const next = parse(version, 'version');
   const line = `release-${next[0]}.${next[1]}.x`;
   if (ref !== 'refs/heads/main') return line;
-  if (latest && below(next, parse(latest, 'latest'))) return line;
+  if (below(next, parse(latest, 'latest'))) return line;
   return 'latest';
 }
 

@@ -143,9 +143,9 @@ jobs:
         env:
           REF: ${{ github.ref }}
         run: |
-          latest="$(npm view @ai-ecoverse/slicc-browsers dist-tags.latest 2>/dev/null || true)"
+          latest="$(npm view @ai-ecoverse/slicc-browsers dist-tags.latest)"
           tag="$(node scripts/dist-tag.mjs "$VERSION" "$REF" "$latest")"
-          echo "publish $VERSION from $REF to $tag, latest is ${latest:-unset}"
+          echo "publish $VERSION from $REF to $tag, latest is $latest"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -703,6 +703,7 @@ class Execution {
             fixture: this.options.fixture,
             mode: step.redirectSecret,
             side: this.side,
+            controls: (this.clients.redirectSecretControls ??= {}),
           })
         );
       } finally {

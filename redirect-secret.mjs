@@ -222,8 +222,9 @@ class RedirectProbe {
         .filter(
           (event) =>
             event.method === 'Network.requestWillBeSent' &&
-            !event.params.redirectResponse &&
-            event.params.request?.url?.startsWith(this.prefix)
+            (event.params.redirectResponse
+              ? event.params.redirectResponse.url?.startsWith(this.prefix)
+              : event.params.request?.url?.startsWith(this.prefix))
         )
         .map((event) => event.params.requestId)
     );

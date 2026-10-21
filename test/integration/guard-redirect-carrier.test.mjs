@@ -37,7 +37,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
       request: { url: route.to },
       redirectResponse: { ...hop.redirectResponse, headers: { location: route.to } },
     });
-    if (network !== 'none')
+    if (!['none', 'hop-only'].includes(network))
       emit(client, 'S1', 'Network.requestWillBeSent', { requestId: id, request: { url } });
     if (fetch === true || (fetch === 'odd' && count % 2))
       emit(client, 'S1', 'Fetch.requestPaused', {
@@ -47,7 +47,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
         responseStatusCode: route.code ?? 302,
         responseHeaders: [{ name: 'location', value: to.origin }],
       });
-    if (network === 'redact') {
+    if (['redact', 'hop-only'].includes(network)) {
       emit(client, 'S1', 'Network.requestWillBeSent', hop);
       emit(client, 'S1', 'Network.loadingFinished', { requestId: id });
     }
@@ -225,6 +225,13 @@ test.describe('C2 redirect network-body carrier and request termination', {
 
   test('an in-place protected redirect substituted with an ordinary URL is not redacted', async () => {
     const out = await probe({ network: 'redact', raw: 'ordinary' });
+    assert.equal(out.hopsRedacted, false);
+    assert.deepEqual(deliveries(out), ['ordinary']);
+  });
+
+  test('a substituted hop delivered without its initial request event is still classified', async () => {
+    const out = await probe({ network: 'hop-only', raw: 'ordinary' });
+    assert.equal(Object.keys(out.hops).length, 16);
     assert.equal(out.hopsRedacted, false);
     assert.deepEqual(deliveries(out), ['ordinary']);
   });

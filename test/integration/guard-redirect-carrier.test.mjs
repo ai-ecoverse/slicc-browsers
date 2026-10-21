@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { redirectSecret } from '../../redirect-secret.mjs';
 
@@ -27,7 +28,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
     const to = new URL(route.to);
     const hop = {
       requestId: id,
-      request: { url: raw ? route.to : to.origin },
+      request: { url: raw === 'ordinary' ? `${ordinary}/plain` : raw ? route.to : to.origin },
       redirectResponse: { url, status: route.code ?? 302, headers: { location: to.origin } },
     };
     emit(reader, 'O1', 'Network.requestWillBeSent', { requestId: id, request: { url } });
@@ -222,9 +223,32 @@ test.describe('C2 redirect network-body carrier and request termination', {
     assert.equal(out.networkBodyRefused, true);
   });
 
+  test('an in-place protected redirect substituted with an ordinary URL is not redacted', async () => {
+    const out = await probe({ network: 'redact', raw: 'ordinary' });
+    assert.equal(out.hopsRedacted, false);
+    assert.deepEqual(deliveries(out), ['ordinary']);
+  });
+
   test('an in-place redirect carrying the raw protected URL is never accepted', async () => {
     const out = await probe({ network: 'redact', raw: true });
     assert.equal(out.hopsRedacted, false);
     assert.deepEqual(deliveries(out), ['raw']);
   });
+});
+
+test('every C2 redirect row holds the network-body leg, request termination and hop redaction', async () => {
+  const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
+  const rows = set.vectors.filter((vector) => vector.id.startsWith('C2.redirect'));
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    for (const key of [
+      'networkBodyAttempted',
+      'networkBodyRefused',
+      'requestsTerminated',
+      'hopsRedacted',
+    ])
+      assert.equal(row.expected[key], true, `${row.id} ${key}`);
+    for (const key of ['networkBodyAttempted', 'requestsTerminated'])
+      assert.equal(row.control.expected[key], true, `${row.id} control ${key}`);
+  }
 });

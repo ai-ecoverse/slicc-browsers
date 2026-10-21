@@ -327,6 +327,24 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "networkBodyAttempted": {
+          "means": "redirect secret: networkBodyAttempted",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyAttempted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "networkBodyRefused": {
+          "means": "redirect secret: networkBodyRefused",
+          "check": {
+            "result": "redirect",
+            "path": "result.networkBodyRefused",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the fixture served the registered ordinary redirect",
@@ -356,7 +374,8 @@
           "snapshotAttempted": true,
           "domSnapshotAttempted": true,
           "overridesWorked": true,
-          "requestsTerminated": true
+          "requestsTerminated": true,
+          "networkBodyAttempted": true
         }
       },
       "expected": {
@@ -373,7 +392,9 @@
         "overridesRefused": true,
         "iframeSnapshotAttempted": true,
         "requestsTerminated": true,
-        "hopsRedacted": true
+        "hopsRedacted": true,
+        "networkBodyAttempted": true,
+        "networkBodyRefused": true
       }
     },
     {

@@ -262,7 +262,7 @@ class RedirectProbe {
     return {
       hops,
       requestsTerminated: !deliveries.includes('unterminated'),
-      hopsRedacted: !deliveries.includes('raw'),
+      hopsRedacted: !deliveries.some((delivery) => ['raw', 'ordinary'].includes(delivery)),
     };
   }
 

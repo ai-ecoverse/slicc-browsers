@@ -98,7 +98,8 @@
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
     "discovery": "session-less Target.setDiscoverTargets and targetCreated/targetInfoChanged delivery; absent transports must emit neither event",
     "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't",
-    "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it"
+    "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it",
+    "siteIsolationOff": "the browser runs without site isolation, so a cross-site iframe shares its parent's process"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -13040,6 +13041,524 @@
           }
         ],
         "observer": "client"
+      }
+    },
+    {
+      "id": "C4.iframe-preattach.blank",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "frameRead": "blank",
+          "from": "{ordinary-same-site}",
+          "on": "guarded",
+          "as": "frames"
+        },
+        {
+          "frameRead": "blank",
+          "from": "{plain}",
+          "on": "control",
+          "as": "frames"
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "live": {
+          "means": "the observer saw the protected frame's about:blank child and its marker in the page's process",
+          "check": {
+            "result": "frames",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeShown": {
+          "means": "the client's Page.getFrameTree showed the child's marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.frameTreeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axFullShown": {
+          "means": "the client's frame-scoped Accessibility.getFullAXTree showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axFullShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axPartialShown": {
+          "means": "the client's Accessibility.getPartialAXTree of the marker node showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axPartialShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentShown": {
+          "means": "the client's pierced DOM.getDocument showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.documentShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "nodeShown": {
+          "means": "the client's DOM.describeNode and DOM.getOuterHTML of the child's nodes showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.nodeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotShown": {
+          "means": "the client's DOMSnapshot.captureSnapshot showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.snapshotShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsShown": {
+          "means": "an event on the client's session showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.eventsShown",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer, before the client attaches, sees {target}'s about:blank child frame and its marker in the page's own process through every read",
+      "liveCheck": {
+        "result": "frames",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "frameTreeShown": true,
+          "axFullShown": true,
+          "axPartialShown": true,
+          "documentShown": true,
+          "nodeShown": true,
+          "snapshotShown": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "frameTreeShown": false,
+        "axFullShown": false,
+        "axPartialShown": false,
+        "documentShown": false,
+        "nodeShown": false,
+        "snapshotShown": false,
+        "eventsShown": false
+      }
+    },
+    {
+      "id": "C4.iframe-preattach.srcdoc",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "frameRead": "srcdoc",
+          "from": "{ordinary-same-site}",
+          "on": "guarded",
+          "as": "frames"
+        },
+        {
+          "frameRead": "srcdoc",
+          "from": "{plain}",
+          "on": "control",
+          "as": "frames"
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "live": {
+          "means": "the observer saw the protected frame's about:srcdoc child and its marker in the page's process",
+          "check": {
+            "result": "frames",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeShown": {
+          "means": "the client's Page.getFrameTree showed the child's marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.frameTreeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axFullShown": {
+          "means": "the client's frame-scoped Accessibility.getFullAXTree showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axFullShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axPartialShown": {
+          "means": "the client's Accessibility.getPartialAXTree of the marker node showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axPartialShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentShown": {
+          "means": "the client's pierced DOM.getDocument showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.documentShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "nodeShown": {
+          "means": "the client's DOM.describeNode and DOM.getOuterHTML of the child's nodes showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.nodeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotShown": {
+          "means": "the client's DOMSnapshot.captureSnapshot showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.snapshotShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsShown": {
+          "means": "an event on the client's session showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.eventsShown",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer, before the client attaches, sees {target}'s about:srcdoc child frame and its marker in the page's own process through every read",
+      "liveCheck": {
+        "result": "frames",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "frameTreeShown": true,
+          "axFullShown": true,
+          "axPartialShown": true,
+          "documentShown": true,
+          "nodeShown": true,
+          "snapshotShown": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "frameTreeShown": false,
+        "axFullShown": false,
+        "axPartialShown": false,
+        "documentShown": false,
+        "nodeShown": false,
+        "snapshotShown": false,
+        "eventsShown": false
+      }
+    },
+    {
+      "id": "C4.iframe-preattach.blank.shared",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "frameRead": "blank",
+          "from": "{ordinary}",
+          "as": "frames",
+          "requires": ["siteIsolationOff"]
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "requires": ["siteIsolationOff"],
+      "observe": {
+        "live": {
+          "means": "the observer saw the protected frame's about:blank child and its marker in the page's process",
+          "check": {
+            "result": "frames",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeShown": {
+          "means": "the client's Page.getFrameTree showed the child's marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.frameTreeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axFullShown": {
+          "means": "the client's frame-scoped Accessibility.getFullAXTree showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axFullShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axPartialShown": {
+          "means": "the client's Accessibility.getPartialAXTree of the marker node showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axPartialShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentShown": {
+          "means": "the client's pierced DOM.getDocument showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.documentShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "nodeShown": {
+          "means": "the client's DOM.describeNode and DOM.getOuterHTML of the child's nodes showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.nodeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotShown": {
+          "means": "the client's DOMSnapshot.captureSnapshot showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.snapshotShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsShown": {
+          "means": "an event on the client's session showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.eventsShown",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer, before the client attaches, sees {target}'s about:blank child frame and its marker in the page's own process through every read",
+      "liveCheck": {
+        "result": "frames",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "frameTreeShown": true,
+          "axFullShown": true,
+          "axPartialShown": true,
+          "documentShown": true,
+          "nodeShown": true,
+          "snapshotShown": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "frameTreeShown": false,
+        "axFullShown": false,
+        "axPartialShown": false,
+        "documentShown": false,
+        "nodeShown": false,
+        "snapshotShown": false,
+        "eventsShown": false
+      }
+    },
+    {
+      "id": "C4.iframe-preattach.srcdoc.shared",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "frameRead": "srcdoc",
+          "from": "{ordinary}",
+          "as": "frames",
+          "requires": ["siteIsolationOff"]
+        }
+      ],
+      "targets": ["seven", "vault", "vault-x", "apex"],
+      "requires": ["siteIsolationOff"],
+      "observe": {
+        "live": {
+          "means": "the observer saw the protected frame's about:srcdoc child and its marker in the page's process",
+          "check": {
+            "result": "frames",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeShown": {
+          "means": "the client's Page.getFrameTree showed the child's marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.frameTreeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axFullShown": {
+          "means": "the client's frame-scoped Accessibility.getFullAXTree showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axFullShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axPartialShown": {
+          "means": "the client's Accessibility.getPartialAXTree of the marker node showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.axPartialShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentShown": {
+          "means": "the client's pierced DOM.getDocument showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.documentShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "nodeShown": {
+          "means": "the client's DOM.describeNode and DOM.getOuterHTML of the child's nodes showed the marker",
+          "check": {
+            "result": "frames",
+            "path": "result.nodeShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotShown": {
+          "means": "the client's DOMSnapshot.captureSnapshot showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.snapshotShown",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventsShown": {
+          "means": "an event on the client's session showed the marker or the protected path, query or fragment",
+          "check": {
+            "result": "frames",
+            "path": "result.eventsShown",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the independent observer, before the client attaches, sees {target}'s about:srcdoc child frame and its marker in the page's own process through every read",
+      "liveCheck": {
+        "result": "frames",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "frameTreeShown": true,
+          "axFullShown": true,
+          "axPartialShown": true,
+          "documentShown": true,
+          "nodeShown": true,
+          "snapshotShown": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "frameTreeShown": false,
+        "axFullShown": false,
+        "axPartialShown": false,
+        "documentShown": false,
+        "nodeShown": false,
+        "snapshotShown": false,
+        "eventsShown": false
       }
     },
     {

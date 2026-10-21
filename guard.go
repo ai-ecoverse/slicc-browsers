@@ -44,6 +44,7 @@ const (
 	GuardCapExtensionWorld   = "extensionWorld"
 	GuardCapDiscovery        = "discovery"
 	GuardCapClientExit       = "clientExit"
+	GuardCapSiteIsolationOff = "siteIsolationOff"
 	GuardClientExit          = "exit"
 	GuardPageScript          = "script"
 	GuardSessionPage         = "page"
@@ -172,6 +173,7 @@ type GuardStep struct {
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
+	FrameRead      string          `json:"frameRead,omitempty"`
 	Text           string          `json:"text,omitempty"`
 	CDP            string          `json:"cdp,omitempty"`
 	Params         json.RawMessage `json:"params,omitempty"`

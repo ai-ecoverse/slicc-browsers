@@ -3,6 +3,7 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 export { fixtureClient };
 
 import { extensionWorld } from './extension-world.mjs';
+import { frameRead } from './frame-read.mjs';
 import {
   beacon,
   canary,
@@ -669,12 +670,20 @@ class Execution {
       );
     if (step.extensionWorld && out.result?.incomplete)
       this.errors.push(`extensionWorld ${step.extensionWorld}: ${out.result.incomplete}`);
-    const probe = ['redirectSecret', 'unparseable', 'errorPage', 'extensionWorld'].find(
-      (key) => step[key]
-    );
+    const probe = [
+      'redirectSecret',
+      'unparseable',
+      'errorPage',
+      'extensionWorld',
+      'frameRead',
+    ].find((key) => step[key]);
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
-    if (['errorPage', 'redirectSecret'].includes(probe) && out.ok && out.result?.incomplete)
+    if (
+      ['errorPage', 'redirectSecret', 'frameRead'].includes(probe) &&
+      out.ok &&
+      out.result?.incomplete
+    )
       this.incomplete.push(`${probe}: ${out.result.incomplete}`);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
@@ -763,6 +772,20 @@ class Execution {
           side: this.side,
           secret: step.secret,
           discovery: supported(['discovery'], this.options.capabilities),
+          notes: this.notes,
+          budget: this.bound(5000),
+        })
+      );
+    if (step.frameRead)
+      return outcome(
+        frameRead({
+          client: this.client,
+          reader: this.reader,
+          top: step.from,
+          framed: this.vars.target,
+          tag: this.vars.tag,
+          mode: step.frameRead,
+          side: this.side,
           notes: this.notes,
           budget: this.bound(5000),
         })

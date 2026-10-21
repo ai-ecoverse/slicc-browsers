@@ -29,6 +29,17 @@ function trigger(p) {
   return `<p>trigger</p><button onclick="go()">Go</button>${frame}<script>const to=${JSON.stringify(to)};function go(){const k=${JSON.stringify(kind)};if(k==='href'||k==='deferred')location.href=to;if(k==='replace')location.replace(to);if(k==='popup')window.open(to);if(k==='form'){const u=new URL(to);const f=document.createElement('form');f.action=u.origin+u.pathname;for(const [name,value] of u.searchParams){const i=document.createElement('input');i.type='hidden';i.name=name;i.value=value;f.append(i);}document.body.append(f);f.submit();}return 'went';}${kind === 'deferred' ? `setTimeout(go,${Number(p.get('defer') ?? 3000)});` : ''}</script>`;
 }
 
+function nest(p) {
+  const n = p.get('n') ?? '';
+  const marker = escape(`frame-marker-${n}`);
+  const child =
+    p.get('kind') === 'srcdoc'
+      ? `<iframe name="${marker}" srcdoc="${escape(`<p>${marker}</p>`)}"></iframe>`
+      : `<iframe name="${marker}"></iframe><script>const f=document.querySelector('iframe');const p=f.contentDocument.createElement('p');p.textContent=f.name;f.contentDocument.body.append(p)</script>`;
+  const tag = JSON.stringify(n).replaceAll('<', '\\u003c');
+  return `<p>${marker}</p>${child}<script>const n=${tag};history.replaceState(null,'',location.pathname+'/path-'+'secret-'+n+'?query-'+'secret='+n+'#fragment-'+'secret-'+n)</script>`;
+}
+
 function route(req, url, send, html, redirects) {
   const secret =
     redirects.get(`${url.hostname}${url.pathname}${url.search ?? ''}`) ??
@@ -95,6 +106,7 @@ function route(req, url, send, html, redirects) {
       'canary',
       `<p data-canary="${escape(p.get('value') ?? 'planted')}">canary-marker ${escape(url.host)}</p>`
     );
+  if (url.pathname.startsWith('/nest')) return html('nest', nest(p));
   const handler = routes[url.pathname];
   if (handler) return handler();
   return send(404, 'missing', 'text/plain');

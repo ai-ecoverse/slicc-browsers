@@ -269,7 +269,13 @@ for (const v of guard.vectors ?? []) {
     gv(`${v.id}: hopped requires a hops step`);
   const runnable = steps.some(
     (st) =>
-      st.cdp || st.page || st.extensionWorld || st.unparseable || st.errorPage || st.redirectSecret
+      st.cdp ||
+      st.page ||
+      st.extensionWorld ||
+      st.unparseable ||
+      st.errorPage ||
+      st.redirectSecret ||
+      st.frameRead
   );
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);

@@ -69,12 +69,16 @@ test('the reference runner checks real Chromium effects without a guard', {
     for (let repeat = 0; repeat < repeats; repeat++) {
       const width = Number(process.env.GUARD_PARALLEL ?? (target === 'ordinary' ? 2 : 6));
       const browsers = await Promise.all(Array.from({ length: width }, () => launch(fixture)));
+      let shared;
       let execution;
       const timeouts = [];
       try {
         execution = await run(selected, {
           clientFactory: async ({ slot, vector }) => {
-            const raw = await connect(browsers[slot].ws);
+            const browser = vector.requires?.includes('siteIsolationOff')
+              ? await (shared ??= launch(fixture, { isolation: false }))
+              : browsers[slot];
+            const raw = await connect(browser.ws);
             const client = /^E[46]\b/.test(vector.id)
               ? {
                   ...raw,
@@ -88,7 +92,7 @@ test('the reference runner checks real Chromium effects without a guard', {
               : raw;
             if (!vector.requires?.includes('clientExit'))
               return { client, unguarded: client, close: () => client.close() };
-            const unguarded = await connect(browsers[slot].ws);
+            const unguarded = await connect(browser.ws);
             return {
               client,
               unguarded,
@@ -107,6 +111,7 @@ test('the reference runner checks real Chromium effects without a guard', {
             extensionWorld: true,
             discovery: true,
             clientExit: true,
+            siteIsolationOff: true,
           },
           parallel: width,
           variant: process.env.GUARD_VARIANT ?? Object.keys(set.variants),
@@ -119,7 +124,11 @@ test('the reference runner checks real Chromium effects without a guard', {
             : undefined,
         });
       } finally {
-        await Promise.all(browsers.map((browser) => browser.close()));
+        await Promise.all(
+          [...browsers, await shared?.catch(() => undefined)]
+            .filter(Boolean)
+            .map((browser) => browser.close())
+        );
       }
       const rows = execution.results.filter((r) => r.control !== 'skip' && r.control !== 'not-run');
       const failures = rows.filter(

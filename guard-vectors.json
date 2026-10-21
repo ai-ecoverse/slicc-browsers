@@ -14968,6 +14968,9 @@
           "wait": 2000
         },
         {
+          "cdp": "Debugger.resume"
+        },
+        {
           "cdp": "Debugger.disable"
         }
       ],
@@ -15120,6 +15123,9 @@
         },
         {
           "wait": 2000
+        },
+        {
+          "cdp": "Debugger.resume"
         },
         {
           "cdp": "Debugger.disable"
@@ -18041,7 +18047,7 @@
       "trigger": [
         {
           "page": "navigate",
-          "url": "{ordinary}/page?k=href&to={target}/canary/{tag}&tag={tag}"
+          "url": "{ordinary}/page?k=href&tag={tag}&to={target}/canary/{tag}"
         },
         {
           "settle": {
@@ -18089,7 +18095,9 @@
             "where": {
               "params": {
                 "request": {
-                  "url": "{ordinary}/page?k=href&to={target}/canary/{tag}&tag={tag}"
+                  "url": {
+                    "$regex": "^{ordinary}/page\\?k=href&tag={tag}&to="
+                  }
                 }
               }
             },

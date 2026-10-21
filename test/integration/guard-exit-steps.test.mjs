@@ -203,3 +203,79 @@ test('the shared set has C5.script and X1.after-exit with positive controls', ()
   assert.equal(exit.expected.paused, false);
   assert.ok(exit.liveCheck);
 });
+
+function redacting(tagged) {
+  const log = [];
+  let next = 0;
+  const client = { events: [] };
+  client.close = () => {};
+  client.send = async (method, params = {}, sessionId) => {
+    if (method === 'Target.createTarget') return { targetId: `target-${++next}` };
+    if (method === 'Target.attachToTarget') return { sessionId: `session-${++next}` };
+    if (method === 'Target.getTargetInfo')
+      return { targetInfo: { targetId: params.targetId, attached: true } };
+    if (method === 'Page.navigate') {
+      log.push({ url: params.url, headers: {} });
+      const loaderId = `loader-${++next}`;
+      const url = new URL(params.url).searchParams.has('k')
+        ? tagged(params.url.replace(/([?&]to=https?:\/\/(?:seven|vault)\.test).*$/, '$1'))
+        : params.url;
+      client.events.push(
+        { method: 'Fetch.requestPaused', sessionId, params: { requestId: 'r', request: { url } } },
+        { method: 'Page.frameNavigated', sessionId, params: { frame: { loaderId } } },
+        { method: 'Page.loadEventFired', sessionId, params: {} }
+      );
+      return { loaderId };
+    }
+    if (method === 'Runtime.evaluate') return { result: { value: true } };
+    return {};
+  };
+  return { log, client };
+}
+
+const exitRow = full.vectors.find((v) => v.id === 'X1.after-exit');
+const intercepted = (target) => ({
+  id: 'X9.redacted-trigger',
+  family: 'X',
+  kind: 'cdp',
+  scope: 'any',
+  setup: [{ page: 'tab', url: '{ordinary}/doc?n={tag}' }],
+  trigger: [exitRow.trigger[0]],
+  targets: [target],
+  observe: { intercepted: exitRow.observe.intercepted },
+  live: 'the trigger page loads',
+  liveCheck: { loaded: exitRow.trigger[0].url, observer: 'fixture' },
+  control: { origin: 'ordinary', via: 'guard', expected: { intercepted: true } },
+  expected: { intercepted: true },
+});
+
+for (const target of ['seven', 'vault'])
+  test(`X1.after-exit matches its trigger's Fetch.requestPaused when a guard redacts the protected URL after to= (${target})`, async () => {
+    const b = redacting((url) => url);
+    const execution = await run(
+      { ...full, vectors: [intercepted(target)], variants: { prompt: 0 } },
+      { targets, client: b.client, unguarded: b.client, fixture: { log: async () => b.log } }
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.match(
+      b.client.events.find((e) => e.params.request?.url.includes(targets[target])).params.request
+        .url,
+      new RegExp(`&to=${targets[target]}$`)
+    );
+  });
+
+test("X1.after-exit's intercepted check does not match a paused trigger for another tag", async () => {
+  const b = redacting((url) => url.replace(/tag=[^&]+/, 'tag=guard-other'));
+  const execution = await run(
+    { ...full, vectors: [intercepted('seven')], variants: { prompt: 0 } },
+    { targets, client: b.client, unguarded: b.client, fixture: { log: async () => b.log } }
+  );
+  const [row] = execution.results;
+  assert.deepEqual(row.observations, {
+    control: { intercepted: false },
+    guarded: { intercepted: false },
+  });
+});

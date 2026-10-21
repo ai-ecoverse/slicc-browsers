@@ -70,10 +70,22 @@ test('the reference runner checks real Chromium effects without a guard', {
       const width = Number(process.env.GUARD_PARALLEL ?? (target === 'ordinary' ? 2 : 6));
       const browsers = await Promise.all(Array.from({ length: width }, () => launch(fixture)));
       let execution;
+      const timeouts = [];
       try {
         execution = await run(selected, {
           clientFactory: async ({ slot, vector }) => {
-            const client = await connect(browsers[slot].ws);
+            const raw = await connect(browsers[slot].ws);
+            const client = /^E[46]\b/.test(vector.id)
+              ? {
+                  ...raw,
+                  send: (method, params, sessionId) =>
+                    raw.send(method, params, sessionId).catch((error) => {
+                      if (/timed out/i.test(error.message))
+                        timeouts.push(`${vector.id}: ${method}`);
+                      throw error;
+                    }),
+                }
+              : raw;
             if (!vector.requires?.includes('clientExit'))
               return { client, unguarded: client, close: () => client.close() };
             const unguarded = await connect(browsers[slot].ws);
@@ -140,6 +152,7 @@ test('the reference runner checks real Chromium effects without a guard', {
         })),
         []
       );
+      assert.deepEqual(timeouts, []);
       process.stdout.write(
         `controls pass ${rows.filter((r) => r.control === 'pass').length}/${rows.length}; guarded without guard fail ${rows.filter((r) => r.guarded === 'fail').length}/${rows.length}\n`
       );

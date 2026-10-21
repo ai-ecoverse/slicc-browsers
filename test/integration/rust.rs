@@ -248,9 +248,30 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_CHROME_URLS_ATTACH,
         guard::CAP_EXTENSION_WORLD,
         guard::CAP_DISCOVERY,
+        guard::CAP_CLIENT_EXIT,
     ] {
         assert!(v.capabilities.contains_key(c));
     }
+    let script = v.vectors.iter().find(|x| x.id == "C5.script").unwrap();
+    assert_eq!(script.family, "C");
+    assert_eq!(script.trigger[0].page.as_deref(), Some(guard::PAGE_SCRIPT));
+    assert!(script.live_check.is_some());
+    let exit = v.vectors.iter().find(|x| x.id == "X1.after-exit").unwrap();
+    assert_eq!(exit.family, "X");
+    assert_eq!(exit.requires, vec![guard::CAP_CLIENT_EXIT.to_string()]);
+    assert_eq!(
+        exit.trigger
+            .iter()
+            .filter(|s| s.client.as_deref() == Some(guard::CLIENT_EXIT))
+            .count(),
+        1
+    );
+    assert!(exit.live_check.is_some());
+    let guard::Expected::Checks(after) = &exit.expected else {
+        panic!("X1.after-exit has a text expectation");
+    };
+    assert_eq!(after["served"], guard::Outcome::Is(true));
+    assert_eq!(after["paused"], guard::Outcome::Is(false));
     let fetch = v
         .vectors
         .iter()

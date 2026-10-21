@@ -313,6 +313,8 @@ for (const v of guard.vectors ?? []) {
     if (st.session === 'browser') want.push('browserSession');
     if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
       want.push('browserContexts');
+    if (st.client === 'exit') needs.add('clientExit');
+    if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
       if (!(st.requires ?? []).includes(c))
         gv(`${v.id}: a ${st.cdp ?? st.page ?? 'children'} step doesn't require ${c}`);
@@ -327,6 +329,12 @@ for (const v of guard.vectors ?? []) {
     gv(
       `${v.id} requires ${[...requires].join(', ') || 'nothing'}, not ${[...needs].join(', ') || 'nothing'}`
     );
+  const exits = (check) =>
+    Boolean(check?.exit) ||
+    [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(exits);
+  const scoped = Object.values(v.observe ?? {}).some((o) => exits(o.check));
+  const exitStep = top.some((st) => st.client === 'exit');
+  if (scoped && !exitStep) gv(`${v.id} scopes a check to a client exit it lacks`);
   if (v.observe) {
     for (const want of [v.control?.expected, v.expected]) {
       for (const k of typeof want === 'object' ? Object.keys(want) : []) {

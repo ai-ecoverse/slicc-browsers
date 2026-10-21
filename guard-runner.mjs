@@ -105,6 +105,9 @@ function pageExpression(step, url) {
     case 'image':
       expression = `new Promise(resolve=>{const i=new Image();i.onload=()=>resolve('width '+i.naturalWidth);i.onerror=()=>resolve('error');i.src=${q(url)};})`;
       break;
+    case 'script':
+      expression = `new Promise(resolve=>{const s=document.createElement('script');s.onload=()=>resolve(String(globalThis.vectorScript));s.onerror=()=>resolve('error');s.src=${q(url)};document.head.append(s);})`;
+      break;
     default:
       throw new Error(`Unknown page kind: ${step.page}`);
   }
@@ -146,6 +149,34 @@ class Execution {
     this.requestStart = undefined;
     this.trace = [];
     this.stopped = false;
+  }
+
+  actor() {
+    return this.exitedTo ?? this.client;
+  }
+
+  async exit() {
+    const gone = this.client;
+    if (typeof gone.close !== 'function') throw new Error('the guarded client has no close()');
+    this.exitRequestStart = (await this.options.fixture.log()).length;
+    this.clients.exited = true;
+    await gone.close();
+    const released = await this.poll(async () => {
+      const read = await outcome(
+        this.reader.send('Target.getTargetInfo', { targetId: this.pageTarget })
+      );
+      return read.ok && read.result.targetInfo?.attached === false;
+    }, 5000);
+    if (!released)
+      this.notes.push(`client exit: the page stayed attached for ${this.bound(5000)}ms`);
+    const { sessionId } = await this.reader.send('Target.attachToTarget', {
+      targetId: this.pageTarget,
+      flatten: true,
+    });
+    await this.reader.send('Page.enable', {}, sessionId);
+    this.exitedTo = this.reader;
+    this.sessions.page = sessionId;
+    return { sessionId, released };
   }
 
   session(kind) {
@@ -642,6 +673,7 @@ class Execution {
       (key) => step[key]
     );
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
+    if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (['errorPage', 'redirectSecret'].includes(probe) && out.ok && out.result?.incomplete)
       this.incomplete.push(`${probe}: ${out.result.incomplete}`);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
@@ -693,6 +725,7 @@ class Execution {
       await this.settle(step.settle);
       return;
     }
+    if (step.client) return outcome(this.exit());
     if (step.redirectSecret) {
       this.internalSessions.add(session);
       try {
@@ -793,7 +826,7 @@ class Execution {
             (await this.requestCheck({ served: this.actionDestination }, this.actionRequestStart)))
         );
       if (settle.title) return this.check({ title: settle.title, session: settle.session });
-      const events = this.client.events.slice(this.actionEventStart);
+      const events = this.actor().events.slice(this.actionEventStart);
       return events.some(
         (event, index) =>
           event.method === 'Page.frameNavigated' &&
@@ -850,7 +883,7 @@ class Execution {
       session === undefined
     )
       params.browserContextId = this.vars.context;
-    const out = await outcome(this.client.send(step.cdp, params, session));
+    const out = await outcome(this.actor().send(step.cdp, params, session));
     if (step.cdp === 'Target.setAutoAttach' && out.ok) {
       if (params.autoAttach) this.attachSettings.set(session, true);
       else this.attachSettings.delete(session);
@@ -873,7 +906,8 @@ class Execution {
   }
 
   async page(step, session, phase) {
-    this.actionEventStart = this.client.events.length;
+    const client = this.actor();
+    this.actionEventStart = client.events.length;
     this.actionRequestStart = (await this.options.fixture.log()).length;
     this.actionDestination = step.hops ? step.url : undefined;
     const url = step.hops ? hop(step.hops, step.url) : step.url;
@@ -885,7 +919,7 @@ class Execution {
       const tab = await this.create(
         url,
         step.context ?? this.vars.context,
-        this.client,
+        client,
         step.background ?? true
       );
       this.sessions.page = tab.sessionId;
@@ -894,20 +928,20 @@ class Execution {
     }
     if (pre && step.page !== 'framed') this.preSent.push(url);
     if (step.page === 'navigate') {
-      if (pre) await this.evaluate(pre, session);
-      return this.navigate(this.client, session, url);
+      if (pre) await this.evaluate(pre, session, client);
+      return this.navigate(client, session, url);
     }
     if (step.page === 'framed') {
       if (phase === 'trigger') this.preSent.push(url);
       return this.navigate(
-        this.client,
+        client,
         session,
         `${step.from}/framed?tag=${encodeURIComponent(this.vars.tag)}&url=${encodeURIComponent(url)}&log=${encodeURIComponent(this.vars.log)}`
       );
     }
     let expression = pageExpression(step, url);
     if (pre) expression = `(() => { ${pre} return (${expression}); })()`;
-    const promise = this.evaluate(expression, session);
+    const promise = this.evaluate(expression, session, client);
     if (step.background) {
       const done = promise.then((out) => {
         if (typeof step.as === 'string') this.calls[step.as] = out;
@@ -1127,7 +1161,12 @@ class Execution {
   }
 
   async requestCheck(c, start = this.requestStart) {
-    const logs = (await this.options.fixture.log()).slice(start);
+    if (c.exit && this.exitRequestStart === undefined) return false;
+    const all = await this.options.fixture.log();
+    const logs = all.slice(
+      c.exit === 'after' ? this.exitRequestStart : start,
+      c.exit === 'before' ? this.exitRequestStart : all.length
+    );
     if (c.hops)
       return c.hops.every((_, i) =>
         logs.some((entry) => entry?.url === hop(c.hops.slice(i), c.to))
@@ -1294,6 +1333,15 @@ const inactive = (vector, target, capabilities) =>
   inapplicable(vector, target, capabilities.scope) || !supported(vector.requires, capabilities);
 
 const allSteps = (list) => list.flatMap((step) => [step, ...allSteps(step.children ?? [])]);
+const exitsClient = (vector) =>
+  [...(vector.setup ?? []), ...(vector.trigger ?? [])].some((step) => step.client === 'exit');
+const skipRow = (base, reason) => ({
+  ...base,
+  control: 'skip',
+  guarded: 'skip',
+  live: 'skip',
+  reason,
+});
 const browserContextStep = (vector, capabilities) =>
   allSteps([...vector.setup, ...vector.trigger]).some(
     (step) =>
@@ -1510,35 +1558,16 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
       live: 'skip',
       reason: 'not-supported:browserSession',
     };
-  if (needsObserver(vector) && !clients.unguarded)
-    return {
-      ...base,
-      control: 'skip',
-      guarded: 'skip',
-      live: 'skip',
-      reason: 'not-supported:unguarded-observer',
-    };
+  const observerReason = observerSkip(vector, opts, made, clients);
+  if (observerReason) return skipRow(base, observerReason);
   const legs = {};
+  const renewed = [];
   flights.add({ flight, base, clients });
   opts.onStart?.(base);
-  const sides = (async () => {
-    for (const side of ['control', 'guarded']) {
-      const vars = variables(opts.targets, target, side, slot, index);
-      const execution = new Execution(vector, side, opts, clients, vars, set.variants[variant]);
-      try {
-        legs[side] = await execution.run();
-      } catch (error) {
-        legs[side] = {
-          observed: {},
-          live: false,
-          errors: [...execution.errors, String(error.message ?? error)],
-          notes: execution.notes,
-        };
-      }
-    }
-  })();
+  const sides = runLegs({ vector, opts, clients, set, job, slot, index, legs, renewed });
   const stuck = await watch(sides, opts.rowTimeoutMs, () => view(flight, base, clients));
   for (const entry of flights) if (entry.flight === flight) flights.delete(entry);
+  await closeAll(renewed);
   if (stuck) {
     flight.abandoned = true;
     return timedOut(stuck, base, made, sides, opts);
@@ -1571,6 +1600,65 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   }
   opts.log?.(row);
   return row;
+}
+
+function observerSkip(vector, opts, made, clients) {
+  if (needsObserver(vector) && !clients.unguarded) return 'not-supported:unguarded-observer';
+  if (!exitsClient(vector)) return undefined;
+  if (!opts.clientFactory) return 'not-supported:clientExit';
+  if (!made.unguarded || made.unguarded === made.client) return 'not-supported:unguarded-observer';
+  return undefined;
+}
+
+async function runLegs({ vector, opts, clients, set, job, slot, index, legs, renewed }) {
+  for (const side of ['control', 'guarded']) {
+    if (clients.exited) {
+      const missing = await renew(job, opts, set, slot, clients, renewed);
+      if (missing) {
+        legs[side] = unmeasured(vector, missing);
+        continue;
+      }
+    }
+    const vars = variables(opts.targets, job.target, side, slot, index);
+    const execution = new Execution(vector, side, opts, clients, vars, set.variants[job.variant]);
+    try {
+      legs[side] = await execution.run();
+    } catch (error) {
+      legs[side] = {
+        observed: {},
+        live: false,
+        errors: [...execution.errors, String(error.message ?? error)],
+        notes: execution.notes,
+      };
+    }
+  }
+}
+
+async function closeAll(closers) {
+  for (const close of closers) await close?.();
+}
+
+async function renew(job, opts, set, slot, clients, renewed) {
+  clients.exited = false;
+  const factory = await factoryClients(opts, set, { ...job, leg: 'guarded' }, slot);
+  if (!factory.ok) return `clientFactory: ${factory.error.message}`;
+  const fresh = normalize(factory.result, opts);
+  renewed.push(fresh.close);
+  if (!fresh.unguarded || fresh.unguarded === fresh.client)
+    return 'client exit: the fresh client has no independent unguarded observer';
+  clients.client = tracked(fresh.client, clients.flight.calls, 'client');
+  clients.unguarded = tracked(fresh.unguarded, clients.flight.calls, 'unguarded');
+  return undefined;
+}
+
+function unmeasured(vector, reason) {
+  return {
+    observed: Object.fromEntries(Object.keys(vector.expected).map((name) => [name, 'incomplete'])),
+    live: 'incomplete',
+    errors: [],
+    notes: [],
+    incomplete: [reason],
+  };
 }
 
 function settleIncomplete(row, vector, base, legs) {
@@ -1675,9 +1763,23 @@ function factoryClients(opts, set, job, slot) {
             detachDelay: set.variants[job.variant],
             vector: job.vector,
             target: job.target,
+            ...(job.leg ? { leg: job.leg } : {}),
           })
         : opts.client)()
   );
+}
+
+function normalize(made, opts) {
+  const clients =
+    typeof made?.send === 'function'
+      ? {
+          client: made,
+          unguarded: opts.unguarded ?? made.unguarded,
+          transportVariant: made.transportVariant,
+        }
+      : (made ?? { client: undefined, unguarded: opts.unguarded });
+  clients.unguarded ??= opts.unguarded;
+  return clients;
 }
 
 function unmade(job, message) {
@@ -1739,15 +1841,7 @@ async function runAll(set, options, flights) {
       }
       const made = factory.result;
       transport = (typeof made?.send === 'function' ? made : made?.client)?.transport ?? transport;
-      const clients =
-        typeof made?.send === 'function'
-          ? {
-              client: made,
-              unguarded: opts.unguarded ?? made.unguarded,
-              transportVariant: made.transportVariant,
-            }
-          : (made ?? { client: undefined, unguarded: opts.unguarded });
-      clients.unguarded ??= opts.unguarded;
+      const clients = normalize(made, opts);
       try {
         const stateful = [...job.vector.setup, ...job.vector.trigger].some((s) =>
           /Cookie|Storage|IndexedDB|CacheStorage/.test(s.cdp ?? '')

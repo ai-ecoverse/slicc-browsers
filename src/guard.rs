@@ -29,6 +29,9 @@ pub const CAP_BROWSER_CONTEXTS: &str = "browserContexts";
 pub const CAP_CHROME_URLS_ATTACH: &str = "chromeUrlsAttach";
 pub const CAP_EXTENSION_WORLD: &str = "extensionWorld";
 pub const CAP_DISCOVERY: &str = "discovery";
+pub const CAP_CLIENT_EXIT: &str = "clientExit";
+pub const CLIENT_EXIT: &str = "exit";
+pub const PAGE_SCRIPT: &str = "script";
 pub const SESSION_PAGE: &str = "page";
 pub const SESSION_BROWSER: &str = "browser";
 pub const SESSION_PAGE_OR_BROWSER: &str = "page-or-browser";
@@ -177,6 +180,8 @@ pub struct Where {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Step {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
     #[serde(rename = "redirectSecret", skip_serializing_if = "Option::is_none")]
     pub redirect_secret: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

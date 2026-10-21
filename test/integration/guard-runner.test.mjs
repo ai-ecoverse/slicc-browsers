@@ -72,9 +72,19 @@ test('the reference runner checks real Chromium effects without a guard', {
       let execution;
       try {
         execution = await run(selected, {
-          clientFactory: async ({ slot }) => {
+          clientFactory: async ({ slot, vector }) => {
             const client = await connect(browsers[slot].ws);
-            return { client, unguarded: client, close: () => client.close() };
+            if (!vector.requires?.includes('clientExit'))
+              return { client, unguarded: client, close: () => client.close() };
+            const unguarded = await connect(browsers[slot].ws);
+            return {
+              client,
+              unguarded,
+              close: () => {
+                client.close();
+                unguarded.close();
+              },
+            };
           },
           targets: origins(fixture),
           capabilities: {
@@ -84,6 +94,7 @@ test('the reference runner checks real Chromium effects without a guard', {
             chromeUrlsAttach: true,
             extensionWorld: true,
             discovery: true,
+            clientExit: true,
           },
           parallel: width,
           variant: process.env.GUARD_VARIANT ?? Object.keys(set.variants),
@@ -103,7 +114,13 @@ test('the reference runner checks real Chromium effects without a guard', {
         (r) =>
           r.control !== 'pass' ||
           r.guarded !==
-            (['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C9.page-drivable'].includes(r.id)
+            ([
+              'C8.newtab',
+              'C8.network-error',
+              'C8.iframe-error',
+              'C9.page-drivable',
+              'X1.after-exit',
+            ].includes(r.id)
               ? 'pass'
               : 'fail')
       );

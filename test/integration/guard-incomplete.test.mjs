@@ -6,7 +6,12 @@ import { run } from '../../guard-runner.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 
-function fakeBrowser({ commits = (url) => url, refuse = [] } = {}) {
+function fakeBrowser({
+  commits = (url) => url,
+  refuse = [],
+  opener = false,
+  unattachable = false,
+} = {}) {
   const targets = new Map();
   const sessions = new Map();
   let next = 0;
@@ -19,14 +24,25 @@ function fakeBrowser({ commits = (url) => url, refuse = [] } = {}) {
       const target = targets.get(sessions.get(sessionId));
       if (method === 'Target.createTarget') {
         const targetId = `T${++next}`;
-        targets.set(targetId, { url: commits(params.url) });
+        targets.set(targetId, { url: commits(params.url), seed: params.url.endsWith('-history') });
         return { targetId };
       }
       if (method === 'Target.getTargetInfo') {
-        const url = targets.get(params.targetId)?.url ?? '';
-        return { targetInfo: { targetId: params.targetId, type: 'page', url, title: url } };
+        const entry = targets.get(params.targetId);
+        const url = entry?.url ?? '';
+        return {
+          targetInfo: {
+            targetId: params.targetId,
+            type: 'page',
+            url,
+            title: url,
+            ...(opener && entry?.seed ? { openerId: 'T0' } : {}),
+          },
+        };
       }
       if (method === 'Target.attachToTarget') {
+        if (unattachable && targets.get(params.targetId)?.seed)
+          throw new Error('Target.attachToTarget: no such target');
         const sessionId = `S${++next}`;
         sessions.set(sessionId, params.targetId);
         return { sessionId };
@@ -173,6 +189,64 @@ test('a client factory that rejects leaves its row incomplete and the run goes o
     assert.equal(execution.results[2].control, 'incomplete');
     assert.equal(execution.summary().pass, false);
     assert.deepEqual(execution.summary().missing, []);
+  } finally {
+    await fixture.close();
+  }
+});
+
+for (const [name, options, reason] of [
+  ['created with an opener', { opener: true }, 'observer target must have no openerId'],
+  ['that cannot be attached', { unattachable: true }, 'Target.attachToTarget: no such target'],
+])
+  test(`an error-page observer target ${name} is incomplete, not a failure`, async () => {
+    const { row: result } = await row('C8.protected-error-page', fakeBrowser(options));
+    assert.equal(result.control, 'incomplete', JSON.stringify(result));
+    assert.equal(result.guarded, 'incomplete', JSON.stringify(result));
+    assert.equal(result.live, 'incomplete', JSON.stringify(result));
+    assert.deepEqual(result.errors, []);
+    assert.deepEqual(result.incomplete, [
+      `control errorPage: protected-error-page: observer setup failed: ${reason}`,
+      `guarded errorPage: protected-error-page: observer setup failed: ${reason}`,
+    ]);
+  });
+
+test('a client factory that throws synchronously leaves its row incomplete and the run goes on', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = fakeBrowser({
+      commits: (url) => (url.endsWith('-history') ? 'about:blank' : url),
+    });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let calls = 0;
+    const execution = await run(
+      {
+        ...set,
+        vectors: set.vectors.filter((v) => v.id.startsWith('C8.protected-error-page-sticky')),
+        variants: { prompt: 0 },
+      },
+      {
+        clientFactory: () => {
+          calls++;
+          if (calls === 1) throw new Error('factory threw synchronously');
+          return browser;
+        },
+        fixture,
+        settleScale: 0.05,
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+    assert.equal(execution.results.length, 3);
+    assert.deepEqual(execution.results[0].incomplete, [
+      'clientFactory: factory threw synchronously',
+    ]);
+    assert.equal(execution.results[0].control, 'incomplete');
+    assert.equal(execution.results[1].control, 'incomplete');
   } finally {
     await fixture.close();
   }

@@ -80,6 +80,18 @@ async function redaction({
     : 'not-supported';
 }
 
+async function observerTarget(reader, initial, notes) {
+  const { targetId } = await createObserverTarget(
+    reader,
+    { url: initial, background: true },
+    notes
+  );
+  const attached = await outcome(reader.send('Target.attachToTarget', { targetId, flatten: true }));
+  if (attached.ok) return { targetId, sessionId: attached.result.sessionId };
+  await outcome(reader.send('Target.closeTarget', { targetId }));
+  throw new Error(attached.error.message);
+}
+
 async function seed(reader, observer, loaded, initial, allowed) {
   const out = await outcome(
     (async () => {
@@ -119,17 +131,13 @@ export async function protectedErrorPage({
   const missing = (reason) => ({ ...result, incomplete: `protected-error-page: ${reason}` });
   if (!discovery) notes.push('eventsRedacted: not-supported:discovery');
   const start = client.events.length;
-  const { targetId } = await createObserverTarget(
-    reader,
-    { url: initial, background: true },
-    notes
-  );
-  let session;
-  let observer;
-  let failing = false;
   let cursor = reader.events.length;
-  const { sessionId } = await reader.send('Target.attachToTarget', { targetId, flatten: true });
-  observer = sessionId;
+  const opened = await outcome(observerTarget(reader, initial, notes));
+  if (!opened.ok) return missing(`observer setup failed: ${opened.error.message}`);
+  const { targetId } = opened.result;
+  let session;
+  let observer = opened.result.sessionId;
+  let failing = false;
   internalSessions.add(observer);
   const frame = async () => (await reader.send('Page.getFrameTree', {}, observer)).frameTree.frame;
   const loaded = (url) => loadedDocument(reader, observer, url, until);

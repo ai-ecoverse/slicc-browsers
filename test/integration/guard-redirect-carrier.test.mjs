@@ -9,6 +9,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
   const routes = new Map();
   const log = [];
   let next = 0;
+  let count = 0;
   const make = () => ({ events: [], messages: [] });
   const client = make();
   const reader = make();
@@ -21,7 +22,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
   const request = (url) => {
     const route = routes.get(new URL(url).pathname);
     if (!route?.to) return;
-    const id = `N${++next}`;
+    const id = `N${++count}`;
     log.push({ url, headers: {} });
     const to = new URL(route.to);
     const hop = {
@@ -37,9 +38,9 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
     });
     if (network !== 'none')
       emit(client, 'S1', 'Network.requestWillBeSent', { requestId: id, request: { url } });
-    if (fetch)
+    if (fetch === true || (fetch === 'odd' && count % 2))
       emit(client, 'S1', 'Fetch.requestPaused', {
-        requestId: `F${next}`,
+        requestId: `F${count}`,
         networkId: id,
         request: { url },
         responseStatusCode: route.code ?? 302,
@@ -65,7 +66,8 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
     }
     if (method === 'Fetch.getResponseBody') throw refusal();
     if (method === 'Network.getResponseBody') {
-      if (leak) return { body: `leaked ${marker}`, base64Encoded: false };
+      if (leak === 'even' ? Number(params.requestId.slice(1)) % 2 === 0 : leak)
+        return { body: `leaked ${marker}`, base64Encoded: false };
       throw refusal();
     }
     return {};
@@ -142,6 +144,15 @@ test.describe('C2 redirect network-body carrier and request termination', {
     assert.equal(out.networkBodyAttempted, true);
     assert.equal(out.networkBodyRefused, true);
     assert.equal(out.fetchBodyAttempted, false);
+  });
+
+  test('a hop without a guarded carrier is still read with the tap id and its leak fails', async () => {
+    const out = await probe({ network: 'none', fetch: 'odd', leak: 'even' });
+    assert.equal(out.networkBodyPath, 'withheld+tap');
+    assert.ok(out.networkBodyCarriers['fetch-networkId'] > 0);
+    assert.ok(out.networkBodyCarriers['withheld+tap'] > 0);
+    assert.equal(out.networkBodyAttempted, true);
+    assert.equal(out.networkBodyRefused, false);
   });
 
   test('no network id from events, Fetch or tap is incomplete, never a pass', async () => {

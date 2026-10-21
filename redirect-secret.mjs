@@ -166,13 +166,23 @@ class RedirectProbe {
   }
 
   networkLeg() {
-    const path = this.learned.network.size
-      ? 'network'
-      : this.learned.fetch.size
-        ? 'fetch-networkId'
-        : this.learned.tap.size
-          ? 'withheld+tap'
-          : 'none';
+    const carriers = [...this.networkBodies].map((id) =>
+      this.learned.network.has(id)
+        ? 'network'
+        : this.learned.fetch.has(id)
+          ? 'fetch-networkId'
+          : 'withheld+tap'
+    );
+    const path =
+      ['withheld+tap', 'fetch-networkId', 'network'].find((carrier) =>
+        carriers.includes(carrier)
+      ) ?? 'none';
+    const networkBodyCarriers = Object.fromEntries(
+      [...new Set(carriers)].map((carrier) => [
+        carrier,
+        carriers.filter((entry) => entry === carrier).length,
+      ])
+    );
     const attempts = this.attempts.filter((entry) => entry.method === 'Network.getResponseBody');
     const refusedAll = attempts.length > 0 && attempts.every(refused);
     const proven = path === 'network' || this.side !== 'guarded' || this.controls?.networkEvents;
@@ -185,12 +195,14 @@ class RedirectProbe {
     if (reason && (!attempts.length || refusedAll))
       return {
         networkBodyPath: path,
+        networkBodyCarriers,
         networkBodyAttempted: 'incomplete',
         networkBodyRefused: 'incomplete',
         incomplete: `redirect-secret: network body leg ${reason}`,
       };
     return {
       networkBodyPath: path,
+      networkBodyCarriers,
       networkBodyAttempted: attempts.length > 0,
       networkBodyRefused: refusedAll,
     };
@@ -457,7 +469,7 @@ class RedirectProbe {
 
   async evidence() {
     await pause(8000);
-    if (!this.networkBodies.size) await this.tap();
+    await this.tap();
     await Promise.allSettled([...this.jobs]);
     if (this.side === 'control' && this.controls)
       this.controls.networkEvents = this.learned.network.size > 0;

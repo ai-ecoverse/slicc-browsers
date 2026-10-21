@@ -24,7 +24,7 @@ test('a load whose event arrives just after a synchronous event-loop stall still
     send: async () => {
       sent = true;
       setTimeout(() => {
-        stall(400);
+        stall(1500);
         resumed = Date.now();
       }, 5);
       return { loaderId: 'L' };
@@ -46,7 +46,7 @@ test('a load that never arrives still times out at its bound', async () => {
 test('a stall while the check awaits its reply does not consume the bound', async () => {
   let resumed = Infinity;
   setTimeout(() => {
-    stall(400);
+    stall(1500);
     resumed = Date.now();
   }, 5);
   const held = await waitFor(async () => {

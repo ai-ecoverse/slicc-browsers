@@ -122,7 +122,8 @@ export async function waitFor(check, ms, step = 25) {
   let last = start;
   const beat = () => {
     const now = Date.now();
-    deadline = Math.min(limit, deadline + Math.max(0, now - last - step * 4));
+    const gap = now - last;
+    if (gap > Math.max(step * 4, 1000)) deadline = Math.min(limit, deadline + gap - step);
     last = now;
   };
   let timer;

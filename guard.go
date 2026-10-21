@@ -45,6 +45,8 @@ const (
 	GuardCapDiscovery        = "discovery"
 	GuardCapClientExit       = "clientExit"
 	GuardCapSiteIsolationOff = "siteIsolationOff"
+	GuardCapInboundDelay     = "inboundDelay"
+	GuardCapForwardAudit     = "forwardAudit"
 	GuardClientExit          = "exit"
 	GuardPageScript          = "script"
 	GuardSessionPage         = "page"
@@ -174,6 +176,8 @@ type GuardStep struct {
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
 	FrameRead      string          `json:"frameRead,omitempty"`
+	BFCacheRestore string          `json:"bfcacheRestore,omitempty"`
+	Origin         string          `json:"origin,omitempty"`
 	Text           string          `json:"text,omitempty"`
 	CDP            string          `json:"cdp,omitempty"`
 	Params         json.RawMessage `json:"params,omitempty"`

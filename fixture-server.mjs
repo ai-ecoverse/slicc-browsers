@@ -91,6 +91,16 @@ function route(req, url, send, html, redirects) {
         `<script>navigator.sendBeacon(${JSON.stringify(pre)})</script><iframe src="${escape(to)}"></iframe>`
       );
     },
+    '/bfcache': () => {
+      const marker = JSON.stringify(`bfcache-marker-${p.get('n') ?? ''}`).replaceAll(
+        '<',
+        '\\u003c'
+      );
+      return html(
+        'bfcache',
+        `<p id="bfcache-marker"></p><script>globalThis.__bfcacheMarker=${marker};sessionStorage.setItem('bfcache-marker',globalThis.__bfcacheMarker);document.querySelector('p').textContent=globalThis.__bfcacheMarker;globalThis.__bfcachePersisted=false;addEventListener('pageshow',e=>{globalThis.__bfcachePersisted=e.persisted});addEventListener('keydown',()=>{globalThis.__bfcacheKeys=(globalThis.__bfcacheKeys||0)+1})</script>`
+      );
+    },
     '/doc': () => document(url, html),
     '/csp': () => document(url, html),
   };

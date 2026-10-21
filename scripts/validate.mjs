@@ -275,7 +275,8 @@ for (const v of guard.vectors ?? []) {
       st.unparseable ||
       st.errorPage ||
       st.redirectSecret ||
-      st.frameRead
+      st.frameRead ||
+      st.bfcacheRestore
   );
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);

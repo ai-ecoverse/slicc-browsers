@@ -31,6 +31,8 @@ pub const CAP_EXTENSION_WORLD: &str = "extensionWorld";
 pub const CAP_DISCOVERY: &str = "discovery";
 pub const CAP_CLIENT_EXIT: &str = "clientExit";
 pub const CAP_SITE_ISOLATION_OFF: &str = "siteIsolationOff";
+pub const CAP_INBOUND_DELAY: &str = "inboundDelay";
+pub const CAP_FORWARD_AUDIT: &str = "forwardAudit";
 pub const CLIENT_EXIT: &str = "exit";
 pub const PAGE_SCRIPT: &str = "script";
 pub const SESSION_PAGE: &str = "page";
@@ -195,6 +197,10 @@ pub struct Step {
     pub extension_world: Option<String>,
     #[serde(rename = "frameRead", skip_serializing_if = "Option::is_none")]
     pub frame_read: Option<String>,
+    #[serde(rename = "bfcacheRestore", skip_serializing_if = "Option::is_none")]
+    pub bfcache_restore: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

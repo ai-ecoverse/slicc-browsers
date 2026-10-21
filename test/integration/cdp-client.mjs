@@ -186,7 +186,7 @@ export async function launch(fixture, { spki, signal, allowOrigin, isolation = t
   }
 }
 
-export async function connect(url) {
+export async function connect(url, { inbound, outbound } = {}) {
   const ws = new WebSocket(url);
   await new Promise((resolve, reject) => {
     ws.addEventListener('open', resolve, { once: true });
@@ -197,9 +197,8 @@ export async function connect(url) {
   const waiters = new Set();
   const events = [];
   const messages = [];
-  ws.addEventListener('message', ({ data }) => {
+  const deliver = (data, message) => {
     messages.push(String(data));
-    const message = JSON.parse(data);
     if (message.id) {
       const entry = pending.get(message.id);
       if (!entry) return;
@@ -219,6 +218,13 @@ export async function connect(url) {
           waiter.resolve(message);
         }
     }
+  };
+  ws.addEventListener('message', ({ data }) => {
+    const message = JSON.parse(data);
+    const dispatch = () => deliver(data, message);
+    if (inbound)
+      inbound(message, dispatch, message.sessionId ?? pending.get(message.id)?.sessionId);
+    else dispatch();
   });
   ws.addEventListener('close', () => {
     for (const entry of pending.values()) {
@@ -242,7 +248,8 @@ export async function connect(url) {
           pending.delete(seq);
           reject(new Error(`CDP timed out: ${method}`));
         }, 10000);
-        pending.set(seq, { resolve, reject, timer });
+        pending.set(seq, { resolve, reject, timer, sessionId });
+        outbound?.({ id: seq, method, params, sessionId, sentAt: Date.now() });
         ws.send(JSON.stringify({ id: seq, method, params, ...(sessionId ? { sessionId } : {}) }));
       }),
     waitEvent: (pred, ms) =>

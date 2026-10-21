@@ -16,6 +16,7 @@ import {
   summary as report,
   result,
   steps,
+  waitFor,
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
@@ -120,6 +121,7 @@ class Execution {
     this.contexts = [];
     this.pending = [];
     this.errors = [];
+    this.incomplete = [];
     this.preSent = [];
     this.notes = [];
     this.answers = [];
@@ -193,12 +195,7 @@ class Execution {
   }
 
   async poll(predicate, ms = 1500, absent = false) {
-    const deadline = Date.now() + this.bound(ms, absent);
-    do {
-      if (await predicate()) return true;
-      await sleep(25);
-    } while (Date.now() < deadline);
-    return false;
+    return waitFor(predicate, this.bound(ms, absent));
   }
 
   async prepareState(spec) {
@@ -641,6 +638,8 @@ class Execution {
       (key) => step[key]
     );
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
+    if (['errorPage', 'redirectSecret'].includes(probe) && out.ok && out.result?.incomplete)
+      this.incomplete.push(`${probe}: ${out.result.incomplete}`);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
   }
@@ -726,6 +725,7 @@ class Execution {
           secret: step.secret,
           discovery: supported(['discovery'], this.options.capabilities),
           notes: this.notes,
+          budget: this.bound(5000),
         })
       );
     if (step.unparseable)
@@ -956,7 +956,10 @@ class Execution {
     const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
       name
     ];
-    if (check?.result && at(this.calls[check.result], check.path) === 'incomplete')
+    if (
+      check?.result &&
+      (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
+    )
       return 'incomplete';
     if (want !== true || check?.observer !== 'fixture') return this.check(check);
     let seen = false;
@@ -965,6 +968,11 @@ class Execution {
       return seen === true;
     }, observeMs);
     return seen;
+  }
+
+  unmeasured(check) {
+    const out = check?.result ? this.calls[check.result] : undefined;
+    return Boolean(out?.result?.incomplete) && at(out, check.path) === undefined;
   }
 
   async check(check) {
@@ -1186,6 +1194,8 @@ class Execution {
     if (this.side === 'control') return { live: true };
     const alive = () => this.check(this.vector.liveCheck);
     let live = await alive();
+    if (!live && this.unmeasured(this.vector.liveCheck))
+      return { live: 'incomplete', liveWhy: 'incomplete' };
     if (!live && !unseen.length) live = await this.poll(alive, 1500);
     if (!unseen.length || (live && !incomplete.length)) return { live };
     const detail = incomplete.length ? ` (${incomplete.join(', ')} incomplete)` : '';
@@ -1216,7 +1226,14 @@ class Execution {
         side: this.side,
       });
       const { live, liveWhy } = await this.liveness(unseen, incomplete);
-      return { observed, live, liveWhy, errors: this.errors, notes: this.notes };
+      return {
+        observed,
+        live,
+        liveWhy,
+        errors: this.errors,
+        notes: this.notes,
+        incomplete: this.incomplete,
+      };
     } finally {
       this.stopped = true;
       await pumping;
@@ -1517,18 +1534,17 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   opts.onStart?.(base);
   const sides = (async () => {
     for (const side of ['control', 'guarded']) {
+      const vars = variables(opts.targets, target, side, slot, index);
+      const execution = new Execution(vector, side, opts, clients, vars, set.variants[variant]);
       try {
-        const vars = variables(opts.targets, target, side, slot, index);
-        legs[side] = await new Execution(
-          vector,
-          side,
-          opts,
-          clients,
-          vars,
-          set.variants[variant]
-        ).run();
+        legs[side] = await execution.run();
       } catch (error) {
-        legs[side] = { observed: {}, live: false, errors: [String(error.message ?? error)] };
+        legs[side] = {
+          observed: {},
+          live: false,
+          errors: [...execution.errors, String(error.message ?? error)],
+          notes: execution.notes,
+        };
       }
     }
   })();
@@ -1559,12 +1575,44 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     ...(legs.guarded.notes ?? []).map((note) => `guarded ${note}`),
   ];
   if (notes.length) row.notes = notes;
+  settleIncomplete(row, vector, base, legs);
   if (row.errors.length) {
     row.control = 'fail';
     row.guarded = 'fail';
   }
   opts.log?.(row);
   return row;
+}
+
+function settleIncomplete(row, vector, base, legs) {
+  const incomplete = ['control', 'guarded'].flatMap((side) =>
+    (legs[side].incomplete ?? []).map((reason) => `${side} ${reason}`)
+  );
+  if (!incomplete.length) return;
+  row.incomplete = incomplete;
+  if (row.errors.length) return;
+  const fill = (side) => {
+    const want = side === 'control' ? vector.control.expected : vector.expected;
+    return Object.fromEntries(
+      Object.entries(legs[side].observed).map(([name, value]) => [
+        name,
+        value === 'incomplete' && Object.hasOwn(want, name)
+          ? want[name] === 'either' || want[name]
+          : value,
+      ])
+    );
+  };
+  const filled = result(vector, {
+    ...base,
+    control: fill('control'),
+    guarded: fill('guarded'),
+    live: legs.control.live === true && [true, 'incomplete'].includes(legs.guarded.live),
+  });
+  for (const side of ['control', 'guarded'])
+    if (legs[side].incomplete?.length && row[side] === 'fail' && filled[side] === 'pass')
+      row[side] = 'incomplete';
+  if (legs.guarded.live === 'incomplete' && filled.live === 'pass') row.live = 'incomplete';
+  row.why = [filled.why, `incomplete: ${incomplete.join('; ')}`].filter(Boolean).join('; ');
 }
 
 const invalidBlocked = (check) =>
@@ -1628,6 +1676,37 @@ function validate(set, opts) {
   return variants;
 }
 
+function factoryClients(opts, set, job, slot) {
+  return outcome(
+    opts.clientFactory
+      ? opts.clientFactory({
+          slot,
+          variant: job.variant,
+          detachDelay: set.variants[job.variant],
+          vector: job.vector,
+          target: job.target,
+        })
+      : Promise.resolve(opts.client)
+  );
+}
+
+function unmade(job, message) {
+  const reason = `clientFactory: ${message}`;
+  return {
+    id: job.vector.id,
+    target: job.target,
+    variant: job.variant,
+    via: job.vector.control.via,
+    transportVariant: false,
+    control: 'incomplete',
+    guarded: 'incomplete',
+    live: 'incomplete',
+    why: `incomplete: ${reason}`,
+    errors: [],
+    incomplete: [reason],
+  };
+}
+
 export function run(set, options) {
   const flights = new Set();
   const inFlight = () =>
@@ -1655,20 +1734,21 @@ async function runAll(set, options, flights) {
   const results = new Array(jobs.length);
   let next = 0;
   let serial = Promise.resolve();
+  let transport = 'cdp';
+  const unmadeRows = [];
   const worker = async (slot) => {
     for (;;) {
       const index = next++;
       if (index >= jobs.length) break;
       const job = jobs[index];
-      const made = opts.clientFactory
-        ? await opts.clientFactory({
-            slot,
-            variant: job.variant,
-            detachDelay: set.variants[job.variant],
-            vector: job.vector,
-            target: job.target,
-          })
-        : opts.client;
+      const factory = await factoryClients(opts, set, job, slot);
+      if (!factory.ok) {
+        results[index] = unmade(job, factory.error.message);
+        unmadeRows.push(results[index]);
+        continue;
+      }
+      const made = factory.result;
+      transport = (typeof made?.send === 'function' ? made : made?.client)?.transport ?? transport;
       const clients =
         typeof made?.send === 'function'
           ? {
@@ -1702,6 +1782,10 @@ async function runAll(set, options, flights) {
   };
   const width = opts.clientFactory ? opts.parallel : 1;
   await Promise.all(Array.from({ length: width }, (_, slot) => worker(slot)));
+  for (const row of unmadeRows) {
+    row.transport = transport;
+    opts.log?.(row);
+  }
   return { results, summary: (metadata = {}) => summary({ set, results, ...metadata }) };
 }
 
@@ -1725,23 +1809,28 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown' }) 
     if (row.control === 'skip')
       skips[row.reason ?? 'unknown'] = (skips[row.reason ?? 'unknown'] ?? 0) + 1;
   const skipped = Object.values(skips).reduce((sum, count) => sum + count, 0);
+  const incomplete = results.filter((row) =>
+    [row.control, row.guarded, row.live].includes('incomplete')
+  ).length;
   const line = observerSkipped ? value.line.replace('GUARD-PASS', 'GUARD-FAIL') : value.line;
+  const skipLine = skipped
+    ? `${line} skips ${skipped} (${Object.entries(skips)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([reason, count]) => `${reason}=${count}`)
+        .join(', ')})`
+    : line;
   return {
     ...value,
     pass: value.pass && observerSkipped === 0,
-    line: skipped
-      ? `${line} skips ${skipped} (${Object.entries(skips)
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([reason, count]) => `${reason}=${count}`)
-          .join(', ')})`
-      : line,
+    line: incomplete ? `${skipLine} incomplete ${incomplete}` : skipLine,
     skips,
     observerSkipped,
+    incomplete,
     counts: Object.fromEntries(
       ['control', 'guarded', 'live'].map((side) => [
         side,
         Object.fromEntries(
-          ['pass', 'fail', 'skip', 'not-run'].map((status) => [
+          ['pass', 'fail', 'incomplete', 'skip', 'not-run'].map((status) => [
             status,
             results.filter((r) => r[side] === status).length,
           ])

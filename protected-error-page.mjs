@@ -1,19 +1,10 @@
-import { outcome } from './guard-driver.mjs';
+import { outcome, waitFor } from './guard-driver.mjs';
 import { createObserverTarget } from './observer-target.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 
-async function until(check) {
-  const deadline = Date.now() + 5000;
-  do {
-    if (await check()) return true;
-    await pause(25);
-  } while (Date.now() < deadline);
-  return false;
-}
-
-async function loadedDocument(reader, observer, url) {
+async function loadedDocument(reader, observer, url, until) {
   return until(async () => {
     const { frameTree } = await reader.send('Page.getFrameTree', {}, observer);
     if (frameTree.frame.url !== url || frameTree.frame.unreachableUrl) return false;
@@ -89,6 +80,18 @@ async function redaction({
     : 'not-supported';
 }
 
+async function seed(reader, observer, loaded, initial, allowed) {
+  const out = await outcome(
+    (async () => {
+      await reader.send('Page.enable', {}, observer);
+      if (!(await loaded(initial))) return 'history seed did not commit';
+      await reader.send('Page.navigate', { url: allowed }, observer);
+      if (!(await loaded(allowed))) return 'allowed document did not commit';
+    })()
+  );
+  return out.ok ? out.result : `observer setup failed: ${out.error.message}`;
+}
+
 const secrets = {
   all: (tag) => `/doc/path-secret-${tag}?query-secret=${tag}#fragment-secret-${tag}`,
   query: (tag) => `/doc?query-secret=${tag}`,
@@ -107,10 +110,13 @@ export async function protectedErrorPage({
   secret = 'all',
   discovery = true,
   notes = [],
+  budget = 5000,
 }) {
   const initial = `${protectedOrigin}/doc?n=${tag}-history`;
   const failedURL = `${protectedOrigin}${secrets[secret](tag)}`;
   const result = {};
+  const until = (check) => waitFor(check, budget);
+  const missing = (reason) => ({ ...result, incomplete: `protected-error-page: ${reason}` });
   if (!discovery) notes.push('eventsRedacted: not-supported:discovery');
   const start = client.events.length;
   const { targetId } = await createObserverTarget(
@@ -126,7 +132,7 @@ export async function protectedErrorPage({
   observer = sessionId;
   internalSessions.add(observer);
   const frame = async () => (await reader.send('Page.getFrameTree', {}, observer)).frameTree.frame;
-  const loaded = (url) => loadedDocument(reader, observer, url);
+  const loaded = (url) => loadedDocument(reader, observer, url, until);
   let stopped = false;
   const fail = (async () => {
     while (!stopped) {
@@ -147,12 +153,8 @@ export async function protectedErrorPage({
     }
   })();
   try {
-    await reader.send('Page.enable', {}, observer);
-    if (!(await loaded(initial)))
-      throw new Error('protected-error-page: history seed did not commit');
-    await reader.send('Page.navigate', { url: `${ordinary}/blank` }, observer);
-    if (!(await loaded(`${ordinary}/blank`)))
-      throw new Error('protected-error-page: allowed document did not commit');
+    const unseeded = await seed(reader, observer, loaded, initial, `${ordinary}/blank`);
+    if (unseeded) return missing(unseeded);
     const attached = await outcome(
       client.send('Target.attachToTarget', { targetId, flatten: true })
     );
@@ -174,10 +176,11 @@ export async function protectedErrorPage({
       { expression: `setTimeout(()=>location.href=${JSON.stringify(failedURL)},0)` },
       session
     );
-    result.live = await until(async () => {
+    let evidence;
+    const live = await until(async () => {
       const f = await frame();
       const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
-      result.evidence = { frame: f, targetInfo };
+      evidence = { frame: f, targetInfo };
       return (
         f.url === 'chrome-error://chromewebdata/' &&
         f.securityOrigin === '://' &&
@@ -185,11 +188,11 @@ export async function protectedErrorPage({
         targetInfo.url === failedURL
       );
     });
-    if (!result.live && side !== 'control') return result;
-    if (!result.live)
-      throw new Error(
-        `protected-error-page: missing error commit ${JSON.stringify(result.evidence)}`
-      );
+    result.evidence = evidence;
+    if (!live && side === 'control')
+      return missing(`missing error commit ${JSON.stringify(evidence)}`);
+    result.live = live;
+    if (!live) return result;
     await redaction({ client, targetId, failedURL, protectedOrigin, start, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
@@ -227,14 +230,14 @@ export async function protectedErrorPage({
     failing = false;
     const { entries, currentIndex } = await reader.send('Page.getNavigationHistory', {}, observer);
     const index = entries.findIndex((e) => e.url === initial);
-    if (index < 0) throw new Error('protected-error-page: missing protected history');
+    if (index < 0) return missing('missing protected history');
     const beforeRestore = reader.events.length;
     await reader.send(
       'Runtime.evaluate',
       { expression: `setTimeout(() => history.go(${index - currentIndex}), 0)` },
       observer
     );
-    result.restored = await until(() =>
+    const restored = await until(() =>
       reader.events
         .slice(beforeRestore)
         .some(
@@ -245,8 +248,8 @@ export async function protectedErrorPage({
             e.params.frame.url === initial
         )
     );
-    if (!result.restored)
-      throw new Error('protected-error-page: real protected BFCache restore required');
+    if (!restored) return missing('real protected BFCache restore required');
+    result.restored = true;
     await pause(100);
     if (mode === 'sticky') {
       await reader.send('Target.detachFromTarget', { sessionId: observer });
@@ -260,11 +263,9 @@ export async function protectedErrorPage({
         observer
       );
       await reader.send('Page.navigate', { url: failedURL }, observer);
-      result.stickyError = await until(async () => (await frame()).unreachableUrl === failedURL);
-      if (!result.stickyError)
-        throw new Error(
-          `protected-error-page: missing sticky error ${JSON.stringify(await frame())}`
-        );
+      if (!(await until(async () => (await frame()).unreachableUrl === failedURL)))
+        return missing(`missing sticky error ${JSON.stringify(await frame())}`);
+      result.stickyError = true;
       await pause(100);
     }
     await lockChecks({ client, session, targetId, result });

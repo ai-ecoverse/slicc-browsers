@@ -84,12 +84,13 @@ export async function frameLayout(reader, session, { framed, marker, kind }) {
 
 async function read(client, session, calls, needles) {
   let shown = false;
+  let silent = false;
   for (const [method, params] of calls) {
     const out = await outcome(client.send(method, params, session));
-    if (unanswered(out)) return 'incomplete';
     shown ||= shows(out, needles);
+    silent ||= unanswered(out);
   }
-  return shown;
+  return shown || (silent ? 'incomplete' : false);
 }
 
 async function enable(client, session) {
@@ -163,7 +164,7 @@ export async function frameRead({
     for (const name of frameReads) {
       const value = session ? await read(client, session, calls[name], needles) : false;
       if (value === 'incomplete') missing.push(`${name} unanswered`);
-      result[`${name}Shown`] = proven[name] ? value : 'incomplete';
+      result[`${name}Shown`] = value === true || proven[name] ? value : 'incomplete';
     }
     result.eventsShown = shows(
       client.events

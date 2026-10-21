@@ -170,7 +170,7 @@ function fakeBrowser({ guard = 'none', oopif = false, blindAX = false } = {}) {
   const targets = new Map();
   const sessions = new Map();
   let next = 0;
-  const raw = () => ({
+  const raw = (kind) => ({
     events: [],
     messages: [],
     async send(method, params = {}, sessionId) {
@@ -195,7 +195,11 @@ function fakeBrowser({ guard = 'none', oopif = false, blindAX = false } = {}) {
         target.frames = layoutOf(params.url);
         return { frameId: 'F0' };
       }
-      if (target?.frames) return answer(method, params, target.frames, { oopif, blindAX });
+      if (target?.frames)
+        return answer(method, params, target.frames, {
+          oopif,
+          blindAX: blindAX && kind === 'observer',
+        });
       if (method === 'Page.getFrameTree')
         return {
           frameTree: { frame: { id: 'F', loaderId: 'L', url: target?.url ?? 'about:blank' } },
@@ -205,8 +209,8 @@ function fakeBrowser({ guard = 'none', oopif = false, blindAX = false } = {}) {
     },
     waitEvent: () => new Promise(() => {}),
   });
-  const unguarded = raw();
-  const inner = raw();
+  const unguarded = raw('observer');
+  const inner = raw('client');
   const client = {
     ...inner,
     async send(method, params = {}, sessionId) {
@@ -220,6 +224,10 @@ function fakeBrowser({ guard = 'none', oopif = false, blindAX = false } = {}) {
       if (!frames || !reads.includes(method) || guard === 'none')
         return inner.send(method, params, sessionId);
       if (guard === 'hang') throw new Error(`CDP timed out: ${method}`);
+      if (guard === 'half' && method === 'Accessibility.getFullAXTree')
+        if (params.frameId === 'F1') return inner.send(method, params, sessionId);
+        else throw new Error(`CDP timed out: ${method}`);
+      if (guard === 'half') throw new Error(refusal);
       if (guard === 'refuse') throw new Error(refusal);
       if (guard === 'show-ax' && method.startsWith('Accessibility.'))
         return inner.send(method, params, sessionId);
@@ -360,4 +368,19 @@ test('a read the observer cannot show, or the guard never answers, is incomplete
   assert.equal(hung.guarded, 'incomplete', JSON.stringify(hung));
   assert.equal(hung.observations.guarded.documentShown, 'incomplete');
   assert.match(hung.incomplete[0], /^guarded frameRead: frame-read: frameTree unanswered/);
+});
+
+test('a grouped read that shows the marker before an unanswered call fails', async () => {
+  const [row] = (await rows(['C4.iframe-preattach.blank'], fakeBrowser({ guard: 'half' }))).results;
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.axFullShown, true);
+});
+
+test('a read the observer could not prove still fails when the guarded client sees the marker', async () => {
+  const [row] = (
+    await rows(['C4.iframe-preattach.srcdoc'], fakeBrowser({ guard: 'show-ax', blindAX: true }))
+  ).results;
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.axFullShown, true);
 });

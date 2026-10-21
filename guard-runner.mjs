@@ -1678,15 +1678,16 @@ function validate(set, opts) {
 
 function factoryClients(opts, set, job, slot) {
   return outcome(
-    opts.clientFactory
-      ? opts.clientFactory({
-          slot,
-          variant: job.variant,
-          detachDelay: set.variants[job.variant],
-          vector: job.vector,
-          target: job.target,
-        })
-      : Promise.resolve(opts.client)
+    (async () =>
+      opts.clientFactory
+        ? opts.clientFactory({
+            slot,
+            variant: job.variant,
+            detachDelay: set.variants[job.variant],
+            vector: job.vector,
+            target: job.target,
+          })
+        : opts.client)()
   );
 }
 

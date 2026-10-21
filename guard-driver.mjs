@@ -116,13 +116,26 @@ export async function load(client, sessionId, url, ms = 20000) {
 }
 
 export async function waitFor(check, ms, step = 25) {
-  let deadline = Date.now() + ms;
-  for (;;) {
-    if (await check()) return true;
-    if (Date.now() > deadline) return false;
-    const before = Date.now();
-    await new Promise((resolve) => setTimeout(resolve, step));
-    deadline += Math.max(0, Date.now() - before - step * 4);
+  const start = Date.now();
+  const limit = start + ms + Math.max(ms * 4, 30000);
+  let deadline = start + ms;
+  let last = start;
+  const beat = () => {
+    const now = Date.now();
+    deadline = Math.min(limit, deadline + Math.max(0, now - last - step * 4));
+    last = now;
+  };
+  const timer = setInterval(beat, step);
+  try {
+    for (;;) {
+      if (await check()) return true;
+      beat();
+      if (Date.now() > deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, step));
+      beat();
+    }
+  } finally {
+    clearInterval(timer);
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { load } from '../../guard-driver.mjs';
+import { load, waitFor } from '../../guard-driver.mjs';
 
 const stall = (ms) => {
   const until = Date.now() + ms;
@@ -40,5 +40,32 @@ test('a load that never arrives still times out at its bound', async () => {
     load(client, 'S', 'https://ordinary.example.test/doc', 150),
     /load of https:\/\/ordinary\.example\.test\/doc timed out/
   );
+  assert(Date.now() - started < 1000);
+});
+
+test('a stall while the check awaits its reply does not consume the bound', async () => {
+  let resumed = Infinity;
+  setTimeout(() => {
+    stall(400);
+    resumed = Date.now();
+  }, 5);
+  const held = await waitFor(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return Date.now() > resumed + 30;
+  }, 150);
+  assert.equal(held, true);
+});
+
+test('a check that always stalls still ends', async () => {
+  const started = Date.now();
+  const held = await waitFor(
+    () => {
+      stall(60);
+      return false;
+    },
+    10,
+    5
+  );
+  assert.equal(held, false);
   assert(Date.now() - started < 1000);
 });

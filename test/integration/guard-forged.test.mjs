@@ -135,3 +135,23 @@ test('a skip naming an origin the row never uses fails the run', async () => {
     assert.ok(report.forged.some((f) => f.id === row.id && f.why.includes(`no-${origin}-origin`)));
   }
 });
+
+test('a skip naming an origin only a later any branch uses fails the run', async () => {
+  const execution = await genuine();
+  const index = execution.results.findIndex((r) => r.id === 'C1.script-nav');
+  const row = execution.results[index];
+  const forge = (origin) =>
+    driverSummary({
+      guard: 'reference',
+      sha: 'test',
+      set,
+      results: execution.results.with(index, {
+        ...row,
+        reason: `not-applicable:no-${origin}-origin`,
+      }),
+    });
+  assert.deepEqual(forge('ordinary').forged, []);
+  const report = forge('ordinary-same-site');
+  assert.equal(report.pass, false);
+  assert.ok(report.forged.some((f) => f.id === row.id && f.why.includes('ordinary-same-site')));
+});

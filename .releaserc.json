@@ -1,5 +1,5 @@
 {
-  "branches": ["main", { "name": "1.13.x", "range": "1.13.x", "channel": "release-1.13.x" }],
+  "branches": ["main"],
   "tagFormat": "v${version}",
   "plugins": [
     "@semantic-release/commit-analyzer",

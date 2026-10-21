@@ -81,6 +81,8 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true, la
     if (method === 'Fetch.getResponseBody') throw refusal();
     if (method === 'Network.getResponseBody') {
       if (leak === 'hang') return new Promise(() => {});
+      if (leak === 'slow')
+        return new Promise((resolve, reject) => setTimeout(() => reject(refusal()), 300));
       if (leak === 'after-continue' && !continued.has(params.requestId.slice(1)))
         return new Promise((resolve, reject) => waiting.set(params.requestId.slice(1), reject));
       if (leak === 'even' ? Number(params.requestId.slice(1)) % 2 === 0 : leak)
@@ -233,6 +235,20 @@ test.describe('C2 redirect network-body carrier and request termination', {
     const out = await probe({ network: 'redact', late: true });
     assert.equal(out.requestsTerminated, true);
     assert.deepEqual(deliveries(out), ['redacted']);
+  });
+
+  test('a body read started by a late terminal event is drained before the evidence', async () => {
+    const out = await probe({
+      network: 'redact',
+      late: true,
+      fetch: false,
+      tap: false,
+      leak: 'slow',
+    });
+    assert.equal(out.requestsTerminated, true);
+    assert.equal(out.networkBodyPath, 'network');
+    assert.equal(out.networkBodyCarriers.network, 16);
+    assert.equal(out.networkBodyRefused, true);
   });
 
   test('a control request that never terminates is missing evidence, not a control failure', async () => {

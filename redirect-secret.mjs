@@ -271,6 +271,8 @@ class RedirectProbe {
       Math.round(5000 * this.scale),
       50
     );
+    await waitFor(() => this.cursor >= this.client.events.length, 1000, 5);
+    await this.settle();
   }
 
   hops(events) {

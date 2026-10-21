@@ -121,7 +121,7 @@ class RedirectProbe {
     if (redirects.includes(event.params.responseStatusCode)) {
       const out = await this.send('Fetch.getResponseBody', { requestId: event.params.requestId });
       this.attempts.push({ method: 'Fetch.getResponseBody', ...out });
-      if (event.params.networkId) await this.networkBody(event.params.networkId, 'fetch');
+      if (event.params.networkId) this.track(this.networkBody(event.params.networkId, 'fetch'));
     }
     if (
       this.holdURL &&
@@ -152,16 +152,23 @@ class RedirectProbe {
     this.learned[source].add(requestId);
     if (this.networkBodies.has(requestId)) return;
     this.networkBodies.add(requestId);
+    const entry = { method: 'Network.getResponseBody', source, pending: true };
+    this.attempts.push(entry);
     const out = await this.send('Network.getResponseBody', { requestId });
-    this.attempts.push({ method: 'Network.getResponseBody', source, ...out });
+    delete entry.pending;
+    Object.assign(entry, out);
   }
 
-  async tap() {
+  async settle() {
+    for (let i = 0; i < 500 && this.jobs.size; i++) await pause(10);
+  }
+
+  tap() {
     for (const event of this.reader.events ?? []) {
       if (event.sessionId !== this.observer) continue;
       const response = event.params?.redirectResponse ?? event.params?.response;
       if (response?.url?.startsWith(this.prefix) && redirects.includes(response.status))
-        await this.networkBody(event.params.requestId, 'tap');
+        this.track(this.networkBody(event.params.requestId, 'tap'));
     }
   }
 
@@ -469,8 +476,7 @@ class RedirectProbe {
 
   async evidence() {
     await pause(8000);
-    await this.tap();
-    await Promise.allSettled([...this.jobs]);
+    this.tap();
     if (this.side === 'control' && this.controls)
       this.controls.networkEvents = this.learned.network.size > 0;
     await this.send('Fetch.disable');
@@ -479,6 +485,7 @@ class RedirectProbe {
       expression: 'document.title',
       returnByValue: true,
     });
+    await this.settle();
     const tapped = `"sessionId":"${this.observer}"`;
     const events = this.client.events
       .slice(this.eventsStart)
@@ -590,7 +597,7 @@ class RedirectProbe {
   async close() {
     this.stopped = true;
     await this.watching;
-    await Promise.allSettled([...this.jobs]);
+    await this.settle();
     await outcome(this.client.send('Fetch.disable', {}, this.session));
     if (this.observer) {
       await outcome(

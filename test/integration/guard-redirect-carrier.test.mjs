@@ -57,7 +57,14 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
         blockedReason: 'inspector',
       });
   };
+  const continued = new Set();
+  const waiting = new Map();
   const handle = (method, params) => {
+    if (method === 'Fetch.continueRequest') {
+      const n = params.requestId.slice(1);
+      continued.add(n);
+      waiting.get(n)?.(refusal());
+    }
     if (method === 'Page.navigate') request(params.url);
     if (method === 'Runtime.evaluate') {
       const url = params.expression.match(/"(http[^"]+)"/)?.[1];
@@ -66,6 +73,9 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
     }
     if (method === 'Fetch.getResponseBody') throw refusal();
     if (method === 'Network.getResponseBody') {
+      if (leak === 'hang') return new Promise(() => {});
+      if (leak === 'after-continue' && !continued.has(params.requestId.slice(1)))
+        return new Promise((resolve, reject) => waiting.set(params.requestId.slice(1), reject));
       if (leak === 'even' ? Number(params.requestId.slice(1)) % 2 === 0 : leak)
         return { body: `leaked ${marker}`, base64Encoded: false };
       throw refusal();
@@ -76,7 +86,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true }) 
   client.send = async (method, params = {}) => {
     await new Promise((resolve) => setTimeout(resolve, 1));
     try {
-      const result = handle(method, params);
+      const result = await handle(method, params);
       client.messages.push(JSON.stringify({ id: ++next, result }));
       return result;
     } catch (error) {
@@ -118,6 +128,7 @@ const terminals = (out) => [...new Set(Object.values(out.hops).map((hop) => hop.
 
 test.describe('C2 redirect network-body carrier and request termination', {
   concurrency: true,
+  timeout: 120000,
 }, () => {
   test('withheld Network events: the Fetch networkId carries the refused network body read', async () => {
     const out = await probe({ network: 'none' });
@@ -153,6 +164,22 @@ test.describe('C2 redirect network-body carrier and request termination', {
     assert.ok(out.networkBodyCarriers['withheld+tap'] > 0);
     assert.equal(out.networkBodyAttempted, true);
     assert.equal(out.networkBodyRefused, false);
+  });
+
+  test('a network body read the guard never answers is not a refusal', async () => {
+    const out = await probe({ network: 'none', leak: 'hang' });
+    assert.equal(out.networkBodyAttempted, true);
+    assert.equal(out.networkBodyRefused, false);
+  });
+
+  test('a network body read answered only after its Fetch pause continues does not stall the probe', {
+    timeout: 60000,
+  }, async () => {
+    const out = await probe({ network: 'none', leak: 'after-continue' });
+    assert.equal(out.networkBodyPath, 'fetch-networkId');
+    assert.equal(out.networkBodyAttempted, true);
+    assert.equal(out.networkBodyRefused, true);
+    assert.equal(out.sessionSurvives, true);
   });
 
   test('no network id from events, Fetch or tap is incomplete, never a pass', async () => {

@@ -149,7 +149,7 @@ test('a client factory that rejects leaves its row incomplete and the run goes o
       {
         clientFactory: async () => {
           calls++;
-          if (calls === 2) throw new Error('guard client did not start');
+          if (calls === 1) throw new Error('guard client did not start');
           return { ...browser, client: Object.assign(browser.client, { transport: 'seven' }) };
         },
         fixture,
@@ -164,7 +164,7 @@ test('a client factory that rejects leaves its row incomplete and the run goes o
       }
     );
     assert.equal(execution.results.length, 3);
-    const failed = execution.results[1];
+    const failed = execution.results[0];
     assert.equal(failed.control, 'incomplete', JSON.stringify(failed));
     assert.equal(failed.guarded, 'incomplete');
     assert.equal(failed.live, 'incomplete');
@@ -172,6 +172,7 @@ test('a client factory that rejects leaves its row incomplete and the run goes o
     assert.deepEqual(failed.incomplete, ['clientFactory: guard client did not start']);
     assert.equal(execution.results[2].control, 'incomplete');
     assert.equal(execution.summary().pass, false);
+    assert.deepEqual(execution.summary().missing, []);
   } finally {
     await fixture.close();
   }

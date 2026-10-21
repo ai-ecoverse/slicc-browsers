@@ -352,7 +352,7 @@ The factory can configure the guard's own transport delay from this metadata;
 the runner never reaches into the guard. `transportVariant: true` acknowledges
 that configuration, and every result records that boolean (false by default).
 `slot` allows pooling browsers while keeping each row's clients independent.
-A factory that rejects makes only that row `incomplete` for control, guarded and live, with `clientFactory: <reason>` in its `incomplete` and the transport of the last client the factory made (`cdp` before any); the run goes on with the next row instead of rejecting. The optional `close` releases the row's clients; release pooled browsers after
+A factory that rejects makes only that row `incomplete` for control, guarded and live, with `clientFactory: <reason>` in its `incomplete`; the run goes on with the next row instead of rejecting. Such a row is labelled with the transport of the last client the factory made (`cdp` if none), and is passed to `log` once the run completes, so `summary()` never counts a placeholder transport. The optional `close` releases the row's clients; release pooled browsers after
 `run` completes. Each parallel slot needs an independent browser for
 browser-wide settings. Without a factory execution is serial. Cookie and storage
 rows use fresh browser contexts when `capabilities.browserContexts` is true;

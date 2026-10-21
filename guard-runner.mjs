@@ -1690,13 +1690,12 @@ function factoryClients(opts, set, job, slot) {
   );
 }
 
-function unmade(job, message, transport) {
+function unmade(job, message) {
   const reason = `clientFactory: ${message}`;
   return {
     id: job.vector.id,
     target: job.target,
     variant: job.variant,
-    transport,
     via: job.vector.control.via,
     transportVariant: false,
     control: 'incomplete',
@@ -1736,6 +1735,7 @@ async function runAll(set, options, flights) {
   let next = 0;
   let serial = Promise.resolve();
   let transport = 'cdp';
+  const unmadeRows = [];
   const worker = async (slot) => {
     for (;;) {
       const index = next++;
@@ -1743,8 +1743,8 @@ async function runAll(set, options, flights) {
       const job = jobs[index];
       const factory = await factoryClients(opts, set, job, slot);
       if (!factory.ok) {
-        results[index] = unmade(job, factory.error.message, transport);
-        opts.log?.(results[index]);
+        results[index] = unmade(job, factory.error.message);
+        unmadeRows.push(results[index]);
         continue;
       }
       const made = factory.result;
@@ -1782,6 +1782,10 @@ async function runAll(set, options, flights) {
   };
   const width = opts.clientFactory ? opts.parallel : 1;
   await Promise.all(Array.from({ length: width }, (_, slot) => worker(slot)));
+  for (const row of unmadeRows) {
+    row.transport = transport;
+    opts.log?.(row);
+  }
   return { results, summary: (metadata = {}) => summary({ set, results, ...metadata }) };
 }
 

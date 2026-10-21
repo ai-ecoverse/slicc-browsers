@@ -130,8 +130,11 @@ export function emulatedGuard(browser, options = {}) {
           : (headers.location ?? headers.Location)) ?? '',
         { readOnly: true }
       )
-    )
+    ) {
       protectedBodies.add(`${event.sessionId}:${event.params.requestId}`);
+      if (event.params.networkId)
+        protectedBodies.add(`${event.sessionId}:${event.params.networkId}`);
+    }
     if (options.parsedHeadersOnly) {
       const copy = structuredClone(event);
       const walk = (value) => {

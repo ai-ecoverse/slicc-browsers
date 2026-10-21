@@ -14545,7 +14545,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 5000
           }
         },
@@ -14705,7 +14704,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "served": "{target}/doc?n={tag}&listener=1",
             "ms": 5000
           }
@@ -14860,7 +14858,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "served": "{target}/doc?n={tag}&listener=1",
             "ms": 5000
           }
@@ -15024,7 +15021,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15154,7 +15151,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15274,7 +15271,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15402,7 +15399,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15522,7 +15519,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15650,7 +15647,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15770,7 +15767,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -15895,7 +15892,7 @@
         },
         {
           "settle": {
-            "variant": true
+            "ms": 1500
           }
         }
       ],
@@ -16015,7 +16012,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 8000
           }
         }
@@ -16144,7 +16140,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 8000
           }
         }
@@ -16259,7 +16254,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 5000
           }
         }
@@ -16381,7 +16375,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 5000
           }
         }
@@ -16509,7 +16502,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 5000
           }
         }
@@ -16634,7 +16626,6 @@
         },
         {
           "settle": {
-            "variant": true,
             "ms": 5000
           }
         }

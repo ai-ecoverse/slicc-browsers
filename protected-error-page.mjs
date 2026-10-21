@@ -1,4 +1,4 @@
-import { outcome, waitFor } from './guard-driver.mjs';
+import { outcome, parseURL, waitFor } from './guard-driver.mjs';
 import { createObserverTarget } from './observer-target.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -104,6 +104,43 @@ async function seed(reader, observer, loaded, initial, allowed) {
   return out.ok ? out.result : `observer setup failed: ${out.error.message}`;
 }
 
+const encoded = (url) =>
+  Array.from(
+    new TextEncoder().encode(url),
+    (byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+  ).join('');
+
+async function scripted(client, session, ordinary, url) {
+  const out = await outcome(
+    client.send(
+      'Page.navigate',
+      { url: `${ordinary}/page?k=deferred&defer=0&to=${encoded(url)}` },
+      session
+    )
+  );
+  return out.ok ? undefined : `client navigation failed: ${out.error.message}`;
+}
+
+async function recover({ client, session, targetId, ordinary, failedURL, start, result, reached }) {
+  if (result.blank) {
+    const unsent = await scripted(client, session, ordinary, failedURL);
+    if (unsent) return unsent;
+    result.closeError = await reached();
+  }
+  result.attached &&= !client.events
+    .slice(start)
+    .some((e) => e.method === 'Target.detachedFromTarget' && e.params.sessionId === session);
+  const close = await outcome(client.send('Target.closeTarget', { targetId }));
+  result.close = result.closeError === true && close.result?.success === true;
+}
+
+function answer(event, failing, origin) {
+  const { requestId, request } = event.params;
+  return failing && parseURL(request?.url)?.origin === origin
+    ? ['Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }]
+    : ['Fetch.continueRequest', { requestId }];
+}
+
 const secrets = {
   all: (tag) => `/doc/path-secret-${tag}?query-secret=${tag}#fragment-secret-${tag}`,
   query: (tag) => `/doc?query-secret=${tag}`,
@@ -126,6 +163,7 @@ export async function protectedErrorPage({
 }) {
   const initial = `${protectedOrigin}/doc?n=${tag}-history`;
   const failedURL = `${protectedOrigin}${secrets[secret](tag)}`;
+  const origin = parseURL(protectedOrigin)?.origin;
   const result = {};
   const until = (check) => waitFor(check, budget);
   const missing = (reason) => ({ ...result, incomplete: `protected-error-page: ${reason}` });
@@ -147,15 +185,7 @@ export async function protectedErrorPage({
       for (const event of reader.events.slice(cursor)) {
         cursor++;
         if (event.method === 'Fetch.requestPaused' && event.sessionId === observer)
-          await outcome(
-            reader.send(
-              failing ? 'Fetch.failRequest' : 'Fetch.continueRequest',
-              failing
-                ? { requestId: event.params.requestId, errorReason: 'BlockedByClient' }
-                : { requestId: event.params.requestId },
-              observer
-            )
-          );
+          await outcome(reader.send(...answer(event, failing, origin), observer));
       }
       await pause(5);
     }
@@ -179,11 +209,8 @@ export async function protectedErrorPage({
         observer
       );
     }
-    await client.send(
-      'Runtime.evaluate',
-      { expression: `setTimeout(()=>location.href=${JSON.stringify(failedURL)},0)` },
-      session
-    );
+    const unsent = await scripted(client, session, ordinary, failedURL);
+    if (unsent) return missing(unsent);
     let evidence;
     const live = await until(async () => {
       const f = await frame();
@@ -219,32 +246,25 @@ export async function protectedErrorPage({
       .slice(start)
       .some((e) => e.method === 'Target.detachedFromTarget' && e.params.sessionId === session);
     if (mode === 'recover') {
-      if (result.blank) {
-        await client.send(
-          'Runtime.evaluate',
-          { expression: `setTimeout(()=>location.href=${JSON.stringify(failedURL)},0)` },
-          session
-        );
-        result.closeError = await until(async () => (await frame()).unreachableUrl === failedURL);
-      }
-      result.attached &&= !client.events
-        .slice(start)
-        .some((e) => e.method === 'Target.detachedFromTarget' && e.params.sessionId === session);
-      const close = await outcome(client.send('Target.closeTarget', { targetId }));
-      result.close = result.closeError === true && close.result?.success === true;
-      return result;
+      const unclosed = await recover({
+        client,
+        session,
+        targetId,
+        ordinary,
+        failedURL,
+        start,
+        result,
+        reached: () => until(async () => (await frame()).unreachableUrl === failedURL),
+      });
+      return unclosed ? missing(unclosed) : result;
     }
     if (side === 'control') await reader.send('Fetch.disable', {}, observer);
     failing = false;
-    const { entries, currentIndex } = await reader.send('Page.getNavigationHistory', {}, observer);
-    const index = entries.findIndex((e) => e.url === initial);
-    if (index < 0) return missing('missing protected history');
+    const { entries } = await reader.send('Page.getNavigationHistory', {}, observer);
+    const entry = entries.find((e) => e.url === initial);
+    if (!entry) return missing('missing protected history');
     const beforeRestore = reader.events.length;
-    await reader.send(
-      'Runtime.evaluate',
-      { expression: `setTimeout(() => history.go(${index - currentIndex}), 0)` },
-      observer
-    );
+    await outcome(reader.send('Page.navigateToHistoryEntry', { entryId: entry.id }, observer));
     const restored = await until(() =>
       reader.events
         .slice(beforeRestore)

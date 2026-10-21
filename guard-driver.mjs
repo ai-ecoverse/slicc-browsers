@@ -125,7 +125,12 @@ export async function waitFor(check, ms, step = 25) {
     deadline = Math.min(limit, deadline + Math.max(0, now - last - step * 4));
     last = now;
   };
-  const timer = setInterval(beat, step);
+  let timer;
+  const tick = () => {
+    beat();
+    timer = setTimeout(tick, step);
+  };
+  timer = setTimeout(tick, step);
   try {
     for (;;) {
       if (await check()) return true;
@@ -135,7 +140,7 @@ export async function waitFor(check, ms, step = 25) {
       beat();
     }
   } finally {
-    clearInterval(timer);
+    clearTimeout(timer);
   }
 }
 

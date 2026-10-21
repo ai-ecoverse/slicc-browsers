@@ -9,7 +9,9 @@ import {
   expand,
   hop,
   isRefusal,
+  knownOrigins,
   loadedAfter,
+  originDefaults,
   outcome,
   owned,
   parseURL,
@@ -1301,21 +1303,6 @@ const browserContextStep = (vector, capabilities) =>
         /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp ?? '') &&
         supported(['browserContexts'], capabilities))
   );
-
-const originDefaults = { plain: 'ordinary', cross: 'client', log: 'ordinary', own: 'client' };
-const knownOrigins = [
-  'ordinary',
-  'ordinary-same-site',
-  'seven',
-  'vault',
-  'vault-x',
-  'apex',
-  'own',
-  'client',
-  'plain',
-  'cross',
-  'log',
-];
 
 function nullOrigins(value, targets) {
   return [...q(value).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)]

@@ -1,5 +1,25 @@
 const q = JSON.stringify;
 
+export const originDefaults = {
+  plain: 'ordinary',
+  cross: 'client',
+  log: 'ordinary',
+  own: 'client',
+};
+export const knownOrigins = [
+  'ordinary',
+  'ordinary-same-site',
+  'seven',
+  'vault',
+  'vault-x',
+  'apex',
+  'own',
+  'client',
+  'plain',
+  'cross',
+  'log',
+];
+
 export const beacon = (log, tag) =>
   `try { const u = ${q(log)} + '/beacon?tag=' + ${q(tag)} + '&origin=' + encodeURIComponent(location.origin); if (!navigator.sendBeacon(u)) fetch(u, { keepalive: true, mode: 'no-cors' }).catch(() => {}); } catch {}`;
 
@@ -285,11 +305,20 @@ const capabilities = (value) =>
         )
       : [];
 
+function originReason(vector, row, reason) {
+  const origin = /^not-applicable:no-(.+)-origin$/.exec(reason)?.[1];
+  if (!knownOrigins.includes(origin)) return false;
+  return [
+    ...q([`{${row.target}}`, '{plain}', vector ?? null]).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g),
+  ]
+    .map((match) => (match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]))
+    .some((name) => name === origin || originDefaults[name] === origin);
+}
+
 function skipWhy(vector, row, known) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
-  if (reason === 'not-applicable' || /^not-applicable:no-[A-Za-z][A-Za-z-]*-origin$/.test(reason))
-    return null;
+  if (reason === 'not-applicable' || originReason(vector, row, reason)) return null;
   if (vector?.skip?.target === row.target && vector.skip.reason === reason) return null;
   if (reason.startsWith('not-supported:') && known.has(reason.slice('not-supported:'.length)))
     return null;

@@ -18,6 +18,7 @@ import {
   parseURL,
   summary as report,
   result,
+  skipReason,
   steps,
   waitFor,
 } from './guard-driver.mjs';
@@ -1493,7 +1494,9 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
       control: 'skip',
       guarded: 'skip',
       live: 'skip',
-      reason: missing ? `not-supported:${missing}` : 'not-applicable',
+      reason: missing
+        ? `not-supported:${missing}`
+        : skipReason(vector, target, opts.capabilities.scope),
     };
   }
   if (

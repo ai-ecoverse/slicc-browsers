@@ -336,18 +336,20 @@ function originReason(vector, row, reason) {
   ].includes(origin);
 }
 
-export const inapplicable = (vector, target, scope) =>
-  Boolean(vector) &&
-  (vector.skip?.target === target ||
-    vector.observable?.[target] === false ||
-    (vector.scope !== 'any' && vector.scope !== scope));
+export const skipReason = (vector, target, scope) => {
+  if (!vector) return null;
+  if (vector.skip?.target === target) return vector.skip.reason;
+  if (vector.observable?.[target] === false) return 'not-applicable';
+  return vector.scope !== 'any' && vector.scope !== scope ? 'not-applicable' : null;
+};
+
+export const inapplicable = (vector, target, scope) => skipReason(vector, target, scope) !== null;
 
 function skipWhy(vector, row, known, guard) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
-  if (reason === 'not-applicable' && inapplicable(vector, row.target, guard)) return null;
+  if (reason === skipReason(vector, row.target, guard)) return null;
   if (originReason(vector, row, reason)) return null;
-  if (vector?.skip?.target === row.target && vector.skip.reason === reason) return null;
   if (reason.startsWith('not-supported:') && known.has(reason.slice('not-supported:'.length)))
     return null;
   return `skip with a reason the runner never gives: ${reason}`;

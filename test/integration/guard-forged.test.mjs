@@ -44,7 +44,7 @@ test('a genuine run of text and skipped rows still passes', async () => {
   const statuses = new Set(execution.results.flatMap((r) => [r.control, r.guarded, r.live]));
   assert.deepEqual([...statuses].sort(), ['not-run', 'skip']);
   const reasons = new Set(execution.results.map((r) => r.reason).filter(Boolean));
-  assert.ok(reasons.has('not-applicable'));
+  for (const v of set.vectors.filter((v) => v.skip)) assert.ok(reasons.has(v.skip.reason), v.id);
   assert.ok(reasons.has('not-applicable:no-apex-origin'));
   assert.ok([...reasons].some((r) => r.startsWith('not-supported:')));
   const report = execution.summary({ guard: 'reference', sha: 'test' });
@@ -216,4 +216,30 @@ test('a genuine not-applicable row for an unobservable target or another scope s
     elsewhere.forged.map((f) => f.id),
     Object.keys(full.variants).map(() => 'scoped.other')
   );
+});
+
+test('a vector skip reason survives run() into a passing summary, and a bare one is forged', async () => {
+  const reason = 'not-applicable: on macOS the C9 controls hang inside Chrome (slicc-cli#344)';
+  const vectors = full.vectors
+    .filter((v) => v.id.startsWith('C9.'))
+    .map((v) => ({ ...v, skip: { target: 'ordinary', reason } }));
+  assert.ok(vectors.length > 0);
+  const one = { ...full, vectors };
+  const client = { transport: 'cdp', events: [], messages: [], send: async () => ({}) };
+  const execution = await run(one, {
+    client,
+    capabilities: [...capabilities, 'extensionWorld'],
+    targets,
+    fixture: { log: async () => [] },
+  });
+  assert.ok(execution.results.length > 0);
+  assert.ok(execution.results.every((r) => r.control === 'skip' && r.reason === reason));
+  const report = execution.summary({ guard: 'reference', sha: 'test' });
+  assert.deepEqual(report.forged, []);
+  assert.equal(report.pass, true);
+  assert.match(report.line, /^GUARD-PASS /);
+  const bare = execution.results.map((r) => ({ ...r, reason: 'not-applicable' }));
+  const forged = driverSummary({ guard: 'reference', sha: 'test', set: one, results: bare });
+  assert.equal(forged.pass, false);
+  assert.equal(forged.forged.length, bare.length);
 });

@@ -1676,6 +1676,38 @@ function validate(set, opts) {
   return variants;
 }
 
+function factoryClients(opts, set, job, slot) {
+  return outcome(
+    opts.clientFactory
+      ? opts.clientFactory({
+          slot,
+          variant: job.variant,
+          detachDelay: set.variants[job.variant],
+          vector: job.vector,
+          target: job.target,
+        })
+      : Promise.resolve(opts.client)
+  );
+}
+
+function unmade(job, message, transport) {
+  const reason = `clientFactory: ${message}`;
+  return {
+    id: job.vector.id,
+    target: job.target,
+    variant: job.variant,
+    transport,
+    via: job.vector.control.via,
+    transportVariant: false,
+    control: 'incomplete',
+    guarded: 'incomplete',
+    live: 'incomplete',
+    why: `incomplete: ${reason}`,
+    errors: [],
+    incomplete: [reason],
+  };
+}
+
 export function run(set, options) {
   const flights = new Set();
   const inFlight = () =>
@@ -1703,20 +1735,20 @@ async function runAll(set, options, flights) {
   const results = new Array(jobs.length);
   let next = 0;
   let serial = Promise.resolve();
+  let transport = 'cdp';
   const worker = async (slot) => {
     for (;;) {
       const index = next++;
       if (index >= jobs.length) break;
       const job = jobs[index];
-      const made = opts.clientFactory
-        ? await opts.clientFactory({
-            slot,
-            variant: job.variant,
-            detachDelay: set.variants[job.variant],
-            vector: job.vector,
-            target: job.target,
-          })
-        : opts.client;
+      const factory = await factoryClients(opts, set, job, slot);
+      if (!factory.ok) {
+        results[index] = unmade(job, factory.error.message, transport);
+        opts.log?.(results[index]);
+        continue;
+      }
+      const made = factory.result;
+      transport = (typeof made?.send === 'function' ? made : made?.client)?.transport ?? transport;
       const clients =
         typeof made?.send === 'function'
           ? {

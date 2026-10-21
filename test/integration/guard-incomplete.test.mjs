@@ -131,3 +131,48 @@ test('a redirect-body observer whose setup fails is incomplete, not a guard fail
     /^control redirectSecret: redirect-secret: observer setup failed: Storage\.setCookies: refused by the fake$/
   );
 });
+
+test('a client factory that rejects leaves its row incomplete and the run goes on', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = fakeBrowser({
+      commits: (url) => (url.endsWith('-history') ? 'about:blank' : url),
+    });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let calls = 0;
+    const execution = await run(
+      {
+        ...set,
+        vectors: set.vectors.filter((v) => v.id.startsWith('C8.protected-error-page-sticky')),
+        variants: { prompt: 0 },
+      },
+      {
+        clientFactory: async () => {
+          calls++;
+          if (calls === 2) throw new Error('guard client did not start');
+          return { ...browser, client: Object.assign(browser.client, { transport: 'seven' }) };
+        },
+        fixture,
+        settleScale: 0.05,
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+    assert.equal(execution.results.length, 3);
+    const failed = execution.results[1];
+    assert.equal(failed.control, 'incomplete', JSON.stringify(failed));
+    assert.equal(failed.guarded, 'incomplete');
+    assert.equal(failed.live, 'incomplete');
+    assert.equal(failed.transport, 'seven');
+    assert.deepEqual(failed.incomplete, ['clientFactory: guard client did not start']);
+    assert.equal(execution.results[2].control, 'incomplete');
+    assert.equal(execution.summary().pass, false);
+  } finally {
+    await fixture.close();
+  }
+});

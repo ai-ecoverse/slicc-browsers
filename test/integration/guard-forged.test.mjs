@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { summary as driverSummary, result } from '../../guard-driver.mjs';
+import { summary as driverSummary, knownOrigins, result } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 
 const full = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
@@ -100,4 +100,38 @@ test('a skip with a reason the runner never gives fails the run', async () => {
   });
   assert.equal(report.pass, false);
   assert.ok(report.forged.some((f) => f.id === row.id && /trust-me/.test(f.why)));
+});
+
+test('a genuine run with every origin missing still passes', async () => {
+  const client = { transport: 'cdp', events: [], messages: [], send: async () => ({}) };
+  const execution = await run(full, {
+    client,
+    capabilities: [],
+    targets: Object.fromEntries(knownOrigins.map((name) => [name, null])),
+    fixture: { log: async () => [] },
+  });
+  const reasons = new Set(execution.results.map((r) => r.reason));
+  assert.ok([...reasons].every((r) => /^not-applicable:no-[a-z-]+-origin$/.test(r)));
+  assert.ok(reasons.size > 1);
+  const report = execution.summary({ guard: 'reference', sha: 'test' });
+  assert.deepEqual(report.forged, []);
+  assert.equal(report.pass, true);
+});
+
+test('a skip naming an origin the row never uses fails the run', async () => {
+  const execution = await genuine();
+  const uses = (row, origin) =>
+    row.target === origin ||
+    JSON.stringify(set.vectors.find((v) => v.id === row.id)).includes(`{${origin}}`);
+  for (const origin of ['made-up', 'vault-x']) {
+    const index = execution.results.findIndex((r) => r.control === 'skip' && !uses(r, origin));
+    const row = execution.results[index];
+    const results = execution.results.with(index, {
+      ...row,
+      reason: `not-applicable:no-${origin}-origin`,
+    });
+    const report = driverSummary({ guard: 'reference', sha: 'test', set, results });
+    assert.equal(report.pass, false, origin);
+    assert.ok(report.forged.some((f) => f.id === row.id && f.why.includes(`no-${origin}-origin`)));
+  }
 });

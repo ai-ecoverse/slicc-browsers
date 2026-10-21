@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main, 1.13.x]
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   release:
-    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/1.13.x') && !inputs.cert-only
+    if: github.ref == 'refs/heads/main' && !inputs.cert-only
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -130,33 +130,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          sparse-checkout: scripts/dist-tag.mjs
-          sparse-checkout-cone-mode: false
+          ref: v${{ needs.release.outputs.version }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - name: Dist-tag
-        id: dist
-        env:
-          REF: ${{ github.ref }}
-        run: |
-          latest="$(npm view @ai-ecoverse/slicc-browsers dist-tags.latest)"
-          tag="$(node scripts/dist-tag.mjs "$VERSION" "$REF" "$latest")"
-          echo "publish $VERSION from $REF to $tag, latest is $latest"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          path: release
-          ref: v${{ needs.release.outputs.version }}
-
       - name: Publish to npm
-        working-directory: release
-        env:
-          DIST_TAG: ${{ steps.dist.outputs.tag }}
         run: |
           name=$(node -p "require('./package.json').name")
           if npm view "$name@$VERSION" version >/dev/null 2>&1; then
@@ -168,7 +149,7 @@ jobs:
           fi
           node scripts/set-crate-version.mjs "$VERSION"
           npm version "$VERSION" --no-git-tag-version --allow-same-version --ignore-scripts
-          npm publish --provenance --access public --ignore-scripts --tag "$DIST_TAG"
+          npm publish --provenance --access public --ignore-scripts
 
   cert:
     needs: [release, npm]

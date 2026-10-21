@@ -61,7 +61,7 @@
     "fixture-client.mjs"
   ],
   "scripts": {
-    "prepare": "lefthook install",
+    "prepare": "slicc-install-hooks",
     "corpus": "node scripts/corpus.mjs",
     "validate": "node scripts/validate.mjs",
     "lint": "slicc-lint && test -z \"$(gofmt -l .)\" && go mod tidy -diff && go vet ./... && golangci-lint run && cargo fmt --check && cargo clippy --all-features --all-targets -- -D warnings",

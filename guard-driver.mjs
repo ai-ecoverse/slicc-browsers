@@ -305,14 +305,35 @@ const capabilities = (value) =>
         )
       : [];
 
+const originNames = (value) =>
+  [...q(value ?? null).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)]
+    .map((match) => (match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]))
+    .flatMap((name) => [name, originDefaults[name]]);
+
+const checkOrigins = (check) => {
+  if (!check || typeof check !== 'object') return [];
+  if (check.any) return checkOrigins(check.any[0]);
+  if (check.all || check.not) return (check.all ?? [check.not]).flatMap(checkOrigins);
+  return originNames(check);
+};
+
 function originReason(vector, row, reason) {
   const origin = /^not-applicable:no-(.+)-origin$/.exec(reason)?.[1];
   if (!knownOrigins.includes(origin)) return false;
+  const fixed = [
+    row.target,
+    '{plain}',
+    vector?.control?.origin,
+    vector?.setup,
+    vector?.trigger,
+  ].map((value) => (typeof value === 'string' && !value.startsWith('{') ? `{${value}}` : value));
   return [
-    ...q([`{${row.target}}`, '{plain}', vector ?? null]).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g),
-  ]
-    .map((match) => (match[1] === 'beacon' || match[1] === 'probe' ? 'log' : match[1]))
-    .some((name) => name === origin || originDefaults[name] === origin);
+    ...originNames(fixed),
+    ...checkOrigins(vector?.liveCheck),
+    ...Object.values(vector?.observe ?? {}).flatMap((observation) =>
+      checkOrigins(observation?.check)
+    ),
+  ].includes(origin);
 }
 
 function skipWhy(vector, row, known) {

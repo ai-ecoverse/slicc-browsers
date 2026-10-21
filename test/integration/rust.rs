@@ -249,8 +249,27 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_EXTENSION_WORLD,
         guard::CAP_DISCOVERY,
         guard::CAP_CLIENT_EXIT,
+        guard::CAP_SITE_ISOLATION_OFF,
     ] {
         assert!(v.capabilities.contains_key(c));
+    }
+    let frames: Vec<_> = v
+        .vectors
+        .iter()
+        .filter(|x| x.id.starts_with("C4.iframe-preattach."))
+        .collect();
+    assert_eq!(frames.len(), 4);
+    for frame in frames {
+        assert!(frame.default_context);
+        assert_eq!(frame.control.via, guard::VIA_UNGUARDED);
+        assert!(frame.trigger.iter().all(|s| s.frame_read.is_some()));
+        let shared = frame.id.ends_with(".shared");
+        assert_eq!(
+            frame
+                .requires
+                .contains(&guard::CAP_SITE_ISOLATION_OFF.to_string()),
+            shared
+        );
     }
     let script = v.vectors.iter().find(|x| x.id == "C5.script").unwrap();
     assert_eq!(script.family, "C");

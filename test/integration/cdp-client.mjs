@@ -70,7 +70,7 @@ function watchdog(child, directory) {
   return dog;
 }
 
-export async function launch(fixture, { spki, signal, allowOrigin } = {}) {
+export async function launch(fixture, { spki, signal, allowOrigin, isolation = true } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
   const child = spawn(
     chromium.executablePath(),
@@ -94,8 +94,8 @@ export async function launch(fixture, { spki, signal, allowOrigin } = {}) {
       '--remote-debugging-port=0',
       `--user-data-dir=${directory}`,
       '--no-proxy-server',
-      '--site-per-process',
-      '--disable-features=HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,LocalNetworkAccessChecks,LocalNetworkAccessRestrictions,LocalNetworkAccessChecksWebRTC,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults',
+      ...(isolation ? ['--site-per-process'] : ['--disable-site-isolation-trials']),
+      `--disable-features=${isolation ? '' : 'IsolateOrigins,site-per-process,OriginKeyedProcessesByDefault,'}HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,LocalNetworkAccessChecks,LocalNetworkAccessRestrictions,LocalNetworkAccessChecksWebRTC,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults`,
       `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP *.control.test 127.0.0.1:${fixture.port}`,
       'about:blank',
     ],

@@ -302,7 +302,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery, sliccbrowsers.GuardCapClientExit} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery, sliccbrowsers.GuardCapClientExit, sliccbrowsers.GuardCapSiteIsolationOff} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}
@@ -322,6 +322,11 @@ func TestTheGuardVectorsParse(t *testing.T) {
 		case "C9.world-hidden", "C9.world-select", "C9.world-debugger", "C9.page-drivable":
 			if !g.DefaultContext || !slices.Equal(g.Requires, []string{sliccbrowsers.GuardCapExtensionWorld}) || g.Trigger[0].ExtensionWorld == "" || g.Control.Via != sliccbrowsers.GuardViaUnguarded {
 				t.Fatalf("C9 vector %+v", g)
+			}
+		case "C4.iframe-preattach.blank", "C4.iframe-preattach.srcdoc", "C4.iframe-preattach.blank.shared", "C4.iframe-preattach.srcdoc.shared":
+			shared := strings.HasSuffix(g.ID, ".shared")
+			if !g.DefaultContext || g.Control.Via != sliccbrowsers.GuardViaUnguarded || g.Trigger[0].FrameRead == "" || slices.Contains(g.Requires, sliccbrowsers.GuardCapSiteIsolationOff) != shared || g.Expected.Checks["documentShown"].Value || !g.Control.Expected.Checks["documentShown"].Value {
+				t.Fatalf("frame-read vector %+v", g)
 			}
 		case "C8.unparseable":
 			if !g.DefaultContext || !g.Trigger[0].Unparseable || len(g.Requires) != 0 || len(g.Trigger[0].Requires) != 0 {

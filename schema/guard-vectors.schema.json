@@ -88,7 +88,8 @@
         "chromeUrlsAttach",
         "extensionWorld",
         "discovery",
-        "clientExit"
+        "clientExit",
+        "siteIsolationOff"
       ],
       "properties": {
         "autoAttach": {
@@ -109,7 +110,8 @@
           "type": "string",
           "minLength": 1
         },
-        "clientExit": { "type": "string", "minLength": 1 }
+        "clientExit": { "type": "string", "minLength": 1 },
+        "siteIsolationOff": { "type": "string", "minLength": 1 }
       }
     },
     "placeholders": {
@@ -139,7 +141,8 @@
         "chromeUrlsAttach",
         "extensionWorld",
         "discovery",
-        "clientExit"
+        "clientExit",
+        "siteIsolationOff"
       ]
     },
     "requires": {
@@ -449,6 +452,18 @@
           "properties": {
             "errorPage": { "enum": ["recover", "restore", "sticky"] },
             "secret": { "enum": ["all", "query", "fragment"] },
+            "requires": { "$ref": "#/$defs/requires" },
+            "as": { "$ref": "#/$defs/name" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frameRead", "from", "as"],
+          "properties": {
+            "frameRead": { "enum": ["blank", "srcdoc"] },
+            "from": { "type": "string", "minLength": 1 },
+            "on": { "$ref": "#/$defs/on" },
             "requires": { "$ref": "#/$defs/requires" },
             "as": { "$ref": "#/$defs/name" }
           }

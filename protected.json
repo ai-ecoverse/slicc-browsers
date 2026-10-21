@@ -951,6 +951,11 @@
       "protected": false
     },
     {
+      "url": "https://idp.example/authorize?redirect_uri=https://vault.sliccy.ai/oauth/mcp-callback",
+      "type": "page",
+      "protected": false
+    },
+    {
       "url": "about:blank",
       "protected": false
     },

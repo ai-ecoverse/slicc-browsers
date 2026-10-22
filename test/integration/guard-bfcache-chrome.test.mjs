@@ -5,7 +5,7 @@ import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
 import { connect, launch, origins } from './cdp-client.mjs';
 
-async function gatedClient(endpoint) {
+async function gatedClient(endpoint, seed = () => []) {
   let gate;
   const calls = [];
   const sessions = new Map();
@@ -32,11 +32,14 @@ async function gatedClient(endpoint) {
       if (method === 'Target.attachToTarget') sessions.set(answer.sessionId, params.targetId);
       return answer;
     },
-    arm({ targetId, sessionId, ms }) {
-      const commits = raw.events.filter(
+    commits(targetId) {
+      return raw.events.filter(
         (event) =>
           sessions.get(event.sessionId) === targetId && event.method === 'Page.frameNavigated'
       );
+    },
+    arm({ targetId, sessionId, ms }) {
+      const commits = [...client.commits(targetId), ...seed(targetId)];
       gate = { sessionId, held: [], count: 0 };
       return {
         targetId,
@@ -90,8 +93,8 @@ test('history restore controls run through an inbound gate', { timeout: 180000 }
   try {
     const execution = await run(selected, {
       clientFactory: async () => {
-        const client = await gatedClient(browser.ws);
         const unguarded = await gatedClient(browser.ws);
+        const client = await gatedClient(browser.ws, (targetId) => unguarded.commits(targetId));
         return {
           client,
           unguarded,

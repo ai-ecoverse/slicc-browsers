@@ -4,10 +4,22 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after } from 'node:test';
+import { findBrowser } from '@ai-ecoverse/slicc-cdp';
 import { EXTENSION_ID, EXTENSION_PATH } from '@ai-ecoverse/slicc-shared-web/harness';
-import { chromium } from 'playwright-core';
 
 const running = new Set();
+
+const headless =
+  process.env.SLICC_HEADLESS === '1' ||
+  (process.env.SLICC_HEADLESS !== '0' && ['', 'false', '0'].includes(process.env.CI ?? ''));
+
+let found;
+const chrome = async () => {
+  found ??= findBrowser();
+  const browser = await found;
+  if (!browser) throw new Error('no Chrome: set CHROME_PATH or run npx slicc-cdp install-browser');
+  return browser.executable;
+};
 
 function killGroup(child, signal = 'SIGKILL') {
   if (!child.pid) return;
@@ -71,15 +83,16 @@ function watchdog(child, directory) {
 }
 
 export async function launch(fixture, { spki, signal, allowOrigin, isolation = true } = {}) {
+  const executable = await chrome();
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
   const child = spawn(
-    chromium.executablePath(),
+    executable,
     [
-      '--headless',
+      ...(headless ? ['--headless'] : []),
       '--use-mock-keychain',
-      ...(allowOrigin
+      ...(allowOrigin ? [`--remote-allow-origins=${allowOrigin}`] : []),
+      ...(allowOrigin || !headless
         ? [
-            `--remote-allow-origins=${allowOrigin}`,
             '--disable-background-timer-throttling',
             '--disable-renderer-backgrounding',
             '--disable-backgrounding-occluded-windows',

@@ -18804,7 +18804,7 @@
       "requires": ["clientExit"],
       "setup": [
         {
-          "text": "a plain page whose client registers an init script, an x-probe header and Fetch.enable '*' that fulfils the destination with a forged body, then loads a trigger page whose navigation into {target} is pending when the client exits"
+          "text": "a plain page registers an init script, an x-probe header and Fetch.enable '*' that fulfils the destination with a forged body, then loads a trigger page whose navigation into {target} is pending when the session exits; the control uses the unguarded observer, and guarded refusals waive only their corresponding pre-exit proofs"
         },
         {
           "page": "tab",
@@ -18814,6 +18814,11 @@
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
             "source": "{beacon}"
+          },
+          "as": "initScript",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
           }
         },
         {
@@ -18822,6 +18827,11 @@
             "headers": {
               "x-probe": "{tag}"
             }
+          },
+          "as": "extraHeaders",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
           }
         },
         {
@@ -18832,6 +18842,11 @@
                 "urlPattern": "*"
               }
             ]
+          },
+          "as": "interception",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
           }
         },
         {
@@ -18860,7 +18875,12 @@
         {
           "settle": {
             "beacon": "{ordinary}",
-            "required": true
+            "required": true,
+            "dependsOn": ["initScript"],
+            "or": {
+              "served": "{ordinary}/page?k=href&tag={tag}&to={target}/canary/{tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -18880,7 +18900,8 @@
       "targets": ["seven", "vault"],
       "observe": {
         "instrumented": {
-          "means": "the client's init script sent its beacon from {ordinary} before the exit",
+          "means": "the session's init script sent its beacon from {ordinary} before the exit unless registration was refused",
+          "dependsOn": ["initScript"],
           "check": {
             "beacon": "{ordinary}",
             "exit": "before",
@@ -18888,7 +18909,8 @@
           }
         },
         "headed": {
-          "means": "the trigger page's request carried the client's x-probe header before the exit",
+          "means": "the trigger page's request carried the session's x-probe header before the exit unless registration was refused",
+          "dependsOn": ["extraHeaders"],
           "check": {
             "header": "x-probe",
             "on": "/page",
@@ -18897,7 +18919,8 @@
           }
         },
         "intercepted": {
-          "means": "a Fetch.requestPaused for the trigger page reached the client before the exit",
+          "means": "a Fetch.requestPaused for the trigger page reached the session before the exit unless interception was refused",
+          "dependsOn": ["interception"],
           "check": {
             "event": "Fetch.requestPaused",
             "where": {
@@ -18914,6 +18937,7 @@
         },
         "served": {
           "means": "the stand-in served {target}/canary/{tag} after the exit",
+          "dependsOn": [],
           "check": {
             "served": "{target}/canary/{tag}",
             "exit": "after",
@@ -18922,6 +18946,7 @@
         },
         "document": {
           "means": "the unguarded observer reads {target}'s real document, title 'canary'",
+          "dependsOn": [],
           "check": {
             "title": "canary",
             "via": "unguarded",
@@ -18930,6 +18955,7 @@
         },
         "forged": {
           "means": "the unguarded observer reads the client's forged FULFILLED body",
+          "dependsOn": [],
           "check": {
             "expression": "document.body ? document.body.innerText.includes('FULFILLED') : false",
             "equals": true,
@@ -18939,6 +18965,7 @@
         },
         "scripted": {
           "means": "the client's init script sent a beacon from {target} after the exit",
+          "dependsOn": [],
           "check": {
             "beacon": "{target}",
             "exit": "after",
@@ -18947,6 +18974,7 @@
         },
         "probed": {
           "means": "a request for {target}/canary/{tag} carried the client's x-probe header after the exit",
+          "dependsOn": [],
           "check": {
             "header": "x-probe",
             "on": "{target}/canary/{tag}",
@@ -18956,6 +18984,7 @@
         },
         "paused": {
           "means": "a Fetch.requestPaused for {target}/canary/{tag} reached the client",
+          "dependsOn": [],
           "check": {
             "event": "Fetch.requestPaused",
             "where": {
@@ -18969,10 +18998,10 @@
           }
         }
       },
-      "live": "the stand-in serves {target}'s document after the client exits",
+      "live": "the stand-in serves {target}'s document after the session exits",
       "control": {
         "origin": "ordinary",
-        "via": "guard",
+        "via": "unguarded",
         "expected": {
           "instrumented": true,
           "headed": true,

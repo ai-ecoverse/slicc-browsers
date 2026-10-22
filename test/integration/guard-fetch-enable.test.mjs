@@ -18,7 +18,7 @@ const vectors = data.vectors.filter((vector) =>
   )
 );
 
-test('only Fetch.enable patterns naming protected placeholders are refusable', () => {
+test('Fetch.enable is refusable for protected patterns or client-exit persistence', () => {
   assert.deepEqual(
     vectors.map((vector) => vector.id),
     ['C5.guessed-id.continue-response']
@@ -29,7 +29,16 @@ test('only Fetch.enable patterns naming protected placeholders are refusable', (
       const protectedOrigin = step.params.patterns.some((pattern) =>
         protectedPattern.test(pattern.urlPattern)
       );
-      assert.equal(Boolean(step.refusable), protectedOrigin, vector.id);
+      const afterExit = vector.id === 'X1.after-exit';
+      assert.equal(Boolean(step.refusable), protectedOrigin || afterExit, vector.id);
+      if (afterExit) {
+        assert.equal(vector.control.via, 'unguarded');
+        assert.equal(step.as, 'interception');
+        assert.equal(step.refusal.match, 'refused');
+        assert.deepEqual(vector.observe.intercepted.dependsOn, ['interception']);
+        for (const name of ['served', 'document', 'forged', 'scripted', 'probed', 'paused'])
+          assert.deepEqual(vector.observe[name].dependsOn, []);
+      }
       if (!protectedOrigin) continue;
       assert.equal(step.refusal.match, '^slicc: refused');
       assert.equal(step.refusal.onlyProtected, true);

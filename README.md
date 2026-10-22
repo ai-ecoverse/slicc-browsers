@@ -186,6 +186,10 @@ Each vector runs twice. The **control** runs it against an ordinary origin, wher
 
 When a vector compares ordinary and protected fixture markers, those markers do not contain one another. Protected-marker checks still examine complete probe replies, including errors, and the vector's client events and messages, including encoded values.
 
+### Client exit (X1)
+
+The unguarded control proves pre-exit instrumentation; guarded persistent-capability refusals are recorded as valid evidence, granted instruments must leave no effects after exit, and missing answers remain incomplete.
+
 ### Running them
 
 The reference runner works with any guard that speaks CDP:

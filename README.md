@@ -222,6 +222,8 @@ You supply:
 | `clientExit` | close the guarded client in the middle of a row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
 
+`forwardAudit` permits observer restore after a client history timeout only with terminal `historyTrigger: { id: "history-trigger", complete: true, forwarded: false }` proof from `audit({ historyTrigger: command, probes: [], final: false })`, keeping the probe ledger open; missing proof, forwarding or a late successful reply never qualifies as refusal.
+
 ### Reading the result
 
 Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `incomplete` (the test couldn't gather its own evidence) or `not-run` (vectors described only in words). `summary()` turns the rows into one line:

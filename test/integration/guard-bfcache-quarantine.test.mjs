@@ -11,8 +11,23 @@ const targets = {
   seven: 'http://seven.sliccy.ai:4811',
 };
 
-async function rows(options) {
+async function rows({ missingAcknowledgement, ...options } = {}) {
   const browser = bfcacheQuarantineClients(options);
+  const acknowledgementSessions = new Set();
+  for (const transport of [browser.client, browser.unguarded]) {
+    const send = transport.send;
+    transport.send = async (method, params, sessionId) => {
+      if (method === 'Page.getFrameTree' && acknowledgementSessions.has(sessionId)) return {};
+      const result = await send(method, params, sessionId);
+      if (
+        method === 'Target.attachToTarget' &&
+        browser.targets.get(params.targetId)?.url.endsWith('-b') &&
+        (missingAcknowledgement === transport.name || missingAcknowledgement === 'both')
+      )
+        acknowledgementSessions.add(result.sessionId);
+      return result;
+    };
+  }
   const execution = await run(
     {
       ...set,
@@ -81,6 +96,33 @@ for (const options of [{}, { blockProtectedLoads: false, refuseHistory: true }])
       )
     );
     assert.equal(execution.summary().pass, true);
+  });
+}
+
+for (const missingAcknowledgement of ['client', 'observer', 'both']) {
+  test(`missing ${missingAcknowledgement} B acknowledgement stays incomplete in affected columns`, {
+    timeout: 30000,
+  }, async () => {
+    const { execution } = await rows({ missingAcknowledgement });
+    for (const row of execution.results) {
+      const controlMissing = missingAcknowledgement !== 'client';
+      const guardedMissing = missingAcknowledgement !== 'observer';
+      assert.equal(row.control, controlMissing ? 'incomplete' : 'pass', row.why);
+      assert.equal(row.guarded, guardedMissing ? 'incomplete' : 'pass', row.why);
+      assert.equal(row.live, guardedMissing ? 'incomplete' : 'pass', row.why);
+      assert.deepEqual(row.errors, []);
+      assert(
+        row.incomplete.some((reason) => reason.includes('ordinary B acknowledgement unavailable'))
+      );
+      for (const leg of ['control', 'guarded']) {
+        if (!(leg === 'control' ? controlMissing : guardedMissing)) continue;
+        const evidence = row.evidence[leg].restore;
+        assert.equal(evidence.sessionLive, undefined);
+        assert.equal(evidence.delay.acknowledged, undefined);
+        assert.deepEqual(evidence.probes, []);
+      }
+    }
+    assert.equal(execution.summary().pass, false);
   });
 }
 

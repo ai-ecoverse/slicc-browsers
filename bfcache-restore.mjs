@@ -122,12 +122,10 @@ class Restore {
     if (!(await this.attach())) return this.missingEvidence('initial client attach unanswered');
     const live = await this.call('Page.getFrameTree', {});
     const frame = live.result?.frameTree?.frame;
-    this.result.sessionLive = live.ok && frame?.url === b && !frame.unreachableUrl;
     this.result.seed.ordinaryAnswer = live;
-    if (!this.result.sessionLive) {
-      this.result.sessionLive = 'incomplete';
+    if (!(live.ok && frame?.url === b && !frame.unreachableUrl))
       return this.missingEvidence('ordinary B acknowledgement unavailable');
-    }
+    this.result.sessionLive = true;
     await this.call('Page.enable', {});
     const history = await this.read('Page.getNavigationHistory', {});
     this.entry = history.result?.entries?.find((item) => item.url === this.url);

@@ -29,7 +29,7 @@ async function discover(reader, session, extensionId) {
   throw new Error(`extensionWorld: no content-script context for ${extensionId}`);
 }
 
-async function drivable(client, session, live) {
+async function drivable({ client, session, live, reader, observer }) {
   const setup = await outcome(
     client.send(
       'Runtime.evaluate',
@@ -44,6 +44,7 @@ async function drivable(client, session, live) {
   const snapshot = await outcome(
     client.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }, session)
   );
+  await outcome(reader.send('Page.bringToFront', {}, observer));
   const down = await outcome(
     client.send(
       'Input.dispatchMouseEvent',
@@ -395,7 +396,7 @@ export async function extensionWorld({
       controls,
       pauseMs,
     };
-    if (mode === 'drivable') return await drivable(client, session, live);
+    if (mode === 'drivable') return await drivable(input);
     if (mode === 'debugger') return await debuggerWorld(input);
     return await selectWorld(input);
   } finally {

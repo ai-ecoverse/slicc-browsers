@@ -232,6 +232,7 @@ export async function protectedErrorPage({
         observer
       );
     }
+    await outcome(reader.send('Page.bringToFront', {}, observer));
     const unsent = await scripted(client, session, ordinary, failedURL);
     if (unsent) return missing(unsent);
     let evidence;

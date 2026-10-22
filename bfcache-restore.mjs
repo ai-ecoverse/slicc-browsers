@@ -183,19 +183,19 @@ class Restore {
     if (timedOut && this.forwardAudit) {
       const audit = await bounded(
         typeof this.gate.audit === 'function'
-          ? Promise.resolve().then(() => this.gate.audit({ probes: [command], final: true }))
+          ? Promise.resolve().then(() =>
+              this.gate.audit({ historyTrigger: command, probes: [], final: false })
+            )
           : Promise.reject(new Error('forwarding audit unavailable')),
         this.budget
       );
       this.result.triggerAudit = audit;
-      const entries = audit.result?.probes;
+      const decision = audit.result?.historyTrigger;
       refused =
         audit.ok &&
-        audit.result?.complete === true &&
-        Array.isArray(entries) &&
-        entries.length === 1 &&
-        entries[0]?.id === command.id &&
-        entries[0].forwarded === false &&
+        decision?.complete === true &&
+        decision.id === command.id &&
+        decision.forwarded === false &&
         !(await bounded(work, 0)).ok;
     }
     if (refused) {

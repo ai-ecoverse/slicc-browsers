@@ -6,6 +6,7 @@ export function bfcacheHistoryClients({
   lateAnswer = false,
   lateAfterFallback = false,
   audit = 'complete',
+  closeOnFinal = false,
 } = {}) {
   const browser = bfcacheClients({ guard: 'refuse' });
   const evidence = { fallbacks: 0, audits: [] };
@@ -36,21 +37,28 @@ export function bfcacheHistoryClients({
   browser.client.inboundDelay = async (args) => {
     guarded = args.side === 'guarded';
     const gate = await install(args);
+    let finalLedger;
     return {
       ...gate,
       async audit(options) {
-        if (options.probes[0]?.method === 'Page.navigateToHistoryEntry') {
+        if (closeOnFinal && finalLedger) return finalLedger;
+        if (options.historyTrigger?.method === 'Page.navigateToHistoryEntry') {
           evidence.audits.push(options);
           if (lateAnswer) answer();
           if (audit === 'error') throw new Error('audit unavailable');
           if (audit === 'missing') return { complete: true, probes: [] };
-          const entry = { id: options.probes[0].id, forwarded };
-          return {
-            complete: audit !== 'partial',
-            probes: audit === 'duplicate' ? [entry, entry] : [entry],
+          const entry = { id: options.historyTrigger.id, complete: audit !== 'partial', forwarded };
+          const ledger = {
+            complete: false,
+            probes: [],
+            historyTrigger: audit === 'duplicate' ? [entry, entry] : entry,
           };
+          if (closeOnFinal && options.final) finalLedger = ledger;
+          return ledger;
         }
-        return gate.audit(options);
+        const ledger = await gate.audit(options);
+        if (closeOnFinal && options.final) finalLedger = ledger;
+        return ledger;
       },
       async release() {
         const result = await gate.release();

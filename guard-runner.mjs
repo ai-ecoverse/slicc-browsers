@@ -159,10 +159,14 @@ class Execution {
 
   async exit() {
     const gone = this.client;
-    if (typeof gone.close !== 'function') throw new Error('the guarded client has no close()');
     this.exitRequestStart = (await this.options.fixture.log()).length;
     this.clients.exited = true;
-    await gone.close();
+    if (gone === this.reader)
+      await gone.send('Target.detachFromTarget', { sessionId: this.sessions.page });
+    else {
+      if (typeof gone.close !== 'function') throw new Error('the guarded client has no close()');
+      await gone.close();
+    }
     const released = await this.poll(async () => {
       const read = await outcome(
         this.reader.send('Target.getTargetInfo', { targetId: this.pageTarget })
@@ -664,8 +668,15 @@ class Execution {
       refused,
       ...(gone ? { detached: true } : {}),
     });
-    if (step.refusable) this.refused[step.refusal.name] = refused;
-    if (step.refusable && !out.ok && !refused && !gone)
+    const unanswered =
+      step.refusable &&
+      exitsClient(this.vector) &&
+      !out.ok &&
+      !refused &&
+      /timeout|timed out|no answer/i.test(String(out.error?.message ?? out.error));
+    if (step.refusable) this.refused[step.refusal.name] = unanswered ? 'incomplete' : refused;
+    if (unanswered) this.incomplete.push(`${step.refusal.name}: no answer`);
+    else if (step.refusable && !out.ok && !refused && !gone)
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
@@ -881,10 +892,11 @@ class Execution {
     };
     const met = await this.poll(arrived, settle.ms ?? 1500, absent);
     if (refused() && !alt) return skipped();
-    if (settle.required && !met)
-      this.errors.push(
-        `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${this.bound(settle.ms ?? 1500)}ms`
-      );
+    if (settle.required && !met) {
+      const missing = `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${this.bound(settle.ms ?? 1500)}ms`;
+      if (exitsClient(this.vector)) this.incomplete.push(missing);
+      else this.errors.push(missing);
+    }
   }
 
   async guess(guess, session) {
@@ -926,7 +938,21 @@ class Execution {
       session === undefined
     )
       params.browserContextId = this.vars.context;
-    const out = await outcome(this.actor().send(step.cdp, params, session));
+    const pending = outcome(this.actor().send(step.cdp, params, session));
+    let timer;
+    const out =
+      step.refusable && exitsClient(this.vector)
+        ? await Promise.race([
+            pending,
+            new Promise((resolve) => {
+              timer = setTimeout(
+                () => resolve({ ok: false, error: { message: 'no answer' } }),
+                this.bound(this.options.namedResultMs ?? namedResultMs)
+              );
+            }),
+          ])
+        : await pending;
+    clearTimeout(timer);
     if (step.cdp === 'Target.setAutoAttach' && out.ok) {
       if (params.autoAttach) this.attachSettings.set(session, true);
       else this.attachSettings.delete(session);
@@ -1259,8 +1285,17 @@ class Execution {
         observed[name] = 'not-supported';
         continue;
       }
-      if ((observation.dependsOn ?? []).some((dep) => this.refused[dep])) continue;
+      const dependencies = observation.dependsOn ?? [];
+      if (dependencies.some((dep) => this.refused[dep] === 'incomplete')) {
+        observed[name] = 'incomplete';
+        continue;
+      }
+      if (dependencies.some((dep) => this.refused[dep] === true)) continue;
       observed[name] = await this.observe(name, observation.check);
+      if (exitsClient(this.vector) && dependencies.length && observed[name] === false) {
+        observed[name] = 'incomplete';
+        this.incomplete.push(`${name}: pre-exit evidence not observed`);
+      }
       if (!observation.eitherWhen || this.side !== 'guarded') continue;
       const holds = await this.either(observation.eitherWhen, observed[name], name, unseen);
       observed[`${name}.either`] = holds;

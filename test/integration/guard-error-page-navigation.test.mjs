@@ -85,3 +85,62 @@ test('a refused navigation before the recover close leaves only that close incom
   assert.equal(row.observations.guarded.blank, true);
   assert.equal(row.observations.guarded.infoRedacted, true);
 });
+
+test('a refused guarded attach is recorded in the row evidence and why', async () => {
+  const execution = await rows(['C8.protected-error-page'], {
+    refuseAttach: (tab, quarantined) => quarantined(tab),
+  });
+  const [row] = execution.results;
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.live, 'fail', JSON.stringify(row));
+  assert.deepEqual(row.errors, []);
+  assert.equal(row.incomplete, undefined);
+  assert.deepEqual(row.evidence.guarded.errorPage.clientAttach, {
+    outcome: 'refused',
+    error: 'slicc: refused: attach to a quarantined tab',
+  });
+  assert.equal(row.evidence.guarded.errorPage.errorCommit, undefined);
+  assert.deepEqual(row.evidence.control.errorPage.clientAttach, {
+    outcome: 'answered',
+    sessionId: true,
+  });
+  assert.equal(row.evidence.control.errorPage.errorCommit.seen, true);
+  assert.equal(row.evidence.control.errorPage.errorCommit.budgetMs, 500);
+  assert.match(
+    row.why,
+    /not live: client attach refused: slicc: refused: attach to a quarantined tab$/
+  );
+  const summary = execution.summary();
+  assert.equal(summary.pass, false);
+  assert.equal(summary.results[0].evidence.guarded.errorPage.clientAttach.outcome, 'refused');
+});
+
+test('a missed guarded error commit records its wait and budget in the row evidence and why', async () => {
+  const execution = await rows(['C8.protected-error-page-sticky.query'], { block: false });
+  const [row] = execution.results;
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.live, 'fail', JSON.stringify(row));
+  assert.deepEqual(row.errors, []);
+  assert.equal(row.incomplete, undefined);
+  const { clientAttach, errorCommit } = row.evidence.guarded.errorPage;
+  assert.deepEqual(clientAttach, { outcome: 'answered', sessionId: true });
+  assert.equal(errorCommit.seen, false);
+  assert.equal(errorCommit.budgetMs, 500);
+  assert(errorCommit.elapsedMs >= 500, JSON.stringify(errorCommit));
+  assert.match(errorCommit.frame.url, /^http:\/\/seven\.sliccy\.ai:\d+\/doc\?query-secret=/);
+  assert.equal(errorCommit.frame.unreachableUrl, undefined);
+  assert.equal(errorCommit.targetInfo.url, errorCommit.frame.url);
+  const control = row.evidence.control.errorPage.errorCommit;
+  assert.equal(control.seen, true);
+  assert.equal(control.frame.url, 'chrome-error://chromewebdata/');
+  const url = errorCommit.frame.url;
+  assert(
+    row.why.endsWith(
+      `not live: error commit not seen after ${errorCommit.elapsedMs}ms (budget 500ms): frame ${url} unreachableUrl none, target ${url}`
+    ),
+    row.why
+  );
+  assert.equal(execution.summary().results[0].evidence.guarded.errorPage.errorCommit.seen, false);
+});

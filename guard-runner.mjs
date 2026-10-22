@@ -1283,7 +1283,10 @@ class Execution {
     if (!live && this.unmeasured(this.vector.liveCheck))
       return { live: 'incomplete', liveWhy: 'incomplete' };
     if (!live && !unseen.length) live = await this.poll(alive, 1500);
-    if (!unseen.length || (live && !incomplete.length)) return { live };
+    if (!unseen.length || (live && !incomplete.length))
+      return live
+        ? { live }
+        : { live, liveWhy: this.calls[this.vector.liveCheck.result]?.result?.liveWhy };
     const detail = incomplete.length ? ` (${incomplete.join(', ')} incomplete)` : '';
     return { live: false, liveWhy: `pre beacon not observed for ${unseen.join(', ')}${detail}` };
   }
@@ -1321,8 +1324,10 @@ class Execution {
         incomplete: this.incomplete,
         evidence: Object.fromEntries(
           Object.entries(this.calls)
-            .filter(([, out]) => out?.result?.delay && out.result.probes)
-            .map(([name, out]) => [name, out.result])
+            .filter(
+              ([, out]) => (out?.result?.delay && out.result.probes) || out?.result?.diagnostics
+            )
+            .map(([name, out]) => [name, out.result.diagnostics ?? out.result])
         ),
       };
     } finally {
@@ -1746,6 +1751,7 @@ function settleIncomplete(row, vector, base, legs) {
     control: fill('control'),
     guarded: fill('guarded'),
     live: legs.control.live === true && [true, 'incomplete'].includes(legs.guarded.live),
+    liveWhy: legs.guarded.liveWhy,
   });
   for (const side of ['control', 'guarded'])
     if (legs[side].incomplete?.length && filled[side] === 'pass') row[side] = 'incomplete';

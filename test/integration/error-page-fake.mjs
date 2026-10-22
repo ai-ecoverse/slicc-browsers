@@ -199,7 +199,10 @@ export function chrome() {
   return { connect, commits, interceptors, attached, tabOf };
 }
 
-export function quarantining(browser, { refuseNavigation = () => false } = {}) {
+export function quarantining(
+  browser,
+  { refuseNavigation = () => false, refuseAttach = () => false, block = true } = {}
+) {
   const locked = new Map();
   const redact = (targetInfo) =>
     seven(targetInfo.url)
@@ -213,7 +216,9 @@ export function quarantining(browser, { refuseNavigation = () => false } = {}) {
       tab.frame.unreachableUrl ? (locked.get(tab.targetId) ?? false) : seven(tab.frame.url)
     )
   );
-  browser.interceptors.push((tab, url) => seven(url) && browser.attached(conn, tab.targetId));
+  browser.interceptors.push(
+    (tab, url) => block && seven(url) && browser.attached(conn, tab.targetId)
+  );
   const refuse = (why) => {
     throw new Error(`slicc: refused: ${why}`);
   };
@@ -228,6 +233,8 @@ export function quarantining(browser, { refuseNavigation = () => false } = {}) {
       refuseNavigation(tab, quarantined)
     )
       refuse('navigation in a quarantined tab');
+    if (method === 'Target.attachToTarget' && tab && refuseAttach(tab, quarantined))
+      refuse('attach to a quarantined tab');
     if (
       ['Target.attachToTarget', 'Target.closeTarget'].includes(method) &&
       locked.get(tab?.targetId)

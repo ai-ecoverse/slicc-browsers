@@ -109,33 +109,25 @@ class Restore {
     await this.read('Page.enable', {});
     if (!(await this.loaded(`${this.ordinary}/bfcache?n=${this.tag}-a`)))
       return this.missingEvidence('ordinary A did not commit');
-    if (!(await this.attach())) return this.missingEvidence('initial client attach unanswered');
-    await this.call('Page.enable', {});
     await this.read('Page.navigate', { url: this.url });
     if (!(await this.loaded(this.url)))
       return this.missingEvidence('protected seed did not commit');
     const state = await this.state();
     if (state?.marker !== this.marker || state.stored !== this.marker)
       return this.missingEvidence('protected fixture marker absent');
-    const lock = await this.call('Runtime.evaluate', {
-      expression: 'location.origin',
-      returnByValue: true,
-    });
-    this.result.protectedLocked = refusal(lock);
-    this.result.seed = { protectedURL: this.url, lock };
+    this.result.seed = { protectedURL: this.url };
     const b = `${this.ordinary}/bfcache?n=${this.tag}-b`;
     await this.read('Page.navigate', { url: b });
     if (!(await this.loaded(b))) return this.missingEvidence('ordinary B did not commit');
-    await bounded(
-      this.client.send('Target.detachFromTarget', { sessionId: this.session }),
-      this.budget
-    );
-    const live = (await this.attach())
-      ? await this.call('Runtime.evaluate', { expression: 'location.href', returnByValue: true })
-      : { ok: false };
-    this.result.sessionLive = value(live) === b;
+    if (!(await this.attach())) return this.missingEvidence('initial client attach unanswered');
+    const live = await this.call('Page.getFrameTree', {});
+    const frame = live.result?.frameTree?.frame;
+    this.result.sessionLive = live.ok && frame?.url === b && !frame.unreachableUrl;
     this.result.seed.ordinaryAnswer = live;
-    if (!this.result.sessionLive) return false;
+    if (!this.result.sessionLive) {
+      this.result.sessionLive = 'incomplete';
+      return this.missingEvidence('ordinary B acknowledgement unavailable');
+    }
     await this.call('Page.enable', {});
     const history = await this.read('Page.getNavigationHistory', {});
     this.entry = history.result?.entries?.find((item) => item.url === this.url);

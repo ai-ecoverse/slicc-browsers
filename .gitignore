@@ -5,3 +5,4 @@ coverage/
 cover.out
 *_test.go
 !test/integration/*_test.go
+artifacts/

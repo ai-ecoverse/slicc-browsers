@@ -15,7 +15,6 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const gate = join(root, 'scripts/gate.mjs');
 const node = (args, cwd = root) => spawnSync(process.execPath, args, { cwd, encoding: 'utf8' });
 
 function linked(t) {
@@ -62,72 +61,4 @@ test('major-guard runs through a symlinked checkout and a symlinked script', (t)
       /^major-guard: v2\.0\.0 needs module path \S+\/v2, go\.mod declares /
     );
   }
-});
-
-test('a gate fails a command that is silent, exits early or fails, and passes its verdict', (t) => {
-  const base = mkdtempSync(join(tmpdir(), 'slicc-browsers-gate-'));
-  t.after(() => rmSync(base, { recursive: true, force: true }));
-  const script = (name, body) => {
-    const file = join(base, `${name}.mjs`);
-    writeFileSync(file, body);
-    return file;
-  };
-  const expect = ['--expect', '^check: PASS \\d+ items$', '--'];
-  const silent = node([gate, ...expect, process.execPath, script('silent', '')]);
-  assert.equal(silent.status, 1);
-  assert.match(silent.stderr, /gate: FAIL no line matching/);
-  const early = node([
-    gate,
-    ...expect,
-    process.execPath,
-    script('early', "process.stdout.write('check: starting\\n'); process.exit(0);"),
-  ]);
-  assert.equal(early.status, 1);
-  const failed = node([
-    gate,
-    ...expect,
-    process.execPath,
-    script('failed', "process.stdout.write('check: PASS 3 items\\n'); process.exit(4);"),
-  ]);
-  assert.equal(failed.status, 4);
-  assert.match(failed.stderr, /exited 4/);
-  const passed = node([
-    gate,
-    ...expect,
-    process.execPath,
-    script('passed', "process.stdout.write('check: PASS 3 items\\n');"),
-  ]);
-  assert.equal(passed.status, 0, passed.stderr);
-  assert.equal(passed.stdout, 'check: PASS 3 items\n');
-  const log = join(base, 'release.log');
-  writeFileSync(log, '[semantic-release] › ℹ  major-guard: PASS v1.7.9 fits example\n');
-  const found = node([gate, '--expect', 'major-guard: PASS v1\\.7\\.9 fits ', '--in', log]);
-  assert.equal(found.status, 0, found.stderr);
-  writeFileSync(log, '');
-  const empty = node([gate, '--expect', 'major-guard: PASS v1\\.7\\.9 fits ', '--in', log]);
-  assert.equal(empty.status, 1);
-  const absent = node([gate, '--expect', 'x', '--in', join(base, 'missing.log')]);
-  assert.equal(absent.status, 1);
-});
-
-test('the real gates print their verdict lines', () => {
-  const validate = node([
-    gate,
-    '--expect',
-    '^validate: PASS ',
-    '--',
-    process.execPath,
-    'scripts/validate.mjs',
-  ]);
-  assert.equal(validate.status, 0, validate.stderr);
-  const corpus = node([
-    gate,
-    '--expect',
-    '^corpus: PASS [0-9]+ cases$',
-    '--',
-    process.execPath,
-    'scripts/corpus.mjs',
-    '--check',
-  ]);
-  assert.equal(corpus.status, 0, corpus.stderr);
 });

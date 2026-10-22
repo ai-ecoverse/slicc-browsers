@@ -3,115 +3,153 @@ name: CI
 on:
   pull_request:
   merge_group:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
-  contents: read
+  contents: write
+  actions: read
+  issues: write
+  pull-requests: write
+  statuses: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  guard-runner:
+  ci:
+    uses: ai-ecoverse/slicc-shared-web/.github/workflows/pipeline.yml@v2.8.4
+    secrets: inherit
+    with:
+      lint: |
+        # renovate: datasource=github-releases depName=golangci/golangci-lint
+        GOLANGCI_LINT=v2.14.0
+        curl -fsSL "https://raw.githubusercontent.com/golangci/golangci-lint/$GOLANGCI_LINT/install.sh" | sh -s -- -b "$RUNNER_TEMP/golangci-lint" "$GOLANGCI_LINT"
+        export PATH="$RUNNER_TEMP/golangci-lint:$HOME/.cargo/bin:$PATH"
+        rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-wasip1
+        rustup default stable
+        npm run lint
+      test-glob: test/integration/*.test.mjs
+      shards: 4
+      timeout-minutes: 30
+      review-prompt: |
+        SLICC-BROWSERS
+
+        This repository is slicc-browsers: the browser data SLICC's tools share, published at one version as the Go module `github.com/ai-ecoverse/slicc-browsers`, the Rust crate `slicc-browsers` and the npm package `@ai-ecoverse/slicc-browsers`. It holds `catalog.json` (browsers, discovery, ranking, seven's launch flags, protected origins), the discovery corpus in `corpus/` (bundled into `corpus.json`), the protected-origin vectors (`protected.json`) and their reference matcher `protected.mjs`, the guard vectors (`guard-vectors.json`) with their reference runner (`guard-runner.mjs` and the modules it imports) and fixture server, and the schemas in `schema/`. slicc-cli and slicc-cdp discover and launch browsers from it, and slicc-cli, slicc-cdp, slicc-bios and slicc-extension prove their CDP guards with its vectors. README.md is the contract for users; the schemas, the data files and the tests are the spec. `git diff origin/main...HEAD`, or `$RUNNER_TEMP/review/context/pr.diff`, is the change.
+
+        There is no certification after you: once this pull request passes the merge queue, semantic-release publishes it to npm from `main`, then the crate and the Go tag follow, and every guard in SLICC is measured against it. Review it as the last check before it ships.
+
+        Look for real defects, in this order:
+        1. Vector semantics: a guard must never pass a row it didn't earn. Missing evidence (an unseen beacon, an unregistered fixture, a never-paused control, an unanswered call) is `incomplete` or not-supported, never a pass; a control that can't run is never a guarded pass; skips carry the reason the runner gives. Without a guard, every control passes and every protection fails, which the `guard-sweep-*` tests assert.
+        2. Protected origins: `catalog.json`'s rules, `protected.json` and `protected.mjs` agree with how Chromium parses URLs (WHATWG), and seven's origins, the vault, browser pages, extensions and local files stay protected in every alias. `protected.mjs` and `seven.mjs` import nothing, and the runner's import graph stays browser-safe (no `Buffer`, `process`, `require` or `node:`).
+        3. Compatibility for consumers: the catalog is schema 1 and only grows; the Go API, the Rust features (`serde`, `corpus`, and `wasm32-wasip1` builds), the npm `exports` and `files`, and the runner's options and result shape change only additively. The corpus and the tests never use ports 9222 to 9229 and always fake the process list.
+        4. Correctness of the runner against real Chromium: flat sessions, races between targets, sessions and events, background tabs in a headed browser, and promises or waits that never end.
+        5. Tests: every behaviour change has an integration test in `test/integration/`, a new discovery behaviour a corpus case, a new guard behaviour a vector, and a fix's test fails without the fix. Confirm that for a fix: copy the changed test files into `$RUNNER_TEMP/base` and run them there.
+        6. Repo rules: no comments in any file except Go directives and `# renovate:` annotations, no unit tests in git (`test/unit/` is ignored), AGENTS.md under 1,000 characters, README.md under 20,000 and never documenting single rows, probes or timeouts, and a conventional-commit title (`feat` for new rows, `fix` otherwise; `fix`, `feat` and `perf` release, the rest don't).
+
+        Run `npm run validate`, `npm run lint`, and one test file with `node --test test/integration/<file>.test.mjs`; Go and Rust run through `test/integration/go.test.mjs` and `cargo.test.mjs`. The browser tests find Chrome through `CHROME_PATH` or `npx slicc-cdp install-browser`. Don't report style preferences, or anything you haven't confirmed in the code or by a run.
+
+        Severity: deny for a confirmed P1 or P2: a vector or runner change that lets a leaking guard pass or a missing measurement count as a pass, a protected origin that stops being protected, a breaking change to the catalog, the schemas or a package's API, a behaviour change without its test, or a fix whose test passes without it. A narrow problem with a workaround is P3: comment with a repro and approve. A problem in a guard belongs to the repository that ships it (ai-ecoverse/slicc-cli, slicc-cdp, slicc-bios or slicc-extension), one in the shared pipeline to ai-ecoverse/slicc-shared-web: open it there as an issue.
+
+  released:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 55
-    env:
-      LEFTHOOK: '0'
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx playwright-core install --with-deps chromium
-      - run: npm run test:guard-integration
-      - run: npm run test:gates
-      - run: |
-          timeout -k 30 1800 node scripts/gate.mjs --expect '^guard-sweep: PASS 14 targets$' -- node scripts/test-guards.mjs
+          persist-credentials: false
 
-  lint:
+      - id: version
+        run: |
+          git fetch --tags --force --quiet origin
+          version=$(git tag --points-at HEAD --list 'v*' | sed 's/^v//' | sort -V | tail -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release: ${version:-none} at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  crates:
+    needs: released
+    if: needs.released.outputs.version != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     env:
-      LEFTHOOK: '0'
+      VERSION: ${{ needs.released.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
-          cache: npm
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
-        with:
-          go-version-file: go.mod
-
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
-        with:
-          install-only: true
-          # renovate: datasource=github-releases depName=golangci/golangci-lint
-          version: v2.14.0
-
-      - name: Install Rust
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-wasip1
+      - run: |
+          rustup toolchain install stable --profile minimal
           rustup default stable
 
-      - run: npm ci
+      - id: decide
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -A "slicc-browsers (https://github.com/ai-ecoverse/slicc-browsers)" "https://crates.io/api/v1/crates/slicc-browsers/$VERSION")
+          if [ "$code" = "200" ]; then
+            echo "slicc-browsers $VERSION is already on crates.io"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
 
-      - run: npm run lint
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18
+        id: auth
+        if: steps.decide.outputs.publish == 'true'
 
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    env:
-      LEFTHOOK: '0'
-    defaults:
-      run:
-        shell: bash
+      - if: steps.decide.outputs.publish == 'true'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          node scripts/set-crate-version.mjs "$VERSION"
+          cargo publish --allow-dirty
+
+  go:
+    needs: released
+    if: needs.released.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 24
-          cache: npm
+          persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
+          cache: false
 
-      - name: Install Rust
+      - name: Warm the Go module proxy and pkg.go.dev
+        working-directory: ${{ runner.temp }}
+        env:
+          MODULE: github.com/ai-ecoverse/slicc-browsers
+          TAG: v${{ needs.released.outputs.version }}
         run: |
-          rustup toolchain install stable --profile minimal --target wasm32-wasip1
-          rustup default stable
-
-      - run: npm ci
-
-      - name: Validate the catalog and the corpus
-        run: |
-          node scripts/gate.mjs --expect '^validate: PASS ' -- node scripts/validate.mjs
-          node scripts/gate.mjs --expect '^corpus: PASS [0-9]+ cases$' -- node scripts/corpus.mjs --check
-
-      - name: Go
-        run: |
-          go build ./...
-          go test -race -count=1 ./test/integration/...
-          CGO_ENABLED=0 go build ./...
-
-      - name: Rust
-        run: |
-          cargo test --all-features
-          cargo build
-          for features in "" serde corpus; do
-            cargo build --target wasm32-wasip1 --no-default-features --features "$features"
+          for attempt in 1 2 3 4 5; do
+            if GOPROXY=https://proxy.golang.org GOFLAGS=-mod=mod go list -m "$MODULE@$TAG"; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::warning::proxy.golang.org did not serve $MODULE@$TAG"
+            else
+              sleep $((attempt * 10))
+            fi
           done
-
-      - name: npm
-        run: npm pack --dry-run --ignore-scripts
+          curl -fsS -X POST --max-time 30 "https://pkg.go.dev/fetch/$MODULE@$TAG" || echo "::warning::pkg.go.dev did not accept a fetch of $MODULE@$TAG"

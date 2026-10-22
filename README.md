@@ -14,7 +14,7 @@ These programs can't share code, so they share data: one catalog, three sets of 
 | [slicc-cli](https://github.com/ai-ecoverse/slicc-cli) (Go) | `slicc browsers`, `slicc launch`, and its CDP relay's guard |
 | [slicc-cdp](https://github.com/ai-ecoverse/slicc-cdp) (Rust, also `wasm32-wasip1`) | `playwright-cli list` and `open`, and its guard |
 | [slicc-agent](https://github.com/ai-ecoverse/slicc-agent) | refusing protected origins in its browser tools |
-| [slicc-bios](https://github.com/ai-ecoverse/slicc-bios), [slicc-extension](https://github.com/ai-ecoverse/slicc-extension) | their CDP guards, certified with the guard vectors |
+| [slicc-bios](https://github.com/ai-ecoverse/slicc-bios), [slicc-extension](https://github.com/ai-ecoverse/slicc-extension) | their CDP guards, tested against the guard vectors |
 
 ## What's inside
 
@@ -238,22 +238,23 @@ To find out what a vector checks, read it in `guard-vectors.json`: each one list
 
 ## Development
 
-You need Go 1.26, Rust stable with the `wasm32-wasip1` target, and Node 24 or later.
+You need Go 1.26, Rust stable with the `wasm32-wasip1` target, Node 24 or later, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or the Chrome for Testing that `npx slicc-cdp install-browser` installs, and run it headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
 
 | command | what it does |
 | --- | --- |
 | `npm run corpus` | rebuilds `corpus.json` from `corpus/` |
 | `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs` |
-| `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet`, golangci-lint, `cargo fmt` and clippy |
-| `npm test` | validation, the Node, Go and Rust tests |
-| `npm run test:guard` | the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
+| `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature |
+| `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
 | `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
 
 A new discovery behaviour gets a corpus case, and a new guard behaviour gets a guard vector.
 
-## Releases
+## CI and releases
 
-Every merge to `main` that warrants it is released by semantic-release, as one version for all three packages. The `vX.Y.Z` tag is the Go release; npm and crates.io are published with trusted publishing, and the GitHub release records the npm tarball's hash for certification. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
+CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, then `npm test` split over shards by timing, then a Claude and a Codex review; the merge queue runs lint and the tests again. Tests run on Linux only.
+
+Every merge to `main` that warrants it is released by semantic-release in the same workflow, as one version for all three packages. The `vX.Y.Z` tag is the Go release, and npm gets the package with provenance through trusted publishing. Then `ci.yml` publishes the crate to crates.io, also with trusted publishing, and asks the Go module proxy and pkg.go.dev for the new tag. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
 
 ## License
 

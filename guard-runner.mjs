@@ -159,12 +159,14 @@ class Execution {
 
   async exit() {
     const gone = this.client;
-    if (typeof gone.close !== 'function') throw new Error('the guarded client has no close()');
     this.exitRequestStart = (await this.options.fixture.log()).length;
     this.clients.exited = true;
     if (gone === this.reader)
       await gone.send('Target.detachFromTarget', { sessionId: this.sessions.page });
-    else await gone.close();
+    else {
+      if (typeof gone.close !== 'function') throw new Error('the guarded client has no close()');
+      await gone.close();
+    }
     const released = await this.poll(async () => {
       const read = await outcome(
         this.reader.send('Target.getTargetInfo', { targetId: this.pageTarget })

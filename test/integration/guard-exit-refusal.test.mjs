@@ -152,13 +152,16 @@ async function execute(policy = {}, target = 'seven') {
       fixture: { log: async () => fake.log },
       clientFactory: () => {
         const client = fake.connect('guard');
-        const unguarded = fake.connect('observer');
+        const observer = fake.connect('observer');
+        const unguarded = policy.observerWithoutClose
+          ? { send: observer.send, events: observer.events }
+          : observer;
         return {
           client,
           unguarded,
           close: () => {
             client.close();
-            unguarded.close();
+            observer.close();
           },
         };
       },
@@ -169,6 +172,16 @@ async function execute(policy = {}, target = 'seven') {
   );
   return { row: execution.results[0], fake, execution };
 }
+
+test('X1 supports an independent observer without close()', async () => {
+  const { row } = await execute({
+    refuse: Object.keys(instruments),
+    observerWithoutClose: true,
+  });
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.live, 'pass', JSON.stringify(row));
+});
 
 for (const target of ['seven', 'vault'])
   test(`X1 passes when the guard refuses every persistent instrument (${target})`, async () => {

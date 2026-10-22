@@ -8,6 +8,7 @@ const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import
 
 async function exercise(options = {}) {
   const browser = redirectHistoryFixture(options);
+  const evidence = {};
   const execution = await run(
     {
       ...set,
@@ -25,9 +26,12 @@ async function exercise(options = {}) {
       targets: { ordinary },
       capabilities: { browserSession: true },
       rowTimeoutMs: 120000,
+      debug: (entry) => {
+        if (entry.calls?.redirect) evidence[entry.side] = entry.calls.redirect.result;
+      },
     }
   );
-  return { ...browser, execution };
+  return { ...browser, execution, evidence };
 }
 
 test('C2 redirect rows recover on fresh tabs after protected-history content refusals', {
@@ -76,4 +80,40 @@ test('a missing override pause is incomplete while received leaks still fail', {
     assert.match(row.incomplete.join('; '), /override pause/);
     assert.deepEqual(row.errors, []);
   }
+});
+
+test('a closed body owner leaves only the reads incomplete and retains the leak tail', {
+  timeout: 120000,
+}, async () => {
+  for (const leak of [false, true]) {
+    const { execution, evidence } = await exercise({
+      closedBody: true,
+      leak,
+      late: true,
+      bodyOnly: true,
+    });
+    const row = execution.results[0];
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, leak ? 'fail' : 'incomplete', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(evidence.guarded.sessionEnded, false);
+    assert.equal(evidence.guarded.sessionSurvives, true);
+    assert.equal(evidence.guarded.networkBodyRefused, 'incomplete');
+    assert.equal(evidence.guarded.secretHidden, !leak);
+    assert.deepEqual(row.errors, []);
+  }
+});
+
+test('client raw replies containing an observer session id still enter every leak check', {
+  timeout: 120000,
+}, async () => {
+  const { execution, evidence } = await exercise({ observerLeak: true, bodyOnly: true });
+  const row = execution.results[0];
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.live, 'pass', JSON.stringify(row));
+  assert.equal(evidence.guarded.secretHidden, false);
+  assert.equal(evidence.guarded.fragmentsHidden, false);
+  assert.equal(evidence.guarded.sessionSurvives, true);
+  assert.deepEqual(row.errors, []);
 });

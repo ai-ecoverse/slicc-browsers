@@ -27,6 +27,12 @@ const gone = (out) =>
   /session with given id not found|no session with given id|\bsession (?:has been |is |was )?(?:closed|detached)|\btarget closed|target page, context or browser has been closed|\b(?:cdp|connection|transport|websocket|socket) (?:has been |is |was )?closed|websocket is not open/i.test(
     out.error?.message ?? ''
   );
+const connectionGone = (out) =>
+  !out.ok &&
+  /\b(?:cdp|connection|transport|websocket|socket) (?:has been |is |was )?closed|websocket is not open/i.test(
+    out.error?.message ?? ''
+  );
+const bodyRead = (method) => /^(?:Network|Fetch)\.getResponseBody$/.test(method);
 const redirects = [301, 302, 303, 307, 308];
 const redirectHeaders = (to) => ({
   location: to,
@@ -101,6 +107,7 @@ class RedirectProbe {
     this.registrations = [];
     this.sessions = new Map([[this.session, undefined]]);
     this.observers = new Set();
+    this.closedSessions = new Set();
     this.targets = new Set();
     this.missing = [];
     this.seen = new Map();
@@ -126,8 +133,12 @@ class RedirectProbe {
       if (
         event.method === 'Target.detachedFromTarget' &&
         this.sessions.has(event.params?.sessionId)
-      )
-        this.end = 'Target.detachedFromTarget';
+      ) {
+        const session = event.params.sessionId;
+        if (session === this.session && !this.closedSessions.has(session))
+          this.end = 'Target.detachedFromTarget';
+        else this.closedSessions.add(session);
+      }
     }
     return Boolean(this.end);
   }
@@ -143,21 +154,35 @@ class RedirectProbe {
 
   answers(method) {
     const all = this.attempts.filter((entry) => entry.method === method);
-    const answered = all.filter((entry) => !(this.end && (entry.pending || entry.ended)));
+    const missing = (entry) =>
+      entry.incomplete ||
+      (entry.pending && this.closedSessions.has(entry.session)) ||
+      (this.end && (entry.pending || entry.ended));
+    const answered = all.filter((entry) => !missing(entry));
     const short =
-      Boolean(this.end || this.halted) &&
-      (!this.complete || !answered.length || answered.length < all.length);
+      all.some(missing) ||
+      (Boolean(this.end || this.halted) &&
+        (!this.complete || !answered.length || answered.length < all.length));
     return { answered, short };
   }
 
   async send(method, params = {}, session = this.session) {
     if (this.ended())
       return { ok: false, ended: true, error: { message: `session ended (${this.end})` } };
-    const out = await outcome(this.client.send(method, params, session));
+    const out = this.closedSessions.has(session)
+      ? { ok: false, incomplete: true, error: { message: 'owning tab closed' } }
+      : await outcome(this.client.send(method, params, session));
     if (gone(out)) {
-      this.end ??= out.error.message;
-      return { ...out, ended: true };
+      if (!connectionGone(out) && (bodyRead(method) || session !== this.session)) {
+        this.closedSessions.add(session);
+        out.incomplete = true;
+      } else {
+        this.end ??= out.error.message;
+        return { ...out, ended: true };
+      }
     }
+    if (bodyRead(method) && out.incomplete)
+      this.missing.push(`redirect-secret: ${method} ${params.requestId} owning tab closed`);
     this.responses.push({ method, ...out });
     return out;
   }
@@ -169,12 +194,19 @@ class RedirectProbe {
 
   async fetchPause(event) {
     if (redirects.includes(event.params.responseStatusCode)) {
+      const entry = {
+        method: 'Fetch.getResponseBody',
+        session: event.sessionId,
+        pending: true,
+      };
+      this.attempts.push(entry);
       const out = await this.send(
         'Fetch.getResponseBody',
         { requestId: event.params.requestId },
         event.sessionId
       );
-      this.attempts.push({ method: 'Fetch.getResponseBody', ...out });
+      delete entry.pending;
+      Object.assign(entry, out);
       if (event.params.networkId)
         this.track(this.networkBody(event.params.networkId, 'fetch', event.sessionId));
     }
@@ -213,7 +245,7 @@ class RedirectProbe {
     this.learned[source].add(key);
     if (this.networkBodies.has(key) || this.ended()) return;
     this.networkBodies.add(key);
-    const entry = { method: 'Network.getResponseBody', source, pending: true };
+    const entry = { method: 'Network.getResponseBody', source, session, pending: true };
     this.attempts.push(entry);
     const out = await this.send('Network.getResponseBody', { requestId }, session);
     delete entry.pending;
@@ -261,7 +293,7 @@ class RedirectProbe {
         : !proven
           ? 'control did not prove the redirect Network events'
           : short
-            ? 'probe ended before every network body read was answered'
+            ? 'not every network body read was answered on a live owner'
             : undefined;
     if (reason && (!attempts.length || refusedAll))
       return {
@@ -647,6 +679,22 @@ class RedirectProbe {
     });
   }
 
+  observerTraffic(value) {
+    return (
+      this.client === this.reader &&
+      this.observers.has(value?.sessionId) &&
+      !this.sessions.has(value?.sessionId)
+    );
+  }
+
+  observerMessage(message) {
+    try {
+      return this.observerTraffic(JSON.parse(message));
+    } catch {
+      return false;
+    }
+  }
+
   overrideCheck(key, unseen) {
     const overrides = this.responses.filter((entry) => entry.overrideMethod);
     if (!overrides.length) return this.overrideIncomplete ? 'incomplete' : unseen;
@@ -670,12 +718,11 @@ class RedirectProbe {
     const survives = await this.survival();
     await this.settle();
     await this.terminated();
-    const observers = [...this.observers];
     const events = this.client.events
       .slice(this.eventsStart)
-      .filter((event) => !observers.includes(event.sessionId));
+      .filter((event) => !this.observerTraffic(event));
     const messages = (this.client.messages?.slice(this.messagesStart) ?? []).filter(
-      (message) => !observers.some((observer) => message.includes(`"sessionId":"${observer}"`))
+      (message) => !this.observerMessage(message)
     );
     const eventLeaks = await this.scan(events);
     const ordinaryEvents = events.filter(

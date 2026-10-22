@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 
 export const ordinary = 'http://ordinary.example.test:4180';
 
-export function redirectHistoryFixture({ leak = false, missingPause = false, late = false } = {}) {
+export function redirectHistoryFixture({
+  leak = false,
+  missingPause = false,
+  late = false,
+  closedBody = false,
+  observerLeak = false,
+} = {}) {
   const routes = new Map();
   const tabs = new Map();
   const sessions = new Map();
@@ -12,6 +18,7 @@ export function redirectHistoryFixture({ leak = false, missingPause = false, lat
   const log = [];
   let next = 0;
   let marker;
+  let closedReadTab;
   const make = (guarded) => ({ guarded, events: [], messages: [] });
   const client = make(true);
   const reader = make(false);
@@ -88,6 +95,22 @@ export function redirectHistoryFixture({ leak = false, missingPause = false, lat
             responseHeaders: Object.entries(headers(to)).map(([name, value]) => ({ name, value })),
           });
         }
+        if (hidden && observerLeak) {
+          const observer = [...sessions].find(
+            ([, candidate]) => candidate.tab === tab && candidate.transport === reader
+          )?.[0];
+          transport.messages.push(
+            JSON.stringify({
+              id: ++next,
+              sessionId,
+              result: {
+                sessionId: observer,
+                body: marker,
+                frame: { url: new URL(destination).origin, urlFragment: '#opaque-fragment' },
+              },
+            })
+          );
+        }
         if (hidden && leak) {
           const deliver = () => emit(transport, sessionId, 'Log.entryAdded', { text: marker });
           if (late) setTimeout(deliver, 7000);
@@ -122,6 +145,16 @@ export function redirectHistoryFixture({ leak = false, missingPause = false, lat
       return { success: true };
     }
     if (method === 'Target.detachFromTarget') return {};
+    if (transport.guarded && closedBody && /^(Network|Fetch)\.getResponseBody$/.test(method)) {
+      closedReadTab ??= tab;
+      if (tab === closedReadTab)
+        return new Promise((resolve, reject) =>
+          setTimeout(() => {
+            tab.closed = true;
+            reject(new Error('Session with given id not found.'));
+          }, 3000)
+        );
+    }
     if (tab?.closed) throw new Error('Session with given id not found.');
     if (transport.guarded && tab?.protectedHistory && /^(Runtime.evaluate|DOM)/.test(method))
       throw new Error('slicc: refused: protected history content');

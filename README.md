@@ -184,6 +184,8 @@ A guard sits between a CDP client, such as an agent's browser tool, and the brow
 
 Each vector runs twice. The **control** runs it against an ordinary origin, where it must work. The **guarded** leg runs it through the guard against a protected target, where it must be refused or have no effect. A **liveness** check, made outside the guard, proves the protected target was really there. A row passes only when all three do, so a guard can't pass by breaking everything, and a test can't pass by never reaching the target.
 
+When a vector compares ordinary and protected fixture markers, those markers do not contain one another. Protected-marker checks still examine complete probe replies, including errors, and the vector's client events and messages, including encoded values.
+
 ### Running them
 
 The reference runner works with any guard that speaks CDP:

@@ -2,6 +2,7 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 
 export { fixtureClient };
 
+import { bfcacheRestore } from './bfcache-restore.mjs';
 import { extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
 import {
@@ -676,11 +677,12 @@ class Execution {
       'errorPage',
       'extensionWorld',
       'frameRead',
+      'bfcacheRestore',
     ].find((key) => step[key]);
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'frameRead'].includes(probe) &&
+      ['errorPage', 'redirectSecret', 'frameRead', 'bfcacheRestore'].includes(probe) &&
       out.ok &&
       out.result?.incomplete
     )
@@ -772,6 +774,22 @@ class Execution {
           side: this.side,
           secret: step.secret,
           discovery: supported(['discovery'], this.options.capabilities),
+          notes: this.notes,
+          budget: this.bound(5000),
+        })
+      );
+    if (step.bfcacheRestore)
+      return outcome(
+        bfcacheRestore({
+          client: this.client,
+          reader: this.reader,
+          delayClient: this.clients.client,
+          ordinary: this.vars.ordinary,
+          protectedOrigin: step.origin,
+          tag: this.vars.tag,
+          mode: step.bfcacheRestore,
+          forwardAudit: supported(['forwardAudit'], this.options.capabilities),
+          side: this.side,
           notes: this.notes,
           budget: this.bound(5000),
         })
@@ -1301,6 +1319,11 @@ class Execution {
         errors: this.errors,
         notes: this.notes,
         incomplete: this.incomplete,
+        evidence: Object.fromEntries(
+          Object.entries(this.calls)
+            .filter(([, out]) => out?.result?.delay && out.result.probes)
+            .map(([name, out]) => [name, out.result])
+        ),
       };
     } finally {
       this.stopped = true;
@@ -1443,6 +1466,7 @@ function variables(targets, target, side, slot, index) {
     tag,
     cookie: `canary-${tag}`,
   };
+  vars.protectedTarget = targets[target];
   vars.target = side === 'control' ? vars.plain : targets[target];
   vars.targetHost = new URL(vars.target).hostname;
   vars.responseOrigin = vars.target === vars.ordinary ? '*' : vars.ordinary;
@@ -1522,6 +1546,14 @@ async function timedOut(stuck, base, made, work, opts) {
   };
   opts.log?.(failed);
   return failed;
+}
+
+function probeEvidence(legs) {
+  return [legs.control.evidence, legs.guarded.evidence].some(
+    (evidence) => Object.keys(evidence ?? {}).length
+  )
+    ? { evidence: { control: legs.control.evidence, guarded: legs.guarded.evidence } }
+    : {};
 }
 
 async function executeRow(job, opts, made, set, slot, index, flights) {
@@ -1611,6 +1643,7 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     observations: { control: legs.control.observed, guarded: legs.guarded.observed },
     errors: [...legs.control.errors, ...legs.guarded.errors],
     designDependent: vector.designDependent ?? [],
+    ...probeEvidence(legs),
   };
   const notes = [
     ...(legs.control.notes ?? []).map((note) => `control ${note}`),
@@ -1627,6 +1660,11 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
 }
 
 function observerSkip(vector, opts, made, clients) {
+  if (
+    vector.requires?.includes('inboundDelay') &&
+    typeof clients.client.inboundDelay !== 'function'
+  )
+    return 'not-supported:inboundDelay';
   if (needsObserver(vector) && !clients.unguarded) return 'not-supported:unguarded-observer';
   if (!exitsClient(vector)) return undefined;
   if (!opts.clientFactory) return 'not-supported:clientExit';
@@ -1710,8 +1748,7 @@ function settleIncomplete(row, vector, base, legs) {
     live: legs.control.live === true && [true, 'incomplete'].includes(legs.guarded.live),
   });
   for (const side of ['control', 'guarded'])
-    if (legs[side].incomplete?.length && row[side] === 'fail' && filled[side] === 'pass')
-      row[side] = 'incomplete';
+    if (legs[side].incomplete?.length && filled[side] === 'pass') row[side] = 'incomplete';
   if (legs.guarded.live === 'incomplete' && filled.live === 'pass') row.live = 'incomplete';
   row.why = [filled.why, `incomplete: ${incomplete.join('; ')}`].filter(Boolean).join('; ');
 }

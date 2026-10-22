@@ -99,10 +99,13 @@
     "discovery": "session-less Target.setDiscoverTargets and targetCreated/targetInfoChanged delivery; absent transports must emit neither event",
     "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't",
     "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it",
-    "siteIsolationOff": "the browser runs without site isolation, so a cross-site iframe shares its parent's process"
+    "siteIsolationOff": "the browser runs without site isolation, so a cross-site iframe shares its parent's process",
+    "inboundDelay": "a harness gate holding browser-to-guard messages until release during a history restore, with seed and release evidence",
+    "forwardAudit": "a complete browser-side forwarding ledger for every history-restore probe"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
+    "protectedTarget": "the row target's origin on both legs of a history-restore probe",
     "targetHost": "{target}'s host",
     "seven": "the seven target's origin",
     "vault": "the vault target's origin",
@@ -126,6 +129,292 @@
     "browserUi": "the id of one of Chrome's own browser_ui targets, which the runner looks up with its own CDP"
   },
   "vectors": [
+    {
+      "id": "C8.protected-bfcache-restore",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-start"
+        }
+      ],
+      "trigger": [
+        {
+          "bfcacheRestore": "observer",
+          "origin": "{protectedTarget}",
+          "as": "restore",
+          "requires": ["inboundDelay"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["inboundDelay"],
+      "observe": {
+        "markerHidden": {
+          "means": "history restore: markerHidden",
+          "check": {
+            "result": "restore",
+            "path": "result.markerHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "originHidden": {
+          "means": "history restore: originHidden",
+          "check": {
+            "result": "restore",
+            "path": "result.originHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sideEffectAbsent": {
+          "means": "history restore: sideEffectAbsent",
+          "check": {
+            "result": "restore",
+            "path": "result.sideEffectAbsent",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "probesRefusedOrUnforwarded": {
+          "means": "history restore: probesRefusedOrUnforwarded",
+          "check": {
+            "result": "restore",
+            "path": "result.probesRefusedOrUnforwarded",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "restoredObserved": {
+          "means": "history restore: restoredObserved",
+          "check": {
+            "result": "restore",
+            "path": "result.restoredObserved",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sessionLive": {
+          "means": "history restore: sessionLive",
+          "check": {
+            "result": "restore",
+            "path": "result.sessionLive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "probeRanInProtected": {
+          "means": "history restore: probeRanInProtected",
+          "check": {
+            "result": "restore",
+            "path": "result.probeRanInProtected",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "touched": {
+          "means": "history restore: touched",
+          "check": {
+            "result": "restore",
+            "path": "result.touched",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "methodsProven": {
+          "means": "the unguarded control exercises every probe method",
+          "check": {
+            "result": "restore",
+            "path": "result.methodsProven",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "commandsUnforwarded": {
+          "means": "no protected-window probe reached the browser while inbound delivery was held",
+          "requires": ["forwardAudit"],
+          "check": {
+            "result": "restore",
+            "path": "result.commandsUnforwarded",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guarded session answers on ordinary B before the history trigger",
+      "liveCheck": {
+        "result": "restore",
+        "path": "result.sessionLive",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "restoredObserved": true,
+          "probeRanInProtected": true,
+          "touched": true,
+          "sessionLive": true,
+          "methodsProven": true
+        }
+      },
+      "expected": {
+        "markerHidden": true,
+        "originHidden": true,
+        "sideEffectAbsent": true,
+        "probesRefusedOrUnforwarded": true,
+        "restoredObserved": true,
+        "sessionLive": true,
+        "commandsUnforwarded": true
+      }
+    },
+    {
+      "id": "C8.protected-bfcache-restore.history",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n={tag}-start"
+        }
+      ],
+      "trigger": [
+        {
+          "bfcacheRestore": "history",
+          "origin": "{protectedTarget}",
+          "as": "restore",
+          "requires": ["inboundDelay"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["inboundDelay"],
+      "observe": {
+        "markerHidden": {
+          "means": "history restore: markerHidden",
+          "check": {
+            "result": "restore",
+            "path": "result.markerHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "originHidden": {
+          "means": "history restore: originHidden",
+          "check": {
+            "result": "restore",
+            "path": "result.originHidden",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sideEffectAbsent": {
+          "means": "history restore: sideEffectAbsent",
+          "check": {
+            "result": "restore",
+            "path": "result.sideEffectAbsent",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "probesRefusedOrUnforwarded": {
+          "means": "history restore: probesRefusedOrUnforwarded",
+          "check": {
+            "result": "restore",
+            "path": "result.probesRefusedOrUnforwarded",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "restoredObserved": {
+          "means": "history restore: restoredObserved",
+          "check": {
+            "result": "restore",
+            "path": "result.restoredObserved",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "sessionLive": {
+          "means": "history restore: sessionLive",
+          "check": {
+            "result": "restore",
+            "path": "result.sessionLive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "probeRanInProtected": {
+          "means": "history restore: probeRanInProtected",
+          "check": {
+            "result": "restore",
+            "path": "result.probeRanInProtected",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "touched": {
+          "means": "history restore: touched",
+          "check": {
+            "result": "restore",
+            "path": "result.touched",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "methodsProven": {
+          "means": "the unguarded control exercises every probe method",
+          "check": {
+            "result": "restore",
+            "path": "result.methodsProven",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "commandsUnforwarded": {
+          "means": "no protected-window probe reached the browser while inbound delivery was held",
+          "requires": ["forwardAudit"],
+          "check": {
+            "result": "restore",
+            "path": "result.commandsUnforwarded",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guarded session answers on ordinary B before the history trigger",
+      "liveCheck": {
+        "result": "restore",
+        "path": "result.sessionLive",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "restoredObserved": true,
+          "probeRanInProtected": true,
+          "touched": true,
+          "sessionLive": true,
+          "methodsProven": true
+        }
+      },
+      "expected": {
+        "markerHidden": true,
+        "originHidden": true,
+        "sideEffectAbsent": true,
+        "probesRefusedOrUnforwarded": true,
+        "restoredObserved": true,
+        "sessionLive": true,
+        "commandsUnforwarded": true
+      }
+    },
     {
       "id": "C2.redirect-body",
       "family": "C",

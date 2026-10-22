@@ -40,8 +40,8 @@ async function bounded(work, ms) {
 class Restore {
   constructor(options) {
     Object.assign(this, options);
-    this.marker = `bfcache-marker-${this.tag}`;
-    this.url = `${this.protectedOrigin}/bfcache?n=${encodeURIComponent(this.tag)}`;
+    this.marker = `bfcache-marker-${this.tag}-p`;
+    this.url = `${this.protectedOrigin}/bfcache?n=${encodeURIComponent(`${this.tag}-p`)}`;
     this.result = { probes: [], delay: { requestedMs: this.delayMs } };
     this.missing = [];
     this.pending = [];

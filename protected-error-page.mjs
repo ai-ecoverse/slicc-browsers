@@ -4,6 +4,22 @@ import { createObserverTarget } from './observer-target.mjs';
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 
+function attachOutcome(out) {
+  if (out.ok) return { outcome: 'answered', sessionId: Boolean(out.result?.sessionId) };
+  return {
+    outcome: refused(out) ? 'refused' : 'error',
+    error: String(out.error?.message ?? out.error),
+  };
+}
+
+const attachWhy = ({ outcome: kind, error }) =>
+  kind === 'answered'
+    ? 'client attach answered without a sessionId'
+    : `client attach ${kind === 'refused' ? 'refused' : 'failed'}: ${error}`;
+
+const commitWhy = ({ elapsedMs, budgetMs, frame, targetInfo }) =>
+  `error commit not seen after ${elapsedMs}ms (budget ${budgetMs}ms): frame ${frame.url} unreachableUrl ${frame.unreachableUrl ?? 'none'}, target ${targetInfo.url}`;
+
 async function loadedDocument(reader, observer, url, until) {
   return until(async () => {
     const { frameTree } = await reader.send('Page.getFrameTree', {}, observer);
@@ -197,7 +213,14 @@ export async function protectedErrorPage({
       client.send('Target.attachToTarget', { targetId, flatten: true })
     );
     session = attached.result?.sessionId;
-    if (!session) return { live: false, attached: false };
+    result.diagnostics = { clientAttach: attachOutcome(attached) };
+    if (!session)
+      return {
+        ...result,
+        live: false,
+        attached: false,
+        liveWhy: attachWhy(result.diagnostics.clientAttach),
+      };
     await client.send('Page.enable', {}, session);
     await client.send('Runtime.enable', {}, session);
     if (discovery) await client.send('Target.setDiscoverTargets', { discover: true });
@@ -212,6 +235,7 @@ export async function protectedErrorPage({
     const unsent = await scripted(client, session, ordinary, failedURL);
     if (unsent) return missing(unsent);
     let evidence;
+    const waited = Date.now();
     const live = await until(async () => {
       const f = await frame();
       const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
@@ -224,10 +248,16 @@ export async function protectedErrorPage({
       );
     });
     result.evidence = evidence;
+    result.diagnostics.errorCommit = {
+      seen: live,
+      elapsedMs: Date.now() - waited,
+      budgetMs: budget,
+      ...evidence,
+    };
     if (!live && side === 'control')
       return missing(`missing error commit ${JSON.stringify(evidence)}`);
     result.live = live;
-    if (!live) return result;
+    if (!live) return { ...result, liveWhy: commitWhy(result.diagnostics.errorCommit) };
     await redaction({ client, targetId, failedURL, protectedOrigin, start, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;

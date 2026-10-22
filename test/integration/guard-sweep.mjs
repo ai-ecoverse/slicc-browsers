@@ -46,6 +46,45 @@ export const drivable = new Set([
   'X1.after-exit',
 ]);
 
+const every = ['seven', 'vault', 'vault-x', 'apex'];
+
+export const liveNeedsGuard = new Map([
+  ['C5.fetch', every],
+  ['C5.xhr', every],
+  ['C5.image', every],
+  ['C5.script', every],
+  ['C5.guessed-id', every],
+  ['C5.guessed-id.continue-request', every],
+  ['C6.read-cookies', ['seven', 'vault']],
+  ['C6.write-cookies', every],
+  ['C6.clear-cookies', every],
+  ['C6.storage', every],
+  ['C6.getCookies', every],
+  ['C6.getAllCookies', every],
+  ['C6.setCookie', every],
+  ['C6.deleteCookies', every],
+  ['C6.storage-getCookies', every],
+  ['C6.clearDataForOrigin', every],
+  ['C8.protected-error-page', ['seven']],
+  ['C8.protected-error-page.query', ['seven']],
+  ['C8.protected-error-page.fragment', ['seven']],
+  ['C8.protected-document-restore', ['seven']],
+  ['C8.protected-error-page-sticky', ['seven']],
+  ['C8.protected-error-page-sticky.query', ['seven']],
+  ['C8.protected-error-page-sticky.fragment', ['seven']],
+]);
+
+export const expectedLive = (vector, target) =>
+  liveNeedsGuard.get(vector.id)?.includes(target) ? 'fail' : 'pass';
+
+const guardOnly = ['refused', 'filtered', 'blocked', 'frameBlocked', 'registration', 'result'];
+
+export const guardEvidence = (check) =>
+  Boolean(check) &&
+  typeof check === 'object' &&
+  (guardOnly.some((name) => name in check) ||
+    [...(check.all ?? []), ...(check.any ?? [])].some(guardEvidence));
+
 export const repeats = 2;
 
 const key = (row) => JSON.stringify([row.id, row.target, row.variant]);
@@ -92,8 +131,9 @@ function rowProblem(vector, row) {
   if (legs.some((leg) => leg === 'skip' || leg === 'not-run'))
     return `declares no skip but is ${shown}`;
   const guarded = drivable.has(vector.id) ? 'pass' : 'fail';
-  if (row.control === 'pass' && row.live === 'pass' && row.guarded === guarded) return null;
-  return `must be pass/${guarded}/pass without a guard but is ${shown}${row.why ? `: ${row.why}` : ''}`;
+  const live = expectedLive(vector, row.target);
+  if (row.control === 'pass' && row.guarded === guarded && row.live === live) return null;
+  return `must be pass/${guarded}/${live} without a guard but is ${shown}${row.why ? `: ${row.why}` : ''}`;
 }
 
 export function verdictProblems(set, targets, results) {

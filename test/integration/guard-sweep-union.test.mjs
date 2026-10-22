@@ -4,7 +4,10 @@ import test from 'node:test';
 import {
   capabilities,
   drivable,
+  expectedLive,
   expectedSkip,
+  guardEvidence,
+  liveNeedsGuard,
   partitions,
   published,
   rowsFor,
@@ -22,7 +25,12 @@ function clean(set, target) {
       return { ...row, control: 'not-run', guarded: 'not-run', live: 'not-run' };
     const reason = expectedSkip(v, target);
     if (reason) return { ...row, control: 'skip', guarded: 'skip', live: 'skip', reason };
-    return { ...row, control: 'pass', guarded: drivable.has(v.id) ? 'pass' : 'fail', live: 'pass' };
+    return {
+      ...row,
+      control: 'pass',
+      guarded: drivable.has(v.id) ? 'pass' : 'fail',
+      live: expectedLive(v, target),
+    };
   });
 }
 
@@ -120,13 +128,37 @@ test('a skip is only accepted with the reason its vector declares', () => {
   assert.deepEqual(changed('own', unobservable.id, { ...skip, reason: 'not-applicable' }), []);
 });
 
-test('a row must pass its control and liveness and fail its protection, unless it is a drivable row', () => {
+test('only published rows whose liveCheck takes guard evidence may be dead without a guard', () => {
+  for (const [id, list] of liveNeedsGuard) {
+    const v = vector((candidate) => candidate.id === id);
+    assert.equal(v?.kind, 'cdp', id);
+    assert.ok(list.length > 0, id);
+    for (const target of list) assert.ok(v.targets.includes(target), `${id} ${target}`);
+    assert.ok(guardEvidence(v.liveCheck), `${id} can be live from the browser and fixture alone`);
+  }
+  assert.equal(guardEvidence({ loaded: '{target}/doc', observer: 'fixture' }), false);
+  assert.equal(
+    guardEvidence({
+      all: [{ state: {}, observer: 'unguarded' }, { any: [{ refused: ['call'] }] }],
+    }),
+    true
+  );
+  const fixtureOnly = published.vectors.filter(
+    (v) => v.kind === 'cdp' && !guardEvidence(v.liveCheck)
+  );
+  assert.ok(fixtureOnly.length > 0);
+  for (const v of fixtureOnly)
+    for (const target of v.targets) assert.equal(expectedLive(v, target), 'pass', v.id);
+});
+
+test('a row must pass its control and fail its protection, unless it is a drivable row, and be live unless only a guard can make it so', () => {
   const runnable = vector(
     (v) =>
       v.kind === 'cdp' &&
       v.targets.includes('seven') &&
       !expectedSkip(v, 'seven') &&
-      !drivable.has(v.id)
+      !drivable.has(v.id) &&
+      !liveNeedsGuard.has(v.id)
   );
   for (const change of [
     { control: 'fail' },
@@ -146,6 +178,11 @@ test('a row must pass its control and liveness and fail its protection, unless i
     changed(text.targets[0], text.id, { control: 'pass', guarded: 'fail', live: 'pass' }).length,
     2
   );
+  for (const change of [{ live: 'pass' }, { live: 'incomplete' }, { live: 'skip' }])
+    assert.equal(changed('seven', 'C6.getCookies', change).length, 2, JSON.stringify(change));
+  assert.equal(changed('seven', 'C6.read-cookies', { live: 'pass' }).length, 2);
+  assert.equal(changed('vault-x', 'C6.read-cookies', { live: 'fail' }).length, 2);
+  assert.deepEqual(changed('apex', 'C6.read-cookies', {}), []);
 });
 
 test('a missing, repeated or unselected row fails the sweep', () => {

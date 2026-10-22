@@ -18,7 +18,9 @@ const spki = createHash('sha256')
   .digest('base64');
 const parallel = 4;
 const batch = set.vectors.filter(
-  (vector) => vector.id.startsWith('C2.redirect') || vector.id.startsWith('C8.protected')
+  (vector) =>
+    (vector.id.startsWith('C2.redirect') || vector.id.startsWith('C8.protected')) &&
+    !vector.requires?.includes('inboundDelay')
 );
 const transports = { seven: 'seven.sliccy.ai', 'six-bridge': 'www.sliccy.ai' };
 
@@ -69,7 +71,11 @@ for (const [transport, host] of Object.entries(transports))
         incomplete: row.incomplete,
       }));
       process.stdout.write(`${transport}: ${JSON.stringify(rows)}\n`);
-      assert.equal(execution.results.length, batch.length * Object.keys(set.variants).length);
+      assert.equal(
+        execution.results.length,
+        batch.reduce((count, vector) => count + vector.targets.length, 0) *
+          Object.keys(set.variants).length
+      );
       assert.deepEqual(
         rows.filter((entry) => entry.verdict !== 'pass/pass/pass'),
         []

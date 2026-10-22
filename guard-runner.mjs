@@ -753,6 +753,7 @@ class Execution {
             side: this.side,
             settleScale: this.scale,
             controls: (this.clients.redirectSecretControls ??= {}),
+            internalSessions: this.internalSessions,
           })
         );
       } finally {

@@ -668,14 +668,38 @@ class RedirectProbe {
     await this.send('Runtime.evaluate', {
       expression: `(()=>{const f=document.createElement('iframe');f.src=${JSON.stringify(url)};document.body.append(f)})();void 0`,
     });
-    await pause(500);
-    await this.send('Page.getFrameTree');
-    const snapshot = await this.send('Page.captureSnapshot', { format: 'mhtml' });
-    const dom = await this.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
+    const control = this.side === 'control';
+    const ms = Math.round(5000 * this.scale);
+    let snapshot;
+    let dom;
+    let ordinaryIframeSnapshot = false;
+    let ordinaryIframeDOM = false;
+    const read = async () => {
+      await this.send('Page.getFrameTree');
+      snapshot = await this.send('Page.captureSnapshot', { format: 'mhtml' });
+      dom = await this.send('DOMSnapshot.captureSnapshot', { computedStyles: [] });
+      ordinaryIframeSnapshot ||= snapshot.ok && this.contains(snapshot);
+      ordinaryIframeDOM ||= dom.ok && this.contains(dom);
+      return this.ended() || (ordinaryIframeSnapshot && ordinaryIframeDOM);
+    };
+    if (control) {
+      if (!(await waitFor(read, ms, 50))) {
+        const missing = [
+          !ordinaryIframeSnapshot && 'ordinaryIframeSnapshot',
+          !ordinaryIframeDOM && 'ordinaryIframeDOM',
+        ].filter(Boolean);
+        this.missing.push(
+          `redirect-secret: control iframe ${missing.join(', ')} not observed within ${ms}ms`
+        );
+      }
+    } else {
+      await pause(500);
+      await read();
+    }
     this.responses.push({
       iframeSnapshotAttempted: !snapshot.ended && !dom.ended,
-      ordinaryIframeSnapshot: this.contains(snapshot),
-      ordinaryIframeDOM: this.contains(dom),
+      ordinaryIframeSnapshot: ordinaryIframeSnapshot || (control ? 'incomplete' : false),
+      ordinaryIframeDOM: ordinaryIframeDOM || (control ? 'incomplete' : false),
     });
   }
 
@@ -750,7 +774,10 @@ class RedirectProbe {
       extraHeld &&
       (extra.length >= this.destinations.length * 4 || (this.cut() ? 'incomplete' : false));
     const unseen = this.end || this.halted ? 'incomplete' : false;
-    const found = (key) => this.responses.some((entry) => entry[key]);
+    const found = (key) => {
+      const values = this.responses.map((entry) => entry[key]);
+      return values.includes(true) || (values.includes('incomplete') ? 'incomplete' : false);
+    };
     const fetchReads = this.answers('Fetch.getResponseBody');
     const fetchLeaked = fetchReads.answered.some((entry) => !refused(entry));
     const evidence = {

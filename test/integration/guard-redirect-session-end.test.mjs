@@ -32,6 +32,7 @@ function fake({
     if (how === 'detach') emit(undefined, 'Target.detachedFromTarget', { sessionId: 'S1' });
   };
   const handle = (method, params) => {
+    if (method === 'Target.attachToTarget') return { sessionId: 'S1' };
     if (method === 'Page.getFrameTree' && navError) {
       navError = false;
       throw new Error('Inspected target navigated or closed');
@@ -86,6 +87,8 @@ function fake({
     }
   };
   reader.send = async (method, params = {}) => {
+    if (method === 'Target.createTarget') return { targetId: 'T2' };
+    if (method === 'Target.getTargetInfo') return { targetInfo: { targetId: 'T2' } };
     if (method === 'Target.attachToTarget') return { sessionId: 'O1' };
     if (method === 'Storage.setCookies') cookie = params.cookies[0].name;
     return {};

@@ -66,6 +66,7 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true, la
   const continued = new Set();
   const waiting = new Map();
   const handle = (method, params) => {
+    if (method === 'Target.attachToTarget') return { sessionId: 'S1' };
     if (method === 'Fetch.continueRequest') {
       const n = params.requestId.slice(1);
       continued.add(n);
@@ -104,6 +105,8 @@ function fake({ network, fetch = true, leak = false, raw = false, tap = true, la
     }
   };
   reader.send = async (method) => {
+    if (method === 'Target.createTarget') return { targetId: 'T2' };
+    if (method === 'Target.getTargetInfo') return { targetInfo: { targetId: 'T2' } };
     if (method === 'Target.attachToTarget') return { sessionId: 'O1' };
     return {};
   };

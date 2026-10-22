@@ -159,14 +159,51 @@ class Restore {
   }
 
   async trigger() {
+    const method = 'Page.navigateToHistoryEntry';
     const params = { entryId: this.entry.id };
-    const out =
-      this.mode === 'history'
-        ? await this.call('Page.navigateToHistoryEntry', params)
-        : await this.read('Page.navigateToHistoryEntry', params);
+    if (this.mode !== 'history') {
+      this.result.triggerPath = 'observer';
+      this.result.trigger = await this.read(method, params);
+      return;
+    }
+    const command = { id: 'history-trigger', method, params, sentAt: Date.now() };
+    const work = this.client.send(method, params, this.session);
+    void outcome(work).then((reply) => {
+      this.result.triggerReply = reply;
+      if (reply.ok && this.result.triggerPath === 'observer-after-audited-timeout') {
+        this.result.triggerPath = 'client-late-answer';
+        this.missingEvidence('history navigation answered after non-forwarding audit');
+      }
+    });
+    const out = await bounded(work, this.budget);
     this.result.trigger = out;
-    if (this.mode === 'history' && refusal(out))
-      await this.read('Page.navigateToHistoryEntry', params);
+    const timedOut = out.error?.message === 'no answer';
+    this.result.triggerPath = timedOut ? 'client-timeout' : 'client';
+    let refused = refusal(out);
+    if (timedOut && this.forwardAudit) {
+      const audit = await bounded(
+        typeof this.gate.audit === 'function'
+          ? Promise.resolve().then(() => this.gate.audit({ probes: [command], final: true }))
+          : Promise.reject(new Error('forwarding audit unavailable')),
+        this.budget
+      );
+      this.result.triggerAudit = audit;
+      const entries = audit.result?.probes;
+      refused =
+        audit.ok &&
+        audit.result?.complete === true &&
+        Array.isArray(entries) &&
+        entries.length === 1 &&
+        entries[0]?.id === command.id &&
+        entries[0].forwarded === false &&
+        !(await bounded(work, 0)).ok;
+    }
+    if (refused) {
+      this.result.triggerPath = timedOut
+        ? 'observer-after-audited-timeout'
+        : 'observer-after-refusal';
+      this.result.fallback = await this.read(method, params);
+    }
   }
 
   async probe(method, params, current) {
@@ -243,6 +280,7 @@ class Restore {
     this.messageStart = this.client.messages?.length ?? 0;
     this.result.delay.startedAt = Date.now();
     const trigger = this.trigger();
+    if (this.mode === 'history') await trigger;
     const restored = await waitFor(async () => {
       const f = await this.frame();
       return f?.url === this.url && !f.unreachableUrl && (await this.state())?.persisted === true;

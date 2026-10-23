@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -192,7 +192,7 @@ test('the crate and the Go module follow only a new release tag on main', () => 
   assert.match(job('crates'), /uses: rust-lang\/crates-io-auth-action@/);
   assert.match(
     job('crates'),
-    /node scripts\/set-crate-version\.mjs "\$VERSION"\n {10}cargo publish --allow-dirty\n/
+    /node scripts\/set-crate-version\.mjs "\$VERSION"\n(?: {10}.*\n)* {10}if cargo publish --allow-dirty /
   );
   assert.match(
     job('go'),
@@ -200,6 +200,83 @@ test('the crate and the Go module follow only a new release tag on main', () => 
   );
   assert.match(job('go'), /https:\/\/pkg\.go\.dev\/fetch\/\$MODULE@\$TAG/);
   assert.doesNotMatch(job('go'), /id-token|contents: write/);
+});
+
+test('the crates job takes only the crates.io 429 for too many versions of the crate in 24 hours as a warning, and fails on every other publish error', (t) => {
+  const step = job('crates')
+    .split(/\n {6}- /)
+    .find((part) => part.includes('cargo publish'));
+  assert.doesNotMatch(step, /\n {8}shell:/);
+  const script = step.match(/\n {8}run: \|\n((?: {10}.*\n|\n)+)/)[1].replace(/^ {10}/gm, '');
+  const dir = mkdtempSync(join(tmpdir(), 'slicc-browsers-crates-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, 'scripts'));
+  mkdirSync(join(dir, 'bin'));
+  cpSync(join(root, 'scripts/set-crate-version.mjs'), join(dir, 'scripts/set-crate-version.mjs'));
+  writeFileSync(join(dir, 'step.sh'), script);
+  writeFileSync(
+    join(dir, 'bin', 'cargo'),
+    '#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$CARGO_ARGS"\nprintf \'%s\\n\' "$CARGO_OUT" >&2\nexit "$CARGO_STATUS"\n',
+    { mode: 0o755 }
+  );
+  const publish = (status, out, version = '1.42.7') => {
+    for (const file of ['Cargo.toml', 'guard-vectors.json'])
+      cpSync(join(root, file), join(dir, file));
+    const run = spawnSync('bash', ['-e', 'step.sh'], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${join(dir, 'bin')}${delimiter}${process.env.PATH}`,
+        VERSION: version,
+        CARGO_ARGS: join(dir, 'cargo-args'),
+        CARGO_STATUS: String(status),
+        CARGO_OUT: out,
+      },
+    });
+    return { ...run, output: run.stdout + run.stderr };
+  };
+  const failed = (status, cause) =>
+    `    Uploading slicc-browsers v1.42.7 (${dir})\nerror: failed to publish slicc-browsers v1.42.7 to registry at https://crates.io\n\nCaused by:\n  the remote server responded with an error (status ${status}): ${cause}`;
+  const daily = 'You have published too many versions of this crate in the last 24 hours';
+  const warning =
+    '::warning::slicc-browsers 1.42.7 is skipped on crates.io: 429, too many versions of this crate in the last 24 hours; the next release publishes the newest crate';
+
+  const published = publish(0, '    Published slicc-browsers v1.42.7 at registry `crates-io`');
+  assert.equal(published.status, 0, published.stderr);
+  assert.match(published.output, /Published slicc-browsers v1\.42\.7/);
+  assert.doesNotMatch(published.output, /::warning::/);
+  assert.match(readFileSync(join(dir, 'Cargo.toml'), 'utf8'), /^version = "1\.42\.7"$/m);
+  assert.equal(readFileSync(join(dir, 'cargo-args'), 'utf8'), 'publish --allow-dirty\n');
+
+  const limited = publish(101, failed('429 Too Many Requests', daily));
+  assert.equal(limited.status, 0, limited.stderr);
+  assert.ok(limited.output.includes(failed('429 Too Many Requests', daily)));
+  assert.equal(limited.stdout.trimEnd().split('\n').at(-1), warning);
+
+  for (const out of [
+    failed(
+      '429 Too Many Requests',
+      'You have published too many updates to existing crates in a short period of time'
+    ),
+    failed(
+      '429 Too Many Requests',
+      'You have published too many new crates in a short period of time'
+    ),
+    failed('500 Internal Server Error', daily),
+    failed('403 Forbidden', "this crate exists but you don't seem to be an owner"),
+    `error: failed to verify package tarball\n${daily}`,
+  ]) {
+    const refused = publish(101, out);
+    assert.notEqual(refused.status, 0, out);
+    assert.ok(refused.output.includes(out), out);
+    assert.doesNotMatch(refused.output, /::warning::/, out);
+  }
+
+  const stamped = publish(0, '', '0.0.0');
+  assert.notEqual(stamped.status, 0);
+  assert.match(stamped.stderr, /refusing to stamp crate version "0\.0\.0"/);
+  assert.equal(readFileSync(join(dir, 'cargo-args'), 'utf8').trimEnd().split('\n').length, 7);
 });
 
 test('the workflow has no comments but renovate annotations', () => {

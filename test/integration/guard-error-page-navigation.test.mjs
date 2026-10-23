@@ -7,6 +7,8 @@ import { chrome, quarantining } from './error-page-fake.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const vectors = set.vectors.filter((v) => v.trigger.some((s) => s.errorPage));
+const inheriting = (url) => /^about:(?:blank|srcdoc)(?:[?#]|$)/i.test(url);
+const recovery = (url) => /\/blank\?n=[^#]*-recover$/.test(url ?? '');
 
 async function rows(ids, options) {
   const fixture = await fixtureServer();
@@ -75,7 +77,7 @@ test('a guard that also refuses the client navigation leaves the error-page rows
 
 test('a refused navigation before the recover close leaves only that close incomplete', async () => {
   const execution = await rows(['C8.protected-error-page.fragment'], {
-    refuseNavigation: (tab, quarantined) => quarantined(tab) && tab.frame.url === 'about:blank',
+    refuseNavigation: (tab, quarantined) => quarantined(tab) && recovery(tab.frame.url),
   });
   const [row] = execution.results;
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -85,6 +87,84 @@ test('a refused navigation before the recover close leaves only that close incom
   assert.equal(row.observations.guarded.blank, true);
   assert.equal(row.observations.guarded.infoRedacted, true);
 });
+
+test('a guard that refuses every client navigation to an inheriting about: URL gets real error-page verdicts', async () => {
+  const asked = [];
+  const execution = await rows(
+    vectors.map((v) => v.id),
+    {
+      refuseURL: (url) => {
+        asked.push(url);
+        return inheriting(url);
+      },
+    }
+  );
+  assert.equal(execution.results.length, 7);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.deepEqual(row.errors, [], JSON.stringify(row));
+    assert.equal(row.incomplete, undefined, JSON.stringify(row));
+    assert.equal(row.observations.guarded.blank, true);
+    assert.equal(row.observations.guarded.attached, true);
+  }
+  assert.equal(asked.filter(recovery).length, 7);
+  assert.deepEqual(asked.filter(inheriting), []);
+  assert.equal(
+    execution.results.find((row) => row.id === 'C8.protected-error-page').observations.guarded
+      .close,
+    true
+  );
+  assert.equal(execution.summary().pass, true);
+});
+
+for (const [name, options, ids, leaked] of [
+  ['exposes the failed URL', { exposeURL: true }, vectors.map((v) => v.id), 'infoRedacted'],
+  [
+    'lets the client script a restored protected document',
+    { evaluate: true },
+    vectors.filter((v) => !v.trigger.some((s) => s.errorPage === 'recover')).map((v) => v.id),
+    'evaluateRefused',
+  ],
+])
+  test(`a guard that refuses inheriting about: URLs but ${name} still fails`, async () => {
+    const execution = await rows(ids, { ...options, refuseURL: inheriting });
+    assert.equal(execution.results.length, ids.length);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'fail', JSON.stringify(row));
+      assert.equal(row.live, 'pass', JSON.stringify(row));
+      assert.deepEqual(row.errors, [], JSON.stringify(row));
+      assert.equal(row.incomplete, undefined, JSON.stringify(row));
+      assert.equal(row.observations.guarded.blank, true);
+      assert.equal(row.observations.guarded[leaked], false);
+    }
+    assert.equal(execution.summary().pass, false);
+  });
+
+for (const [name, options] of [
+  ['refuses', { refuseURL: (url) => inheriting(url) || recovery(url) }],
+  ['answers without committing', { refuseURL: inheriting, unanswered: recovery }],
+])
+  test(`a guard that ${name} the ordinary recovery navigation fails the error-page rows`, async () => {
+    const execution = await rows(
+      vectors.map((v) => v.id),
+      options
+    );
+    assert.equal(execution.results.length, 7);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'fail', JSON.stringify(row));
+      assert.equal(row.live, 'pass', JSON.stringify(row));
+      assert.deepEqual(row.errors, [], JSON.stringify(row));
+      assert.equal(row.incomplete, undefined, JSON.stringify(row));
+      assert.equal(row.observations.guarded.blank, false);
+    }
+    const recover = execution.results.find((row) => row.id === 'C8.protected-error-page');
+    assert.equal(recover.observations.guarded.close, false);
+    assert.equal(execution.summary().pass, false);
+  });
 
 test('a refused guarded attach is recorded in the row evidence and why', async () => {
   const execution = await rows(['C8.protected-error-page'], {

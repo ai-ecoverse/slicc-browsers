@@ -186,6 +186,8 @@ Each vector runs twice. The **control** runs it against an ordinary origin, wher
 
 When a vector compares ordinary and protected fixture markers, those markers do not contain one another. Protected-marker checks still examine complete probe replies, including errors, and the vector's client events and messages, including encoded values.
 
+A guard may refuse every client navigation to an `about:` URL that inherits an origin, such as `about:blank`. No probe asks the client for one: to leave a page, it navigates to an ordinary fixture URL and checks that URL's commit, and a refusal there still fails.
+
 Client-exit controls use the unguarded observer; persistent-capability refusals are valid evidence, granted instruments must leave no effects after exit, and missing answers remain incomplete.
 
 ### Running them

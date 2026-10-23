@@ -201,11 +201,19 @@ export function chrome() {
 
 export function quarantining(
   browser,
-  { refuseNavigation = () => false, refuseAttach = () => false, block = true } = {}
+  {
+    refuseNavigation = () => false,
+    refuseAttach = () => false,
+    refuseURL = () => false,
+    unanswered = () => false,
+    exposeURL = false,
+    evaluate = false,
+    block = true,
+  } = {}
 ) {
   const locked = new Map();
   const redact = (targetInfo) =>
-    seven(targetInfo.url)
+    !exposeURL && seven(targetInfo.url)
       ? { ...targetInfo, url: originOf(targetInfo.url), title: originOf(targetInfo.url) }
       : targetInfo;
   const conn = browser.connect(redact);
@@ -224,9 +232,12 @@ export function quarantining(
   };
   conn.send = async (method, params = {}, sessionId) => {
     const tab = browser.tabOf(sessionId, params.targetId);
-    if (method === 'Runtime.evaluate' && tab && quarantined(tab))
+    if (method === 'Runtime.evaluate' && tab && !evaluate && quarantined(tab))
       refuse("this tab's history holds a protected page");
     if (method === 'Page.navigate' && seven(params.url)) refuse('protected URL');
+    if (method === 'Page.navigate' && refuseURL(params.url)) refuse('inherited origin');
+    if (method === 'Page.navigate' && tab && unanswered(params.url))
+      return { frameId: tab.targetId, loaderId: 'L0' };
     if (
       ['Page.navigate', 'Page.reload'].includes(method) &&
       tab &&

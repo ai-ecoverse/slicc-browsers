@@ -269,10 +269,9 @@ export async function protectedErrorPage({
       });
       result.reload = result.reloadedError;
     }
-    result.blank = (
-      await outcome(client.send('Page.navigate', { url: 'about:blank' }, session))
-    ).ok;
-    if (result.blank) result.blank = await loaded('about:blank');
+    const recovery = `${ordinary}/blank?n=${tag}-recover`;
+    result.blank = (await outcome(client.send('Page.navigate', { url: recovery }, session))).ok;
+    if (result.blank) result.blank = await loaded(recovery);
     result.attached = !client.events
       .slice(start)
       .some((e) => e.method === 'Target.detachedFromTarget' && e.params.sessionId === session);

@@ -43,6 +43,104 @@ async function row(fault) {
   return execution.results[0];
 }
 
+async function snapshotRows({ earlyForwarded = false, finalComplete = true } = {}) {
+  const browser = bfcacheClients({ guard: 'refuse' });
+  const install = browser.client.inboundDelay;
+  browser.client.inboundDelay = async (args) => {
+    const gate = await install(args);
+    const audit = gate.audit;
+    return {
+      ...gate,
+      audit: async ({ probes, final }) => {
+        const ledger = await audit({ probes, final });
+        if (args.side === 'control') return ledger;
+        if (final)
+          return finalComplete
+            ? ledger
+            : { ...ledger, complete: false, probes: ledger.probes.slice(0, -1) };
+        return {
+          ...ledger,
+          complete: false,
+          probes: ledger.probes
+            .slice(0, 1)
+            .map((entry) => ({ ...entry, forwarded: earlyForwarded })),
+        };
+      },
+    };
+  };
+  return run(
+    {
+      ...set,
+      vectors: set.vectors
+        .filter((vector) => vector.id.startsWith('C8.protected-bfcache-restore'))
+        .map((vector) => ({ ...vector, targets: ['seven'] })),
+      variants: { prompt: 0 },
+    },
+    {
+      ...browser,
+      capabilities: { inboundDelay: true, forwardAudit: true },
+      targets: { ordinary, seven: origin },
+      fixture: { log: () => [] },
+      settleScale: 0.01,
+    }
+  );
+}
+
+test('a partial early audit is superseded by complete non-forwarding evidence', {
+  timeout: 30000,
+}, async () => {
+  const execution = await snapshotRows();
+  assert.equal(execution.results.length, 2);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', row.why);
+    assert.equal(row.guarded, 'pass', row.why);
+    assert.equal(row.live, 'pass', row.why);
+    assert.equal(row.observations.guarded.commandsUnforwarded, true);
+    const evidence = row.evidence.guarded.restore;
+    assert.equal(evidence.delay.audit.result.complete, false);
+    assert.equal(evidence.delay.audit.result.probes.length, 1);
+    assert(evidence.delay.audit.result.probes.every((entry) => entry.forwarded === false));
+    assert(evidence.delay.audit.result.probes.length < evidence.probes.length);
+    assert.equal(evidence.delay.finalAudit.result.complete, true);
+    assert.equal(evidence.delay.finalAudit.result.probes.length, evidence.probes.length);
+    assert(evidence.delay.finalAudit.result.probes.every((entry) => entry.forwarded === false));
+    assert.equal(evidence.incomplete, undefined);
+  }
+});
+
+test('an early forward still fails after a complete non-forwarding final audit', {
+  timeout: 30000,
+}, async () => {
+  const execution = await snapshotRows({ earlyForwarded: true });
+  assert.equal(execution.results.length, 2);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', row.why);
+    assert.equal(row.guarded, 'fail', row.why);
+    assert.equal(row.live, 'pass', row.why);
+    assert.equal(row.observations.guarded.commandsUnforwarded, false);
+    const evidence = row.evidence.guarded.restore;
+    assert(evidence.delay.audit.result.probes.some((entry) => entry.forwarded === true));
+    assert.equal(evidence.delay.finalAudit.result.complete, true);
+    assert(evidence.delay.finalAudit.result.probes.every((entry) => entry.forwarded === false));
+    assert.equal(evidence.incomplete, undefined);
+  }
+});
+
+test('an incomplete final audit remains missing evidence', { timeout: 30000 }, async () => {
+  const execution = await snapshotRows({ finalComplete: false });
+  assert.equal(execution.results.length, 2);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', row.why);
+    assert.equal(row.guarded, 'incomplete', row.why);
+    assert.equal(row.live, 'pass', row.why);
+    assert.equal(row.observations.guarded.commandsUnforwarded, 'incomplete');
+    const evidence = row.evidence.guarded.restore;
+    assert.equal(evidence.delay.finalAudit.result.complete, false);
+    assert(evidence.delay.finalAudit.result.probes.every((entry) => entry.forwarded === false));
+    assert(evidence.incomplete.includes('forwarding audit unavailable'));
+  }
+});
+
 test('a missing hold prevents an otherwise matching guarded leg passing', {
   timeout: 15000,
 }, async () => {

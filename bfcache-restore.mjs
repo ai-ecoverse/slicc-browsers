@@ -377,7 +377,7 @@ class Restore {
       this.result.probes.some((probe) => probe.forwarded);
     this.result.commandsUnforwarded = forwarded ? false : complete ? true : 'incomplete';
     if (final) this.finalAuditComplete = complete;
-    if (!complete) this.missingEvidence('forwarding audit unavailable');
+    if (final && !complete) this.missingEvidence('forwarding audit unavailable');
   }
 
   async judge() {

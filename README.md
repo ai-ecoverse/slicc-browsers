@@ -188,6 +188,8 @@ When a vector compares ordinary and protected fixture markers, those markers do 
 
 Client-exit controls use the unguarded observer; persistent-capability refusals are valid evidence, granted instruments must leave no effects after exit, and missing answers remain incomplete.
 
+Forwarding audits retain early snapshots as evidence. A complete final ledger supersedes an incomplete early snapshot, but any forwarding reported in either audit remains a failure. An incomplete final audit remains missing evidence.
+
 ### Running them
 
 The reference runner works with any guard that speaks CDP:

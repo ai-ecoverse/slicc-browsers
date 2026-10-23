@@ -79,7 +79,7 @@
     "test:unit:guard": "mkdir -p coverage/unit && node --experimental-vm-modules --no-warnings --experimental-test-coverage --test --test-concurrency=1 --test-coverage-include=guard-runner.mjs --test-coverage-include=fixture-server.mjs --test-coverage-include=fixture-client.mjs --test-coverage-include=observer-target.mjs --test-coverage-include=frame-read.mjs --test-coverage-include=bfcache-restore.mjs --test-coverage-include=protected-error-page.mjs --test-coverage-include=unparseable-url.mjs --test-coverage-include=scripts/browser-runner.mjs --test-coverage-include=scripts/validate.mjs --test-reporter=lcov --test-reporter-destination=coverage/unit/guard.lcov test/unit/guard-*.test.mjs && slicc-diff-cover coverage/unit/guard.lcov"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-cdp": "1.39.1",
+    "@ai-ecoverse/slicc-cdp": "1.40.0",
     "@ai-ecoverse/slicc-shared-web": "2.11.3",
     "@biomejs/biome": "2.5.15",
     "ajv": "8.20.0",

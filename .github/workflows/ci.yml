@@ -116,8 +116,17 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
+          set -o pipefail
           node scripts/set-crate-version.mjs "$VERSION"
-          cargo publish --allow-dirty
+          log=$(mktemp)
+          if cargo publish --allow-dirty 2>&1 | tee "$log"; then
+            exit 0
+          fi
+          if grep -qF '(status 429 Too Many Requests): You have published too many versions of this crate in the last 24 hours' "$log"; then
+            echo "::warning::slicc-browsers $VERSION is skipped on crates.io: 429, too many versions of this crate in the last 24 hours; the next release publishes the newest crate"
+            exit 0
+          fi
+          exit 1
 
   go:
     needs: released

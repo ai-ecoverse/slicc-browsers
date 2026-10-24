@@ -242,8 +242,8 @@ class Execution {
     return Math.round(ms * (absent ? this.refusalScale : this.scale));
   }
 
-  async poll(predicate, ms = 1500, absent = false) {
-    return waitFor(predicate, this.bound(ms, absent));
+  async poll(predicate, ms = 1500, absent = false, bounded = false) {
+    return waitFor(predicate, this.bound(ms, absent), 25, bounded);
   }
 
   async prepareState(spec) {
@@ -1092,16 +1092,21 @@ class Execution {
     if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
       return this.check(check);
     let seen = false;
-    const met = await this.poll(async () => {
-      if (this.clients.flight?.abandoned) return true;
-      seen = await this.check(check);
-      if (seen !== true && snapshots.length) {
-        await this.execute(snapshots, undefined, 'observation');
+    const met = await this.poll(
+      async () => {
         if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
-      }
-      return seen === true;
-    }, observeMs);
+        if (seen !== true && snapshots.length) {
+          await this.execute(snapshots, undefined, 'observation');
+          if (this.clients.flight?.abandoned) return true;
+          seen = await this.check(check);
+        }
+        return seen === true;
+      },
+      observeMs,
+      false,
+      snapshots.length > 0
+    );
     if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`

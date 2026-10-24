@@ -135,7 +135,7 @@ export async function load(client, sessionId, url, ms = 20000) {
     throw new Error(`load of ${url} timed out`);
 }
 
-export async function waitFor(check, ms, step = 25) {
+export async function waitFor(check, ms, step = 25, bounded = false) {
   const start = Date.now();
   const limit = start + ms + Math.max(ms * 4, 30000);
   let deadline = start + ms;
@@ -156,10 +156,12 @@ export async function waitFor(check, ms, step = 25) {
   timer = setTimeout(tick, step);
   try {
     for (;;) {
-      const expired = new Promise((resolve) => {
-        expire = () => resolve(false);
-      });
-      const met = await Promise.race([check(), expired]);
+      const expired = bounded
+        ? new Promise((resolve) => {
+            expire = () => resolve(false);
+          })
+        : undefined;
+      const met = bounded ? await Promise.race([check(), expired]) : await check();
       expire = undefined;
       if (met) return true;
       beat();

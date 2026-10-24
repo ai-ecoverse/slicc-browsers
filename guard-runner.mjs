@@ -712,6 +712,7 @@ class Execution {
   async execute(list, childSession, phase = 'child') {
     if (phase === 'trigger') await this.childrenSettled();
     for (const [index, raw] of list.entries()) {
+      if (phase === 'observation' && this.clients.flight?.abandoned) return;
       if (this.clients.flight)
         Object.assign(this.clients.flight, { leg: this.side, phase, step: index });
       const step = expand(raw, this.vars);
@@ -1092,14 +1093,16 @@ class Execution {
       return this.check(check);
     let seen = false;
     const met = await this.poll(async () => {
+      if (this.clients.flight?.abandoned) return true;
       seen = await this.check(check);
       if (seen !== true && snapshots.length) {
         await this.execute(snapshots, undefined, 'observation');
+        if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
       }
       return seen === true;
     }, observeMs);
-    if (!met && snapshots.length) {
+    if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
       );

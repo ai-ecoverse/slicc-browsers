@@ -69,3 +69,27 @@ test('a check that always stalls still ends', async () => {
   assert.equal(held, false);
   assert(Date.now() - started < 1000);
 });
+
+for (const async of [false, true])
+  test(`a final ${async ? 'immediately resolved' : 'synchronous'} check still runs when the polling step exceeds the bound`, async () => {
+    let calls = 0;
+    const met = await waitFor(
+      () => {
+        const answer = ++calls === 2;
+        return async ? Promise.resolve(answer) : answer;
+      },
+      1,
+      25
+    );
+    assert.equal(met, true);
+    assert.equal(calls, 2);
+  });
+
+test('a final check that never answers is still bounded', async () => {
+  let calls = 0;
+  const started = Date.now();
+  const met = await waitFor(() => (++calls === 1 ? false : new Promise(() => {})), 1, 25);
+  assert.equal(met, false);
+  assert.equal(calls, 2);
+  assert(Date.now() - started < 1000);
+});

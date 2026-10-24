@@ -15,7 +15,16 @@ const targets = {
 
 async function delayedFrame(
   id,
-  { commit = true, tree = true, leak = false, snapshotReply = async () => {} } = {}
+  {
+    commit = true,
+    tree = true,
+    leak = false,
+    snapshotReply = async () => {},
+    close,
+    debug,
+    rowTimeoutMs,
+    settleScale = 0.01,
+  } = {}
 ) {
   const entries = [];
   const pages = new Map();
@@ -75,6 +84,10 @@ async function delayedFrame(
         return { frameId: page.id };
       }
       if (method === 'Runtime.evaluate') {
+        const pre = params.expression.match(
+          /sendBeacon\(("[^"]+\/live\?[^"]+") \+ encodeURIComponent\(("[^"]+")\)/
+        );
+        if (pre) entries.push({ url: JSON.parse(pre[1]) + encodeURIComponent(JSON.parse(pre[2])) });
         const source = params.expression.match(/f\.src=("[^"]+")/);
         if (source) spawn(JSON.parse(source[1]));
         return { result: { value: true } };
@@ -104,13 +117,14 @@ async function delayedFrame(
           },
         };
       }
-      if (method === 'Target.getTargets')
+      if (method === 'Target.getTargets') {
         return {
           targetInfos: [...pages.values()].flatMap((page) => [
             { targetId: page.id, type: 'page', url: page.url },
             ...(page.frame ? [{ targetId: 'iframe', type: 'iframe', url: page.frame.url }] : []),
           ]),
         };
+      }
       if (method === 'Target.closeTarget') pages.delete(params.targetId);
       return {};
     },
@@ -121,10 +135,13 @@ async function delayedFrame(
     {
       client,
       unguarded: client,
+      clientFactory: close ? () => ({ client, unguarded: client, close }) : undefined,
+      debug: debug ? (data) => debug(data, { reads }) : undefined,
+      rowTimeoutMs,
       targets,
       fixture: { log: () => [...entries] },
       capabilities: { autoAttach: true, browserSession: true },
-      settleScale: 0.01,
+      settleScale,
       refusalScale: 1,
     }
   );
@@ -190,6 +207,36 @@ test('an unanswered snapshot retry expires without keeping the polling heartbeat
     assert.deepEqual(row.incomplete, [
       'control frameOnDest: snapshot evidence not observed within 50ms',
     ]);
+  } finally {
+    clearTimeout(timer);
+    reply.resolve();
+    await running;
+  }
+});
+
+test('a row abandoned during a snapshot reply stops before the next read-only command', async () => {
+  const reply = Promise.withResolvers();
+  const observed = Promise.withResolvers();
+  let timer;
+  let targetSteps = 0;
+  const running = delayedFrame('C4.script-same-site', {
+    snapshotReply: () => reply.promise,
+    rowTimeoutMs: 300,
+    settleScale: 0.1,
+    close: () => reply.resolve(),
+    debug: ({ step, events, side }, { reads }) => {
+      if (step?.cdp === 'Target.getTargets' && side === 'control') targetSteps++;
+      if (events && side === 'control')
+        observed.resolve({ frames: reads.control, targets: targetSteps });
+    },
+  });
+  try {
+    const watchdog = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('abandoned snapshot did not drain')), 1500);
+    });
+    const { row } = await Promise.race([running, watchdog]);
+    assert.match(row.errors[0], /^row timed out after 300ms/);
+    assert.deepEqual(await Promise.race([observed.promise, watchdog]), { frames: 2, targets: 1 });
   } finally {
     clearTimeout(timer);
     reply.resolve();

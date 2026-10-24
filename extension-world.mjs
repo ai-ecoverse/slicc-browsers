@@ -9,6 +9,28 @@ const marker =
   'typeof root !== "undefined" && root === document.documentElement && root.dataset.sliccHarnessExtension === chrome.runtime.id';
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
 
+async function painted(reader, observer, ms) {
+  let timer;
+  const expired = new Promise((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  await Promise.race([
+    outcome(
+      reader.send(
+        'Runtime.evaluate',
+        {
+          expression: `new Promise((resolve) => { setTimeout(resolve, ${ms}); requestAnimationFrame(() => requestAnimationFrame(resolve)); })`,
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        observer
+      )
+    ),
+    expired,
+  ]);
+  clearTimeout(timer);
+}
+
 async function discover(reader, session, extensionId) {
   const start = reader.events.length;
   await reader.send('Runtime.enable', {}, session);
@@ -29,7 +51,7 @@ async function discover(reader, session, extensionId) {
   throw new Error(`extensionWorld: no content-script context for ${extensionId}`);
 }
 
-async function drivable({ client, session, live, reader, observer }) {
+async function drivable({ client, session, live, reader, observer, frameMs }) {
   const setup = await outcome(
     client.send(
       'Runtime.evaluate',
@@ -45,6 +67,7 @@ async function drivable({ client, session, live, reader, observer }) {
     client.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }, session)
   );
   await outcome(reader.send('Page.bringToFront', {}, observer));
+  await painted(reader, observer, frameMs);
   const down = await outcome(
     client.send(
       'Input.dispatchMouseEvent',
@@ -324,6 +347,7 @@ export async function extensionWorld({
   controls,
   extensionId = DEFAULT_EXTENSION_WORLD_ID,
   pauseMs = side === 'control' ? 5000 : 1500,
+  frameMs = 1000,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -395,6 +419,7 @@ export async function extensionWorld({
       side,
       controls,
       pauseMs,
+      frameMs,
     };
     if (mode === 'drivable') return await drivable(input);
     if (mode === 'debugger') return await debuggerWorld(input);

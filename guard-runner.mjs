@@ -854,6 +854,7 @@ class Execution {
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
           pauseMs: this.bound(this.side === 'control' ? 5000 : 1500, this.side !== 'control'),
+          frameMs: this.bound(1000),
           extensionId: this.options.extensionWorldId,
         })
       );

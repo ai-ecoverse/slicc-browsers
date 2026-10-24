@@ -147,14 +147,19 @@ export async function waitFor(check, ms, step = 25) {
     last = now;
   };
   let timer;
+  let expire;
+  const expired = new Promise((resolve) => {
+    expire = () => resolve(false);
+  });
   const tick = () => {
     beat();
-    timer = setTimeout(tick, step);
+    if (Date.now() > deadline) expire();
+    else timer = setTimeout(tick, step);
   };
   timer = setTimeout(tick, step);
   try {
     for (;;) {
-      if (await check()) return true;
+      if (await Promise.race([Promise.resolve().then(check), expired])) return true;
       beat();
       if (Date.now() > deadline) return false;
       await new Promise((resolve) => setTimeout(resolve, step));

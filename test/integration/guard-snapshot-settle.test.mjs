@@ -13,7 +13,10 @@ const targets = {
   client: 'http://client.example.test:5710',
 };
 
-async function delayedFrame(id, { commit = true, tree = true, leak = false } = {}) {
+async function delayedFrame(
+  id,
+  { commit = true, tree = true, leak = false, snapshotReply = async () => {} } = {}
+) {
   const entries = [];
   const pages = new Map();
   const sessions = new Map();
@@ -79,6 +82,7 @@ async function delayedFrame(id, { commit = true, tree = true, leak = false } = {
       if (method === 'Page.getFrameTree') {
         if (page?.frame && sessionId === page.session) {
           reads[page.side]++;
+          if (page.side === 'control' && reads.control >= 2) await snapshotReply();
           if (page.side === 'control' && reads.control >= 2 && commit)
             page.frame.url = page.destination;
           if (reads[page.side] === 1) first[page.side] = structuredClone(page.frame);
@@ -167,4 +171,86 @@ test('a guard that exposes the destination still fails without control-style sna
   assert.equal(row.observations.guarded.frameOnDest, true);
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
   assert.equal(reads.control, 2);
+});
+
+test('an unanswered snapshot retry expires without keeping the polling heartbeat alive', async () => {
+  const reply = Promise.withResolvers();
+  const running = delayedFrame('C4.script-same-site', { snapshotReply: () => reply.promise });
+  let timer;
+  try {
+    const watchdog = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('snapshot retry exceeded its bound')), 1500);
+    });
+    const { row, reads } = await Promise.race([running, watchdog]);
+    assert.equal(row.control, 'incomplete', JSON.stringify(row));
+    assert.equal(row.observations.control.frameOnDest, 'incomplete');
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(reads.control, 2);
+    assert.equal(reads.guarded, 1);
+    assert.deepEqual(row.incomplete, [
+      'control frameOnDest: snapshot evidence not observed within 50ms',
+    ]);
+  } finally {
+    clearTimeout(timer);
+    reply.resolve();
+    await running;
+  }
+});
+
+test('an abandoned row never replays a snapshot after closing its client', async () => {
+  const initial = Promise.withResolvers();
+  const observed = Promise.withResolvers();
+  let closed = false;
+  let calls = 0;
+  const client = {
+    events: [],
+    send: () => {
+      calls++;
+      return closed ? Promise.reject(new Error('closed')) : initial.promise;
+    },
+  };
+  const vector = {
+    id: 'D1.abandoned-snapshot',
+    kind: 'cdp',
+    scope: 'any',
+    targets: ['seven'],
+    setup: [],
+    trigger: [{ cdp: 'Page.getFrameTree', as: 'tree' }],
+    observe: {
+      tree: { check: { result: 'tree', path: 'ok', equals: true, observer: 'client' } },
+    },
+    liveCheck: { served: '/doc', observer: 'fixture' },
+    control: { origin: 'ordinary', via: 'guard', expected: { tree: true } },
+    expected: { tree: true },
+  };
+  let timer;
+  try {
+    const watchdog = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('abandoned execution did not drain')), 1500);
+    });
+    const execution = await run(
+      { ...set, vectors: [vector], variants: { prompt: 0 } },
+      {
+        clientFactory: () => ({
+          client,
+          unguarded: client,
+          close: () => {
+            closed = true;
+            initial.reject(new Error('closed'));
+          },
+        }),
+        targets,
+        fixture: { log: () => [] },
+        rowTimeoutMs: 20,
+        settleScale: 0.01,
+        debug: ({ events, side }) => {
+          if (events && side === 'control') observed.resolve(calls);
+        },
+      }
+    );
+    assert.match(execution.results[0].errors[0], /^row timed out after 20ms/);
+    assert.equal(await Promise.race([observed.promise, watchdog]), 1);
+  } finally {
+    clearTimeout(timer);
+  }
 });

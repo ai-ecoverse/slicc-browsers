@@ -1079,7 +1079,7 @@ class Execution {
     const plan = steps(this.vector, this.side, this.vars);
     const names = resultNames(check);
     const snapshots =
-      this.side === 'control' && want === true
+      this.side === 'control' && want === true && !this.clients.flight?.abandoned
         ? [...plan.setup, ...plan.trigger].filter(
             (step) =>
               names.includes(step.as) &&
@@ -1091,7 +1091,7 @@ class Execution {
     if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
       return this.check(check);
     let seen = false;
-    await this.poll(async () => {
+    const met = await this.poll(async () => {
       seen = await this.check(check);
       if (seen !== true && snapshots.length) {
         await this.execute(snapshots, undefined, 'observation');
@@ -1099,7 +1099,7 @@ class Execution {
       }
       return seen === true;
     }, observeMs);
-    if (!seen && snapshots.length) {
+    if (!met && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
       );

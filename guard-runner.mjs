@@ -70,6 +70,13 @@ const observedValue = (out, path) => {
 
 const address = (value) =>
   typeof value === 'string' ? value : hop(value.hops.slice(value.index ?? 0), value.to);
+const resultNames = (check) =>
+  [
+    check?.result,
+    ...[...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].flatMap(
+      resultNames
+    ),
+  ].filter(Boolean);
 const stateCheck = (check) =>
   check?.state ||
   [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])]
@@ -235,8 +242,8 @@ class Execution {
     return Math.round(ms * (absent ? this.refusalScale : this.scale));
   }
 
-  async poll(predicate, ms = 1500, absent = false) {
-    return waitFor(predicate, this.bound(ms, absent));
+  async poll(predicate, ms = 1500, absent = false, bounded = false) {
+    return waitFor(predicate, this.bound(ms, absent), 25, bounded);
   }
 
   async prepareState(spec) {
@@ -705,6 +712,7 @@ class Execution {
   async execute(list, childSession, phase = 'child') {
     if (phase === 'trigger') await this.childrenSettled();
     for (const [index, raw] of list.entries()) {
+      if (phase === 'observation' && this.clients.flight?.abandoned) return;
       if (this.clients.flight)
         Object.assign(this.clients.flight, { leg: this.side, phase, step: index });
       const step = expand(raw, this.vars);
@@ -1069,12 +1077,42 @@ class Execution {
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
     )
       return 'incomplete';
-    if (want !== true || check?.observer !== 'fixture') return this.check(check);
+    const plan = steps(this.vector, this.side, this.vars);
+    const names = resultNames(check);
+    const snapshots =
+      this.side === 'control' && want === true && !this.clients.flight?.abandoned
+        ? [...plan.setup, ...plan.trigger].filter(
+            (step) =>
+              names.includes(step.as) &&
+              !step.refusable &&
+              ['Page.getFrameTree', 'Target.getTargets'].includes(step.cdp) &&
+              supported(step.requires, this.options.capabilities)
+          )
+        : [];
+    if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
+      return this.check(check);
     let seen = false;
-    await this.poll(async () => {
-      seen = await this.check(check);
-      return seen === true;
-    }, observeMs);
+    const met = await this.poll(
+      async () => {
+        if (this.clients.flight?.abandoned) return true;
+        seen = await this.check(check);
+        if (seen !== true && snapshots.length) {
+          await this.execute(snapshots, undefined, 'observation');
+          if (this.clients.flight?.abandoned) return true;
+          seen = await this.check(check);
+        }
+        return seen === true;
+      },
+      observeMs,
+      false,
+      snapshots.length > 0
+    );
+    if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
+      this.incomplete.push(
+        `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
+      );
+      return 'incomplete';
+    }
     return seen;
   }
 

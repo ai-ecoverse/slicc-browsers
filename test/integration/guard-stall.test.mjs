@@ -69,3 +69,47 @@ test('a check that always stalls still ends', async () => {
   assert.equal(held, false);
   assert(Date.now() - started < 1000);
 });
+
+for (const bounded of [false, true])
+  for (const async of [false, true])
+    test(`a final ${async ? 'immediately resolved' : 'synchronous'} check still runs when the polling step exceeds the ${bounded ? 'bounded' : 'ordinary'} wait`, async () => {
+      let calls = 0;
+      const met = await waitFor(
+        () => {
+          const answer = ++calls === 2;
+          return async ? Promise.resolve(answer) : answer;
+        },
+        1,
+        25,
+        bounded
+      );
+      assert.equal(met, true);
+      assert.equal(calls, 2);
+    });
+
+test('a final check that never answers is still bounded', async () => {
+  let calls = 0;
+  const started = Date.now();
+  const met = await waitFor(() => (++calls === 1 ? false : new Promise(() => {})), 1, 25, true);
+  assert.equal(met, false);
+  assert.equal(calls, 2);
+  assert(Date.now() - started < 1000);
+});
+
+test('ordinary callers finish their pending predicate before consuming its evidence', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const reply = Promise.withResolvers();
+  let snapshot;
+  const waiting = waitFor(
+    async () => {
+      snapshot = await reply.promise;
+      return snapshot.ready;
+    },
+    1,
+    25
+  );
+  t.mock.timers.tick(50);
+  reply.resolve({ ready: true });
+  assert.equal(await waiting, true);
+  assert.deepEqual(snapshot, { ready: true });
+});

@@ -70,6 +70,13 @@ const observedValue = (out, path) => {
 
 const address = (value) =>
   typeof value === 'string' ? value : hop(value.hops.slice(value.index ?? 0), value.to);
+const resultNames = (check) =>
+  [
+    check?.result,
+    ...[...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].flatMap(
+      resultNames
+    ),
+  ].filter(Boolean);
 const stateCheck = (check) =>
   check?.state ||
   [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])]
@@ -1069,12 +1076,35 @@ class Execution {
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
     )
       return 'incomplete';
-    if (want !== true || check?.observer !== 'fixture') return this.check(check);
+    const plan = steps(this.vector, this.side, this.vars);
+    const names = resultNames(check);
+    const snapshots =
+      this.side === 'control' && want === true
+        ? [...plan.setup, ...plan.trigger].filter(
+            (step) =>
+              names.includes(step.as) &&
+              !step.refusable &&
+              ['Page.getFrameTree', 'Target.getTargets'].includes(step.cdp) &&
+              supported(step.requires, this.options.capabilities)
+          )
+        : [];
+    if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
+      return this.check(check);
     let seen = false;
     await this.poll(async () => {
       seen = await this.check(check);
+      if (seen !== true && snapshots.length) {
+        await this.execute(snapshots, undefined, 'observation');
+        seen = await this.check(check);
+      }
       return seen === true;
     }, observeMs);
+    if (!seen && snapshots.length) {
+      this.incomplete.push(
+        `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
+      );
+      return 'incomplete';
+    }
     return seen;
   }
 

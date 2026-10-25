@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, matchesGlob } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -128,6 +128,26 @@ test('npm test runs every test-glob file in exactly one node --test call, so the
     assert.equal(pkg.devDependencies[name], undefined, name);
   assert.match(pkg.devDependencies['@ai-ecoverse/slicc-cdp'], /^\d+\.\d+\.\d+$/);
   for (const name of Object.keys(pkg.scripts)) assert.doesNotMatch(name, /^test:(guard|gates)/);
+});
+
+test('every integration test file but chromium-launch, gates and workflows is a strict row for the flaky hunter, which keeps the default globs and its default retry', () => {
+  assert.equal(input('flaky-retry'), undefined);
+  const strict = block('strict-tests')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  assert.ok(strict.includes('**/*guard*.test.*'));
+  assert.ok(strict.includes('**/*security*.test.*'));
+  const files = globSync(input('test-glob'), { cwd: root }).sort();
+  assert.ok(files.includes('test/integration/guard-runner.test.mjs'));
+  assert.deepEqual(
+    files.filter((file) => !strict.some((glob) => matchesGlob(file, glob))),
+    [
+      'test/integration/chromium-launch.test.mjs',
+      'test/integration/gates.test.mjs',
+      'test/integration/workflows.test.mjs',
+    ]
+  );
 });
 
 test('semantic-release cuts versions from main alone and publishes npm from ci.yml with provenance', () => {

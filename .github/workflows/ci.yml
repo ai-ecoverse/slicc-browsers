@@ -35,6 +35,15 @@ jobs:
       test-glob: test/integration/*.test.mjs
       shards: 4
       timeout-minutes: 30
+      strict-tests: |
+        **/*guard*.test.*
+        **/*security*.test.*
+        test/integration/browser-runner.test.mjs
+        test/integration/fixture-client.test.mjs
+        test/integration/self-contained.test.mjs
+        test/integration/validate.test.mjs
+        test/integration/go.test.mjs
+        test/integration/cargo.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

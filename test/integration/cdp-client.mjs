@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { closeSync, openSync, rmSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,6 +8,8 @@ import { findBrowser } from '@ai-ecoverse/slicc-cdp';
 import { EXTENSION_ID, EXTENSION_PATH } from '@ai-ecoverse/slicc-shared-web/harness';
 
 const running = new Set();
+const launches = 3;
+const kept = 4000;
 
 const headless =
   process.env.SLICC_HEADLESS === '1' ||
@@ -82,9 +84,38 @@ function watchdog(child, directory) {
   return dog;
 }
 
-export async function launch(fixture, { spki, signal, allowOrigin, isolation = true } = {}) {
+async function said(path) {
+  const text = (await readFile(path, 'utf8').catch(() => '')).trim();
+  if (!text) return 'no stderr';
+  return `stderr:\n${text.length > kept ? `...${text.slice(-kept)}` : text}`;
+}
+
+export async function launch(fixture, options = {}) {
+  const exits = [];
+  for (;;) {
+    try {
+      const browser = await start(fixture, options);
+      return { ...browser, exits };
+    } catch (error) {
+      if (!error.exit) throw error;
+      exits.push(error.exit);
+      if (exits.length >= launches)
+        throw new Error(
+          `Chromium exited before CDP startup on all ${launches} attempts\n${exits.map((exit, index) => `attempt ${index + 1}: ${exit}`).join('\n')}`
+        );
+      process.stderr.write(
+        `Warning: Chromium exited before CDP startup, launching it again: ${error.exit}\n`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+}
+
+async function start(fixture, { spki, signal, allowOrigin, isolation = true }) {
   const executable = await chrome();
   const directory = await mkdtemp(join(tmpdir(), 'slicc-guard-'));
+  const log = join(directory, 'chromium-stderr.log');
+  const stderr = openSync(log, 'w');
   const child = spawn(
     executable,
     [
@@ -112,8 +143,9 @@ export async function launch(fixture, { spki, signal, allowOrigin, isolation = t
       `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP *.control.test 127.0.0.1:${fixture.port}`,
       'about:blank',
     ],
-    { detached: true, stdio: 'ignore' }
+    { detached: true, stdio: ['ignore', 'ignore', stderr] }
   );
+  closeSync(stderr);
   const entry = { child, directory, watchdog: watchdog(child, directory) };
   running.add(entry);
   let failure;
@@ -161,8 +193,14 @@ export async function launch(fixture, { spki, signal, allowOrigin, isolation = t
     while (!endpoint) {
       signal?.throwIfAborted();
       if (failure) throw failure;
-      if (child.exitCode !== null) throw new Error('Chromium exited before CDP startup');
-      if (Date.now() > deadline) throw new Error('Chromium CDP startup timed out');
+      if (child.exitCode !== null || child.signalCode !== null) {
+        const how = child.signalCode ? `signal ${child.signalCode}` : `exit code ${child.exitCode}`;
+        throw Object.assign(new Error(`Chromium exited before CDP startup with ${how}`), {
+          exit: `${how}, ${await said(log)}`,
+        });
+      }
+      if (Date.now() > deadline)
+        throw new Error(`Chromium CDP startup timed out, ${await said(log)}`);
       try {
         const [port, path] = (await readFile(join(directory, 'DevToolsActivePort'), 'utf8'))
           .trim()

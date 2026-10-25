@@ -32,6 +32,8 @@ import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
+const browserUiAttempts = 3;
+const browserUiMs = 5000;
 const q = JSON.stringify;
 
 const at = (value, path = '') =>
@@ -82,6 +84,8 @@ const stateCheck = (check) =>
   [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])]
     .map(stateCheck)
     .find(Boolean);
+const refusedOut = (step, out) =>
+  step.refusable ? isRefusal(out, step) : /refused/.test(String(out.error?.message ?? out.error));
 
 function pageExpression(step, url) {
   let expression;
@@ -662,11 +666,7 @@ class Execution {
   }
 
   record(step, out, session, phase, gone) {
-    const refused =
-      !gone &&
-      (step.refusable
-        ? isRefusal(out, step)
-        : /refused/.test(String(out.error?.message ?? out.error)));
+    const refused = !gone && refusedOut(step, out);
     this.trace.push({
       phase,
       declared: Boolean(step.refusable),
@@ -719,8 +719,9 @@ class Execution {
       if (!supported(step.requires, this.options.capabilities) || step.text) continue;
       if (!childSession && step.session === 'child') await this.childrenSettled();
       const session = childSession ?? this.session(step.session);
-      const out = await this.operation(step, session, phase);
-      if (!out) continue;
+      const first = await this.operation(step, session, phase);
+      if (!first) continue;
+      const out = await this.browserUiRetry(step, first, session, phase);
       this.record(
         step,
         out,
@@ -730,6 +731,41 @@ class Execution {
       );
       this.options.debug?.({ step, out, side: this.side });
     }
+  }
+
+  async browserUiRetry(step, out, session, phase) {
+    const tried = new Set();
+    let current = step;
+    let last = out;
+    for (let attempt = 1; attempt < browserUiAttempts; attempt++) {
+      const next = await this.replacementUi(current, last, tried);
+      if (!next) break;
+      current = { ...current, params: { ...current.params, targetId: next } };
+      last = await this.operation(current, session, phase);
+    }
+    return last;
+  }
+
+  async replacementUi(step, out, tried) {
+    const vanished = step.params?.targetId;
+    if (out.ok || !vanished || vanished !== this.vars.browserUi || refusedOut(step, out))
+      return undefined;
+    tried.add(vanished);
+    const reader = this.reader ?? this.client;
+    let next;
+    await this.poll(async () => {
+      const listed = await outcome(reader.send('Target.getTargets', {}));
+      const infos = listed.ok ? (listed.result?.targetInfos ?? []) : [];
+      if (!listed.ok || infos.some((info) => info.targetId === vanished)) return true;
+      next = infos.find((info) => info.type === 'browser_ui' && !tried.has(info.targetId));
+      return Boolean(next);
+    }, browserUiMs);
+    if (!next) return undefined;
+    this.notes.push(
+      `{browserUi} ${vanished} was gone when ${step.cdp} reached it; retried with ${next.targetId}`
+    );
+    this.vars.browserUi = next.targetId;
+    return next.targetId;
   }
 
   async operation(step, session, phase) {

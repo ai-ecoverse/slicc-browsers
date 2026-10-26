@@ -127,8 +127,8 @@ test('a blocked cross-site iframe is live through its out-of-process chrome-erro
   passes(await row('C4.iframe', {}));
 });
 
-test('a guard that replaces the error page proves the block through navigation history', async () => {
-  passes(await row('C1.href', { replaceWith: 'about:blank#blocked' }));
+test('a guard that replaces the error page with its blocked data: page proves the block through navigation history', async () => {
+  passes(await row('C1.href', { replaceWith: 'data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E' }));
 });
 
 test('a proven block without a detach satisfies detached', async () => {

@@ -3,6 +3,7 @@ import { createObserverTarget } from './observer-target.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const refused = (out) => !out.ok && /^slicc: refused:/.test(out.error?.message ?? '');
+const rejected = new Set(['', 'about:blank', 'data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E']);
 const hosts = [
   ['exa mple.sliccy.ai', 'exa%20mple.sliccy.ai'],
   ['exa%20mple.sliccy.ai', 'exa%20mple.sliccy.ai'],
@@ -63,7 +64,7 @@ async function document(reader, targetId, expected, allowNativeRejection = false
       if (out.ok && value?.title === 'doc' && canonicalURL(value.href) === expected) return value;
       await pause(25);
     } while (Date.now() < deadline);
-    if (allowNativeRejection && ['', 'about:blank', 'about:blank#blocked'].includes(targetURL))
+    if (allowNativeRejection && rejected.has(canonicalURL(targetURL)))
       return { nativeRejected: true, url: last?.url ?? '' };
     throw new Error(
       `unparseable: Chrome did not load a fixture document at ${expected}: ${JSON.stringify(last)}`

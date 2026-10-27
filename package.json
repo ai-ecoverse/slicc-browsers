@@ -80,7 +80,7 @@
   },
   "devDependencies": {
     "@ai-ecoverse/slicc-cdp": "1.42.3",
-    "@ai-ecoverse/slicc-shared-web": "2.13.3",
+    "@ai-ecoverse/slicc-shared-web": "2.13.4",
     "@biomejs/biome": "2.5.15",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",

@@ -59,11 +59,27 @@ const plain = (value) =>
       String.fromCharCode(Number.parseInt(hex, 16))
     )
   );
-const layers = (value) => {
-  const out = [lower(value)];
-  for (let next = plain(out[0]); next !== out.at(-1); next = plain(next)) out.push(next);
-  return out;
-};
+const utf8 = (value) =>
+  lower(
+    value.replace(/(?:%[0-9a-f]{2})+/gi, (run) =>
+      new TextDecoder().decode(
+        Uint8Array.from(run.slice(1).split('%'), (hex) => Number.parseInt(hex, 16))
+      )
+    )
+  );
+const ignored = (form) => form.replace(/[\t\n\r]/g, '');
+const readings = (value) =>
+  [
+    [(form) => form, plain],
+    [ignored, plain],
+    [ignored, utf8],
+  ].map(([read, decode]) => {
+    const out = [read(lower(value))];
+    for (let next = read(decode(out[0])); next !== out.at(-1); next = read(decode(next)))
+      out.push(next);
+    return out;
+  });
+const layers = (value) => readings(value).flat();
 const unschemed = (value) => value.replace(/^[a-z][a-z\d+.-]*:\/\//, '');
 
 const encoded = (url) =>
@@ -101,25 +117,38 @@ function discoveryRules({ failedURL, tag, trigger }) {
   const { failed, leaks, names, carries } = failureRules({ failedURL, tag });
   const { origin, host, hostname } = failed;
   const named = [hostname, host, origin];
-  const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
+  const cleanTitle = ({ title, url }) =>
+    !leaks(title) &&
+    (!names(title) ||
+      named.includes(lower(title)) ||
+      (!layers(url).includes(origin) && referenced(title)));
   const ownTitle = ({ url, title }) =>
     plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
   const inner = (u) => (u && !u.host ? inner(parseURL(u.pathname)) : u);
   const onHost = (u) => u?.hostname.replace(/\.$/, '') === hostname;
-  const references = (form) =>
-    Array.from(
-      form.matchAll(/(?:[a-z][a-z\d+.-]*:)+[\\/]*[^\\/?#&\s]*|[\\/]{2}[^\\/?#&\s]*/g),
-      ([ref]) => inner(parseURL(ref, /^[\\/]/.test(ref) ? origin : undefined))
+  const pattern = /(?:[a-z][a-z\d+.-]*:)+[\\/]*[^\\/?#&\s]*|[\\/]{2}[^\\/?#&\s]*/g;
+  const spaced = (form) => Array.from(form, (c) => (c > ' ' ? c : ' ')).join('');
+  const resolve = (ref) => inner(parseURL(ref, /^[\\/]/.test(ref) ? origin : undefined));
+  const fine = (text) =>
+    Array.from(text.matchAll(pattern), ([ref]) => resolve(ref)).every(
+      (u) => !onHost(u) || u.origin === origin
     );
   const exact = (form) =>
-    form === origin ||
-    (!onHost(inner(parseURL(form))) &&
-      references(form).every((u) => !onHost(u) || u.origin === origin));
+    form === origin || (!onHost(inner(parseURL(form))) && fine(form) && fine(spaced(form)));
+  const only = (ref, at, text) =>
+    parseURL(ref, /^[\\/]/.test(ref) ? origin : undefined)?.href === `${origin}/` &&
+    !/[\\/?#]/.test(text[at + ref.length] ?? '');
+  const bare = (form) =>
+    !spaced(form)
+      .replace(pattern, (ref, at, text) => (only(ref, at, text) ? ref.replace(hostname, ' ') : ref))
+      .includes(hostname);
+  const referenced = (title) =>
+    layers(title).every(exact) && readings(title).every((read) => bare(read.at(-1)));
   const cleanURL = (url) => !leaks(url) && layers(url).every(exact);
   const home = parseURL(trigger)?.href;
   const clean = (info) => {
-    if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
-    return cleanURL(info.url) && (cleanTitle(info.title) || (ownTitle(info) && !leaks(info.title)));
+    if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info);
+    return cleanURL(info.url) && (cleanTitle(info) || (ownTitle(info) && !leaks(info.title)));
   };
   return { clean, carries };
 }

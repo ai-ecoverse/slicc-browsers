@@ -52,7 +52,6 @@ async function lockChecks({ client, session, targetId, result }) {
 }
 
 const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
-const errorPageURL = 'chrome-error://chromewebdata/';
 const lower = (value) => String(value ?? '').toLowerCase();
 const plain = (value) =>
   lower(
@@ -92,41 +91,25 @@ function discoveryRules({ failedURL, tag, trigger }) {
   const ownTitle = ({ url, title }) =>
     plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
   const home = parseURL(trigger)?.href;
-  const clean = (info) => {
+  return (info) => {
     if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
     return (
       !leaks(info.url) && (lower(info.url) === origin || !names(info.url)) && cleanTitle(info.title)
     );
   };
-  const shows = ({ url, title }) =>
-    [origin, errorPageURL].includes(lower(url)) ||
-    (lower(url) === '' && named.includes(lower(title)));
-  return { clean, shows };
 }
 
-function eventsRedacted({ events, targetId, start, sent, ...failure }) {
-  const infos = (from) =>
-    events
-      .slice(from)
-      .filter(
-        (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
-      )
-      .map((e) => e.params.targetInfo);
-  const { clean, shows } = discoveryRules(failure);
-  return infos(sent).some(shows) && infos(start).every(clean);
+function eventsRedacted({ events, targetId, start, ...failure }) {
+  const clean = discoveryRules(failure);
+  return events
+    .slice(start)
+    .filter(
+      (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
+    )
+    .every((e) => clean(e.params.targetInfo));
 }
 
-async function redaction({
-  client,
-  targetId,
-  failedURL,
-  ordinary,
-  tag,
-  start,
-  sent,
-  result,
-  discovery,
-}) {
+async function redaction({ client, targetId, failedURL, ordinary, tag, start, result, discovery }) {
   const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
   const list = await outcome(client.send('Target.getTargets'));
   const before = client.events.length;
@@ -155,7 +138,6 @@ async function redaction({
         events: client.events,
         targetId,
         start,
-        sent,
         failedURL,
         tag,
         trigger: triggerURL(ordinary, failedURL),
@@ -290,7 +272,6 @@ export async function protectedErrorPage({
       );
     }
     await outcome(reader.send('Page.bringToFront', {}, observer));
-    const sent = client.events.length;
     const unsent = await scripted(client, session, ordinary, failedURL);
     if (unsent) return missing(unsent);
     let evidence;
@@ -317,17 +298,7 @@ export async function protectedErrorPage({
       return missing(`missing error commit ${JSON.stringify(evidence)}`);
     result.live = live;
     if (!live) return { ...result, liveWhy: commitWhy(result.diagnostics.errorCommit) };
-    await redaction({
-      client,
-      targetId,
-      failedURL,
-      ordinary,
-      tag,
-      start,
-      sent,
-      result,
-      discovery,
-    });
+    await redaction({ client, targetId, failedURL, ordinary, tag, start, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {

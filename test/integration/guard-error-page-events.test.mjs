@@ -26,8 +26,10 @@ const ownPage = (shown) => {
   };
 };
 const legs = ['live', 'attached', 'infoRedacted', 'listRedacted', 'attachRedacted'];
+const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
+const undiscovered = (info, method) => (discoveryMethods.includes(method) ? [] : info);
 
-async function rows(ids, discovery) {
+async function rows(ids, discovery, observed) {
   const fixture = await fixtureServer();
   try {
     const browser = chrome();
@@ -36,7 +38,7 @@ async function rows(ids, discovery) {
       { ...set, vectors: vectors.filter((v) => ids.includes(v.id)), variants: { prompt: 0 } },
       {
         client: quarantining(browser, { discovery }),
-        unguarded: browser.connect(),
+        unguarded: browser.connect(observed),
         fixture,
         settleScale: 0.1,
         capabilities: { discovery: true },
@@ -91,6 +93,23 @@ for (const [name, ids, discovery] of [
       seven(info)
         ? originOnly(info)
         : { ...info, title: decodeURIComponent(info.url.replace(/^http:\/\//, '')) },
+  ],
+  ['reports no event for the tab at all', every, () => []],
+  ['reports nothing about the failed navigation', recover, onSeven(() => [])],
+  [
+    'leaves the url and the title out of every event',
+    recover,
+    onSeven(({ url, title, ...info }) => info),
+  ],
+  [
+    "masks the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : { ...info, url: '', title: '' }),
+  ],
+  [
+    "leaves the url and the title out of the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : (({ url, title, ...rest }) => rest)(info)),
   ],
 ])
   test(`a guard that ${name} in its discovery events during the error interval passes the error-page rows`, async () => {
@@ -200,21 +219,20 @@ for (const [name, ids, discovery] of [
     ]),
   ],
   [
-    'leaves the url and the title out of every event',
-    recover,
-    onSeven(({ url, title, ...info }) => info),
-  ],
-  [
-    "masks the client's own page and reports nothing about the failed navigation",
-    [all],
-    (info) => (seven(info) ? [] : { ...info, url: '', title: '' }),
-  ],
-  [
-    "leaves the url out of the client's own page and reports nothing about the failed navigation",
+    "leaves the url out of the client's own page, keeps its title, which carries the failed URL, and reports nothing else",
     [all],
     (info) => (seven(info) ? [] : (({ url, ...rest }) => rest)(info)),
   ],
-  ['reports nothing about the failed navigation', recover, onSeven(() => [])],
+  [
+    "titles the client's own page with the failed URL and reports nothing else",
+    [all],
+    ownPage((info, page) => ({ ...info, url: page, title: info.url })),
+  ],
+  [
+    'titles an empty url with the query secret and reports nothing else',
+    [all, `${all}.query`],
+    onSeven((info) => ({ ...info, url: '', title: failed(info).search.slice(1) })),
+  ],
 ])
   test(`a guard that ${name} in its discovery events during the error interval fails only eventsRedacted`, async () => {
     const execution = await rows(ids, discovery);
@@ -231,3 +249,14 @@ for (const [name, ids, discovery] of [
     }
     assert.equal(execution.summary().pass, false);
   });
+
+test('a control whose unguarded browser reports no discovery event in the error interval fails the control', async () => {
+  const execution = await rows(every, undefined, undiscovered);
+  assert.equal(execution.results.length, every.length);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.control.eventsRedacted, true, JSON.stringify(row));
+    assert.equal(row.observations.guarded.eventsRedacted, true, JSON.stringify(row));
+  }
+  assert.equal(execution.summary().pass, false);
+});

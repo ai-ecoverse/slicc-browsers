@@ -546,6 +546,57 @@ for (const [name, ids, discovery] of [
     cut(cutTo((to) => `${to.protocol}\t${to.hostname}:1`)),
   ],
   [
+    "cuts the client's own page to its origin but names the protected host on another port with a full-width letter in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.protocol}//\uff53${to.hostname.slice(1)}:1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but names the encoded protected host on another port with a full-width letter in its title's destination",
+    recover,
+    cut(cutTo((to) => upper(`${to.protocol}//\uff53${to.hostname.slice(1)}:1`))),
+  ],
+  [
+    "cuts the client's own page to its origin but names the protected host on another port with a full-width letter and without a scheme in its title's destination",
+    [all],
+    cut(cutTo((to) => `\uff53${to.hostname.slice(1)}:1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts an unrelated path after the origin with a soft hyphen in its host in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.protocol}//${to.host.replace('.', '\u00ad.')}/unrelated`)),
+  ],
+  [
+    "cuts the client's own page to its origin but encodes an unrelated path after the origin with a soft hyphen in its host in its title's destination",
+    recover,
+    cut(cutTo((to) => upper(`${to.protocol}//${to.host.replace('.', '\u00ad.')}/unrelated`))),
+  ],
+  [
+    "cuts the client's own page to its origin but names the uppercase protected host on another port with a full-width capital in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.protocol}//\uff33${to.hostname.slice(1).toUpperCase()}:1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but names the encoded uppercase protected host on another port with a full-width capital in its title's destination",
+    recover,
+    cut(cutTo((to) => upper(`${to.protocol}//\uff33${to.hostname.slice(1).toUpperCase()}:1`))),
+  ],
+  [
+    "masks the client's own page but names the protected host on another port with ideographic full stops in its title's destination",
+    [all],
+    cut(
+      cutTo((to) => `${to.protocol}//${to.hostname.replaceAll('.', '\u3002')}:1`),
+      { url: () => errorPage }
+    ),
+  ],
+  [
+    "masks the client's own page but names the encoded protected host on another port with ideographic full stops in its title's destination",
+    recover,
+    cut(
+      cutTo((to) => upper(`${to.protocol}//${to.hostname.replaceAll('.', '\u3002')}:1`)),
+      { url: () => errorPage }
+    ),
+  ],
+  [
     'shows the origin titled with an ordinary URL whose destination is the bare origin',
     [all],
     onSeven((info) => ({

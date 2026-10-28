@@ -135,9 +135,12 @@ function discoveryRules({ failedURL, tag, trigger }) {
     );
   const exact = (form) =>
     form === origin || (!onHost(inner(parseURL(form))) && fine(form) && fine(spaced(form)));
+  const only = (ref, at, text) =>
+    parseURL(ref, /^[\\/]/.test(ref) ? origin : undefined)?.href === `${origin}/` &&
+    !/[\\/?#]/.test(text[at + ref.length] ?? '');
   const bare = (form) =>
     !spaced(form)
-      .replace(pattern, (ref) => (onHost(resolve(ref)) ? ref.replace(hostname, ' ') : ref))
+      .replace(pattern, (ref, at, text) => (only(ref, at, text) ? ref.replace(hostname, ' ') : ref))
       .includes(hostname);
   const referenced = (title) =>
     layers(title).every(exact) && readings(title).every((read) => bare(read.at(-1)));

@@ -159,6 +159,11 @@ for (const [name, ids, discovery] of [
     cut(bare, { url: (page) => page.href }),
   ],
   [
+    "cuts the client's own page to its origin and titles it with its URL, the destination cut to the bare origin and followed by another parameter",
+    [all],
+    cut(cutTo((to) => `${to.origin}&next=1`)),
+  ],
+  [
     "reduces the destination in the client's own page to the encoded origin after a tab",
     recover,
     reduced((to) => `\t${to.origin}`),
@@ -476,6 +481,49 @@ for (const [name, ids, discovery] of [
     "cuts the client's own page to its origin but keeps the fragment secret in its title's destination",
     [all, `${all}.fragment`],
     cut(cutTo((to) => `${to.origin}/${to.hash}`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts an unrelated path after the origin in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.origin}/unrelated`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts an unrelated query after the origin in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.origin}/?other=1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts an unrelated fragment after the origin in its title's destination",
+    recover,
+    cut(cutTo((to) => `${to.origin}#other`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts a slash after the origin in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.origin}/`)),
+  ],
+  [
+    "cuts the client's own page to its origin but puts userinfo before the protected host in its title's destination",
+    every,
+    cut(cutTo((to) => `${to.protocol}//user:pw@${to.host}`)),
+  ],
+  [
+    "cuts the client's own page to its origin but encodes an unrelated path after the origin in its title's destination",
+    recover,
+    cut(cutTo((to) => upper(`${to.origin}/unrelated`))),
+  ],
+  [
+    "cuts the client's own page to its origin but puts a tab and an unrelated path after the origin in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.origin}\t/unrelated`)),
+  ],
+  [
+    "masks the client's own page but puts an unrelated path after the origin in its title's destination",
+    [all],
+    cut(
+      cutTo((to) => `${to.origin}/unrelated`),
+      { url: () => errorPage }
+    ),
   ],
   [
     "cuts the client's own page to its origin but names the protected host on another port in its title's destination",

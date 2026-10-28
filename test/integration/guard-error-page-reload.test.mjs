@@ -119,6 +119,22 @@ for (const [name, options] of [
     'the private blank page titled with the protected origin',
     { page: blank, taint: (tab, failedURL) => ({ title: new URL(failedURL).origin }) },
   ],
+  [
+    'the private blank page titled with the protected host with a full-width letter',
+    {
+      page: blank,
+      taint: (tab, failedURL) => ({ title: `\uff53${new URL(failedURL).hostname.slice(1)}` }),
+    },
+  ],
+  [
+    'the private blank page titled with the encoded protected host with a soft hyphen',
+    {
+      page: blank,
+      taint: (tab, failedURL) => ({
+        title: encodeURIComponent(new URL(failedURL).hostname.replace('.', '\u00ad.')),
+      }),
+    },
+  ],
 ])
   test(`a reload that finds the tab on ${name} fails only reload`, async () => {
     const execution = await rows([all], options);

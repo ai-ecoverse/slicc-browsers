@@ -107,8 +107,9 @@ function discoveryRules({ failedURL, tag, trigger }) {
   const inner = (u) => (u && !u.host ? inner(parseURL(u.pathname)) : u);
   const onHost = (u) => u?.hostname.replace(/\.$/, '') === hostname;
   const references = (form) =>
-    Array.from(form.matchAll(/(?:[a-z][a-z\d+.-]*:)?[\\/]{2}[^\\/?#&\s]*/g), ([ref]) =>
-      parseURL(ref, origin)
+    Array.from(
+      form.matchAll(/(?:[a-z][a-z\d+.-]*:)+[\\/]*[^\\/?#&\s]*|[\\/]{2}[^\\/?#&\s]*/g),
+      ([ref]) => inner(parseURL(ref, /^[\\/]/.test(ref) ? origin : undefined))
     );
   const exact = (form) =>
     form === origin ||

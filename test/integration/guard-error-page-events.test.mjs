@@ -348,6 +348,16 @@ for (const [name, ids, discovery] of [
     reduced((to) => `${to.protocol}//${to.hostname}:1`, { encode: (to) => upper(upper(to)) }),
   ],
   [
+    "reduces the destination in the client's own page to the protected host on another port after a single backslash",
+    recover,
+    reduced((to) => `${to.protocol}\\${to.hostname}:1`, { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port with no separator",
+    [all],
+    reduced((to) => `${to.protocol}${to.hostname}:1`),
+  ],
+  [
     "titles the client's own page with the failed URL and reports nothing else",
     [all],
     ownPage((info, page) => ({ ...info, url: page, title: info.url })),

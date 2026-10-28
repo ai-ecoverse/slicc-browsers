@@ -3,5 +3,10 @@
   "extends": ["@ai-ecoverse/slicc-shared-web/biome"],
   "files": {
     "includes": ["**", "!corpus.json"]
+  },
+  "markdown": {
+    "formatter": {
+      "enabled": false
+    }
   }
 }

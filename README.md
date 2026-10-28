@@ -1,7 +1,6 @@
 # slicc-browsers
 
 The browser knowledge that SLICC's tools share. SLICC drives a real Chromium browser over the Chrome DevTools Protocol (CDP), and several programs, written in different languages, need to agree on the same facts:
-
 - which browsers exist, where they are installed, and how to launch them for SLICC;
 - how to find a browser that is already running with a debugging port, and which one to pick;
 - which origins browser control must **never** touch, starting with seven's own origin and the vault;
@@ -9,23 +8,23 @@ The browser knowledge that SLICC's tools share. SLICC drives a real Chromium bro
 
 These programs can't share code, so they share data: one catalog, three sets of test vectors and their JSON schemas, published as a Go module, a Rust crate and an npm package at the same version.
 
-| who | uses it for |
-| --- | --- |
-| [slicc-cli](https://github.com/ai-ecoverse/slicc-cli) (Go) | `slicc browsers`, `slicc launch`, and its CDP relay's guard |
-| [slicc-cdp](https://github.com/ai-ecoverse/slicc-cdp) (Rust, also `wasm32-wasip1`) | `playwright-cli list` and `open`, and its guard |
-| [slicc-agent](https://github.com/ai-ecoverse/slicc-agent) | refusing protected origins in its browser tools |
-| [slicc-bios](https://github.com/ai-ecoverse/slicc-bios), [slicc-extension](https://github.com/ai-ecoverse/slicc-extension) | their CDP guards, tested against the guard vectors |
+| who                                                                                                                        | uses it for                                                 |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| [slicc-cli](https://github.com/ai-ecoverse/slicc-cli) (Go)                                                                 | `slicc browsers`, `slicc launch`, and its CDP relay's guard |
+| [slicc-cdp](https://github.com/ai-ecoverse/slicc-cdp) (Rust, also `wasm32-wasip1`)                                         | `playwright-cli list` and `open`, and its guard             |
+| [slicc-agent](https://github.com/ai-ecoverse/slicc-agent)                                                                  | refusing protected origins in its browser tools             |
+| [slicc-bios](https://github.com/ai-ecoverse/slicc-bios), [slicc-extension](https://github.com/ai-ecoverse/slicc-extension) | their CDP guards, tested against the guard vectors          |
 
 ## What's inside
 
-| file | what it is |
-| --- | --- |
-| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations and the protected origins |
-| [`corpus/`](corpus), `corpus.json` | discovery conformance cases: a fake machine each, with the ranked browser list it must produce |
-| [`protected.json`](protected.json), [`protected.mjs`](protected.mjs) | protected-origin test vectors, and a reference matcher in JavaScript |
-| [`guard-vectors.json`](guard-vectors.json) | the CDP scenarios every guard must pass |
-| [`guard-runner.mjs`](guard-runner.mjs), [`guard-driver.mjs`](guard-driver.mjs), [`fixture-server.mjs`](fixture-server.mjs) | a reference runner for the guard vectors, its helpers, and the test server they run against |
-| [`schema/`](schema) | JSON Schema (2020-12) for each file above, and for the `--json` output of `slicc browsers` and `playwright-cli list` |
+| file                                                                                                                       | what it is                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`catalog.json`](catalog.json)                                                                                             | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations and the protected origins |
+| [`corpus/`](corpus), `corpus.json`                                                                                         | discovery conformance cases: a fake machine each, with the ranked browser list it must produce                                                                                     |
+| [`protected.json`](protected.json), [`protected.mjs`](protected.mjs)                                                       | protected-origin test vectors, and a reference matcher in JavaScript                                                                                                               |
+| [`guard-vectors.json`](guard-vectors.json)                                                                                 | the CDP scenarios every guard must pass                                                                                                                                            |
+| [`guard-runner.mjs`](guard-runner.mjs), [`guard-driver.mjs`](guard-driver.mjs), [`fixture-server.mjs`](fixture-server.mjs) | a reference runner for the guard vectors, its helpers, and the test server they run against                                                                                        |
+| [`schema/`](schema)                                                                                                        | JSON Schema (2020-12) for each file above, and for the `--json` output of `slicc browsers` and `playwright-cli list`                                                               |
 
 ## Install
 
@@ -58,10 +57,10 @@ slicc-browsers = { version = "1", features = ["serde"] }
 slicc-browsers = { version = "1", features = ["corpus"] }
 ```
 
-| feature | adds |
-| --- | --- |
-| none | `CATALOG` and the schemas as `&str` constants, with no dependencies |
-| `serde` | typed `Catalog`, `catalog()`, `Catalog::browser` and `Catalog::priority` |
+| feature  | adds                                                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------- |
+| none     | `CATALOG` and the schemas as `&str` constants, with no dependencies                                               |
+| `serde`  | typed `Catalog`, `catalog()`, `Catalog::browser` and `Catalog::priority`                                          |
 | `corpus` | the vectors (`CORPUS`, `PROTECTED`, `GUARD_VECTORS`) and the modules `corpus`, `protected` and `guard`, for tests |
 
 Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` so it stays out of release builds.
@@ -77,21 +76,20 @@ import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' };
 import { protectedOrigins } from '@ai-ecoverse/slicc-browsers/protected.mjs';
 ```
 
-| export | what it is |
-| --- | --- |
-| `.`, `./catalog.json`, `./corpus.json`, `./protected.json`, `./guard-vectors.json` | the data |
-| `./schema/<name>.schema.json` | the schemas |
-| `./protected.mjs` | the protected-origin matcher |
-| `./seven.mjs` | `isSevenLabel(seven, label)`: whether a `sliccy.ai` host label can be a seven instance |
-| `./guard-runner`, `./guard-driver.mjs` | the guard vector runner and its helpers |
-| `./fixture`, `./fixture-client` | the test server (Node only) and a client for a remote one |
+| export                                                                             | what it is                                                                             |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `.`, `./catalog.json`, `./corpus.json`, `./protected.json`, `./guard-vectors.json` | the data                                                                               |
+| `./schema/<name>.schema.json`                                                      | the schemas                                                                            |
+| `./protected.mjs`                                                                  | the protected-origin matcher                                                           |
+| `./seven.mjs`                                                                      | `isSevenLabel(seven, label)`: whether a `sliccy.ai` host label can be a seven instance |
+| `./guard-runner`, `./guard-driver.mjs`                                             | the guard vector runner and its helpers                                                |
+| `./fixture`, `./fixture-client`                                                    | the test server (Node only) and a client for a remote one                              |
 
 Everything except `./fixture` runs in a browser as well as in Node. `protected.mjs` and `seven.mjs` import nothing, so an extension or a service worker can ship either file on its own.
 
 ## The catalog
 
 `catalog.json` holds everything a program needs to know about browsers:
-
 - **Browsers.** Chrome, Edge, Brave, Opera, Vivaldi, Arc, Atlas, Dia and their pre-release channels, Chrome for Testing and Chromium, **in priority order**. Each has its macOS bundle, Windows install roots and registry keys, Linux binaries, `.desktop` ids, flatpak and snap names, and its default user-data dir.
 - **Electron apps**: known apps by bundle id, and the ones that block remote debugging.
 - **Ranking**: endpoints with a seven tab come first, then other running endpoints, then installed Chrome, other installed Chromium browsers, Electron apps, and SLICC six's profile last. Browsers older than Chromium 116 are left out.
@@ -219,15 +217,15 @@ You supply:
 - **origins**: the fixture server reachable as seven, the vault and an ordinary site. Point the protected hostnames at it with Chrome's `--host-resolver-rules`, so no test ever touches the real seven;
 - **capabilities**: what your transport can do. A row that needs something you don't declare is skipped as `not-supported:<capability>`.
 
-| capability | means the transport can |
-| --- | --- |
-| `autoAttach` | auto-attach to child targets such as popups and iframes |
-| `browserSession` | send commands to the browser session, not only to a page |
-| `browserContexts` | create isolated browser contexts |
-| `discovery` | report target creation and changes without a session |
-| `chromeUrlsAttach` | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't) |
-| `extensionWorld` | host a foreign extension's content script on the test page |
-| `clientExit` | close the guarded client in the middle of a row |
+| capability                                         | means the transport can                                                                                  |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `autoAttach`                                       | auto-attach to child targets such as popups and iframes                                                  |
+| `browserSession`                                   | send commands to the browser session, not only to a page                                                 |
+| `browserContexts`                                  | create isolated browser contexts                                                                         |
+| `discovery`                                        | report target creation and changes without a session                                                     |
+| `chromeUrlsAttach`                                 | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't)                      |
+| `extensionWorld`                                   | host a foreign extension's content script on the test page                                               |
+| `clientExit`                                       | close the guarded client in the middle of a row                                                          |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
 
 `forwardAudit` permits observer restore after a client history timeout only with terminal `historyTrigger: { id: "history-trigger", complete: true, forwarded: false }` proof from `audit({ historyTrigger: command, probes: [], final: false })`, keeping the probe ledger open; missing proof, forwarding or a late successful reply never qualifies as refusal.
@@ -248,13 +246,13 @@ To find out what a vector checks, read it in `guard-vectors.json`: each one list
 
 You need Go 1.26, Rust stable with the `wasm32-wasip1` target, Node 24 or later, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or the Chrome for Testing that `npx slicc-cdp install-browser` installs, and run it headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
 
-| command | what it does |
-| --- | --- |
-| `npm run corpus` | rebuilds `corpus.json` from `corpus/` |
-| `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs` |
-| `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature |
-| `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
-| `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
+| command            | what it does                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run corpus`   | rebuilds `corpus.json` from `corpus/`                                                                                                                                                                  |
+| `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs`                                                                           |
+| `npm run lint`     | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature                                            |
+| `npm test`         | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
+| `npm run build`    | the Go module, the crate (also for `wasm32-wasip1`), and the npm package                                                                                                                               |
 
 A new discovery behaviour gets a corpus case, and a new guard behaviour gets a guard vector.
 

@@ -1200,7 +1200,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover: eventsRedacted",
+          "means": "protected error-page recover: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1349,7 +1349,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (query): eventsRedacted",
+          "means": "protected error-page recover (query): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1498,7 +1498,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (fragment): eventsRedacted",
+          "means": "protected error-page recover (fragment): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1646,7 +1646,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page restore: eventsRedacted",
+          "means": "protected error-page restore: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1827,7 +1827,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky: eventsRedacted",
+          "means": "protected error-page sticky: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2020,7 +2020,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (query): eventsRedacted",
+          "means": "protected error-page sticky (query): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2213,7 +2213,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (fragment): eventsRedacted",
+          "means": "protected error-page sticky (fragment): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",

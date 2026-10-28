@@ -1,0 +1,170 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+import { fixtureServer } from '../../fixture-server.mjs';
+import { run } from '../../guard-runner.mjs';
+import { chrome, quarantining } from './error-page-fake.mjs';
+
+const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
+const vectors = set.vectors.filter((v) => v.trigger.some((s) => s.errorPage));
+const every = vectors.map((v) => v.id);
+const all = 'C8.protected-error-page';
+const recover = [all, `${all}.query`, `${all}.fragment`];
+const errorPage = 'chrome-error://chromewebdata/';
+const failed = (info) => new URL(info.url);
+const seven = (info) => failed(info).hostname === 'seven.sliccy.ai';
+const originOnly = (info) => ({ ...info, url: failed(info).origin, title: failed(info).origin });
+const onSeven = (shown) => (info) => (seven(info) ? shown(info) : info);
+const legs = ['live', 'attached', 'infoRedacted', 'listRedacted', 'attachRedacted'];
+
+async function rows(ids, discovery) {
+  const fixture = await fixtureServer();
+  try {
+    const browser = chrome();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    return await run(
+      { ...set, vectors: vectors.filter((v) => ids.includes(v.id)), variants: { prompt: 0 } },
+      {
+        client: quarantining(browser, { discovery }),
+        unguarded: browser.connect(),
+        fixture,
+        settleScale: 0.1,
+        capabilities: { discovery: true },
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+  } finally {
+    await fixture.close();
+  }
+}
+
+for (const [name, ids, discovery] of [
+  [
+    'masks the url and titles the tab with its host',
+    every,
+    onSeven((info) => ({ ...info, url: errorPage, title: failed(info).hostname })),
+  ],
+  ['shows the origin only', recover, undefined],
+  [
+    "masks the url and the title with Chrome's error page",
+    recover,
+    onSeven((info) => ({ ...info, url: errorPage, title: errorPage })),
+  ],
+  ['leaves the url and the title out', recover, onSeven(({ url, title, ...info }) => info)],
+  [
+    'shows an empty url titled with the origin',
+    recover,
+    onSeven((info) => ({ ...info, url: '', title: failed(info).origin })),
+  ],
+  [
+    'shows the origin titled with the host and port',
+    recover,
+    onSeven((info) => ({ ...info, url: failed(info).origin, title: failed(info).host })),
+  ],
+  [
+    "shows the origin only after the client's own page was titled with its unescaped URL",
+    recover,
+    (info) =>
+      seven(info)
+        ? originOnly(info)
+        : { ...info, title: decodeURIComponent(info.url.replace(/^http:\/\//, '')) },
+  ],
+])
+  test(`a guard whose discovery events during the error interval ${name} passes the error-page rows`, async () => {
+    const execution = await rows(ids, discovery);
+    assert.equal(execution.results.length, ids.length);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'pass', JSON.stringify(row));
+      assert.equal(row.live, 'pass', JSON.stringify(row));
+      assert.deepEqual(row.errors, [], JSON.stringify(row));
+      assert.equal(row.incomplete, undefined, JSON.stringify(row));
+      assert.equal(row.observations.guarded.eventsRedacted, true, JSON.stringify(row));
+      assert.equal(row.observations.control.eventsRedacted, false, JSON.stringify(row));
+    }
+    assert.equal(execution.summary().pass, true);
+  });
+
+for (const [name, ids, discovery] of [
+  ['shows the failed URL', recover, (info) => info],
+  [
+    'shows the failed URL with a masked title',
+    [all],
+    onSeven((info) => ({ ...info, title: failed(info).hostname })),
+  ],
+  [
+    'masks the url but titles the tab with the failed URL',
+    [all],
+    onSeven((info) => ({ ...info, url: errorPage, title: info.url })),
+  ],
+  [
+    'puts the path in a masked url',
+    [all],
+    onSeven((info) => ({
+      ...info,
+      url: `chrome-error://chromewebdata${failed(info).pathname}`,
+      title: '',
+    })),
+  ],
+  [
+    'titles a masked url with the host and the path',
+    [all],
+    onSeven((info) => ({
+      ...info,
+      url: errorPage,
+      title: `${failed(info).host}${failed(info).pathname}`,
+    })),
+  ],
+  [
+    'titles a masked url with the query secret',
+    [all, `${all}.query`],
+    onSeven((info) => ({ ...info, url: errorPage, title: failed(info).search.slice(1) })),
+  ],
+  [
+    'puts the fragment secret in a masked url',
+    [all, `${all}.fragment`],
+    onSeven((info) => ({ ...info, url: `${errorPage}${failed(info).hash}`, title: errorPage })),
+  ],
+  [
+    'puts the encoded failed URL in a masked url',
+    [all],
+    onSeven((info) => ({ ...info, url: `${errorPage}?u=${encodeURIComponent(info.url)}` })),
+  ],
+  [
+    'shows the origin with a trailing slash',
+    [all],
+    onSeven((info) => ({ ...info, url: `${failed(info).origin}/`, title: failed(info).origin })),
+  ],
+  [
+    'shows an absent url, then the failed URL',
+    [all],
+    onSeven(({ url, title, ...info }) => [info, { ...info, url, title }]),
+  ],
+  [
+    'shows an absent url, then the fragment secret in its title',
+    [all, `${all}.fragment`],
+    onSeven(({ url, title, ...info }) => [info, { ...info, title: new URL(url).hash }]),
+  ],
+  ['reports nothing about the failed navigation', recover, onSeven(() => [])],
+])
+  test(`a guard whose discovery events during the error interval ${name} fails only eventsRedacted`, async () => {
+    const execution = await rows(ids, discovery);
+    assert.equal(execution.results.length, ids.length);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'fail', JSON.stringify(row));
+      assert.equal(row.live, 'pass', JSON.stringify(row));
+      assert.deepEqual(row.errors, [], JSON.stringify(row));
+      assert.equal(row.incomplete, undefined, JSON.stringify(row));
+      assert.equal(row.observations.guarded.eventsRedacted, false, JSON.stringify(row));
+      for (const leg of legs) assert.equal(row.observations.guarded[leg], true, leg);
+      assert.equal(row.why, 'eventsRedacted: got false, want true', JSON.stringify(row));
+    }
+    assert.equal(execution.summary().pass, false);
+  });

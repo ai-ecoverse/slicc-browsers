@@ -51,12 +51,57 @@ async function lockChecks({ client, session, targetId, result }) {
   result.closeRefused = refused(await outcome(client.send('Target.closeTarget', { targetId })));
 }
 
+const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
+const lower = (value) => String(value ?? '').toLowerCase();
+
+function shownOnly(failedURL, home) {
+  const failed = new URL(failedURL);
+  const { origin, host, hostname } = failed;
+  const parts = [
+    failedURL,
+    `${failed.pathname}${failed.search}${failed.hash}`,
+    failed.pathname,
+    failed.search.slice(1),
+    failed.hash.slice(1),
+  ]
+    .filter((part) => part && part !== '/')
+    .flatMap((part) => [part, encodeURIComponent(part)].map(lower));
+  const leaks = (value) => parts.some((part) => value.includes(part));
+  const names = (value) => value.includes(hostname) || parseURL(value)?.origin === origin;
+  return (info) => {
+    const url = lower(info.url);
+    const title = lower(info.title);
+    const own = parseURL(info.url)?.origin === home;
+    return (
+      !leaks(url) &&
+      (url === origin || !names(url)) &&
+      (own || (!leaks(title) && (!names(title) || [hostname, host, origin].includes(title))))
+    );
+  };
+}
+
+function eventsRedacted({ events, targetId, failedURL, ordinary, start, sent }) {
+  const infos = (from) =>
+    events
+      .slice(from)
+      .filter(
+        (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
+      )
+      .map((e) => e.params.targetInfo);
+  const home = parseURL(ordinary)?.origin ?? null;
+  return (
+    infos(sent).some((info) => parseURL(info.url)?.origin !== home) &&
+    infos(start).every(shownOnly(failedURL, home))
+  );
+}
+
 async function redaction({
   client,
   targetId,
   failedURL,
-  protectedOrigin,
+  ordinary,
   start,
+  sent,
   result,
   discovery,
 }) {
@@ -83,16 +128,8 @@ async function redaction({
     info.result?.targetInfo?.url === failedURL &&
     listed?.url === failedURL &&
     attachedInfo?.url === failedURL;
-  const targetEvents = client.events
-    .slice(start)
-    .filter(
-      (e) =>
-        ['Target.targetCreated', 'Target.targetInfoChanged'].includes(e.method) &&
-        e.params?.targetInfo?.targetId === targetId &&
-        e.params.targetInfo.url.includes(new URL(protectedOrigin).host)
-    );
   result.eventsRedacted = discovery
-    ? targetEvents.length > 0 && targetEvents.every((e) => only(e.params.targetInfo))
+    ? eventsRedacted({ events: client.events, targetId, failedURL, ordinary, start, sent })
     : 'not-supported';
 }
 
@@ -233,6 +270,7 @@ export async function protectedErrorPage({
       );
     }
     await outcome(reader.send('Page.bringToFront', {}, observer));
+    const sent = client.events.length;
     const unsent = await scripted(client, session, ordinary, failedURL);
     if (unsent) return missing(unsent);
     let evidence;
@@ -259,7 +297,7 @@ export async function protectedErrorPage({
       return missing(`missing error commit ${JSON.stringify(evidence)}`);
     result.live = live;
     if (!live) return { ...result, liveWhy: commitWhy(result.diagnostics.errorCommit) };
-    await redaction({ client, targetId, failedURL, protectedOrigin, start, result, discovery });
+    await redaction({ client, targetId, failedURL, ordinary, start, sent, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {

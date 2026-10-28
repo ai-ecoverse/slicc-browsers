@@ -90,12 +90,15 @@ function discoveryRules({ failedURL, tag, trigger }) {
   const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
   const ownTitle = ({ url, title }) =>
     plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
+  const onHost = (url) => {
+    const parsed = parseURL(url);
+    return parsed?.origin === origin || parsed?.hostname === hostname;
+  };
+  const cleanURL = (url) => !leaks(url) && (lower(url) === origin || !onHost(url));
   const home = parseURL(trigger)?.href;
   return (info) => {
     if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
-    return (
-      !leaks(info.url) && (lower(info.url) === origin || !names(info.url)) && cleanTitle(info.title)
-    );
+    return cleanURL(info.url) && (cleanTitle(info.title) || (ownTitle(info) && !leaks(info.title)));
   };
 }
 

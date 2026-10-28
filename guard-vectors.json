@@ -1210,7 +1210,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover: reload",
+          "means": "protected error-page recover: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1359,7 +1359,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover (query): reload",
+          "means": "protected error-page recover (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1508,7 +1508,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover (fragment): reload",
+          "means": "protected error-page recover (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1656,7 +1656,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page restore: reload",
+          "means": "protected error-page restore: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1837,7 +1837,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky: reload",
+          "means": "protected error-page sticky: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -2030,7 +2030,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky (query): reload",
+          "means": "protected error-page sticky (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -2223,7 +2223,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky (fragment): reload",
+          "means": "protected error-page sticky (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
           "check": {
             "result": "errorPage",
             "path": "result.reload",

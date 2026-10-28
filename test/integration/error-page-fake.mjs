@@ -104,6 +104,7 @@ export function chrome() {
     if (expression === 'document.readyState')
       return { result: { type: 'string', value: 'complete' } };
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
+    if (expression === 'location.href') return { result: { type: 'string', value: tab.frame.url } };
     return { result: { type: 'undefined' } };
   };
   const tabOf = (sessionId, targetId) =>

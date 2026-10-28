@@ -45,6 +45,16 @@ const reduced =
     return { ...info, url, title: title(url, page, new URL(to)) };
   };
 const undiscovered = (info, method) => (discoveryMethods.includes(method) ? [] : info);
+const cut =
+  (title, { url = (page) => page.origin } = {}) =>
+  (info) => {
+    if (seven(info)) return originOnly(info);
+    const page = URL.parse(info.url);
+    const to = page?.searchParams.get('to');
+    return to ? { ...info, url: url(page), title: title(page, new URL(to)) } : info;
+  };
+const cutTo = (keep) => (page, to) => unschemed(trigger(page, keep(to)));
+const bare = cutTo((to) => to.origin);
 
 async function rows(ids, discovery, { observed, port, guarded = [] } = {}) {
   const fixture = await fixtureServer();
@@ -127,6 +137,36 @@ for (const [name, ids, discovery] of [
     "reduces the destination in the client's own page to the bare origin and keeps the page's title",
     recover,
     reduced((to) => to.origin, { encode: (to) => to, title: () => 'trigger' }),
+  ],
+  [
+    "cuts the client's own page to its origin and titles it with its URL, the destination cut to the bare origin",
+    every,
+    cut(bare),
+  ],
+  [
+    "cuts the client's own page to its origin and titles it with its URL, the destination cut to the encoded origin",
+    recover,
+    cut(cutTo((to) => upper(to.origin))),
+  ],
+  [
+    "masks the client's own page and titles it with its URL, the destination cut to the bare origin",
+    [all],
+    cut(bare, { url: () => errorPage }),
+  ],
+  [
+    "keeps the client's own page and titles it with its URL, the destination cut to the bare origin",
+    recover,
+    cut(bare, { url: (page) => page.href }),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded origin after a tab",
+    recover,
+    reduced((to) => `\t${to.origin}`),
+  ],
+  [
+    "reduces the destination in the client's own page to the bare origin after a control character",
+    [all],
+    reduced((to) => `\u0001${to.origin}`, { encode: (to) => to }),
   ],
   ['reports no event for the tab at all', every, () => []],
   ['reports nothing about the failed navigation', recover, onSeven(() => [])],
@@ -358,6 +398,100 @@ for (const [name, ids, discovery] of [
     reduced((to) => `${to.protocol}${to.hostname}:1`),
   ],
   [
+    "reduces the destination in the client's own page to the protected host on another port after a tab",
+    recover,
+    reduced((to) => `${to.protocol}\t${to.hostname}:1`, { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port after a tab",
+    [all],
+    reduced((to) => `${to.protocol}\t${to.hostname}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to the protected host on another port with a carriage return between the slashes",
+    [all],
+    reduced((to) => `${to.protocol}/\r/${to.hostname}:1`, { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port with a carriage return between the slashes",
+    recover,
+    reduced((to) => `${to.protocol}/\r/${to.hostname}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to the protected host on another port with a line feed in the host",
+    recover,
+    reduced((to) => `${to.protocol}//${to.hostname.replace('.', '\n.')}:1`, { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port with a line feed in the host",
+    [all],
+    reduced((to) => `${to.protocol}//${to.hostname.replace('.', '\n.')}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to a wrapped protected host on another port after a control character",
+    [all],
+    reduced((to) => `view-source:\u0001${to.protocol}${to.hostname}:1`, { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page to an encoded wrapped protected host on another port after a control character",
+    recover,
+    reduced((to) => `view-source:\u0001${to.protocol}${to.hostname}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page but keeps all of it with a tab after every character",
+    [all],
+    reduced((to) => Array.from(to.href).join('\t'), { encode: (to) => to }),
+  ],
+  [
+    "reduces the destination in the client's own page but encodes all of it with a tab after every character",
+    recover,
+    reduced((to) => Array.from(to.href).join('\t')),
+  ],
+  [
+    "cuts the client's own page to its origin but keeps the path in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.origin}${to.pathname}`)),
+  ],
+  [
+    "cuts the client's own page to its origin but keeps the query secret in its title's destination",
+    [all, `${all}.query`],
+    cut(cutTo((to) => `${to.origin}/${to.search}`)),
+  ],
+  [
+    "cuts the client's own page to its origin but keeps the fragment secret in its title's destination",
+    [all, `${all}.fragment`],
+    cut(cutTo((to) => `${to.origin}/${to.hash}`)),
+  ],
+  [
+    "cuts the client's own page to its origin but names the protected host on another port in its title's destination",
+    recover,
+    cut(cutTo((to) => `${to.protocol}//${to.hostname}:1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but names the encoded protected host on another port in its title's destination",
+    [all],
+    cut(cutTo((to) => upper(`${to.protocol}//${to.hostname}:1`))),
+  ],
+  [
+    "cuts the client's own page to its origin but names the protected host on another port without a scheme in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.hostname}:1`)),
+  ],
+  [
+    "cuts the client's own page to its origin but names the protected host on another port after a tab in its title's destination",
+    [all],
+    cut(cutTo((to) => `${to.protocol}\t${to.hostname}:1`)),
+  ],
+  [
+    'shows the origin titled with an ordinary URL whose destination is the bare origin',
+    [all],
+    onSeven((info) => ({
+      ...info,
+      url: failed(info).origin,
+      title: `ordinary.example.test/page?to=${failed(info).origin}`,
+    })),
+  ],
+  [
     "titles the client's own page with the failed URL and reports nothing else",
     [all],
     ownPage((info, page) => ({ ...info, url: page, title: info.url })),
@@ -417,6 +551,28 @@ test('the reduced destination passes verbatim: origin-only protected events and 
   assert(
     infos.some(
       (i) => i.url === 'http://seven.sliccy.ai:41739' && i.title === 'http://seven.sliccy.ai:41739'
+    ),
+    JSON.stringify(infos)
+  );
+});
+
+test("a guard that cuts the client's own page to its origin and titles it with its URL, the destination cut to the bare origin, passes verbatim", async () => {
+  const guarded = [];
+  const execution = await rows(every, cut(bare), { port: 3000, guarded });
+  assert.equal(execution.results.length, every.length);
+  for (const row of execution.results) {
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.observations.guarded.eventsRedacted, true, JSON.stringify(row));
+  }
+  const infos = guarded[0].events
+    .filter((e) => discoveryMethods.includes(e.method))
+    .map((e) => e.params.targetInfo);
+  assert(
+    infos.some(
+      (i) =>
+        i.url === 'http://ordinary.example.test:3000' &&
+        i.title ===
+          'ordinary.example.test:3000/page?k=deferred&defer=0&to=http://seven.sliccy.ai:3000'
     ),
     JSON.stringify(infos)
   );

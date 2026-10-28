@@ -52,7 +52,6 @@ async function lockChecks({ client, session, targetId, result }) {
 }
 
 const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
-const errorPageURL = 'chrome-error://chromewebdata/';
 const lower = (value) => String(value ?? '').toLowerCase();
 const plain = (value) =>
   lower(
@@ -60,6 +59,11 @@ const plain = (value) =>
       String.fromCharCode(Number.parseInt(hex, 16))
     )
   );
+const layers = (value) => {
+  const out = [lower(value)];
+  for (let next = plain(out[0]); next !== out.at(-1); next = plain(next)) out.push(next);
+  return out;
+};
 const unschemed = (value) => value.replace(/^[a-z][a-z\d+.-]*:\/\//, '');
 
 const encoded = (url) =>
@@ -70,10 +74,12 @@ const encoded = (url) =>
 
 const triggerURL = (ordinary, url) => `${ordinary}/page?k=deferred&defer=0&to=${encoded(url)}`;
 
-function discoveryRules({ failedURL, tag, trigger }) {
+const errorPageURL = 'chrome-error://chromewebdata/';
+const privateBlankURL = 'data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E';
+
+function failureRules({ failedURL, tag }) {
   const failed = new URL(failedURL);
-  const { origin, host, hostname } = failed;
-  const named = [hostname, host, origin];
+  const { origin, hostname } = failed;
   const parts = [
     failedURL,
     `${failed.pathname}${failed.search}${failed.hash}`,
@@ -84,49 +90,67 @@ function discoveryRules({ failedURL, tag, trigger }) {
   ]
     .filter((part) => part && part !== '/')
     .map(plain);
-  const forms = (value) => [lower(value), plain(value)];
-  const leaks = (value) => forms(value).some((form) => parts.some((part) => form.includes(part)));
+  const leaks = (value) => layers(value).some((form) => parts.some((part) => form.includes(part)));
   const names = (value) =>
-    forms(value).some((form) => form.includes(hostname)) || parseURL(value)?.origin === origin;
+    layers(value).some((form) => form.includes(hostname)) || parseURL(value)?.origin === origin;
+  const carries = (value) => layers(value).some((form) => form.includes(plain(tag)));
+  return { failed, leaks, names, carries };
+}
+
+function discoveryRules({ failedURL, tag, trigger }) {
+  const { failed, leaks, names, carries } = failureRules({ failedURL, tag });
+  const { origin, host, hostname } = failed;
+  const named = [hostname, host, origin];
   const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
   const ownTitle = ({ url, title }) =>
     plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
+  const onHost = (url) => {
+    const parsed = parseURL(url);
+    return parsed?.origin === origin || parsed?.hostname === hostname;
+  };
+  const cleanURL = (url) => !leaks(url) && (lower(url) === origin || !onHost(url));
   const home = parseURL(trigger)?.href;
   const clean = (info) => {
     if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
-    return (
-      !leaks(info.url) && (lower(info.url) === origin || !names(info.url)) && cleanTitle(info.title)
-    );
+    return cleanURL(info.url) && (cleanTitle(info.title) || (ownTitle(info) && !leaks(info.title)));
   };
-  const shows = ({ url, title }) =>
-    [origin, errorPageURL].includes(lower(url)) ||
-    (lower(url) === '' && named.includes(lower(title)));
-  return { clean, shows };
+  return { clean, carries };
 }
 
-function eventsRedacted({ events, targetId, start, sent, ...failure }) {
-  const infos = (from) =>
-    events
-      .slice(from)
-      .filter(
-        (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
-      )
-      .map((e) => e.params.targetInfo);
-  const { clean, shows } = discoveryRules(failure);
-  return infos(sent).some(shows) && infos(start).every(clean);
+function eventsRedacted({ events, targetId, start, ...failure }) {
+  const { clean, carries } = discoveryRules(failure);
+  return events
+    .slice(start)
+    .filter((e) => discoveryMethods.includes(e.method))
+    .every((e) =>
+      e.params?.targetInfo?.targetId === targetId
+        ? clean(e.params.targetInfo)
+        : !carries(JSON.stringify(e.params ?? null))
+    );
 }
 
-async function redaction({
-  client,
-  targetId,
-  failedURL,
-  ordinary,
-  tag,
-  start,
-  sent,
-  result,
-  discovery,
-}) {
+async function privateBlank({ frame, reader, observer, targetId, failedURL, tag }) {
+  const { leaks, names } = failureRules({ failedURL, tag });
+  if (frame.url !== privateBlankURL || frame.unreachableUrl) return false;
+  const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
+  if (targetInfo.url !== privateBlankURL) return false;
+  const read = async (expression) => {
+    const out = await outcome(
+      reader.send('Runtime.evaluate', { expression, returnByValue: true }, observer)
+    );
+    const value = out.result?.result?.value;
+    return out.ok && !out.result.exceptionDetails && typeof value === 'string' ? value : undefined;
+  };
+  const href = await read('location.href');
+  const title = await read('document.title');
+  if (href === undefined || title === undefined) return 'incomplete';
+  return (
+    href === privateBlankURL &&
+    ![targetInfo.title, title].some((value) => leaks(value) || names(value))
+  );
+}
+
+async function redaction({ client, targetId, failedURL, ordinary, tag, start, result, discovery }) {
   const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
   const list = await outcome(client.send('Target.getTargets'));
   const before = client.events.length;
@@ -155,7 +179,6 @@ async function redaction({
         events: client.events,
         targetId,
         start,
-        sent,
         failedURL,
         tag,
         trigger: triggerURL(ordinary, failedURL),
@@ -290,7 +313,6 @@ export async function protectedErrorPage({
       );
     }
     await outcome(reader.send('Page.bringToFront', {}, observer));
-    const sent = client.events.length;
     const unsent = await scripted(client, session, ordinary, failedURL);
     if (unsent) return missing(unsent);
     let evidence;
@@ -300,7 +322,7 @@ export async function protectedErrorPage({
       const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
       evidence = { frame: f, targetInfo };
       return (
-        f.url === 'chrome-error://chromewebdata/' &&
+        f.url === errorPageURL &&
         f.securityOrigin === '://' &&
         f.unreachableUrl === failedURL &&
         targetInfo.url === failedURL
@@ -317,25 +339,24 @@ export async function protectedErrorPage({
       return missing(`missing error commit ${JSON.stringify(evidence)}`);
     result.live = live;
     if (!live) return { ...result, liveWhy: commitWhy(result.diagnostics.errorCommit) };
-    await redaction({
-      client,
-      targetId,
-      failedURL,
-      ordinary,
-      tag,
-      start,
-      sent,
-      result,
-      discovery,
-    });
+    await redaction({ client, targetId, failedURL, ordinary, tag, start, result, discovery });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {
-      result.reloadedError = await until(async () => {
+      result.reload = await until(async () => {
         const f = await frame();
-        return f.loaderId !== beforeReload && f.unreachableUrl === failedURL;
+        result.reloadedError =
+          f.loaderId !== beforeReload && f.url === errorPageURL && f.unreachableUrl === failedURL;
+        result.reloadedBlank =
+          !result.reloadedError &&
+          side === 'guarded' &&
+          (await privateBlank({ frame: f, reader, observer, targetId, failedURL, tag }));
+        return result.reloadedError || result.reloadedBlank === true;
       });
-      result.reload = result.reloadedError;
+      if (!result.reload && result.reloadedBlank === 'incomplete') {
+        result.reload = 'incomplete';
+        result.incomplete = 'protected-error-page: the private blank page could not be read';
+      }
     }
     const recovery = `${ordinary}/blank?n=${tag}-recover`;
     result.blank = (await outcome(client.send('Page.navigate', { url: recovery }, session))).ok;

@@ -26,17 +26,38 @@ const ownPage = (shown) => {
   };
 };
 const legs = ['live', 'attached', 'infoRedacted', 'listRedacted', 'attachRedacted'];
+const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
+const upper = (text) =>
+  Array.from(
+    new TextEncoder().encode(text),
+    (byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+  ).join('');
+const unschemed = (url) => url.replace(/^http:\/\//, '');
+const trigger = (url, to) => `${url.origin}${url.pathname}?k=deferred&defer=0&to=${to}`;
+const reduced =
+  (keep, { encode = upper, title = (url) => unschemed(url) } = {}) =>
+  (info) => {
+    if (seven(info)) return originOnly(info);
+    const page = URL.parse(info.url);
+    const to = page?.searchParams.get('to');
+    if (!to) return info;
+    const url = trigger(page, encode(keep(new URL(to))));
+    return { ...info, url, title: title(url, page, new URL(to)) };
+  };
+const undiscovered = (info, method) => (discoveryMethods.includes(method) ? [] : info);
 
-async function rows(ids, discovery) {
+async function rows(ids, discovery, { observed, port, guarded = [] } = {}) {
   const fixture = await fixtureServer();
   try {
     const browser = chrome();
-    const origin = (host) => `http://${host}:${fixture.port}`;
+    const origin = (host) => `http://${host}:${port ?? fixture.port}`;
+    const client = quarantining(browser, { discovery });
+    guarded.push(client);
     return await run(
       { ...set, vectors: vectors.filter((v) => ids.includes(v.id)), variants: { prompt: 0 } },
       {
-        client: quarantining(browser, { discovery }),
-        unguarded: browser.connect(),
+        client,
+        unguarded: browser.connect(observed),
         fixture,
         settleScale: 0.1,
         capabilities: { discovery: true },
@@ -91,6 +112,33 @@ for (const [name, ids, discovery] of [
       seven(info)
         ? originOnly(info)
         : { ...info, title: decodeURIComponent(info.url.replace(/^http:\/\//, '')) },
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded origin and titles it with that URL",
+    every,
+    reduced((to) => to.origin),
+  ],
+  [
+    "reduces the destination in the client's own page to the bare origin and keeps the page's title",
+    recover,
+    reduced((to) => to.origin, { encode: (to) => to, title: () => 'trigger' }),
+  ],
+  ['reports no event for the tab at all', every, () => []],
+  ['reports nothing about the failed navigation', recover, onSeven(() => [])],
+  [
+    'leaves the url and the title out of every event',
+    recover,
+    onSeven(({ url, title, ...info }) => info),
+  ],
+  [
+    "masks the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : { ...info, url: '', title: '' }),
+  ],
+  [
+    "leaves the url and the title out of the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : (({ url, title, ...rest }) => rest)(info)),
   ],
 ])
   test(`a guard that ${name} in its discovery events during the error interval passes the error-page rows`, async () => {
@@ -200,21 +248,81 @@ for (const [name, ids, discovery] of [
     ]),
   ],
   [
-    'leaves the url and the title out of every event',
-    recover,
-    onSeven(({ url, title, ...info }) => info),
-  ],
-  [
-    "masks the client's own page and reports nothing about the failed navigation",
-    [all],
-    (info) => (seven(info) ? [] : { ...info, url: '', title: '' }),
-  ],
-  [
-    "leaves the url out of the client's own page and reports nothing about the failed navigation",
+    "leaves the url out of the client's own page, keeps its title, which carries the failed URL, and reports nothing else",
     [all],
     (info) => (seven(info) ? [] : (({ url, ...rest }) => rest)(info)),
   ],
-  ['reports nothing about the failed navigation', recover, onSeven(() => [])],
+  [
+    "reduces the destination in the client's own page but keeps the path",
+    [all],
+    reduced((to) => `${to.origin}${to.pathname}`),
+  ],
+  [
+    "reduces the destination in the client's own page but keeps the query secret",
+    [all, `${all}.query`],
+    reduced((to) => `${to.origin}/${to.search}`),
+  ],
+  [
+    "reduces the destination in the client's own page but keeps the fragment secret",
+    [all, `${all}.fragment`],
+    reduced((to) => `${to.origin}/${to.hash}`),
+  ],
+  [
+    "reduces the destination in the client's own page but keeps the path in its title",
+    [all],
+    reduced((to) => to.origin, {
+      title: (url, page, to) => unschemed(trigger(page, upper(`${to.origin}${to.pathname}`))),
+    }),
+  ],
+  [
+    "reduces the destination in the client's own page but keeps the query secret in its title",
+    [all, `${all}.query`],
+    reduced((to) => to.origin, {
+      title: (url, page, to) => unschemed(trigger(page, upper(`${to.origin}/${to.search}`))),
+    }),
+  ],
+  [
+    'reports the failed URL under another target id',
+    [all],
+    onSeven((info) => ({ ...info, targetId: 'T0' })),
+  ],
+  ['reports the failed URL without a target id', recover, onSeven(({ targetId, ...info }) => info)],
+  [
+    'puts the twice-encoded failed URL in a masked url',
+    recover,
+    onSeven((info) => ({
+      ...info,
+      url: `${errorPage}?u=${upper(upper(info.url))}`,
+      title: errorPage,
+    })),
+  ],
+  [
+    "reduces the destination in the client's own page but encodes all of it twice",
+    [all],
+    reduced((to) => to.href, { encode: (to) => upper(upper(to)) }),
+  ],
+  [
+    "reduces the destination in the client's own page but encodes its origin once and the rest twice",
+    recover,
+    reduced((to) => to, {
+      encode: (to) => `${upper(to.origin)}${upper(upper(to.href.slice(to.origin.length)))}`,
+    }),
+  ],
+  [
+    'shows the protected host on another port',
+    [all],
+    onSeven((info) => ({ ...info, url: `http://${failed(info).hostname}:1`, title: '' })),
+  ],
+  [
+    "titles the client's own page with the failed URL and reports nothing else",
+    [all],
+    ownPage((info, page) => ({ ...info, url: page, title: info.url })),
+  ],
+  [
+    'titles an empty url with the query secret and reports nothing else',
+    [all, `${all}.query`],
+    onSeven((info) => ({ ...info, url: '', title: failed(info).search.slice(1) })),
+  ],
 ])
   test(`a guard that ${name} in its discovery events during the error interval fails only eventsRedacted`, async () => {
     const execution = await rows(ids, discovery);
@@ -231,3 +339,41 @@ for (const [name, ids, discovery] of [
     }
     assert.equal(execution.summary().pass, false);
   });
+
+test('a control whose unguarded browser reports no discovery event in the error interval fails the control', async () => {
+  const execution = await rows(every, undefined, { observed: undiscovered });
+  assert.equal(execution.results.length, every.length);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.control.eventsRedacted, true, JSON.stringify(row));
+    assert.equal(row.observations.guarded.eventsRedacted, true, JSON.stringify(row));
+  }
+  assert.equal(execution.summary().pass, false);
+});
+
+test('the reduced destination passes verbatim: origin-only protected events and the encoded origin in the url and title of the own page', async () => {
+  const guarded = [];
+  const execution = await rows(
+    [all],
+    reduced((to) => to.origin),
+    { port: 41739, guarded }
+  );
+  const [row] = execution.results;
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.eventsRedacted, true, JSON.stringify(row));
+  const page =
+    'ordinary.example.test:41739/page?k=deferred&defer=0&to=%68%74%74%70%3A%2F%2F%73%65%76%65%6E%2E%73%6C%69%63%63%79%2E%61%69%3A%34%31%37%33%39';
+  const infos = guarded[0].events
+    .filter((e) => discoveryMethods.includes(e.method))
+    .map((e) => e.params.targetInfo);
+  assert(
+    infos.some((i) => i.url === `http://${page}` && i.title === page),
+    JSON.stringify(infos)
+  );
+  assert(
+    infos.some(
+      (i) => i.url === 'http://seven.sliccy.ai:41739' && i.title === 'http://seven.sliccy.ai:41739'
+    ),
+    JSON.stringify(infos)
+  );
+});

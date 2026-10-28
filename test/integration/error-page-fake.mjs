@@ -18,14 +18,15 @@ export function chrome() {
     attached: [...sessions.values()].some((s) => s.targetId === tab.targetId),
     browserContextId: 'B1',
   });
-  const emit = (conn, method, params, sessionId) =>
-    conn.events.push({
-      method,
-      params: params.targetInfo
-        ? { ...params, targetInfo: conn.redact(params.targetInfo) }
-        : params,
-      ...(sessionId ? { sessionId } : {}),
-    });
+  const emit = (conn, method, params, sessionId) => {
+    const shown = params.targetInfo ? [conn.redact(params.targetInfo, method)].flat() : [null];
+    for (const targetInfo of shown)
+      conn.events.push({
+        method,
+        params: targetInfo ? { ...params, targetInfo } : params,
+        ...(sessionId ? { sessionId } : {}),
+      });
+  };
   const onTab = (tab, method, params) => {
     for (const [sessionId, s] of sessions)
       if (s.targetId === tab.targetId) emit(s.conn, method, params, sessionId);
@@ -207,15 +208,18 @@ export function quarantining(
     refuseURL = () => false,
     unanswered = () => false,
     exposeURL = false,
+    discovery,
     evaluate = false,
     block = true,
   } = {}
 ) {
   const locked = new Map();
-  const redact = (targetInfo) =>
-    !exposeURL && seven(targetInfo.url)
-      ? { ...targetInfo, url: originOf(targetInfo.url), title: originOf(targetInfo.url) }
-      : targetInfo;
+  const redact = (targetInfo, method) => {
+    if (discovery && ['Target.targetCreated', 'Target.targetInfoChanged'].includes(method))
+      return discovery(targetInfo);
+    if (exposeURL || !seven(targetInfo.url)) return targetInfo;
+    return { ...targetInfo, url: originOf(targetInfo.url), title: originOf(targetInfo.url) };
+  };
   const conn = browser.connect(redact);
   const quarantined = (tab) => tab.entries.some((entry) => seven(entry.url));
   browser.commits.push((tab) =>

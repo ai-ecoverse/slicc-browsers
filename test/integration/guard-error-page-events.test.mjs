@@ -282,6 +282,33 @@ for (const [name, ids, discovery] of [
     }),
   ],
   [
+    'reports the failed URL under another target id',
+    [all],
+    onSeven((info) => ({ ...info, targetId: 'T0' })),
+  ],
+  ['reports the failed URL without a target id', recover, onSeven(({ targetId, ...info }) => info)],
+  [
+    'puts the twice-encoded failed URL in a masked url',
+    recover,
+    onSeven((info) => ({
+      ...info,
+      url: `${errorPage}?u=${upper(upper(info.url))}`,
+      title: errorPage,
+    })),
+  ],
+  [
+    "reduces the destination in the client's own page but encodes all of it twice",
+    [all],
+    reduced((to) => to.href, { encode: (to) => upper(upper(to)) }),
+  ],
+  [
+    "reduces the destination in the client's own page but encodes its origin once and the rest twice",
+    recover,
+    reduced((to) => to, {
+      encode: (to) => `${upper(to.origin)}${upper(upper(to.href.slice(to.origin.length)))}`,
+    }),
+  ],
+  [
     'shows the protected host on another port',
     [all],
     onSeven((info) => ({ ...info, url: `http://${failed(info).hostname}:1`, title: '' })),

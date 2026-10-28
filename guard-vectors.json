@@ -1200,7 +1200,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page recover: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1210,7 +1210,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page recover: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1349,7 +1349,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (query): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page recover (query): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1359,7 +1359,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page recover (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1498,7 +1498,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (fragment): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page recover (fragment): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1508,7 +1508,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page recover (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page recover (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1646,7 +1646,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page restore: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page restore: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1656,7 +1656,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page restore: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page restore: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -1827,7 +1827,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page sticky: every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1837,7 +1837,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page sticky: Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -2020,7 +2020,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (query): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page sticky (query): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2030,7 +2030,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page sticky (query): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",
@@ -2213,7 +2213,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (fragment): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment; reporting no event for the tab also passes",
+          "means": "protected error-page sticky (fragment): every discovery event for the tab shows the failed URL's origin only, a masked or absent url, or a url off the protected host that names at most that origin, and no url or title carries the failed URL, its path, query or fragment, decoded as often as it takes; no discovery event for another or no target carries the row's tag; reporting no event for the tab also passes",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2223,7 +2223,7 @@
           }
         },
         "reload": {
-          "means": "protected error-page sticky (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location",
+          "means": "protected error-page sticky (fragment): Page.reload is answered, then the observer sees the protected error page again, or on the guarded leg exactly data:text/html,%3Ctitle%3Eblocked%3C%2Ftitle%3E with no unreachableUrl and no protected URL in its target url, title or location; a title or location the observer can't read is incomplete",
           "check": {
             "result": "errorPage",
             "path": "result.reload",

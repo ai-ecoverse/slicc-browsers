@@ -36,13 +36,27 @@ function wiping(browser, conn, page, taint) {
   return conn;
 }
 
-async function rows(ids, { page, taint, side = 'guarded' } = {}) {
+function unread(browser, conn, expression, answer) {
+  const send = conn.send;
+  conn.send = async (method, params, sessionId) => {
+    if (
+      method === 'Runtime.evaluate' &&
+      params.expression === expression &&
+      browser.tabOf(sessionId)?.url === blank
+    )
+      return answer();
+    return send(method, params, sessionId);
+  };
+}
+
+async function rows(ids, { page, taint, side = 'guarded', observer } = {}) {
   const fixture = await fixtureServer();
   try {
     const browser = chrome();
     const client = quarantining(browser);
     const unguarded = browser.connect();
     wiping(browser, side === 'guarded' ? client : unguarded, page, taint);
+    if (observer) unread(browser, unguarded, ...observer);
     const origin = (host) => `http://${host}:${fixture.port}`;
     return await run(
       { ...set, vectors: vectors.filter((v) => ids.includes(v.id)), variants: { prompt: 0 } },
@@ -128,3 +142,38 @@ test('an unguarded control whose tab is on the private blank page when it reload
   }
   assert.equal(execution.summary().pass, false);
 });
+
+for (const [name, observer] of [
+  [
+    "can't evaluate its title",
+    [
+      'document.title',
+      () => {
+        throw new Error('Execution context was destroyed.');
+      },
+    ],
+  ],
+  [
+    'gets an exception for its title',
+    [
+      'document.title',
+      () => ({
+        result: { type: 'string', value: 'blocked' },
+        exceptionDetails: { text: 'Uncaught' },
+      }),
+    ],
+  ],
+  ['gets no string for its location', ['location.href', () => ({ result: { type: 'undefined' } })]],
+])
+  test(`a reload onto the private blank page whose observer ${name} is incomplete, not a pass`, async () => {
+    const execution = await rows([all], { page: blank, observer });
+    const [row] = execution.results;
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+    assert.equal(row.observations.guarded.reload, 'incomplete', JSON.stringify(row));
+    assert(
+      row.incomplete.some((reason) => reason.includes('the private blank page could not be read')),
+      JSON.stringify(row)
+    );
+    assert.equal(execution.summary().pass, false);
+  });

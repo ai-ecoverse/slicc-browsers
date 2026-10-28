@@ -59,6 +59,11 @@ const plain = (value) =>
       String.fromCharCode(Number.parseInt(hex, 16))
     )
   );
+const layers = (value) => {
+  const out = [lower(value)];
+  for (let next = plain(out[0]); next !== out.at(-1); next = plain(next)) out.push(next);
+  return out;
+};
 const unschemed = (value) => value.replace(/^[a-z][a-z\d+.-]*:\/\//, '');
 
 const encoded = (url) =>
@@ -85,15 +90,15 @@ function failureRules({ failedURL, tag }) {
   ]
     .filter((part) => part && part !== '/')
     .map(plain);
-  const forms = (value) => [lower(value), plain(value)];
-  const leaks = (value) => forms(value).some((form) => parts.some((part) => form.includes(part)));
+  const leaks = (value) => layers(value).some((form) => parts.some((part) => form.includes(part)));
   const names = (value) =>
-    forms(value).some((form) => form.includes(hostname)) || parseURL(value)?.origin === origin;
-  return { failed, leaks, names };
+    layers(value).some((form) => form.includes(hostname)) || parseURL(value)?.origin === origin;
+  const carries = (value) => layers(value).some((form) => form.includes(plain(tag)));
+  return { failed, leaks, names, carries };
 }
 
 function discoveryRules({ failedURL, tag, trigger }) {
-  const { failed, leaks, names } = failureRules({ failedURL, tag });
+  const { failed, leaks, names, carries } = failureRules({ failedURL, tag });
   const { origin, host, hostname } = failed;
   const named = [hostname, host, origin];
   const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
@@ -105,33 +110,41 @@ function discoveryRules({ failedURL, tag, trigger }) {
   };
   const cleanURL = (url) => !leaks(url) && (lower(url) === origin || !onHost(url));
   const home = parseURL(trigger)?.href;
-  return (info) => {
+  const clean = (info) => {
     if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
     return cleanURL(info.url) && (cleanTitle(info.title) || (ownTitle(info) && !leaks(info.title)));
   };
+  return { clean, carries };
 }
 
 function eventsRedacted({ events, targetId, start, ...failure }) {
-  const clean = discoveryRules(failure);
+  const { clean, carries } = discoveryRules(failure);
   return events
     .slice(start)
-    .filter(
-      (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
-    )
-    .every((e) => clean(e.params.targetInfo));
+    .filter((e) => discoveryMethods.includes(e.method))
+    .every((e) =>
+      e.params?.targetInfo?.targetId === targetId
+        ? clean(e.params.targetInfo)
+        : !carries(JSON.stringify(e.params ?? null))
+    );
 }
 
 async function privateBlank({ frame, reader, observer, targetId, failedURL, tag }) {
   const { leaks, names } = failureRules({ failedURL, tag });
   if (frame.url !== privateBlankURL || frame.unreachableUrl) return false;
   const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
-  const read = async (expression) =>
-    (await outcome(reader.send('Runtime.evaluate', { expression, returnByValue: true }, observer)))
-      .result?.result?.value;
+  if (targetInfo.url !== privateBlankURL) return false;
+  const read = async (expression) => {
+    const out = await outcome(
+      reader.send('Runtime.evaluate', { expression, returnByValue: true }, observer)
+    );
+    const value = out.result?.result?.value;
+    return out.ok && !out.result.exceptionDetails && typeof value === 'string' ? value : undefined;
+  };
   const href = await read('location.href');
   const title = await read('document.title');
+  if (href === undefined || title === undefined) return 'incomplete';
   return (
-    targetInfo.url === privateBlankURL &&
     href === privateBlankURL &&
     ![targetInfo.title, title].some((value) => leaks(value) || names(value))
   );
@@ -338,8 +351,12 @@ export async function protectedErrorPage({
           !result.reloadedError &&
           side === 'guarded' &&
           (await privateBlank({ frame: f, reader, observer, targetId, failedURL, tag }));
-        return result.reloadedError || result.reloadedBlank;
+        return result.reloadedError || result.reloadedBlank === true;
       });
+      if (!result.reload && result.reloadedBlank === 'incomplete') {
+        result.reload = 'incomplete';
+        result.incomplete = 'protected-error-page: the private blank page could not be read';
+      }
     }
     const recovery = `${ordinary}/blank?n=${tag}-recover`;
     result.blank = (await outcome(client.send('Page.navigate', { url: recovery }, session))).ok;

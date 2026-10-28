@@ -1200,7 +1200,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page recover: every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1349,7 +1349,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (query): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page recover (query): every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1498,7 +1498,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page recover (fragment): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page recover (fragment): every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1646,7 +1646,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page restore: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page restore: every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -1827,7 +1827,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky: while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page sticky: every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2020,7 +2020,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (query): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page sticky (query): every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",
@@ -2213,7 +2213,7 @@
           }
         },
         "eventsRedacted": {
-          "means": "protected error-page sticky (fragment): while the tab is off the ordinary page, every discovery event for it shows the failed URL's origin only or a masked or absent url, never its path, query or fragment, and one reports the failed navigation",
+          "means": "protected error-page sticky (fragment): every discovery event for the tab shows the failed URL's origin only or a masked or absent url, and no url or title carries the failed URL, its path, query or fragment; one after the client's navigation shows that origin, Chrome's error page, or an empty url titled with the protected host",
           "requires": ["discovery"],
           "check": {
             "result": "errorPage",

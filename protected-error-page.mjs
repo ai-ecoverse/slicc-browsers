@@ -52,35 +52,59 @@ async function lockChecks({ client, session, targetId, result }) {
 }
 
 const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
+const errorPageURL = 'chrome-error://chromewebdata/';
 const lower = (value) => String(value ?? '').toLowerCase();
+const plain = (value) =>
+  lower(
+    String(value ?? '').replace(/%([0-9a-f]{2})/gi, (_, hex) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    )
+  );
+const unschemed = (value) => value.replace(/^[a-z][a-z\d+.-]*:\/\//, '');
 
-function shownOnly(failedURL, home) {
+const encoded = (url) =>
+  Array.from(
+    new TextEncoder().encode(url),
+    (byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
+  ).join('');
+
+const triggerURL = (ordinary, url) => `${ordinary}/page?k=deferred&defer=0&to=${encoded(url)}`;
+
+function discoveryRules({ failedURL, tag, trigger }) {
   const failed = new URL(failedURL);
   const { origin, host, hostname } = failed;
+  const named = [hostname, host, origin];
   const parts = [
     failedURL,
     `${failed.pathname}${failed.search}${failed.hash}`,
     failed.pathname,
     failed.search.slice(1),
     failed.hash.slice(1),
+    tag,
   ]
     .filter((part) => part && part !== '/')
-    .flatMap((part) => [part, encodeURIComponent(part)].map(lower));
-  const leaks = (value) => parts.some((part) => value.includes(part));
-  const names = (value) => value.includes(hostname) || parseURL(value)?.origin === origin;
-  return (info) => {
-    const url = lower(info.url);
-    const title = lower(info.title);
-    const own = parseURL(info.url)?.origin === home;
+    .map(plain);
+  const forms = (value) => [lower(value), plain(value)];
+  const leaks = (value) => forms(value).some((form) => parts.some((part) => form.includes(part)));
+  const names = (value) =>
+    forms(value).some((form) => form.includes(hostname)) || parseURL(value)?.origin === origin;
+  const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
+  const ownTitle = ({ url, title }) =>
+    plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
+  const home = parseURL(trigger)?.href;
+  const clean = (info) => {
+    if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);
     return (
-      !leaks(url) &&
-      (url === origin || !names(url)) &&
-      (own || (!leaks(title) && (!names(title) || [hostname, host, origin].includes(title))))
+      !leaks(info.url) && (lower(info.url) === origin || !names(info.url)) && cleanTitle(info.title)
     );
   };
+  const shows = ({ url, title }) =>
+    [origin, errorPageURL].includes(lower(url)) ||
+    (lower(url) === '' && named.includes(lower(title)));
+  return { clean, shows };
 }
 
-function eventsRedacted({ events, targetId, failedURL, ordinary, start, sent }) {
+function eventsRedacted({ events, targetId, start, sent, ...failure }) {
   const infos = (from) =>
     events
       .slice(from)
@@ -88,11 +112,8 @@ function eventsRedacted({ events, targetId, failedURL, ordinary, start, sent }) 
         (e) => discoveryMethods.includes(e.method) && e.params?.targetInfo?.targetId === targetId
       )
       .map((e) => e.params.targetInfo);
-  const home = parseURL(ordinary)?.origin ?? null;
-  return (
-    infos(sent).some((info) => parseURL(info.url)?.origin !== home) &&
-    infos(start).every(shownOnly(failedURL, home))
-  );
+  const { clean, shows } = discoveryRules(failure);
+  return infos(sent).some(shows) && infos(start).every(clean);
 }
 
 async function redaction({
@@ -100,6 +121,7 @@ async function redaction({
   targetId,
   failedURL,
   ordinary,
+  tag,
   start,
   sent,
   result,
@@ -129,7 +151,15 @@ async function redaction({
     listed?.url === failedURL &&
     attachedInfo?.url === failedURL;
   result.eventsRedacted = discovery
-    ? eventsRedacted({ events: client.events, targetId, failedURL, ordinary, start, sent })
+    ? eventsRedacted({
+        events: client.events,
+        targetId,
+        start,
+        sent,
+        failedURL,
+        tag,
+        trigger: triggerURL(ordinary, failedURL),
+      })
     : 'not-supported';
 }
 
@@ -157,19 +187,9 @@ async function seed(reader, observer, loaded, initial, allowed) {
   return out.ok ? out.result : `observer setup failed: ${out.error.message}`;
 }
 
-const encoded = (url) =>
-  Array.from(
-    new TextEncoder().encode(url),
-    (byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`
-  ).join('');
-
 async function scripted(client, session, ordinary, url) {
   const out = await outcome(
-    client.send(
-      'Page.navigate',
-      { url: `${ordinary}/page?k=deferred&defer=0&to=${encoded(url)}` },
-      session
-    )
+    client.send('Page.navigate', { url: triggerURL(ordinary, url) }, session)
   );
   return out.ok ? undefined : `client navigation failed: ${out.error.message}`;
 }
@@ -297,7 +317,17 @@ export async function protectedErrorPage({
       return missing(`missing error commit ${JSON.stringify(evidence)}`);
     result.live = live;
     if (!live) return { ...result, liveWhy: commitWhy(result.diagnostics.errorCommit) };
-    await redaction({ client, targetId, failedURL, ordinary, start, sent, result, discovery });
+    await redaction({
+      client,
+      targetId,
+      failedURL,
+      ordinary,
+      tag,
+      start,
+      sent,
+      result,
+      discovery,
+    });
     const beforeReload = (await frame()).loaderId;
     result.reload = (await outcome(client.send('Page.reload', {}, session))).ok;
     if (result.reload) {

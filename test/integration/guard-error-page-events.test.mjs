@@ -15,6 +15,16 @@ const failed = (info) => new URL(info.url);
 const seven = (info) => failed(info).hostname === 'seven.sliccy.ai';
 const originOnly = (info) => ({ ...info, url: failed(info).origin, title: failed(info).origin });
 const onSeven = (shown) => (info) => (seven(info) ? shown(info) : info);
+const bytes = (text) =>
+  Array.from(new TextEncoder().encode(text), (byte) => `%${byte.toString(16)}`).join('');
+const ownPage = (shown) => {
+  const pages = new Map();
+  return (info) => {
+    if (seven(info)) return shown(info, pages.get(info.targetId));
+    pages.set(info.targetId, info.url);
+    return info;
+  };
+};
 const legs = ['live', 'attached', 'infoRedacted', 'listRedacted', 'attachRedacted'];
 
 async function rows(ids, discovery) {
@@ -56,7 +66,6 @@ for (const [name, ids, discovery] of [
     recover,
     onSeven((info) => ({ ...info, url: errorPage, title: errorPage })),
   ],
-  ['leaves the url and the title out', recover, onSeven(({ url, title, ...info }) => info)],
   [
     'shows an empty url titled with the origin',
     recover,
@@ -68,6 +77,14 @@ for (const [name, ids, discovery] of [
     onSeven((info) => ({ ...info, url: failed(info).origin, title: failed(info).host })),
   ],
   [
+    'leaves the url and the title out of one event and masks the next',
+    recover,
+    onSeven(({ url, title, ...info }) => [
+      info,
+      { ...info, url: errorPage, title: new URL(url).hostname },
+    ]),
+  ],
+  [
     "shows the origin only after the client's own page was titled with its unescaped URL",
     recover,
     (info) =>
@@ -76,7 +93,7 @@ for (const [name, ids, discovery] of [
         : { ...info, title: decodeURIComponent(info.url.replace(/^http:\/\//, '')) },
   ],
 ])
-  test(`a guard whose discovery events during the error interval ${name} passes the error-page rows`, async () => {
+  test(`a guard that ${name} in its discovery events during the error interval passes the error-page rows`, async () => {
     const execution = await rows(ids, discovery);
     assert.equal(execution.results.length, ids.length);
     for (const row of execution.results) {
@@ -113,6 +130,11 @@ for (const [name, ids, discovery] of [
     })),
   ],
   [
+    'puts the percent-encoded path in a masked url',
+    [all],
+    onSeven((info) => ({ ...info, url: `${errorPage}?p=${bytes(failed(info).pathname)}` })),
+  ],
+  [
     'titles a masked url with the host and the path',
     [all],
     onSeven((info) => ({
@@ -125,6 +147,24 @@ for (const [name, ids, discovery] of [
     'titles a masked url with the query secret',
     [all, `${all}.query`],
     onSeven((info) => ({ ...info, url: errorPage, title: failed(info).search.slice(1) })),
+  ],
+  [
+    "titles a masked url with the query secret's value alone",
+    [all, `${all}.query`],
+    onSeven((info) => ({
+      ...info,
+      url: errorPage,
+      title: failed(info).searchParams.get('query-secret'),
+    })),
+  ],
+  [
+    "titles a masked url with the path's last segment and the query secret's value",
+    [all],
+    onSeven((info) => ({
+      ...info,
+      url: errorPage,
+      title: `${failed(info).pathname.split('/').at(-1)} ${failed(info).searchParams.get('query-secret')}`,
+    })),
   ],
   [
     'puts the fragment secret in a masked url',
@@ -151,9 +191,32 @@ for (const [name, ids, discovery] of [
     [all, `${all}.fragment`],
     onSeven(({ url, title, ...info }) => [info, { ...info, title: new URL(url).hash }]),
   ],
+  [
+    "shows the client's own page titled with the failed URL, then masks the url",
+    [all],
+    ownPage((info, page) => [
+      { ...info, url: page, title: info.url },
+      { ...info, url: errorPage, title: failed(info).hostname },
+    ]),
+  ],
+  [
+    'leaves the url and the title out of every event',
+    recover,
+    onSeven(({ url, title, ...info }) => info),
+  ],
+  [
+    "masks the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : { ...info, url: '', title: '' }),
+  ],
+  [
+    "leaves the url out of the client's own page and reports nothing about the failed navigation",
+    [all],
+    (info) => (seven(info) ? [] : (({ url, ...rest }) => rest)(info)),
+  ],
   ['reports nothing about the failed navigation', recover, onSeven(() => [])],
 ])
-  test(`a guard whose discovery events during the error interval ${name} fails only eventsRedacted`, async () => {
+  test(`a guard that ${name} in its discovery events during the error interval fails only eventsRedacted`, async () => {
     const execution = await rows(ids, discovery);
     assert.equal(execution.results.length, ids.length);
     for (const row of execution.results) {

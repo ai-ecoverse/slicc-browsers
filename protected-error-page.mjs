@@ -104,11 +104,17 @@ function discoveryRules({ failedURL, tag, trigger }) {
   const cleanTitle = (title) => !leaks(title) && (!names(title) || named.includes(lower(title)));
   const ownTitle = ({ url, title }) =>
     plain(title) !== '' && [plain(url), unschemed(plain(url))].includes(plain(title));
-  const onHost = (url) => {
-    const parsed = parseURL(url);
-    return parsed?.origin === origin || parsed?.hostname === hostname;
-  };
-  const cleanURL = (url) => !leaks(url) && (lower(url) === origin || !onHost(url));
+  const inner = (u) => (u && !u.host ? inner(parseURL(u.pathname)) : u);
+  const onHost = (u) => u?.hostname.replace(/\.$/, '') === hostname;
+  const references = (form) =>
+    Array.from(form.matchAll(/(?:[a-z][a-z\d+.-]*:)?[\\/]{2}[^\\/?#&\s]*/g), ([ref]) =>
+      parseURL(ref, origin)
+    );
+  const exact = (form) =>
+    form === origin ||
+    (!onHost(inner(parseURL(form))) &&
+      references(form).every((u) => !onHost(u) || u.origin === origin));
+  const cleanURL = (url) => !leaks(url) && layers(url).every(exact);
   const home = parseURL(trigger)?.href;
   const clean = (info) => {
     if (parseURL(info.url)?.href === home) return ownTitle(info) || cleanTitle(info.title);

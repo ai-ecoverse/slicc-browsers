@@ -98,6 +98,11 @@ for (const [name, ids, discovery] of [
     onSeven((info) => ({ ...info, url: failed(info).origin, title: failed(info).host })),
   ],
   [
+    'shows the percent-encoded origin titled with the origin',
+    recover,
+    onSeven((info) => ({ ...info, url: upper(failed(info).origin), title: failed(info).origin })),
+  ],
+  [
     'leaves the url and the title out of one event and masks the next',
     recover,
     onSeven(({ url, title, ...info }) => [
@@ -312,6 +317,35 @@ for (const [name, ids, discovery] of [
     'shows the protected host on another port',
     [all],
     onSeven((info) => ({ ...info, url: `http://${failed(info).hostname}:1`, title: '' })),
+  ],
+  [
+    'shows the percent-encoded protected host on another port',
+    recover,
+    onSeven((info) => ({ ...info, url: upper(`http://${failed(info).hostname}:1`), title: '' })),
+  ],
+  [
+    'shows the twice-encoded protected host on another port',
+    [all],
+    onSeven((info) => ({
+      ...info,
+      url: upper(upper(`http://${failed(info).hostname}:1`)),
+      title: '',
+    })),
+  ],
+  [
+    'shows a blob url on the protected host on another port',
+    [all],
+    onSeven((info) => ({ ...info, url: `blob:http://${failed(info).hostname}:1/0`, title: '' })),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port",
+    recover,
+    reduced((to) => `${to.protocol}//${to.hostname}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to the twice-encoded protected host on another port",
+    [all],
+    reduced((to) => `${to.protocol}//${to.hostname}:1`, { encode: (to) => upper(upper(to)) }),
   ],
   [
     "titles the client's own page with the failed URL and reports nothing else",

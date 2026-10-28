@@ -168,6 +168,11 @@ for (const [name, ids, discovery] of [
     [all],
     reduced((to) => `\u0001${to.origin}`, { encode: (to) => to }),
   ],
+  [
+    "reduces the destination in the client's own page to the encoded origin and an accented path",
+    recover,
+    reduced((to) => `${to.origin}/\u00e9`),
+  ],
   ['reports no event for the tab at all', every, () => []],
   ['reports nothing about the failed navigation', recover, onSeven(() => [])],
   [
@@ -436,6 +441,16 @@ for (const [name, ids, discovery] of [
     "reduces the destination in the client's own page to an encoded wrapped protected host on another port after a control character",
     recover,
     reduced((to) => `view-source:\u0001${to.protocol}${to.hostname}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port with a full-width letter",
+    [all],
+    reduced((to) => `${to.protocol}//\uff53${to.hostname.slice(1)}:1`),
+  ],
+  [
+    "reduces the destination in the client's own page to the encoded protected host on another port with a soft hyphen",
+    recover,
+    reduced((to) => `${to.protocol}//${to.hostname.replace('.', '\u00ad.')}:1`),
   ],
   [
     "reduces the destination in the client's own page but keeps all of it with a tab after every character",

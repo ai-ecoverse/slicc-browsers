@@ -59,10 +59,23 @@ const plain = (value) =>
       String.fromCharCode(Number.parseInt(hex, 16))
     )
   );
+const utf8 = (value) =>
+  lower(
+    value.replace(/(?:%[0-9a-f]{2})+/gi, (run) =>
+      new TextDecoder().decode(
+        Uint8Array.from(run.slice(1).split('%'), (hex) => Number.parseInt(hex, 16))
+      )
+    )
+  );
+const ignored = (form) => form.replace(/[\t\n\r]/g, '');
 const readings = (value) =>
-  [(form) => form, (form) => form.replace(/[\t\n\r]/g, '')].map((read) => {
+  [
+    [(form) => form, plain],
+    [ignored, plain],
+    [ignored, utf8],
+  ].map(([read, decode]) => {
     const out = [read(lower(value))];
-    for (let next = read(plain(out[0])); next !== out.at(-1); next = read(plain(next)))
+    for (let next = read(decode(out[0])); next !== out.at(-1); next = read(decode(next)))
       out.push(next);
     return out;
   });

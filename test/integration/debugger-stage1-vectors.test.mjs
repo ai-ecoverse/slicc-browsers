@@ -7,13 +7,11 @@ const ordinary = [
   'Debugger.enable',
   'Debugger.disable',
   'Debugger.resume',
-  'Debugger.getScriptSource',
-  'Debugger.evaluateOnCallFrame',
   'Debugger.setInstrumentationBreakpoint',
   'Debugger.removeBreakpoint',
 ];
 
-test('Stage1 is exactly the seven-method subset and preserves distinct lifetimes', () => {
+test('Stage1 is exactly the five-method subset and preserves distinct lifetimes', () => {
   assert.equal(vectors.schemaVersion, 1);
   assert.deepEqual(
     vectors.methods.filter((item) => item.admitted).map((item) => item.method),
@@ -37,6 +35,8 @@ test('Stage1 is exactly the seven-method subset and preserves distinct lifetimes
   assert.equal(pause.admitted, false);
   assert.equal(pause.ownedInstrumentationOnly, true);
   for (const method of [
+    'Debugger.getScriptSource',
+    'Debugger.evaluateOnCallFrame',
     'Debugger.setBreakpoint',
     'DOMDebugger.setEventListenerBreakpoint',
     'EventBreakpoints.setInstrumentationBreakpoint',

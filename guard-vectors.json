@@ -15618,6 +15618,11 @@
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
+        "admissionRefused": {
+          "means": "the URL-condition method is refused on the ordinary control",
+          "dependsOn": [],
+          "check": { "registration": "any", "observer": "client" }
+        },
         "condition": {
           "means": "a beacon from the breakpoint condition evaluated in {target}/listener.js?n={tag}",
           "dependsOn": ["refused.3"],
@@ -15673,7 +15678,8 @@
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "condition": true
+          "condition": false,
+          "admissionRefused": true
         }
       },
       "expected": {
@@ -15824,6 +15830,15 @@
             "served": "{target}/doc?n={tag}&listener=1",
             "observer": "fixture"
           }
+        },
+        "convertedPause": {
+          "means": "the guard converts the ordinary instrumentation pause to reason other",
+          "dependsOn": [],
+          "check": {
+            "event": "Debugger.paused",
+            "where": { "params": { "reason": "other" } },
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -15831,7 +15846,8 @@
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "paused": true
+          "paused": true,
+          "convertedPause": true
         }
       },
       "expected": {
@@ -15964,6 +15980,11 @@
             "served": "{target}/doc?n={tag}&listener=1",
             "observer": "fixture"
           }
+        },
+        "admissionRefused": {
+          "means": "the listener breakpoint method is refused on the ordinary control",
+          "dependsOn": [],
+          "check": { "registration": "any", "observer": "client" }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
@@ -15971,7 +15992,8 @@
         "origin": "ordinary",
         "via": "guard",
         "expected": {
-          "paused": true
+          "paused": false,
+          "admissionRefused": true
         }
       },
       "expected": {

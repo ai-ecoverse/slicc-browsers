@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "methods": [
+    { "method": "Debugger.enable", "lifetime": "persistent", "admitted": true },
+    { "method": "Debugger.disable", "lifetime": "cleanup", "admitted": true },
+    { "method": "Debugger.resume", "lifetime": "pause-control", "admitted": true },
+    { "method": "Debugger.getScriptSource", "lifetime": "document", "admitted": true },
+    { "method": "Debugger.evaluateOnCallFrame", "lifetime": "document", "admitted": true },
+    {
+      "method": "Debugger.setInstrumentationBreakpoint",
+      "lifetime": "persistent",
+      "admitted": true
+    },
+    { "method": "Debugger.removeBreakpoint", "lifetime": "cleanup", "admitted": true },
+    {
+      "method": "Debugger.pause",
+      "lifetime": "document",
+      "admitted": false,
+      "ownedInstrumentationOnly": true
+    },
+    { "method": "Debugger.setBreakpoint", "lifetime": "persistent", "admitted": false },
+    { "method": "Debugger.setBreakpointByUrl", "lifetime": "persistent", "admitted": false },
+    { "method": "Debugger.stepInto", "lifetime": "document", "admitted": false },
+    { "method": "Debugger.stepOut", "lifetime": "document", "admitted": false },
+    { "method": "Debugger.stepOver", "lifetime": "document", "admitted": false },
+    {
+      "method": "DOMDebugger.setEventListenerBreakpoint",
+      "lifetime": "persistent",
+      "admitted": false
+    },
+    {
+      "method": "EventBreakpoints.setInstrumentationBreakpoint",
+      "lifetime": "persistent",
+      "admitted": false
+    },
+    {
+      "method": "Page.addScriptToEvaluateOnNewDocument",
+      "lifetime": "persistent",
+      "admitted": false
+    },
+    { "method": "Runtime.addBinding", "lifetime": "persistent", "admitted": false },
+    { "method": "Debugger.stage1Unknown", "lifetime": "unknown", "admitted": false }
+  ],
+  "rows": [
+    {
+      "id": "ordinary-install",
+      "mode": "install",
+      "destination": "ordinary",
+      "expected": { "admitted": true, "converted": true, "liveReads": true, "released": true },
+      "requires": ["privateRescueAudit"]
+    },
+    {
+      "id": "holder-death",
+      "mode": "holder-death",
+      "destination": "ordinary",
+      "expected": { "admitted": true, "converted": true, "liveReads": true, "released": true },
+      "requires": ["clientExit", "privateRescueAudit"]
+    },
+    {
+      "id": "session-loss",
+      "mode": "session-loss",
+      "destination": "ordinary",
+      "expected": { "admitted": true, "converted": true, "liveReads": true, "released": true },
+      "requires": ["privateRescueAudit"]
+    },
+    {
+      "id": "worker-restart",
+      "mode": "worker-restart",
+      "destination": "ordinary",
+      "expected": { "admitted": true, "converted": true, "liveReads": true, "released": true },
+      "requires": ["restartGuard", "privateRescueAudit"]
+    },
+    {
+      "id": "protected-seven-hop",
+      "mode": "protected-hop",
+      "destination": "seven",
+      "expected": { "admitted": true, "published": false, "committed": false, "released": true },
+      "requires": ["privateRescueAudit"]
+    },
+    {
+      "id": "protected-vault-hop",
+      "mode": "protected-hop",
+      "destination": "vault",
+      "expected": { "admitted": true, "published": false, "committed": false, "released": true },
+      "requires": ["privateRescueAudit"]
+    },
+    {
+      "id": "protected-error-page",
+      "mode": "protected-hop",
+      "destination": "seven",
+      "expected": { "admitted": true, "published": false, "committed": false, "released": true },
+      "requires": ["protectedErrorPage", "privateRescueAudit"]
+    },
+    {
+      "id": "late-foreign-world",
+      "mode": "late-foreign-world",
+      "destination": "ordinary",
+      "expected": { "admitted": true, "published": false, "released": true },
+      "requires": ["extensionWorld", "privateRescueAudit"]
+    },
+    {
+      "id": "pending-protected-hop",
+      "mode": "pending-pause-hop",
+      "destination": "seven",
+      "expected": { "admitted": true, "published": false, "committed": false, "released": true },
+      "requires": ["pendingPauseGate", "privateRescueAudit"]
+    }
+  ],
+  "navigation": [
+    "navigate",
+    "href",
+    "replace",
+    "redirect",
+    "reload",
+    "history",
+    "bfcache",
+    "prerender"
+  ],
+  "leaseRefusals": [
+    "protected-top",
+    "protected-subframe",
+    "nested-protected-subframe",
+    "protected-world",
+    "foreign-extension-world",
+    "protected-worker",
+    "unplaced-frame",
+    "unplaced-world",
+    "unplaced-worker",
+    "incomplete-read"
+  ],
+  "rescueEvidence": {
+    "origin": "guard",
+    "noObserverResume": true,
+    "ownerUnchanged": true,
+    "generationUnchanged": true,
+    "deadlineUnchanged": true
+  }
+}

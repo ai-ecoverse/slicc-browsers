@@ -5,6 +5,16 @@
   "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
   "origins": ["http://127.0.0.1:5710", "https://seven.example.test"],
   "urls": [
+    { "url": "http://sliccy.ai/cdp-premise", "protected": true },
+    { "url": "https://sliccy.ai/cdp-premise", "protected": true },
+    { "url": "http://www.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "https://www.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "http://seven.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "https://seven.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "http://vault.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "https://vault.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "http://arbitrary-premise.sliccy.ai/cdp-premise", "protected": true },
+    { "url": "https://arbitrary-premise.sliccy.ai/cdp-premise", "protected": true },
     {
       "url": "http://exa mple.sliccy.ai/",
       "protected": true
@@ -739,6 +749,16 @@
     }
   ],
   "targets": [
+    { "url": "http://sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "https://sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "http://www.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "https://www.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "http://seven.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "https://seven.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "http://vault.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "https://vault.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "http://arbitrary-premise.sliccy.ai/cdp-premise", "type": "page", "protected": true },
+    { "url": "https://arbitrary-premise.sliccy.ai/cdp-premise", "type": "page", "protected": true },
     {
       "url": "https://seven.sliccy.ai/path?secret=query#fragment",
       "documentURL": "chrome-error://chromewebdata/",

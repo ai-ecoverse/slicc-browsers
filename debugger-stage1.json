@@ -4,8 +4,8 @@
     { "method": "Debugger.enable", "lifetime": "persistent", "admitted": true },
     { "method": "Debugger.disable", "lifetime": "cleanup", "admitted": true },
     { "method": "Debugger.resume", "lifetime": "pause-control", "admitted": true },
-    { "method": "Debugger.getScriptSource", "lifetime": "document", "admitted": true },
-    { "method": "Debugger.evaluateOnCallFrame", "lifetime": "document", "admitted": true },
+    { "method": "Debugger.getScriptSource", "lifetime": "document", "admitted": false },
+    { "method": "Debugger.evaluateOnCallFrame", "lifetime": "document", "admitted": false },
     {
       "method": "Debugger.setInstrumentationBreakpoint",
       "lifetime": "persistent",
@@ -42,6 +42,36 @@
     { "method": "Debugger.stage1Unknown", "lifetime": "unknown", "admitted": false }
   ],
   "rows": [
+    {
+      "id": "document-change-before-install",
+      "mode": "document-change-before-install",
+      "destination": "ordinary",
+      "expected": {
+        "admitted": true,
+        "published": true,
+        "installed": false,
+        "liveReads": true,
+        "released": true
+      },
+      "requires": [
+        "publishedPause",
+        "documentChange",
+        "noSourceInNewDocument",
+        "privateRescueAudit"
+      ]
+    },
+    {
+      "id": "stage2-methods-at-published-pause",
+      "mode": "stage2-refusal",
+      "destination": "ordinary",
+      "expected": { "admitted": false, "published": true, "forwarded": false, "released": true },
+      "requires": [
+        "publishedPause",
+        "getScriptSourceRefused",
+        "evaluateOnCallFrameRefused",
+        "privateRescueAudit"
+      ]
+    },
     {
       "id": "ordinary-install",
       "mode": "install",

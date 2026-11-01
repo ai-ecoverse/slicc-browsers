@@ -509,6 +509,68 @@ class Restore {
   }
 }
 
+export function bfcacheNavigation({
+  reader,
+  targetId,
+  ordinary,
+  protectedOrigin,
+  tag,
+  budget = 7000,
+}) {
+  const driver = new Restore({
+    reader,
+    client: reader,
+    targetId,
+    ordinary,
+    protectedOrigin,
+    tag,
+    budget,
+  });
+  return {
+    async prepare() {
+      const seeded = await driver.seed();
+      if (driver.session)
+        await reader.send('Target.detachFromTarget', { sessionId: driver.session });
+      if (!seeded) throw new Error(`bfcache-restore: ${driver.missing.join('; ')}`);
+      const history = await driver.read('Page.getNavigationHistory', {});
+      const ordinaryEntry = history.result?.entries?.find(
+        (entry) => entry.url === `${ordinary}/bfcache?n=${tag}-b`
+      );
+      if (!ordinaryEntry) throw new Error('bfcache-restore: ordinary history entry absent');
+      return {
+        url: ordinaryEntry.url,
+        seed: driver.result.seed,
+        ordinaryEntry,
+        protectedEntry: driver.entry,
+      };
+    },
+    async restore(entry) {
+      const eventStart = reader.events.length;
+      const began = Date.now();
+      const reply = await driver.read('Page.navigateToHistoryEntry', { entryId: entry.id });
+      if (!reply.ok || !(await driver.loaded(entry.url)))
+        throw new Error('bfcache-restore: history document did not complete within bound');
+      const state = await driver.state();
+      const restored = reader.events
+        .slice(eventStart)
+        .some(
+          (event) =>
+            event.sessionId === driver.observer &&
+            event.method === 'Page.frameNavigated' &&
+            event.params?.type === 'BackForwardCacheRestore' &&
+            event.params.frame?.url === entry.url
+        );
+      if (!restored || state?.persisted !== true)
+        throw new Error('bfcache-restore: real BFCache restore not observed');
+      return { reply, state, restored, elapsedMs: Date.now() - began };
+    },
+    async close() {
+      if (driver.observer)
+        await reader.send('Target.detachFromTarget', { sessionId: driver.observer });
+    },
+  };
+}
+
 export function bfcacheRestore({
   client,
   reader,

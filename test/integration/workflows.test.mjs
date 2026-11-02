@@ -114,7 +114,7 @@ test('npm test runs every test-glob file in exactly one node --test call, so the
   assert.equal(input('test-glob'), 'test/integration/*.test.mjs');
   assert.doesNotMatch(pkg.scripts.test, /NODE_OPTIONS|npm run/);
   const calls = pkg.scripts.test.split(' && ').filter((part) => part.startsWith('node --test '));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   const named = calls.flatMap((call) =>
     call.split(' ').filter((word) => word.endsWith('.test.mjs'))
   );

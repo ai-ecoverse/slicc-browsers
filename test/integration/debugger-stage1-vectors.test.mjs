@@ -104,26 +104,26 @@ test('the lease rows include unplaced reachability and every measured navigation
   ]);
 });
 
-test('E4 ordinary controls prove Stage1 refusals and the converted positive without weakening protected expectations', async () => {
+test('E4 raw controls assert native facts and protected expectations still require observations', async () => {
   const { vectors: rows } = JSON.parse(
     await readFile(new URL('../../guard-vectors.json', import.meta.url))
   );
   const condition = rows.find(({ id }) => id === 'E4');
   const instrumentation = rows.find(({ id }) => id === 'E4.instrumentation');
   const listener = rows.find(({ id }) => id === 'E4.event-listener');
-  assert.deepEqual(condition.control.expected, { condition: false, admissionRefused: true });
+  assert.deepEqual(condition.control.expected, { condition: true, admissionRefused: false });
   assert.deepEqual(condition.observe.admissionRefused.check, {
     registration: 'any',
     observer: 'client',
   });
   assert.equal(condition.setup[3].refusable, true);
-  assert.deepEqual(listener.control.expected, { paused: false, admissionRefused: true });
+  assert.deepEqual(listener.control.expected, { paused: true, admissionRefused: false });
   assert.deepEqual(listener.observe.admissionRefused.check, {
     registration: 'any',
     observer: 'client',
   });
   assert.equal(listener.setup[3].refusable, true);
-  assert.deepEqual(instrumentation.control.expected, { paused: true, convertedPause: true });
+  assert.deepEqual(instrumentation.control.expected, { paused: true, convertedPause: false });
   assert.deepEqual(instrumentation.observe.convertedPause.check, {
     event: 'Debugger.paused',
     where: { params: { reason: 'other' } },
@@ -132,4 +132,12 @@ test('E4 ordinary controls prove Stage1 refusals and the converted positive with
   assert.deepEqual(condition.expected, { condition: false, paused: false, served: 'either' });
   for (const row of [instrumentation, listener])
     assert.deepEqual(row.expected, { paused: false, served: 'either' });
+  for (const row of [condition, instrumentation, listener]) {
+    assert.equal(row.control.via, 'unguarded');
+    assert.equal(row.setup[2].refusable, true);
+    assert.deepEqual(row.observe.paused.dependsOn, []);
+    for (const step of row.trigger.filter(({ cdp }) => cdp?.startsWith('Debugger.')))
+      assert.equal(step.refusable, true);
+  }
+  assert.deepEqual(condition.observe.condition.dependsOn, []);
 });

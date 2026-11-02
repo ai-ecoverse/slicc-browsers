@@ -15587,7 +15587,9 @@
           "cdp": "Page.enable"
         },
         {
-          "cdp": "Debugger.enable"
+          "cdp": "Debugger.enable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         },
         {
           "cdp": "Debugger.setBreakpointByUrl",
@@ -15613,7 +15615,9 @@
           }
         },
         {
-          "cdp": "Debugger.disable"
+          "cdp": "Debugger.disable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
@@ -15625,7 +15629,7 @@
         },
         "condition": {
           "means": "a beacon from the breakpoint condition evaluated in {target}/listener.js?n={tag}",
-          "dependsOn": ["refused.3"],
+          "dependsOn": [],
           "check": {
             "beacon": "{target}",
             "observer": "fixture"
@@ -15633,7 +15637,7 @@
         },
         "paused": {
           "means": "a Debugger.paused in {target}/listener.js?n={tag}",
-          "dependsOn": ["refused.3"],
+          "dependsOn": [],
           "check": {
             "any": [
               {
@@ -15676,10 +15680,10 @@
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
-        "via": "guard",
+        "via": "unguarded",
         "expected": {
-          "condition": false,
-          "admissionRefused": true
+          "condition": true,
+          "admissionRefused": false
         }
       },
       "expected": {
@@ -15754,7 +15758,9 @@
           "cdp": "Page.enable"
         },
         {
-          "cdp": "Debugger.enable"
+          "cdp": "Debugger.enable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         },
         {
           "cdp": "Debugger.setInstrumentationBreakpoint",
@@ -15782,17 +15788,21 @@
           "wait": 2000
         },
         {
-          "cdp": "Debugger.resume"
+          "cdp": "Debugger.resume",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         },
         {
-          "cdp": "Debugger.disable"
+          "cdp": "Debugger.disable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "paused": {
           "means": "a Debugger.paused before {target}/listener.js?n={tag}, which names a source map in its SourceMap header",
-          "dependsOn": ["refused.3"],
+          "dependsOn": [],
           "check": {
             "any": [
               {
@@ -15844,10 +15854,10 @@
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
-        "via": "guard",
+        "via": "unguarded",
         "expected": {
           "paused": true,
-          "convertedPause": true
+          "convertedPause": false
         }
       },
       "expected": {
@@ -15921,7 +15931,9 @@
           "cdp": "Page.enable"
         },
         {
-          "cdp": "Debugger.enable"
+          "cdp": "Debugger.enable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         },
         {
           "cdp": "DOMDebugger.setEventListenerBreakpoint",
@@ -15949,17 +15961,21 @@
           "wait": 2000
         },
         {
-          "cdp": "Debugger.resume"
+          "cdp": "Debugger.resume",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         },
         {
-          "cdp": "Debugger.disable"
+          "cdp": "Debugger.disable",
+          "refusable": true,
+          "refusal": { "match": "refused" }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "paused": {
           "means": "a Debugger.paused in a window load listener, which only {target}/doc?n={tag}&listener=1 registers",
-          "dependsOn": ["refused.3"],
+          "dependsOn": [],
           "check": {
             "event": "Debugger.paused",
             "where": {
@@ -15990,10 +16006,10 @@
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
       "control": {
         "origin": "ordinary",
-        "via": "guard",
+        "via": "unguarded",
         "expected": {
-          "paused": false,
-          "admissionRefused": true
+          "paused": true,
+          "admissionRefused": false
         }
       },
       "expected": {

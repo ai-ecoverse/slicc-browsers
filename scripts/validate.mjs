@@ -92,17 +92,8 @@ for (const pattern of [
   new RegExp(pattern);
 }
 
-const sevenLabelsTrue = ['seven', 'link-websockets'];
-const sevenLabelsFalse = [
-  '',
-  'www',
-  'vault',
-  'vault-preview',
-  'get',
-  'mcpcat',
-  'echo',
-  'vault-feature-x',
-];
+const sevenLabelsTrue = ['seven', 'www', 'link-websockets'];
+const sevenLabelsFalse = ['', 'vault', 'vault-preview', 'get', 'mcpcat', 'echo', 'vault-feature-x'];
 for (const label of sevenLabelsTrue) {
   if (!isSevenLabel(catalog.seven, label))
     fail(`isSevenLabel(${JSON.stringify(label)}) should be true`);

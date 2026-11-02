@@ -22,12 +22,11 @@ fn strip_nulls(v: Value) -> Value {
 #[test]
 fn is_seven_label() {
     let seven = &catalog().seven;
-    for label in ["seven", "link-websockets"] {
+    for label in ["seven", "www", "link-websockets"] {
         assert!(seven.is_seven_label(label), "{label} should be seven");
     }
     for label in [
         "",
-        "www",
         "vault",
         "vault-preview",
         "get",

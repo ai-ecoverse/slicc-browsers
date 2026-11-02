@@ -30,7 +30,7 @@ const exercises = {
     );
   },
   'seven.mjs': ({ isSevenLabel }) =>
-    isSevenLabel(catalog.seven, 'seven') && !isSevenLabel(catalog.seven, 'www'),
+    isSevenLabel(catalog.seven, 'seven') && !isSevenLabel(catalog.seven, 'vault'),
 };
 
 export async function check(path) {

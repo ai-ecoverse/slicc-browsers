@@ -41,6 +41,7 @@ jobs:
         test/integration/browser-runner.test.mjs
         test/integration/fixture-client.test.mjs
         test/integration/self-contained.test.mjs
+        test/integration/seven-corpus.test.mjs
         test/integration/validate.test.mjs
         test/integration/go.test.mjs
         test/integration/cargo.test.mjs

@@ -24,9 +24,38 @@
             "title": "https://lars.sliccy.ai"
           },
           {
+            "id": "T2",
+            "url": "https://www.sliccy.ai",
+            "title": "https://www.sliccy.ai"
+          },
+          {
             "id": "T6",
             "url": "https://seven.sliccy.ai",
             "title": "https://seven.sliccy.ai"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cdp:127.0.0.1:9322",
+      "kind": "endpoint",
+      "tier": 1,
+      "name": "Chrome",
+      "version": "154.0.8037.98",
+      "endpoint": {
+        "cdp": "http://127.0.0.1:9322",
+        "webSocketDebuggerUrl": "ws://127.0.0.1:9322/devtools/browser/s2",
+        "name": "Chrome",
+        "version": "154.0.8037.98",
+        "product": "Chrome/154.0.8037.98",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
+        "source": "flag",
+        "sevenOpen": true,
+        "sevenTabs": [
+          {
+            "id": "U1",
+            "url": "https://www.sliccy.ai",
+            "title": "https://www.sliccy.ai"
           }
         ]
       }
@@ -53,24 +82,6 @@
             "title": "https://team-7.sliccy.ai"
           }
         ]
-      }
-    },
-    {
-      "id": "cdp:127.0.0.1:9322",
-      "kind": "endpoint",
-      "tier": 2,
-      "name": "Chrome",
-      "version": "154.0.8037.98",
-      "endpoint": {
-        "cdp": "http://127.0.0.1:9322",
-        "webSocketDebuggerUrl": "ws://127.0.0.1:9322/devtools/browser/s2",
-        "name": "Chrome",
-        "version": "154.0.8037.98",
-        "product": "Chrome/154.0.8037.98",
-        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.8037.98 Safari/537.36",
-        "source": "flag",
-        "sevenOpen": false,
-        "sevenTabs": []
       }
     }
   ]

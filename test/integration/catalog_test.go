@@ -382,3 +382,64 @@ func TestTheGuardVectorsParse(t *testing.T) {
 		t.Fatalf("guard schema: %v", s["$id"])
 	}
 }
+
+func TestCorpusWWWPagesMatchCatalog(t *testing.T) {
+	cases, err := sliccbrowsers.Corpus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		for host, server := range c.Input.HTTP {
+			var targets []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+				URL  string `json:"url"`
+			}
+			if len(server.List) == 0 {
+				continue
+			}
+			if err := json.Unmarshal(server.List, &targets); err != nil {
+				t.Fatal(err)
+			}
+			var expected struct {
+				Entries []struct {
+					ID       string `json:"id"`
+					Tier     int    `json:"tier"`
+					Endpoint struct {
+						SevenOpen bool `json:"sevenOpen"`
+						SevenTabs []struct {
+							ID    string `json:"id"`
+							URL   string `json:"url"`
+							Title string `json:"title"`
+						} `json:"sevenTabs"`
+					} `json:"endpoint"`
+				} `json:"entries"`
+			}
+			if err := json.Unmarshal(c.Expected, &expected); err != nil {
+				t.Fatal(err)
+			}
+			for _, target := range targets {
+				if target.Type != "page" || !strings.HasPrefix(target.URL, "https://www.sliccy.ai/") {
+					continue
+				}
+				found := false
+				for _, entry := range expected.Entries {
+					if entry.ID != "cdp:"+host {
+						continue
+					}
+					for _, tab := range entry.Endpoint.SevenTabs {
+						if tab.ID == target.ID {
+							found = true
+							if tab.URL != "https://www.sliccy.ai" || tab.Title != tab.URL || !entry.Endpoint.SevenOpen || entry.Tier != 1 {
+								t.Errorf("%s %s: invalid www seven endpoint", c.Name, target.ID)
+							}
+						}
+					}
+				}
+				if found != sliccbrowsers.Default().Seven.IsSevenLabel("www") {
+					t.Errorf("%s %s: www sevenTabs presence = %v, disagrees with catalog", c.Name, target.ID, found)
+				}
+			}
+		}
+	}
+}

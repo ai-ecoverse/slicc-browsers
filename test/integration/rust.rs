@@ -22,12 +22,11 @@ fn strip_nulls(v: Value) -> Value {
 #[test]
 fn is_seven_label() {
     let seven = &catalog().seven;
-    for label in ["seven", "link-websockets"] {
+    for label in ["seven", "www", "link-websockets"] {
         assert!(seven.is_seven_label(label), "{label} should be seven");
     }
     for label in [
         "",
-        "www",
         "vault",
         "vault-preview",
         "get",
@@ -355,4 +354,49 @@ fn the_guard_vectors_parse_and_round_trip() {
         );
     }
     assert!(slicc_browsers::GUARD_VECTORS_SCHEMA.contains("/schema/guard-vectors.schema.json"));
+}
+
+#[test]
+fn corpus_www_pages_match_catalog() {
+    for c in corpus::corpus().cases {
+        for (host, server) in &c.input.http {
+            let Some(targets) = server.list.as_ref().and_then(Value::as_array) else {
+                continue;
+            };
+            for target in targets {
+                if target["type"] != "page"
+                    || !target["url"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .starts_with("https://www.sliccy.ai/")
+                {
+                    continue;
+                }
+                let entry = c.expected["entries"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|e| e["id"] == format!("cdp:{host}"))
+                    .unwrap();
+                let tab = entry["endpoint"]["sevenTabs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tab| tab["id"] == target["id"]);
+                assert_eq!(
+                    tab.is_some(),
+                    catalog().seven.is_seven_label("www"),
+                    "{} {}",
+                    c.name,
+                    target["id"]
+                );
+                if let Some(tab) = tab {
+                    assert_eq!(tab["url"], "https://www.sliccy.ai");
+                    assert_eq!(tab["title"], tab["url"]);
+                    assert_eq!(entry["endpoint"]["sevenOpen"], true);
+                    assert_eq!(entry["tier"], 1);
+                }
+            }
+        }
+    }
 }

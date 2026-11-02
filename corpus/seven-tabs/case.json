@@ -1,5 +1,5 @@
 {
-  "description": "sevenOpen needs a page target on https://<label>.sliccy.ai other than www; www, the apex, other schemes, nested labels and non-page targets don't count",
+  "description": "sevenOpen needs a page target on https://<label>.sliccy.ai, including www; excluded labels such as vault, the apex, other schemes, nested labels and non-page targets don't count",
   "needs": ["flag"],
   "cdp": ["127.0.0.1:9321", "9322", "ws://127.0.0.1:9323/devtools/browser/s3"],
   "http": {
@@ -68,6 +68,13 @@
           "url": "https://lars.sliccy.ai/",
           "title": "worker",
           "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/T8"
+        },
+        {
+          "id": "T9",
+          "type": "page",
+          "url": "https://vault.sliccy.ai/",
+          "title": "vault",
+          "webSocketDebuggerUrl": "ws://127.0.0.1/devtools/page/T9"
         }
       ]
     },

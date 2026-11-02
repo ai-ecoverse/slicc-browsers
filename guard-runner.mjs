@@ -8,8 +8,11 @@ import { frameRead } from './frame-read.mjs';
 import {
   beacon,
   canary,
+  debuggerCleanup,
+  debuggerPaused,
   expand,
   hop,
+  idleDebuggerCleanup,
   inapplicable,
   isRefusal,
   knownOrigins,
@@ -683,7 +686,13 @@ class Execution {
       /timeout|timed out|no answer/i.test(String(out.error?.message ?? out.error));
     if (step.refusable) this.refused[step.refusal.name] = unanswered ? 'incomplete' : refused;
     if (unanswered) this.incomplete.push(`${step.refusal.name}: no answer`);
-    else if (step.refusable && !out.ok && !refused && !gone)
+    else if (
+      step.refusable &&
+      !out.ok &&
+      !refused &&
+      !gone &&
+      !idleDebuggerCleanup(this.vector, step, phase, out)
+    )
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
@@ -895,7 +904,7 @@ class Execution {
         })
       );
     if (step.guess) return this.guess(step.guess, session);
-    if (step.cdp) return this.cdp(step, session);
+    if (step.cdp) return this.cdp(step, session, phase);
     if (step.page) return this.page(step, session, phase);
     throw new Error('Unknown step kind');
   }
@@ -965,7 +974,12 @@ class Execution {
     return { ok: true, result: attempts };
   }
 
-  async cdp(step, sessionId) {
+  async cdp(step, sessionId, phase) {
+    if (
+      debuggerCleanup(this.vector, step, phase) &&
+      !debuggerPaused(this.client.events.slice(this.eventStart), sessionId)
+    )
+      return { ok: true, result: { cleanup: 'never paused' } };
     if (step.cdp === 'Target.detachFromTarget') await sleep(this.delay);
     if (step.cdp === 'Target.setAutoAttach' && step.params?.autoAttach === false)
       this.cleanupEventStart = this.client.events.length;

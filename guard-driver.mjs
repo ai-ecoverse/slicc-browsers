@@ -430,3 +430,16 @@ export function parseURL(value, base) {
 
 export const owned = (entries, tag) =>
   (entries ?? []).filter((entry) => typeof entry?.url === 'string' && entry.url.includes(tag));
+
+export const debuggerCleanup = (vector, step, phase) =>
+  ['E4.instrumentation', 'E4.event-listener'].includes(vector.id) &&
+  phase === 'trigger' &&
+  step.cdp === 'Debugger.resume';
+
+export const idleDebuggerCleanup = (vector, step, phase, out) =>
+  debuggerCleanup(vector, step, phase) &&
+  !out.ok &&
+  out.error?.message === 'Can only perform operation while paused.';
+
+export const debuggerPaused = (events, session) =>
+  events.some((event) => event.sessionId === session && event.method === 'Debugger.paused');

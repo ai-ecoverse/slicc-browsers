@@ -14,6 +14,8 @@ pub const PROTECTED_SCHEMA: &str = include_str!("../schema/protected.schema.json
 
 pub const GUARD_VECTORS_SCHEMA: &str = include_str!("../schema/guard-vectors.schema.json");
 
+pub const DEBUGGER_STAGE1_SCHEMA: &str = include_str!("../schema/debugger-stage1.schema.json");
+
 #[cfg(feature = "corpus")]
 pub const CORPUS: &str = include_str!("../corpus.json");
 
@@ -22,6 +24,9 @@ pub const PROTECTED: &str = include_str!("../protected.json");
 
 #[cfg(feature = "corpus")]
 pub const GUARD_VECTORS: &str = include_str!("../guard-vectors.json");
+
+#[cfg(feature = "corpus")]
+pub const DEBUGGER_STAGE1: &str = include_str!("../debugger-stage1.json");
 
 #[cfg(feature = "serde")]
 mod catalog;
@@ -37,3 +42,6 @@ pub mod protected;
 
 #[cfg(feature = "corpus")]
 pub mod guard;
+
+#[cfg(feature = "corpus")]
+pub mod debugger_stage1;

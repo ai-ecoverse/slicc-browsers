@@ -80,6 +80,7 @@ test('auth refusal patterns are declared and malformed observation patterns fail
       'catalog.json',
       'corpus.json',
       'protected.json',
+      'debugger-stage1.json',
       'protected.mjs',
       'seven.mjs',
     ])

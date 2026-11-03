@@ -7,7 +7,7 @@ The browser knowledge that SLICC's tools share. SLICC drives a real Chromium bro
 - which origins browser control must **never** touch, starting with seven's own origin and the vault;
 - how to prove that a CDP guard really keeps a client away from them.
 
-These programs can't share code, so they share data: one catalog, three sets of test vectors and their JSON schemas, published as a Go module, a Rust crate and an npm package at the same version.
+These programs can't share code, so they share data: one catalog, four sets of test vectors and their JSON schemas, published as a Go module, a Rust crate and an npm package at the same version.
 
 | who | uses it for |
 | --- | --- |
@@ -24,6 +24,7 @@ These programs can't share code, so they share data: one catalog, three sets of 
 | [`corpus/`](corpus), `corpus.json` | discovery conformance cases: a fake machine each, with the ranked browser list it must produce |
 | [`protected.json`](protected.json), [`protected.mjs`](protected.mjs) | protected-origin test vectors, and a reference matcher in JavaScript |
 | [`guard-vectors.json`](guard-vectors.json) | the CDP scenarios every guard must pass |
+| [`debugger-stage1.json`](debugger-stage1.json) | shared Stage 1 debugger conformance data |
 | [`guard-runner.mjs`](guard-runner.mjs), [`guard-driver.mjs`](guard-driver.mjs), [`fixture-server.mjs`](fixture-server.mjs) | a reference runner for the guard vectors, its helpers, and the test server they run against |
 | [`schema/`](schema) | JSON Schema (2020-12) for each file above, and for the `--json` output of `slicc browsers` and `playwright-cli list` |
 
@@ -45,8 +46,8 @@ rank := c.Priority("chrome")
 
 The files are embedded, so nothing is read from disk at run time.
 - `Default()` parses the embedded catalog once and panics if it can't, which CI rules out; `Load()` returns the error instead, and `Parse(b)` reads another copy.
-- `Corpus()`, `Protected()` and `Guard()` return the vectors as typed structs.
-- `CatalogJSON()`, `CorpusJSON()`, `ProtectedJSON()`, `GuardVectorsJSON()` and the `…SchemaJSON()` functions return the raw files.
+- `Corpus()`, `Protected()`, `Guard()` and `DebuggerStage1()` return the vectors as typed structs.
+- `CatalogJSON()`, `CorpusJSON()`, `ProtectedJSON()`, `GuardVectorsJSON()`, `DebuggerStage1JSON()` and the `…SchemaJSON()` functions return the raw files.
 
 ### Rust
 
@@ -62,7 +63,7 @@ slicc-browsers = { version = "1", features = ["corpus"] }
 | --- | --- |
 | none | `CATALOG` and the schemas as `&str` constants, with no dependencies |
 | `serde` | typed `Catalog`, `catalog()`, `Catalog::browser` and `Catalog::priority` |
-| `corpus` | the vectors (`CORPUS`, `PROTECTED`, `GUARD_VECTORS`) and the modules `corpus`, `protected` and `guard`, for tests |
+| `corpus` | the vectors (`CORPUS`, `PROTECTED`, `GUARD_VECTORS`, `DEBUGGER_STAGE1`) and the modules `corpus`, `protected`, `guard` and `debugger_stage1`, for tests |
 
 Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` so it stays out of release builds.
 
@@ -79,7 +80,7 @@ import { protectedOrigins } from '@ai-ecoverse/slicc-browsers/protected.mjs';
 
 | export | what it is |
 | --- | --- |
-| `.`, `./catalog.json`, `./corpus.json`, `./protected.json`, `./guard-vectors.json` | the data |
+| `.`, `./catalog.json`, `./corpus.json`, `./protected.json`, `./guard-vectors.json`, `./debugger-stage1.json` | the data |
 | `./schema/<name>.schema.json` | the schemas |
 | `./protected.mjs` | the protected-origin matcher |
 | `./seven.mjs` | `isSevenLabel(seven, label)`: whether a `sliccy.ai` host label can be a seven instance |

@@ -357,6 +357,20 @@ fn the_guard_vectors_parse_and_round_trip() {
 }
 
 #[test]
+fn the_debugger_stage1_data_and_schema_are_embedded() {
+    let vectors = slicc_browsers::debugger_stage1::vectors();
+    assert_eq!(vectors.schema_version, slicc_browsers::SCHEMA);
+    assert!(!vectors.methods.is_empty() && !vectors.rows.is_empty());
+    let raw: Value = serde_json::from_str(slicc_browsers::DEBUGGER_STAGE1).unwrap();
+    assert_eq!(serde_json::to_value(&vectors).unwrap(), raw);
+    let schema: Value = serde_json::from_str(slicc_browsers::DEBUGGER_STAGE1_SCHEMA).unwrap();
+    assert!(schema["$id"]
+        .as_str()
+        .unwrap()
+        .ends_with("/schema/debugger-stage1.schema.json"));
+}
+
+#[test]
 fn corpus_www_pages_match_catalog() {
     for c in corpus::corpus().cases {
         for (host, server) in &c.input.http {

@@ -45,6 +45,12 @@ jobs:
         test/integration/validate.test.mjs
         test/integration/go.test.mjs
         test/integration/cargo.test.mjs
+        test/integration/debugger-raw-control.test.mjs
+        test/integration/debugger-cleanup.test.mjs
+        test/integration/debugger-stage1-vectors.test.mjs
+        test/integration/debugger-stage1-install-vectors.test.mjs
+        test/integration/debugger-stage1-packaging.test.mjs
+        test/integration/protected-premise.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

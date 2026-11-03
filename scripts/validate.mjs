@@ -21,7 +21,14 @@ const ajv = new Ajv2020({
   allowUnionTypes: true,
 });
 addFormats(ajv);
-for (const name of ['catalog', 'browsers', 'corpus', 'protected', 'guard-vectors'])
+for (const name of [
+  'catalog',
+  'browsers',
+  'corpus',
+  'protected',
+  'guard-vectors',
+  'debugger-stage1',
+])
   ajv.addSchema(read(`schema/${name}.schema.json`));
 const schemaURL = (name) =>
   `https://github.com/ai-ecoverse/slicc-browsers/schema/${name}.schema.json`;
@@ -204,6 +211,8 @@ for (const [field, run, label] of vectorChecks) {
   }
 }
 if (reserved.test(JSON.stringify(vectors))) fail('protected.json: never use ports 9222-9229');
+
+check('debugger-stage1', read('debugger-stage1.json'), 'debugger-stage1.json');
 
 const guard = read('guard-vectors.json');
 check('guard-vectors', guard, 'guard-vectors.json');

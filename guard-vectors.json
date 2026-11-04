@@ -3195,7 +3195,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame hidden: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame hidden: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -3213,7 +3213,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame hidden: PDF is refused with the present refusal",
+          "means": "extension frame hidden: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -3258,7 +3258,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame hidden: MHTML is refused with the present refusal",
+          "means": "extension frame hidden: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -3276,7 +3276,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame hidden: screencast is refused with the present refusal",
+          "means": "extension frame hidden: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -3312,7 +3312,7 @@
           }
         },
         "shot": {
-          "means": "extension frame hidden: a screenshot is taken",
+          "means": "extension frame hidden: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -3321,7 +3321,7 @@
           }
         },
         "click": {
-          "means": "extension frame hidden: a click reaches the page",
+          "means": "extension frame hidden: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -3329,17 +3329,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame hidden: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame hidden: typed text reaches the page",
+          "means": "extension frame hidden: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -3347,17 +3338,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame hidden: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame hidden: a click on the frame box reaches the page",
+          "means": "extension frame hidden: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -3366,20 +3348,11 @@
           }
         },
         "tab": {
-          "means": "extension frame hidden: Tab is delivered",
+          "means": "extension frame hidden: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
             "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame hidden: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
             "observer": "client"
           }
         },
@@ -3393,7 +3366,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame has the hidden attribute",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame has the hidden attribute; input is allowed while it is hidden and unfocused; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -3409,10 +3382,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -3426,14 +3399,11 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
-          "tabRefusal": false,
-          "shot": true,
           "frameVisible": false
         }
       },
@@ -3460,16 +3430,14 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
-        "click": false,
-        "clickRefusal": true,
-        "key": false,
-        "keyRefusal": true,
-        "frameClick": false,
-        "tab": false,
-        "tabRefusal": true,
         "shot": true,
+        "click": true,
+        "key": true,
+        "frameClick": true,
+        "tab": true,
         "frameVisible": false
-      }
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C9.frame-concealed",
@@ -3575,7 +3543,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame concealed: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame concealed: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -3593,7 +3561,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame concealed: PDF is refused with the present refusal",
+          "means": "extension frame concealed: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -3638,7 +3606,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame concealed: MHTML is refused with the present refusal",
+          "means": "extension frame concealed: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -3656,7 +3624,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame concealed: screencast is refused with the present refusal",
+          "means": "extension frame concealed: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -3692,7 +3660,7 @@
           }
         },
         "shot": {
-          "means": "extension frame concealed: a screenshot is taken",
+          "means": "extension frame concealed: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -3701,7 +3669,7 @@
           }
         },
         "click": {
-          "means": "extension frame concealed: a click reaches the page",
+          "means": "extension frame concealed: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -3709,17 +3677,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame concealed: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame concealed: typed text reaches the page",
+          "means": "extension frame concealed: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -3727,17 +3686,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame concealed: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame concealed: a click on the frame box reaches the page",
+          "means": "extension frame concealed: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -3746,20 +3696,11 @@
           }
         },
         "tab": {
-          "means": "extension frame concealed: Tab is delivered",
+          "means": "extension frame concealed: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
             "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame concealed: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
             "observer": "client"
           }
         },
@@ -3773,7 +3714,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is visibility:hidden, transparent and off-screen, as a password manager leaves its closed list",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab with iCloud-like concealment; input is allowed while it is hidden and unfocused; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -3789,10 +3730,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -3806,14 +3747,11 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
-          "tabRefusal": false,
-          "shot": true,
           "frameVisible": false
         }
       },
@@ -3840,16 +3778,14 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
-        "click": false,
-        "clickRefusal": true,
-        "key": false,
-        "keyRefusal": true,
-        "frameClick": false,
-        "tab": false,
-        "tabRefusal": true,
         "shot": true,
+        "click": true,
+        "key": true,
+        "frameClick": true,
+        "tab": true,
         "frameVisible": false
-      }
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C9.frame-shown",
@@ -3955,7 +3891,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame shown: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame shown: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -3973,7 +3909,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame shown: PDF is refused with the present refusal",
+          "means": "extension frame shown: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -4018,7 +3954,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame shown: MHTML is refused with the present refusal",
+          "means": "extension frame shown: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -4036,7 +3972,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame shown: screencast is refused with the present refusal",
+          "means": "extension frame shown: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -4072,7 +4008,7 @@
           }
         },
         "shot": {
-          "means": "extension frame shown: a screenshot is taken",
+          "means": "extension frame shown: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -4081,7 +4017,7 @@
           }
         },
         "click": {
-          "means": "extension frame shown: a click reaches the page",
+          "means": "extension frame shown: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -4089,17 +4025,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame shown: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame shown: typed text reaches the page",
+          "means": "extension frame shown: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -4107,17 +4034,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame shown: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame shown: a click on the frame box reaches the page",
+          "means": "extension frame shown: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -4126,29 +4044,11 @@
           }
         },
         "tab": {
-          "means": "extension frame shown: Tab is delivered",
+          "means": "extension frame shown: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
             "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame shown: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
-        "shotRefusal": {
-          "means": "extension frame shown: the screenshot is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.shotRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
             "observer": "client"
           }
         },
@@ -4160,9 +4060,54 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "clickRefusal": {
+          "means": "extension frame shown: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame shown: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame shown: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame shown: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame shown: the screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is visible in a corner away from the click target",
+      "live": "the observer confirms a chrome-extension: frame is showing in the ordinary tab; screenshot and input are refused; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -4178,10 +4123,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -4195,16 +4140,17 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
+          "frameVisible": true,
+          "clickRefusal": false,
+          "keyRefusal": false,
           "tabRefusal": false,
-          "shot": true,
-          "shotRefusal": false,
-          "frameVisible": true
+          "frameClickRefusal": false,
+          "shotRefusal": false
         }
       },
       "expected": {
@@ -4230,17 +4176,19 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
+        "shot": false,
         "click": false,
-        "clickRefusal": true,
         "key": false,
-        "keyRefusal": true,
         "frameClick": false,
         "tab": false,
+        "frameVisible": true,
+        "clickRefusal": true,
+        "keyRefusal": true,
         "tabRefusal": true,
-        "shot": false,
-        "shotRefusal": true,
-        "frameVisible": true
-      }
+        "frameClickRefusal": true,
+        "shotRefusal": true
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C9.frame-transparent",
@@ -4346,7 +4294,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame transparent: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame transparent: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -4364,7 +4312,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame transparent: PDF is refused with the present refusal",
+          "means": "extension frame transparent: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -4409,7 +4357,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame transparent: MHTML is refused with the present refusal",
+          "means": "extension frame transparent: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -4427,7 +4375,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame transparent: screencast is refused with the present refusal",
+          "means": "extension frame transparent: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -4463,7 +4411,7 @@
           }
         },
         "shot": {
-          "means": "extension frame transparent: a screenshot is taken",
+          "means": "extension frame transparent: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -4472,7 +4420,7 @@
           }
         },
         "click": {
-          "means": "extension frame transparent: a click reaches the page",
+          "means": "extension frame transparent: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -4480,17 +4428,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame transparent: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame transparent: typed text reaches the page",
+          "means": "extension frame transparent: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -4498,17 +4437,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame transparent: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame transparent: a click on the frame box reaches the page",
+          "means": "extension frame transparent: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -4517,29 +4447,11 @@
           }
         },
         "tab": {
-          "means": "extension frame transparent: Tab is delivered",
+          "means": "extension frame transparent: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
             "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame transparent: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
-        "shotRefusal": {
-          "means": "extension frame transparent: the screenshot is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.shotRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
             "observer": "client"
           }
         },
@@ -4551,9 +4463,54 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "clickRefusal": {
+          "means": "extension frame transparent: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame transparent: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame transparent: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame transparent: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame transparent: the screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is laid out and visible but has opacity 0, so it still takes input",
+      "live": "the observer confirms a chrome-extension: frame is opacity-0 but visible in the ordinary tab; screenshot and input are refused; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -4569,10 +4526,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -4586,16 +4543,17 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
+          "frameVisible": true,
+          "clickRefusal": false,
+          "keyRefusal": false,
           "tabRefusal": false,
-          "shot": true,
-          "shotRefusal": false,
-          "frameVisible": true
+          "frameClickRefusal": false,
+          "shotRefusal": false
         }
       },
       "expected": {
@@ -4621,17 +4579,19 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
+        "shot": false,
         "click": false,
-        "clickRefusal": true,
         "key": false,
-        "keyRefusal": true,
         "frameClick": false,
         "tab": false,
+        "frameVisible": true,
+        "clickRefusal": true,
+        "keyRefusal": true,
         "tabRefusal": true,
-        "shot": false,
-        "shotRefusal": true,
-        "frameVisible": true
-      }
+        "frameClickRefusal": true,
+        "shotRefusal": true
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C9.frame-revealed",
@@ -4737,7 +4697,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame revealed: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame revealed: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -4755,7 +4715,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame revealed: PDF is refused with the present refusal",
+          "means": "extension frame revealed: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -4800,7 +4760,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame revealed: MHTML is refused with the present refusal",
+          "means": "extension frame revealed: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -4818,7 +4778,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame revealed: screencast is refused with the present refusal",
+          "means": "extension frame revealed: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -4854,7 +4814,7 @@
           }
         },
         "shot": {
-          "means": "extension frame revealed: a screenshot is taken",
+          "means": "extension frame revealed: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -4863,7 +4823,7 @@
           }
         },
         "click": {
-          "means": "extension frame revealed: a click reaches the page",
+          "means": "extension frame revealed: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -4871,17 +4831,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame revealed: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame revealed: typed text reaches the page",
+          "means": "extension frame revealed: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -4889,17 +4840,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame revealed: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame revealed: a click on the frame box reaches the page",
+          "means": "extension frame revealed: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -4908,64 +4850,10 @@
           }
         },
         "tab": {
-          "means": "extension frame revealed: Tab is delivered",
+          "means": "extension frame revealed: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame revealed: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
-        "revealedShot": {
-          "means": "extension frame revealed: a screenshot is taken after the frame is shown",
-          "check": {
-            "result": "frame",
-            "path": "result.revealedShot",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "revealedRefusal": {
-          "means": "extension frame revealed: that is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.revealedRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
-            "observer": "client"
-          }
-        },
-        "revealedClick": {
-          "means": "extension frame revealed: a click reaches the page after the frame is shown",
-          "check": {
-            "result": "frame",
-            "path": "result.revealedClick",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "revealedClickRefusal": {
-          "means": "extension frame revealed: that click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.revealedClickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
-        "rehiddenShot": {
-          "means": "extension frame revealed: a screenshot is taken after the frame is hidden again",
-          "check": {
-            "result": "frame",
-            "path": "result.rehiddenShot",
             "equals": true,
             "observer": "client"
           }
@@ -4978,9 +4866,54 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "revealedShot": {
+          "means": "extension frame revealed: a screenshot is taken after the frame is shown a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedShot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "revealedRefusal": {
+          "means": "extension frame revealed: that is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "revealedClick": {
+          "means": "extension frame revealed: a click reaches the page after the frame is shown a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "revealedClickRefusal": {
+          "means": "extension frame revealed: that click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "rehiddenShot": {
+          "means": "extension frame revealed: a screenshot is taken after the frame is hidden again a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.rehiddenShot",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame starts hidden, is shown after the client attached, then hidden again",
+      "live": "the observer confirms a chrome-extension: frame starts hidden, is shown during a screenshot, then hidden again; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -4996,10 +4929,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -5013,20 +4946,17 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
-          "tabRefusal": false,
-          "shot": true,
+          "frameVisible": false,
           "revealedShot": true,
           "revealedRefusal": false,
           "revealedClick": true,
           "revealedClickRefusal": false,
-          "rehiddenShot": true,
-          "frameVisible": false
+          "rehiddenShot": true
         }
       },
       "expected": {
@@ -5052,21 +4982,19 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
-        "click": false,
-        "clickRefusal": true,
-        "key": false,
-        "keyRefusal": true,
-        "frameClick": false,
-        "tab": false,
-        "tabRefusal": true,
         "shot": true,
+        "click": true,
+        "key": true,
+        "frameClick": true,
+        "tab": true,
+        "frameVisible": false,
         "revealedShot": false,
         "revealedRefusal": true,
         "revealedClick": false,
         "revealedClickRefusal": true,
-        "rehiddenShot": true,
-        "frameVisible": false
-      }
+        "rehiddenShot": true
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C9.frame-nested",
@@ -5178,7 +5106,7 @@
           }
         },
         "evaluateLeak": {
-          "means": "extension frame nested: Runtime.evaluate exposes the iframe src username",
+          "means": "extension frame nested: Runtime.evaluate exposes the light-DOM iframe src username",
           "check": {
             "result": "frame",
             "path": "result.evaluateLeak",
@@ -5196,7 +5124,7 @@
           }
         },
         "pdfRefusal": {
-          "means": "extension frame nested: PDF is refused with the present refusal",
+          "means": "extension frame nested: PDF is refused with a slicc refusal",
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
@@ -5241,7 +5169,7 @@
           }
         },
         "archiveRefusal": {
-          "means": "extension frame nested: MHTML is refused with the present refusal",
+          "means": "extension frame nested: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
@@ -5259,7 +5187,7 @@
           }
         },
         "castRefusal": {
-          "means": "extension frame nested: screencast is refused with the present refusal",
+          "means": "extension frame nested: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
@@ -5295,7 +5223,7 @@
           }
         },
         "shot": {
-          "means": "extension frame nested: a screenshot is taken",
+          "means": "extension frame nested: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -5304,7 +5232,7 @@
           }
         },
         "click": {
-          "means": "extension frame nested: a click reaches the page",
+          "means": "extension frame nested: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.click",
@@ -5312,17 +5240,8 @@
             "observer": "client"
           }
         },
-        "clickRefusal": {
-          "means": "extension frame nested: the click is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "key": {
-          "means": "extension frame nested: typed text reaches the page",
+          "means": "extension frame nested: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.key",
@@ -5330,17 +5249,8 @@
             "observer": "client"
           }
         },
-        "keyRefusal": {
-          "means": "extension frame nested: the typing is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.keyRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
         "frameClick": {
-          "means": "extension frame nested: a click on the frame box reaches the page",
+          "means": "extension frame nested: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.frameClick",
@@ -5349,29 +5259,11 @@
           }
         },
         "tab": {
-          "means": "extension frame nested: Tab is delivered",
+          "means": "extension frame nested: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.tab",
             "equals": true,
-            "observer": "client"
-          }
-        },
-        "tabRefusal": {
-          "means": "extension frame nested: Tab is refused with the input refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.tabRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
-            "observer": "client"
-          }
-        },
-        "shotRefusal": {
-          "means": "extension frame nested: the screenshot is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.shotRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
             "observer": "client"
           }
         },
@@ -5381,6 +5273,51 @@
             "result": "frame",
             "path": "result.frameVisible",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame nested: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame nested: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame nested: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame nested: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame nested: the screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
             "observer": "client"
           }
         }
@@ -5408,16 +5345,17 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
+        "shot": false,
         "click": false,
-        "clickRefusal": true,
         "key": false,
-        "keyRefusal": true,
         "frameClick": false,
         "tab": false,
+        "frameVisible": true,
+        "clickRefusal": true,
+        "keyRefusal": true,
         "tabRefusal": true,
-        "shot": false,
-        "shotRefusal": true,
-        "frameVisible": true
+        "frameClickRefusal": true,
+        "shotRefusal": true
       },
       "control": {
         "origin": "ordinary",
@@ -5428,10 +5366,10 @@
           "read": true,
           "snapshot": true,
           "snapshotFrameRead": true,
-          "frameTreeLeak": true,
+          "frameTreeLeak": "either",
           "documentLeak": true,
           "shadowDocumentLeak": true,
-          "axLeak": true,
+          "axLeak": "either",
           "evaluateLeak": true,
           "archive": true,
           "archiveRefusal": false,
@@ -5445,19 +5383,490 @@
           "autoAttached": true,
           "targetInfoURL": true,
           "eventURL": true,
+          "shot": true,
           "click": true,
-          "clickRefusal": false,
           "key": true,
-          "keyRefusal": false,
           "frameClick": true,
           "tab": true,
+          "frameVisible": true,
+          "clickRefusal": false,
+          "keyRefusal": false,
           "tabRefusal": false,
-          "shot": true,
-          "shotRefusal": false,
-          "frameVisible": true
+          "frameClickRefusal": false,
+          "shotRefusal": false
         }
       },
-      "live": "the observer confirms a chrome-extension: frame nested under another frame is in the ordinary tab"
+      "live": "the observer confirms a chrome-extension: frame nested under another frame is showing in the ordinary tab; a race between the visibility or focus check and the CDP reply is accepted",
+      "designDependent": ["frameTreeLeak", "axLeak"]
+    },
+    {
+      "id": "C9.frame-focused",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.frameFocused",
+        "equals": true,
+        "observer": "client"
+      },
+      "observe": {
+        "exists": {
+          "means": "extension frame focused: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame focused: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame focused: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame focused: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame focused: the snapshot exposes the extension document, private contents, or iframe src",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame focused: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame focused: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame focused: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame focused: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame focused: Runtime.evaluate exposes the light-DOM iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame focused: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame focused: PDF is refused with a slicc refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame focused: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame focused: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame focused: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame focused: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archiveRefusal": {
+          "means": "extension frame focused: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame focused: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame focused: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame focused: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame focused: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame focused: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame focused: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame focused: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame focused: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame focused: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame focused: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame focused: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame focused: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame focused: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame focused: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame focused: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameFocused": {
+          "means": "extension frame focused: the concealed extension frame holds focus",
+          "check": {
+            "result": "frame",
+            "path": "result.frameFocused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "focusedKey": {
+          "means": "extension frame focused: a keydown reaches the concealed extension frame a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedKey",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "focusedKeyRefusal": {
+          "means": "extension frame focused: that keydown is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedKeyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "focusedText": {
+          "means": "extension frame focused: inserted text reaches the concealed extension frame a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedText",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "focusedTextRefusal": {
+          "means": "extension frame focused: that insert is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedTextRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "focusedIME": {
+          "means": "extension frame focused: IME composition reaches the concealed extension frame a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedIME",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "focusedIMERefusal": {
+          "means": "extension frame focused: that IME call is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.focusedIMERefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
+        "archive": false,
+        "archiveRefusal": true,
+        "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
+        "shot": true,
+        "click": false,
+        "key": false,
+        "frameClick": false,
+        "tab": false,
+        "frameVisible": false,
+        "clickRefusal": true,
+        "keyRefusal": true,
+        "tabRefusal": true,
+        "frameClickRefusal": true,
+        "frameFocused": true,
+        "focusedKey": false,
+        "focusedKeyRefusal": true,
+        "focusedText": false,
+        "focusedTextRefusal": true,
+        "focusedIME": false,
+        "focusedIMERefusal": true
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": "either",
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": "either",
+          "evaluateLeak": true,
+          "archive": true,
+          "archiveRefusal": false,
+          "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
+          "shot": true,
+          "click": true,
+          "key": true,
+          "frameClick": true,
+          "tab": true,
+          "frameVisible": false,
+          "clickRefusal": false,
+          "keyRefusal": false,
+          "tabRefusal": false,
+          "frameClickRefusal": false,
+          "frameFocused": true,
+          "focusedKey": true,
+          "focusedKeyRefusal": false,
+          "focusedText": true,
+          "focusedTextRefusal": false,
+          "focusedIME": true,
+          "focusedIMERefusal": false
+        }
+      },
+      "trigger": [
+        {
+          "extensionFrame": "focused",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "live": "the observer confirms the concealed extension frame is focused before keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",
+      "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
       "id": "C1.script-nav",

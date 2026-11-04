@@ -26,13 +26,11 @@ type ErrorPageRule struct {
 }
 
 type ExtensionFrameRule struct {
-	Schemes           []string `json:"schemes"`
-	WhenShown         []string `json:"whenShown"`
-	WhilePresent      []string `json:"whilePresent"`
-	InputWhilePresent []string `json:"inputWhilePresent"`
-	ShownRefusal      string   `json:"shownRefusal"`
-	PresentRefusal    string   `json:"presentRefusal"`
-	InputRefusal      string   `json:"inputRefusal"`
+	Schemes        []string `json:"schemes"`
+	WhenShown      []string `json:"whenShown"`
+	WhilePresent   []string `json:"whilePresent"`
+	ShownRefusal   string   `json:"shownRefusal"`
+	PresentRefusal string   `json:"presentRefusal"`
 }
 
 type ProtectedOrigins struct {

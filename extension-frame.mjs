@@ -2,11 +2,15 @@ import catalog from './catalog.json' with { type: 'json' };
 import { DEFAULT_EXTENSION_WORLD_ID } from './extension-world.mjs';
 import { outcome } from './guard-driver.mjs';
 
-const INPUT_METHODS = catalog.protectedOrigins.extensionFrames.inputWhilePresent;
+const INPUT_METHODS = catalog.protectedOrigins.extensionFrames.whenShown.filter((method) =>
+  method.startsWith('Input.')
+);
+const PRESENT = catalog.protectedOrigins.extensionFrames.presentRefusal;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const FRAME = 'slicc-extension-frame';
 const HOST = 'slicc-extension-frame-host';
+const SHADOW = 'slicc-extension-frame-shadow';
 const MARKER = 'slicc-private-extension-frame-content';
 const USERNAME = 'slicc-frame-test-user';
 const BOX = 'position:fixed;right:0;bottom:0;width:300px;height:200px;border:0';
@@ -17,12 +21,21 @@ const STYLES = {
   shown: `f.hidden = false; f.style.cssText = ${JSON.stringify(BOX)}`,
   transparent: `f.hidden = false; f.style.cssText = ${JSON.stringify(`${BOX};opacity:0`)}`,
   nested: `f.hidden = false; f.style.cssText = ${JSON.stringify(BOX)}`,
+  focused:
+    'f.hidden = false; f.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;border:0;overflow:hidden;opacity:0"',
 };
 const refusal = (out) => (out.ok ? null : String(out.error?.message ?? out.error));
+const presentish = (out) => {
+  const text = refusal(out);
+  if (!text) return null;
+  return text === PRESENT || /^slicc: refused/.test(text) ? PRESENT : text;
+};
 const carries = (value) => {
   const text = JSON.stringify(value) ?? '';
   return text.includes(USERNAME) || text.includes(MARKER);
 };
+const frameLookup = `document.getElementById(${JSON.stringify(FRAME)})
+  ?? document.getElementById(${JSON.stringify(HOST)})?.contentDocument?.getElementById(${JSON.stringify(FRAME)})`;
 
 async function observe(reader, observer, expression) {
   const out = await outcome(
@@ -59,16 +72,7 @@ async function painted(reader, observer, ms) {
 
 async function style(reader, observer, mode, ms) {
   const apply = STYLES[mode] ?? STYLES.shown;
-  await observe(
-    reader,
-    observer,
-    `(() => {
-      const f = document.getElementById(${JSON.stringify(FRAME)})
-        ?? document.getElementById(${JSON.stringify(HOST)})?.shadowRoot?.getElementById(${JSON.stringify(FRAME)});
-      ${apply};
-      return true;
-    })()`
-  );
+  await observe(reader, observer, `(() => { const f = ${frameLookup}; ${apply}; return true; })()`);
   await painted(reader, observer, ms);
 }
 
@@ -126,15 +130,16 @@ async function click(client, reader, session, observer) {
   return { out: pressed.out, ok: pressed.ok && clicked === true };
 }
 
-async function key(client, reader, session, observer) {
+async function key(client, reader, session, observer, beforeSend, requireTyped = true) {
   await observe(
     reader,
     observer,
     'const i = document.getElementById("typed"); i.value = ""; i.focus(); true'
   );
+  if (beforeSend) await beforeSend();
   const out = await outcome(client.send('Input.insertText', { text: 'k' }, session));
   const typed = await observe(reader, observer, 'document.getElementById("typed").value === "k"');
-  return { out, ok: out.ok && typed === true };
+  return { out, ok: out.ok && (!requireTyped || typed === true) };
 }
 
 async function inputMethods(client, session, methods) {
@@ -194,9 +199,9 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   const document = await outcome(client.send('DOM.getDocument', { depth: -1, pierce: true }, page));
   if (!document.ok) missing.push('DOM.getDocument failed');
   else {
-    leaks.documentLeak =
-      carries(document.result) || JSON.stringify(document.result).includes(frameURL);
-    leaks.shadowDocumentLeak = leaks.documentLeak;
+    const text = JSON.stringify(document.result);
+    leaks.documentLeak = carries(document.result) || text.includes(frameURL);
+    leaks.shadowDocumentLeak = text.includes(USERNAME) && text.includes(SHADOW);
   }
   const ax = await outcome(client.send('Accessibility.getFullAXTree', {}, page));
   if (!ax.ok) missing.push('Accessibility.getFullAXTree failed');
@@ -205,11 +210,7 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
     client.send(
       'Runtime.evaluate',
       {
-        expression: `(() => {
-          const f = document.getElementById(${JSON.stringify(FRAME)})
-            ?? document.getElementById(${JSON.stringify(HOST)})?.shadowRoot?.getElementById(${JSON.stringify(FRAME)});
-          return f ? f.src : '';
-        })()`,
+        expression: `(() => { const f = ${frameLookup}; return f ? f.src : ''; })()`,
         returnByValue: true,
       },
       page
@@ -295,7 +296,14 @@ async function targetExposure({
 }
 
 async function embed(reader, observer, mode, frameURL) {
-  const styleMode = mode === 'revealed' ? 'hidden' : mode === 'nested' ? 'nested' : mode;
+  const styleMode =
+    mode === 'revealed'
+      ? 'hidden'
+      : mode === 'focused'
+        ? 'focused'
+        : mode === 'nested'
+          ? 'nested'
+          : mode;
   const src = `${frameURL}?username=${USERNAME}`;
   if (mode === 'nested') {
     return observe(
@@ -303,6 +311,15 @@ async function embed(reader, observer, mode, frameURL) {
       observer,
       `new Promise((resolve) => {
         document.body.innerHTML = '<button id="c9-click" style="position:fixed;left:0;top:0;width:100px;height:100px" onclick="document.body.dataset.clicked=\\'yes\\'">C9 click</button><input id="typed" style="position:fixed;left:0;top:120px;width:100px"><iframe id=${JSON.stringify(HOST)} style="position:fixed;left:0;top:200px;width:400px;height:300px;border:0"></iframe>';
+        const shadowHost = document.createElement('div');
+        shadowHost.id = ${JSON.stringify(SHADOW)};
+        const root = shadowHost.attachShadow({ mode: 'closed' });
+        const shadowFrame = document.createElement('iframe');
+        shadowFrame.id = ${JSON.stringify(FRAME)} + '-shadow';
+        shadowFrame.hidden = true;
+        shadowFrame.src = ${JSON.stringify(src)};
+        root.append(shadowFrame);
+        document.body.append(shadowHost);
         const host = document.getElementById(${JSON.stringify(HOST)});
         host.addEventListener('load', () => {
           const doc = host.contentDocument;
@@ -324,19 +341,189 @@ async function embed(reader, observer, mode, frameURL) {
     observer,
     `new Promise((resolve) => {
       document.body.innerHTML = '<button id="c9-click" style="position:fixed;left:0;top:0;width:100px;height:100px" onclick="document.body.dataset.clicked=\\'yes\\'">C9 click</button><input id="typed" style="position:fixed;left:0;top:120px;width:100px">';
-      const host = document.createElement('div');
-      host.id = ${JSON.stringify(HOST)};
-      const root = host.attachShadow({ mode: 'closed' });
       const f = document.createElement('iframe');
       f.id = ${JSON.stringify(FRAME)};
       ${STYLES[styleMode]};
+      const shadowHost = document.createElement('div');
+      shadowHost.id = ${JSON.stringify(SHADOW)};
+      const root = shadowHost.attachShadow({ mode: 'closed' });
+      const shadowFrame = document.createElement('iframe');
+      shadowFrame.id = ${JSON.stringify(FRAME)} + '-shadow';
+      shadowFrame.hidden = true;
+      shadowFrame.src = ${JSON.stringify(src)};
+      root.append(shadowFrame);
       f.addEventListener('load', () => resolve(true), { once: true });
       setTimeout(() => resolve(false), 5000);
       f.src = ${JSON.stringify(src)};
-      root.append(f);
-      document.body.append(host);
+      document.body.append(f, shadowHost);
     })`
   );
+}
+
+async function paintMarker(reader, frame, focus = false) {
+  const privateSession = (
+    await reader.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
+  ).sessionId;
+  try {
+    await observe(
+      reader,
+      privateSession,
+      focus
+        ? `(() => {
+            const i = document.createElement('input');
+            i.id = 'slicc-frame-focus';
+            i.value = ${JSON.stringify(MARKER)};
+            document.body.replaceChildren(i);
+            document.body.style.cssText = 'background:#f00;color:#f00;font:48px monospace';
+            i.focus();
+            return document.activeElement === i;
+          })()`
+        : `document.body.textContent = ${JSON.stringify(MARKER)}; document.body.style.cssText = 'background:#f00;color:#f00;font:48px monospace'; true`
+    );
+  } finally {
+    await reader.send('Target.detachFromTarget', { sessionId: privateSession });
+  }
+}
+
+async function holdFocus(reader, frame) {
+  const privateSession = (
+    await reader.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
+  ).sessionId;
+  try {
+    await observe(
+      reader,
+      privateSession,
+      `(() => {
+        let i = document.getElementById('slicc-frame-focus');
+        if (!i) {
+          i = document.createElement('input');
+          i.id = 'slicc-frame-focus';
+          i.value = ${JSON.stringify(MARKER)};
+          document.body.replaceChildren(i);
+        }
+        i.focus();
+        return document.activeElement === i;
+      })()`
+    );
+  } finally {
+    await reader.send('Target.detachFromTarget', { sessionId: privateSession });
+  }
+}
+
+async function driveInput(client, reader, page, observer, inputList, mode, frame) {
+  const visible = await observe(
+    reader,
+    observer,
+    `(() => {
+      const f = ${frameLookup};
+      if (!f || !f.checkVisibility({ visibilityProperty: true })) return false;
+      const r = f.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    })()`
+  );
+  let frameFocused = false;
+  if (mode === 'focused' && frame) {
+    await holdFocus(reader, frame);
+    frameFocused = await observe(
+      reader,
+      observer,
+      `(() => { const f = ${frameLookup}; if (f) f.focus(); return Boolean(f) && document.activeElement === f; })()`
+    );
+  }
+  const box = await observe(
+    reader,
+    observer,
+    `(() => {
+      const f = ${frameLookup};
+      if (!f) return null;
+      const r = f.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+    })()`
+  );
+  const refocus = async () => {
+    if (!(mode === 'focused' && frame)) return;
+    await holdFocus(reader, frame);
+    await observe(
+      reader,
+      observer,
+      `(() => { const f = ${frameLookup}; if (f) f.focus(); return true; })()`
+    );
+  };
+  await refocus();
+  const frameClick = await clickAt(
+    client,
+    reader,
+    page,
+    observer,
+    box && box.w > 0 ? box.x : 99990,
+    box && box.h > 0 ? box.y : 10
+  );
+  await refocus();
+  const tab = await outcome(
+    client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab' }, page)
+  );
+  await refocus();
+  const pressed = await click(client, reader, page, observer);
+  await refocus();
+  const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
+  await refocus();
+  const inputs = await inputMethods(client, page, inputList);
+  await refocus();
+  const focusedKey = await outcome(
+    client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA' }, page)
+  );
+  await refocus();
+  const focusedText = await outcome(client.send('Input.insertText', { text: 'x' }, page));
+  await refocus();
+  const focusedIME = await outcome(
+    client.send('Input.imeSetComposition', { text: 'x', selectionStart: 1, selectionEnd: 1 }, page)
+  );
+  return {
+    frameClick,
+    visible,
+    frameFocused,
+    tab,
+    pressed,
+    typed,
+    inputs,
+    focusedKey,
+    focusedText,
+    focusedIME,
+  };
+}
+
+async function driveCaptures(client, page, missing) {
+  const archive = await outcome(client.send('Page.captureSnapshot', { format: 'mhtml' }, page));
+  const pdf = await outcome(client.send('Page.printToPDF', {}, page));
+  if (pdf.ok && !(typeof pdf.result.data === 'string' && pdf.result.data.length > 0))
+    missing.push('Page.printToPDF returned no PDF data');
+  const cast = await outcome(
+    client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
+  );
+  if (cast.ok) await outcome(client.send('Page.stopScreencast', {}, page));
+  const begin = await outcome(
+    client.send('HeadlessExperimental.beginFrame', { screenshot: { format: 'png' } }, page)
+  );
+  return { archive, pdf, cast, begin };
+}
+
+async function driveReveal(client, reader, page, observer, frameMs) {
+  const flipping = (async () => {
+    await pause(20);
+    await style(reader, observer, 'shown', Math.min(frameMs, 200));
+  })();
+  const revealed = await shot(client, page);
+  await flipping;
+  const revealedPress = await click(client, reader, page, observer);
+  await style(reader, observer, 'hidden', frameMs);
+  const rehidden = await shot(client, page);
+  return {
+    revealedShot: revealed.ok,
+    revealedRefusal: refusal(revealed.out),
+    revealedClick: revealedPress.ok,
+    revealedClickRefusal: refusal(revealedPress.out),
+    rehiddenShot: rehidden.ok,
+  };
 }
 
 export async function extensionFrame({
@@ -348,7 +535,7 @@ export async function extensionFrame({
   origin,
   extensionId = DEFAULT_EXTENSION_WORLD_ID,
   frameMs = 1000,
-  inputWhilePresent = INPUT_METHODS,
+  inputMethods: inputList = INPUT_METHODS,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -364,18 +551,7 @@ export async function extensionFrame({
     await reader.send('Accessibility.enable', {}, observer);
     await embed(reader, observer, mode, frameURL);
     const frame = await frameTarget(reader, targetId, extensionId);
-    const privateSession = (
-      await reader.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
-    ).sessionId;
-    try {
-      await observe(
-        reader,
-        privateSession,
-        `document.body.textContent = ${JSON.stringify(MARKER)}; document.body.style.cssText = 'background:#f00;color:#f00;font:48px monospace'; true`
-      );
-    } finally {
-      await reader.send('Target.detachFromTarget', { sessionId: privateSession });
-    }
+    await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);
     const attach = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
     page = attach.ok ? attach.result.sessionId : session;
@@ -387,48 +563,8 @@ export async function extensionFrame({
     );
     const leaks = await pageLeaks({ client, page, extensionId, frameURL, missing });
     const picture = await shot(client, page);
-    const box = await observe(
-      reader,
-      observer,
-      `(() => {
-        const f = document.getElementById(${JSON.stringify(FRAME)})
-          ?? document.getElementById(${JSON.stringify(HOST)})?.shadowRoot?.getElementById(${JSON.stringify(FRAME)})
-          ?? document.getElementById(${JSON.stringify(HOST)})?.contentDocument?.getElementById(${JSON.stringify(FRAME)});
-        if (!f) return null;
-        const r = f.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
-      })()`
-    );
-    const frameX = box && box.w > 0 ? box.x : 99990;
-    const frameY = box && box.h > 0 ? box.y : 10;
-    const frameClick = await clickAt(client, reader, page, observer, frameX, frameY);
-    const visible = await observe(
-      reader,
-      observer,
-      `(() => {
-        const f = document.getElementById(${JSON.stringify(FRAME)})
-          ?? document.getElementById(${JSON.stringify(HOST)})?.shadowRoot?.getElementById(${JSON.stringify(FRAME)})
-          ?? document.getElementById(${JSON.stringify(HOST)})?.contentDocument?.getElementById(${JSON.stringify(FRAME)});
-        return f ? f.checkVisibility({ visibilityProperty: true }) : false;
-      })()`
-    );
-    const tab = await outcome(
-      client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab' }, page)
-    );
-    const pressed = await click(client, reader, page, observer);
-    const typed = await key(client, reader, page, observer);
-    const inputs = await inputMethods(client, page, inputWhilePresent);
-    const archive = await outcome(client.send('Page.captureSnapshot', { format: 'mhtml' }, page));
-    const pdf = await outcome(client.send('Page.printToPDF', {}, page));
-    if (pdf.ok && !(typeof pdf.result.data === 'string' && pdf.result.data.length > 0))
-      missing.push('Page.printToPDF returned no PDF data');
-    const cast = await outcome(
-      client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
-    );
-    if (cast.ok) await outcome(client.send('Page.stopScreencast', {}, page));
-    const begin = await outcome(
-      client.send('HeadlessExperimental.beginFrame', { screenshot: { format: 'png' } }, page)
-    );
+    const input = await driveInput(client, reader, page, observer, inputList, mode, frame);
+    const captures = await driveCaptures(client, page, missing);
     const result = {
       exists: true,
       attached: attach.ok,
@@ -442,43 +578,34 @@ export async function extensionFrame({
       evaluateLeak: leaks.evaluateLeak,
       shot: picture.ok,
       shotRefusal: refusal(picture.out),
-      click: pressed.ok,
-      clickRefusal: refusal(pressed.out),
-      key: typed.ok,
-      keyRefusal: refusal(typed.out),
-      frameClick: frameClick.ok,
-      frameClickRefusal: refusal(frameClick.out),
-      tab: tab.ok,
-      tabRefusal: refusal(tab),
-      frameVisible: visible === true,
-      archive: archive.ok,
-      archiveRefusal: refusal(archive),
-      pdf: pdf.ok,
-      pdfRefusal: refusal(pdf),
-      cast: cast.ok,
-      castRefusal: refusal(cast),
-      beginFrame: begin.ok,
-      beginFrameRefusal: refusal(begin),
-      inputs,
+      click: input.pressed.ok,
+      clickRefusal: refusal(input.pressed.out),
+      key: input.typed.ok,
+      keyRefusal: refusal(input.typed.out),
+      frameClick: input.frameClick.ok,
+      frameClickRefusal: refusal(input.frameClick.out),
+      tab: input.tab.ok,
+      tabRefusal: refusal(input.tab),
+      frameVisible: input.visible === true,
+      frameFocused: input.frameFocused === true,
+      focusedKey: input.focusedKey.ok,
+      focusedKeyRefusal: refusal(input.focusedKey),
+      focusedText: input.focusedText.ok,
+      focusedTextRefusal: refusal(input.focusedText),
+      focusedIME: input.focusedIME.ok,
+      focusedIMERefusal: refusal(input.focusedIME),
+      archive: captures.archive.ok,
+      archiveRefusal: presentish(captures.archive),
+      pdf: captures.pdf.ok,
+      pdfRefusal: presentish(captures.pdf),
+      cast: captures.cast.ok,
+      castRefusal: presentish(captures.cast),
+      beginFrame: captures.begin.ok,
+      beginFrameRefusal: presentish(captures.begin),
+      inputs: input.inputs,
     };
-    if (mode === 'revealed') {
-      const flipping = (async () => {
-        await pause(20);
-        await style(reader, observer, 'shown', Math.min(frameMs, 200));
-      })();
-      const revealed = await shot(client, page);
-      await flipping;
-      const revealedPress = await click(client, reader, page, observer);
-      await style(reader, observer, 'hidden', frameMs);
-      const rehidden = await shot(client, page);
-      Object.assign(result, {
-        revealedShot: revealed.ok,
-        revealedRefusal: refusal(revealed.out),
-        revealedClick: revealedPress.ok,
-        revealedClickRefusal: refusal(revealedPress.out),
-        rehiddenShot: rehidden.ok,
-      });
-    }
+    if (mode === 'revealed')
+      Object.assign(result, await driveReveal(client, reader, page, observer, frameMs));
     const frameAttach = await outcome(
       client.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
     );

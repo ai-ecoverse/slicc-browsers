@@ -248,7 +248,7 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 		t.Fatalf("protectedOrigins: %+v", po)
 	}
 	ef := po.ExtensionFrames
-	if !slices.Equal(ef.Schemes, []string{"chrome-extension"}) || !slices.Contains(ef.WhenShown, "Page.captureScreenshot") || slices.Contains(ef.WhenShown, "Input.dispatchMouseEvent") || !slices.Contains(ef.WhilePresent, "Page.startScreencast") || !slices.Contains(ef.InputWhilePresent, "Input.dispatchMouseEvent") || !strings.Contains(ef.ShownRefusal, "chrome-extension://") || !strings.Contains(ef.PresentRefusal, "chrome-extension://") || !strings.Contains(ef.InputRefusal, "reload the tab to type or click") {
+	if !slices.Equal(ef.Schemes, []string{"chrome-extension"}) || !slices.Contains(ef.WhenShown, "Page.captureScreenshot") || !slices.Contains(ef.WhenShown, "Input.dispatchMouseEvent") || !slices.Contains(ef.WhilePresent, "Page.startScreencast") || !strings.Contains(ef.ShownRefusal, "showing or focused") || !strings.Contains(ef.PresentRefusal, "chrome-extension://") {
 		t.Fatalf("extensionFrames: %+v", ef)
 	}
 	s, ok := decode(t, sliccbrowsers.ProtectedSchemaJSON()).(map[string]any)

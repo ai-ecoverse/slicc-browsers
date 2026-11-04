@@ -266,7 +266,7 @@ for (const v of guard.vectors ?? []) {
     const text = observation.check?.equals;
     if (typeof text !== 'string' || !text.startsWith('slicc: refused: ')) continue;
     if (!key.endsWith('Refusal')) continue;
-    if (![frames.shownRefusal, frames.presentRefusal, frames.inputRefusal].includes(text))
+    if (![frames.shownRefusal, frames.presentRefusal].includes(text))
       gv(
         `${v.id}: ${key} expects a refusal that isn't one of catalog.json's extensionFrames refusals`
       );

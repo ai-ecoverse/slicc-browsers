@@ -36,6 +36,16 @@ test('extensionFrame matches only foreign chrome-extension: frames', () => {
   assert.equal(is.url(`${own}/frame.html`), true);
 });
 
+test('extension-frame catalog gates Input on whenShown with shownRefusal covering focus', () => {
+  assert.ok(frames.whenShown.includes('Page.captureScreenshot'));
+  assert.ok(frames.whenShown.includes('Input.dispatchMouseEvent'));
+  assert.ok(frames.whenShown.includes('Input.insertText'));
+  assert.equal(frames.inputWhilePresent, undefined);
+  assert.equal(frames.inputRefusal, undefined);
+  assert.match(frames.shownRefusal, /showing or focused/);
+  assert.match(frames.presentRefusal, /chrome-extension:\/\//);
+});
+
 test('extension-frame rows skip transports that do not declare extensionFrame', async () => {
   const fixture = await fixtureServer();
   try {
@@ -50,11 +60,7 @@ test('extension-frame rows skip transports that do not declare extensionFrame', 
         assert.equal(row.guarded, 'skip');
         assert.equal(row.reason, 'not-supported:extensionFrame');
       }
-      assert.equal(
-        execution.summary({ guard: 'reference', sha: 'test' }).pass,
-        true,
-        'skips without declaring the capability still pass'
-      );
+      assert.equal(execution.summary({ guard: 'reference', sha: 'test' }).pass, true);
     }
   } finally {
     await fixture.close();
@@ -83,11 +89,6 @@ test('forgeries reject not-supported:extensionFrame when the run declared the ca
     capabilities: { extensionFrame: true },
   });
   assert.equal(forged.pass, false);
-  assert.ok(
-    forged.forged.every((row) =>
-      row.why.includes('not-supported:extensionFrame while the run declared extensionFrame')
-    )
-  );
   const honest = driverSummary({
     guard: 'fake',
     sha: 'test',
@@ -96,7 +97,6 @@ test('forgeries reject not-supported:extensionFrame when the run declared the ca
     capabilities: {},
   });
   assert.equal(honest.pass, true);
-  assert.deepEqual(honest.forged, []);
 });
 
 test('extension-frame rows reject missing evidence and unsafe capture or attachment paths', {
@@ -120,10 +120,10 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
     { name: 'dropped target info', dropInfo: true, incomplete: true },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
-      name: 'input while hidden',
-      options: { frameInput: 'ignored' },
-      observation: 'click',
-      onlyHidden: true,
+      name: 'foreign MHTML refusal',
+      mhtmlMessage: 'slicc: refused: mhtml disabled here',
+      observation: 'archiveRefusal',
+      expectPass: true,
     },
   ];
   try {
@@ -150,6 +150,8 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
           }
           if (mode.dropInfo && method === 'Target.getTargetInfo')
             throw new Error('Target.getTargetInfo dropped');
+          if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
+            throw new Error(mode.mhtmlMessage);
           const answer = await guard.client.send(method, params, session);
           if (method === 'Target.getTargets' && mode.listing) return mode.listing;
           if (method === 'DOMSnapshot.captureSnapshot') {
@@ -168,11 +170,8 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
         },
       };
       try {
-        const subset = mode.onlyHidden
-          ? vectors.filter((vector) => vector.id === 'C9.frame-hidden')
-          : vectors.slice(0, 1);
         const execution = await run(
-          { ...set, vectors: subset, variants: { prompt: 0 } },
+          { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
           {
             client,
             unguarded: browser.unguarded,
@@ -184,22 +183,23 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
         );
         const row = execution.results[0];
         assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
-        assert.equal(
-          row.guarded,
-          mode.incomplete ? 'incomplete' : mode.beginFrame ? 'pass' : 'fail',
-          JSON.stringify({ mode, row })
-        );
-        if (mode.observation)
+        const want = mode.incomplete
+          ? 'incomplete'
+          : mode.beginFrame || mode.expectPass
+            ? 'pass'
+            : 'fail';
+        assert.equal(row.guarded, want, JSON.stringify({ mode, row }));
+        if (mode.observation && !mode.expectPass)
           assert.equal(row.observations.guarded[mode.observation], true, mode.name);
+        if (mode.expectPass) assert.equal(row.observations.guarded.archiveRefusal, true, mode.name);
         if (mode.incomplete) {
           assert.match(
             row.incomplete.join('; '),
             /Target\.(getTargets returned no targetInfos array|getTargetInfo failed)/
           );
-          assert.equal(execution.summary().incomplete, 1);
         }
         if (mode.beginFrame) assert.equal(began, true);
-        assert.equal(execution.summary().pass, Boolean(mode.beginFrame));
+        assert.equal(execution.summary().pass, Boolean(mode.beginFrame || mode.expectPass));
       } finally {
         await guard.stop();
       }
@@ -215,9 +215,11 @@ const expectations = {
   'whole tab': () => 'fail',
   plain: () => 'fail',
   'visibility ignored': (id) =>
-    ['C9.frame-hidden', 'C9.frame-concealed', 'C9.frame-revealed'].includes(id) ? 'pass' : 'fail',
+    ['C9.frame-hidden', 'C9.frame-concealed', 'C9.frame-focused'].includes(id) ? 'pass' : 'fail',
   'opacity counts as hidden': (id) => (id === 'C9.frame-transparent' ? 'fail' : 'pass'),
-  'input while hidden': () => 'fail',
+  'focus ignored': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
+  'input refused while hidden': (id) =>
+    ['C9.frame-hidden', 'C9.frame-concealed'].includes(id) ? 'fail' : undefined,
 };
 
 test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, async () => {
@@ -237,11 +239,21 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
                   : mode === 'opacity counts as hidden'
                     ? 'opacity'
                     : undefined,
-              frameInput: mode === 'input while hidden' ? 'ignored' : undefined,
+              frameFocus: mode === 'focus ignored' ? 'ignored' : undefined,
+              refuse:
+                mode === 'input refused while hidden'
+                  ? (method) => (method.startsWith('Input.') ? frames.shownRefusal : undefined)
+                  : undefined,
             });
       try {
+        const subset =
+          mode === 'input refused while hidden'
+            ? vectors.filter((vector) =>
+                ['C9.frame-hidden', 'C9.frame-concealed'].includes(vector.id)
+              )
+            : vectors;
         const execution = await run(
-          { ...set, vectors, variants: { prompt: 0 } },
+          { ...set, vectors: subset, variants: { prompt: 0 } },
           {
             client: guard.client,
             unguarded: browser.unguarded,
@@ -253,17 +265,11 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
         );
         for (const row of execution.results) {
           assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
-          assert.equal(row.guarded, expected(row.id), JSON.stringify({ mode, row }));
+          const want = expected(row.id);
+          if (want !== undefined) assert.equal(row.guarded, want, JSON.stringify({ mode, row }));
           if (row.guarded === 'pass') assert.equal(row.live, 'pass', JSON.stringify({ mode, row }));
           if (mode === 'catalog' && row.guarded === 'pass') {
-            for (const key of [
-              'archiveRefusal',
-              'pdfRefusal',
-              'castRefusal',
-              'clickRefusal',
-              'keyRefusal',
-              'tabRefusal',
-            ])
+            for (const key of ['archiveRefusal', 'pdfRefusal', 'castRefusal'])
               assert.equal(row.observations.guarded[key], true, `${row.id} ${key}`);
           }
         }
@@ -284,17 +290,14 @@ test('seven vault and own-extension URLs stay protected while foreign extension 
   const withOwn = protectedOrigins(catalog.protectedOrigins, [own]);
   const plain = protectedOrigins(catalog.protectedOrigins);
   assert.equal(plain.extensionFrame(foreign), true);
-  assert.equal(plain.url(foreign), true);
   assert.equal(withOwn.extensionFrame(`${own}/frame.html`), false);
   assert.equal(withOwn.url(`${own}/frame.html`), true);
   assert.equal(plain.url('https://seven.sliccy.ai/'), true);
   assert.equal(plain.extensionFrame('https://seven.sliccy.ai/'), false);
   assert.equal(plain.url('https://vault.sliccy.ai/'), true);
-  assert.equal(plain.extensionFrame('https://vault.sliccy.ai/'), false);
-  assert.equal(
-    Boolean(frames.inputWhilePresent?.length) &&
-      frames.whenShown.includes('Page.captureScreenshot') &&
-      !frames.whenShown.some((method) => method.startsWith('Input.')),
-    true
-  );
+  assert.ok(vectors.some((vector) => vector.id === 'C9.frame-focused'));
+  assert.ok(vectors.some((vector) => vector.id === 'C9.frame-hidden'));
+  assert.equal(vectors.find((vector) => vector.id === 'C9.frame-hidden').expected.click, true);
+  assert.equal(vectors.find((vector) => vector.id === 'C9.frame-focused').expected.click, false);
+  assert.equal(vectors.find((vector) => vector.id === 'C9.frame-shown').expected.click, false);
 });

@@ -377,39 +377,102 @@ export function emulatedGuard(browser, options = {}) {
     };
     return walk(value);
   }
-  async function frameShown(targetId, list) {
-    if (!list.length || options.frameVisibility === 'ignored') return false;
+  async function frameOwner(targetId, frameId) {
     const shieldSession = [...shields].find(([, entry]) => entry.targetId === targetId)?.[0];
     const root = frames.get(targetId)?.id;
-    if (!shieldSession || !root) return true;
+    if (!shieldSession || !root) return null;
+    await unguarded.send('DOM.enable', {}, shieldSession);
+    const world = await unguarded.send(
+      'Page.createIsolatedWorld',
+      { frameId: root, worldName: 'slicc-emulator-frames' },
+      shieldSession
+    );
+    const { backendNodeId } = await unguarded.send('DOM.getFrameOwner', { frameId }, shieldSession);
+    const { object } = await unguarded.send(
+      'DOM.resolveNode',
+      { backendNodeId, executionContextId: world.executionContextId },
+      shieldSession
+    );
+    return { shieldSession, objectId: object.objectId };
+  }
+  async function frameShown(targetId, list) {
+    if (!list.length || options.frameVisibility === 'ignored') return false;
     const test =
       options.frameVisibility === 'opacity'
-        ? 'function(){return this.checkVisibility({visibilityProperty:true,opacityProperty:true})}'
-        : 'function(){return this.checkVisibility({visibilityProperty:true})}';
+        ? `function(){
+            if (!this.checkVisibility({visibilityProperty:true,opacityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          }`
+        : `function(){
+            if (!this.checkVisibility({visibilityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          }`;
     try {
-      await unguarded.send('DOM.enable', {}, shieldSession);
-      const world = await unguarded.send(
-        'Page.createIsolatedWorld',
-        { frameId: root, worldName: 'slicc-emulator-frames' },
-        shieldSession
-      );
       for (const frame of list) {
-        const { backendNodeId } = await unguarded.send(
-          'DOM.getFrameOwner',
-          { frameId: frame.targetId },
-          shieldSession
-        );
-        const { object } = await unguarded.send(
-          'DOM.resolveNode',
-          { backendNodeId, executionContextId: world.executionContextId },
-          shieldSession
-        );
+        const owner = await frameOwner(targetId, frame.targetId);
+        if (!owner) return true;
         const { result } = await unguarded.send(
           'Runtime.callFunctionOn',
-          { objectId: object.objectId, functionDeclaration: test, returnByValue: true },
-          shieldSession
+          {
+            objectId: owner.objectId,
+            functionDeclaration: test,
+            returnByValue: true,
+          },
+          owner.shieldSession
         );
         if (result.value !== false) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+  async function frameFocused(targetId, list) {
+    if (!list.length || options.frameFocus === 'ignored') return false;
+    try {
+      for (const frame of list) {
+        const owner = await frameOwner(targetId, frame.targetId);
+        if (!owner) return true;
+        const { result } = await unguarded.send(
+          'Runtime.callFunctionOn',
+          {
+            objectId: owner.objectId,
+            functionDeclaration: `function () {
+              const owns = (node) => {
+                if (!node) return false;
+                if (node === this || this.contains(node)) return true;
+                if (node.shadowRoot && owns(node.shadowRoot.activeElement)) return true;
+                try {
+                  if (node.contentDocument && owns(node.contentDocument.activeElement)) return true;
+                } catch {}
+                return false;
+              };
+              let node = document.activeElement;
+              const seen = new Set();
+              while (node && !seen.has(node)) {
+                seen.add(node);
+                if (owns(node)) return true;
+                const next =
+                  node.shadowRoot?.activeElement ??
+                  (() => {
+                    try {
+                      return node.contentDocument?.activeElement;
+                    } catch {
+                      return null;
+                    }
+                  })();
+                if (!next || next === node) break;
+                node = next;
+              }
+              return owns(document.activeElement);
+            }`,
+            returnByValue: true,
+          },
+          owner.shieldSession
+        );
+        if (result.value === true) return true;
       }
       return false;
     } catch {
@@ -601,14 +664,12 @@ export function emulatedGuard(browser, options = {}) {
       }
     }
     const frameRules = options.extensionFrames ? options.protectedOrigins.extensionFrames : null;
-    const inputMethods = frameRules?.inputWhilePresent ?? [];
+    const inputMethod = method.startsWith('Input.');
     const gated =
       frameRules &&
       sessionId &&
       targetId &&
-      (frameRules.whenShown.includes(method) ||
-        frameRules.whilePresent.includes(method) ||
-        inputMethods.includes(method));
+      (frameRules.whenShown.includes(method) || frameRules.whilePresent.includes(method));
     const held = gated ? await extensionFramesOf(targetId) : [];
     if (
       held.length &&
@@ -616,10 +677,11 @@ export function emulatedGuard(browser, options = {}) {
       !(options.exposeFramePDF && method === 'Page.printToPDF')
     )
       throw new Error(frameRules.presentRefusal);
-    if (held.length && inputMethods.includes(method) && options.frameInput !== 'ignored')
-      throw new Error(frameRules.inputRefusal);
-    if (held.length && frameRules.whenShown.includes(method) && (await frameShown(targetId, held)))
-      throw new Error(frameRules.shownRefusal);
+    const blocked =
+      held.length &&
+      frameRules.whenShown.includes(method) &&
+      ((await frameShown(targetId, held)) || (inputMethod && (await frameFocused(targetId, held))));
+    if (blocked) throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
     if (failure) throw new Error(failure);
     if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
@@ -654,10 +716,12 @@ export function emulatedGuard(browser, options = {}) {
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
     if (held.length && method === 'Page.captureScreenshot') await pause(50);
     const result = await client.send(method, params, sessionId);
+    const after = held.length ? await extensionFramesOf(targetId) : [];
     if (
-      held.length &&
+      after.length &&
       frameRules.whenShown.includes(method) &&
-      (await frameShown(targetId, await extensionFramesOf(targetId)))
+      ((await frameShown(targetId, after)) ||
+        (inputMethod && (await frameFocused(targetId, after))))
     )
       throw new Error(frameRules.shownRefusal);
     learnWorlds();

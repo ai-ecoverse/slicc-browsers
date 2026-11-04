@@ -529,7 +529,15 @@
           "required": ["extensionFrame", "as", "requires"],
           "properties": {
             "extensionFrame": {
-              "enum": ["hidden", "concealed", "shown", "transparent", "revealed", "nested"]
+              "enum": [
+                "hidden",
+                "concealed",
+                "shown",
+                "transparent",
+                "revealed",
+                "nested",
+                "focused"
+              ]
             },
             "as": {
               "$ref": "#/$defs/name"

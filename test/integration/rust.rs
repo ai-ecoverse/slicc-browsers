@@ -188,7 +188,7 @@ fn the_protected_vectors_parse_and_round_trip() {
         .when_shown
         .iter()
         .any(|m| m == "Page.captureScreenshot"));
-    assert!(!frames
+    assert!(frames
         .when_shown
         .iter()
         .any(|m| m == "Input.dispatchMouseEvent"));
@@ -196,15 +196,8 @@ fn the_protected_vectors_parse_and_round_trip() {
         .while_present
         .iter()
         .any(|m| m == "Page.startScreencast"));
-    assert!(frames
-        .input_while_present
-        .iter()
-        .any(|m| m == "Input.dispatchMouseEvent"));
-    assert!(frames.shown_refusal.contains("chrome-extension://"));
+    assert!(frames.shown_refusal.contains("showing or focused"));
     assert!(frames.present_refusal.contains("chrome-extension://"));
-    assert!(frames
-        .input_refusal
-        .contains("reload the tab to type or click"));
     assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
 }
 
@@ -343,7 +336,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         .iter()
         .filter(|x| x.id.starts_with("C9.frame-"))
         .collect();
-    assert_eq!(extension_frames.len(), 6);
+    assert_eq!(extension_frames.len(), 7);
     for frame in extension_frames {
         assert_eq!(frame.requires, vec![guard::CAP_EXTENSION_FRAME.to_string()]);
         assert!(frame.trigger[0].extension_frame.is_some());

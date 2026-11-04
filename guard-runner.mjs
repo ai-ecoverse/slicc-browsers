@@ -12,7 +12,6 @@ import {
   debuggerPaused,
   expand,
   hop,
-  idleDebuggerCleanup,
   inapplicable,
   isRefusal,
   knownOrigins,
@@ -21,10 +20,12 @@ import {
   outcome,
   owned,
   parseURL,
+  refusalError,
   summary as report,
   result,
   skipReason,
   steps,
+  trustedClientOnly,
   waitFor,
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
@@ -145,6 +146,7 @@ class Execution {
     this.pending = [];
     this.errors = [];
     this.incomplete = [];
+    this.unsupported = undefined;
     this.preSent = [];
     this.notes = [];
     this.answers = [];
@@ -685,14 +687,10 @@ class Execution {
       !refused &&
       /timeout|timed out|no answer/i.test(String(out.error?.message ?? out.error));
     if (step.refusable) this.refused[step.refusal.name] = unanswered ? 'incomplete' : refused;
-    if (unanswered) this.incomplete.push(`${step.refusal.name}: no answer`);
-    else if (
-      step.refusable &&
-      !out.ok &&
-      !refused &&
-      !gone &&
-      !idleDebuggerCleanup(this.vector, step, phase, out)
-    )
+    const trusted = this.side === 'control' && trustedClientOnly(step, out);
+    if (trusted) this.unsupported = 'trustedEmulation';
+    else if (unanswered) this.incomplete.push(`${step.refusal.name}: no answer`);
+    else if (refusalError(step, out, refused, gone, phase, this.vector))
       this.errors.push(
         `${step.refusal.name} failed without a refusal: ${String(out.error?.message ?? out.error)}`
       );
@@ -1447,6 +1445,7 @@ class Execution {
         errors: this.errors,
         notes: this.notes,
         incomplete: this.incomplete,
+        unsupported: this.unsupported,
         evidence: Object.fromEntries(
           Object.entries(this.calls)
             .filter(
@@ -1758,6 +1757,8 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     flight.abandoned = true;
     return timedOut(stuck, base, made, sides, opts);
   }
+  if (legs.control.unsupported === 'trustedEmulation')
+    return skipRow(base, 'not-supported:trustedEmulation');
   const row = {
     ...result(vector, {
       ...base,

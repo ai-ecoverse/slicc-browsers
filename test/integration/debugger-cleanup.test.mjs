@@ -7,6 +7,8 @@ import {
   idleDebuggerCleanup,
   isRefusal,
   outcome,
+  refusalError,
+  trustedClientOnly,
 } from '../../guard-driver.mjs';
 
 const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
@@ -24,6 +26,8 @@ const methods = new Function(
   'sleep',
   'refusedOut',
   'exitsClient',
+  'refusalError',
+  'trustedClientOnly',
   `return { ${source.slice(cdpStart, cdpEnd)}, ${source.slice(recordStart, recordEnd)} };`
 )(
   debuggerCleanup,
@@ -33,7 +37,9 @@ const methods = new Function(
   () => false,
   async () => {},
   (step, out) => isRefusal(out, step),
-  () => false
+  () => false,
+  refusalError,
+  trustedClientOnly
 );
 const step = {
   cdp: 'Debugger.resume',

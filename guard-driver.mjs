@@ -382,7 +382,7 @@ function skipWhy(vector, row, known, guard, declared) {
       : `skip with a reason the runner never gives: ${reason}`;
   if (reason.startsWith('not-supported:')) {
     const cap = reason.slice('not-supported:'.length);
-    if (declared.includes(cap))
+    if (cap === 'extensionFrame' && declared.includes(cap))
       return `skip with not-supported:${cap} while the run declared ${cap}`;
     if (known.has(cap)) return null;
   }

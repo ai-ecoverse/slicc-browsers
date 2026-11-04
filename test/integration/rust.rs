@@ -336,7 +336,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         .iter()
         .filter(|x| x.id.starts_with("C9.frame-"))
         .collect();
-    assert_eq!(extension_frames.len(), 7);
+    assert_eq!(extension_frames.len(), 8);
     for frame in extension_frames {
         assert_eq!(frame.requires, vec![guard::CAP_EXTENSION_FRAME.to_string()]);
         assert!(frame.trigger[0].extension_frame.is_some());

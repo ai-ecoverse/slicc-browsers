@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { presentRefusal, shownRefusal, whenShownInput } from '../extension-frames-rules.mjs';
 import { protectedOrigins } from '../protected.mjs';
 import { isSevenLabel } from '../seven.mjs';
 import { bundle } from './corpus.mjs';
@@ -42,6 +43,21 @@ function check(name, data, label) {
 
 const catalog = read('catalog.json');
 check('catalog', catalog, 'catalog.json');
+{
+  const frames = catalog.protectedOrigins?.extensionFrames ?? {};
+  const input = (frames.whenShown ?? []).filter((method) => method.startsWith('Input.'));
+  if (shownRefusal !== frames.shownRefusal)
+    fail('extension-frames-rules.mjs: shownRefusal does not match catalog.json');
+  if (presentRefusal !== frames.presentRefusal)
+    fail('extension-frames-rules.mjs: presentRefusal does not match catalog.json');
+  if (JSON.stringify(whenShownInput) !== JSON.stringify(input))
+    fail(
+      'extension-frames-rules.mjs: whenShownInput does not match catalog.json whenShown Input.*'
+    );
+  const graph = readFileSync(join(root, 'extension-frame.mjs'), 'utf8');
+  if (/\.json['"]/.test(graph) || /with\s*\{\s*type:\s*['"]json['"]/.test(graph))
+    fail('extension-frame.mjs: keep the runner import graph .mjs-only (no catalog.json import)');
+}
 
 function unique(label, values) {
   const seen = new Set();

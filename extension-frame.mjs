@@ -1,12 +1,10 @@
-import catalog from './catalog.json' with { type: 'json' };
+import {
+  whenShownInput as INPUT_METHODS,
+  presentRefusal as PRESENT,
+  shownRefusal as SHOWN,
+} from './extension-frames-rules.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID } from './extension-world.mjs';
 import { outcome } from './guard-driver.mjs';
-
-const INPUT_METHODS = catalog.protectedOrigins.extensionFrames.whenShown.filter((method) =>
-  method.startsWith('Input.')
-);
-const PRESENT = catalog.protectedOrigins.extensionFrames.presentRefusal;
-const SHOWN = catalog.protectedOrigins.extensionFrames.shownRefusal;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const FRAME = 'slicc-extension-frame';
@@ -89,9 +87,10 @@ async function style(reader, observer, mode, ms) {
   await painted(reader, observer, ms);
 }
 
-async function frameTargets(reader, targetId, extensionId) {
+async function frameTargets(reader, targetId, extensionId, want, missing, waitMs = 5000) {
   const prefix = `chrome-extension://${extensionId}/`;
-  const deadline = Date.now() + 5000;
+  const deadline = Date.now() + waitMs;
+  let best = [];
   do {
     const { targetInfos } = await reader.send('Target.getTargets');
     const byId = new Map(targetInfos.map((info) => [info.targetId, info]));
@@ -107,9 +106,13 @@ async function frameTargets(reader, targetId, extensionId) {
     const found = targetInfos.filter(
       (info) => info.type === 'iframe' && info.url.startsWith(prefix) && under(info)
     );
-    if (found.length) return found;
+    if (found.length > best.length) best = found;
+    if (found.length >= want) return found;
     await pause(50);
   } while (Date.now() < deadline);
+  if (best.length < want)
+    missing.push(`extensionFrame: expected ${want} frame targets, found ${best.length}`);
+  if (best.length) return best;
   throw new Error(`extensionFrame: no frame target for ${extensionId}`);
 }
 
@@ -621,7 +624,15 @@ export async function extensionFrame({
     await reader.send('DOM.enable', {}, observer);
     await reader.send('Accessibility.enable', {}, observer);
     await embed(reader, observer, mode, frameURL);
-    const frames = await frameTargets(reader, targetId, extensionId);
+    const want = mode === 'focused' ? 1 : 2;
+    const frames = await frameTargets(
+      reader,
+      targetId,
+      extensionId,
+      want,
+      missing,
+      frameMs === 0 ? 100 : 5000
+    );
     const frame = frames[0];
     await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);

@@ -446,33 +446,14 @@ export function emulatedGuard(browser, options = {}) {
           {
             objectId: owner.objectId,
             functionDeclaration: `function () {
-              const owns = (node) => {
-                if (!node) return false;
-                if (node === this || this.contains(node)) return true;
-                if (node.shadowRoot && owns(node.shadowRoot.activeElement)) return true;
-                try {
-                  if (node.contentDocument && owns(node.contentDocument.activeElement)) return true;
-                } catch {}
-                return false;
-              };
-              let node = document.activeElement;
-              const seen = new Set();
-              while (node && !seen.has(node)) {
-                seen.add(node);
-                if (owns(node)) return true;
-                const next =
-                  node.shadowRoot?.activeElement ??
-                  (() => {
-                    try {
-                      return node.contentDocument?.activeElement;
-                    } catch {
-                      return null;
-                    }
-                  })();
-                if (!next || next === node) break;
-                node = next;
+              let node = this;
+              for (let depth = 0; depth < 64; depth++) {
+                const root = node.getRootNode();
+                if (root.activeElement !== node) return false;
+                if (!root.host) return true;
+                node = root.host;
               }
-              return owns(document.activeElement);
+              return true;
             }`,
             returnByValue: true,
           },

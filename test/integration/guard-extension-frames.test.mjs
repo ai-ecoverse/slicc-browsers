@@ -47,6 +47,58 @@ test('extension-frame catalog gates Input on whenShown with shownRefusal coverin
   assert.match(frames.presentRefusal, /chrome-extension:\/\//);
 });
 
+test('extension-frame keeps the runner import graph .mjs-only and rules match catalog', async () => {
+  const source = await readFile(new URL('../../extension-frame.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\.json['"]|with\s*\{\s*type:\s*['"]json['"]/);
+  const rules = await import('../../extension-frames-rules.mjs');
+  assert.equal(rules.shownRefusal, frames.shownRefusal);
+  assert.equal(rules.presentRefusal, frames.presentRefusal);
+  assert.deepEqual(
+    rules.whenShownInput,
+    frames.whenShown.filter((method) => method.startsWith('Input.'))
+  );
+});
+
+test('catalog emulator refuses Input and screenshots when focus is inside a closed shadow frame', {
+  timeout: 120000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extensionFrames: true,
+  });
+  try {
+    const execution = await run(
+      {
+        ...set,
+        vectors: vectors.filter((vector) => vector.id === 'C9.frame-focused'),
+        variants: { prompt: 0 },
+      },
+      {
+        client: guard.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities,
+        rowTimeoutMs: 60000,
+      }
+    );
+    const row = execution.results[0];
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.observations.guarded.frameFocused, true);
+    assert.equal(row.observations.guarded.shot, false);
+    assert.equal(row.observations.guarded.click, false);
+    assert.equal(row.observations.guarded.key, false);
+    assert.equal(row.observations.guarded.shotRefusal, true);
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});
+
 test('extension-frame rows skip transports that do not declare extensionFrame', async () => {
   const fixture = await fixtureServer();
   try {
@@ -244,6 +296,7 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
                 throw new Error(frames.shownRefusal);
               }
               if (params.targetId === mode.primaryFrameId) throw new Error(frames.shownRefusal);
+              return browser.unguarded.send(method, params, session);
             }
           }
           const answer = await guard.client.send(method, params, session);

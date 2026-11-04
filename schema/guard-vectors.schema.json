@@ -87,6 +87,7 @@
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",
+        "extensionFrame",
         "discovery",
         "clientExit",
         "siteIsolationOff",
@@ -106,6 +107,7 @@
           "minLength": 1
         },
         "extensionWorld": { "type": "string", "minLength": 1 },
+        "extensionFrame": { "type": "string", "minLength": 1 },
         "discovery": { "type": "string", "minLength": 1 },
         "chromeUrlsAttach": {
           "type": "string",
@@ -143,6 +145,7 @@
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",
+        "extensionFrame",
         "discovery",
         "clientExit",
         "siteIsolationOff",
@@ -511,6 +514,22 @@
           "properties": {
             "extensionWorld": {
               "enum": ["hidden", "select", "debugger", "drivable"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["extensionFrame", "as", "requires"],
+          "properties": {
+            "extensionFrame": {
+              "enum": ["hidden", "concealed", "shown", "transparent", "revealed"]
             },
             "as": {
               "$ref": "#/$defs/name"

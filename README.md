@@ -165,6 +165,8 @@ Browser control must never navigate to, open, attach to, or read the cookies or 
 
 URLs are judged the way the browser parses them, so `blob:`, `view-source:` and `about:` aliases, backslashes, encoded dots and full-width letters can't sneak past. A URL the guard can't parse counts as protected wherever the browser might load it. A tab that seven opened keeps seven's origin when it goes to `about:blank`. A refused call fails with `slicc: refused: target is on seven's origin`.
 
+A browser extension's frame inside an ordinary page, such as a password manager's autofill list, doesn't make the tab protected. The frame itself stays out of reach: it can't be attached, listed or read. The tab's own page can be read, snapshotted, screenshotted and driven while every extension frame in it is hidden, meaning its frame element has no layout box or has `visibility: hidden`. Opacity and position don't count, because a transparent or off-screen frame can still take input. While an extension frame is shown, screenshots and input are refused, and a screenshot taken while one became shown is thrown away. Whole-page captures and screencasts are refused for as long as any extension frame is in the tab. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, the methods and the refusals, and `protected.mjs` offers `extensionFrame(url)`.
+
 `catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. `protected.mjs` is the reference implementation:
 
 ```js
@@ -228,6 +230,7 @@ You supply:
 | `discovery` | report target creation and changes without a session |
 | `chromeUrlsAttach` | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't) |
 | `extensionWorld` | host a foreign extension's content script on the test page |
+| `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
 | `clientExit` | close the guarded client in the middle of a row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
 

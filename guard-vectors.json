@@ -96,6 +96,7 @@
     "browserSession": "CDP calls on the browser session",
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
+    "extensionFrame": "a browser hosting the harness extension, whose web-accessible frame.html an ordinary page embeds as an out-of-process chrome-extension: frame, like a password manager's autofill list",
     "discovery": "session-less Target.setDiscoverTargets and targetCreated/targetInfoChanged delivery; absent transports must emit neither event",
     "chromeUrlsAttach": "attaching to and driving chrome:// pages, which CDP over a DevTools port can and chrome.debugger can't",
     "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it",
@@ -3088,6 +3089,960 @@
         "alive": true,
         "snapshot": true,
         "click": true
+      }
+    },
+    {
+      "id": "C9.frame-hidden",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "hidden",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame hidden: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame hidden: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame hidden: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame hidden: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame hidden: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame hidden: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame hidden: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame hidden: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame hidden: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame hidden: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame hidden: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame hidden: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame has the hidden attribute",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "archive": true,
+          "cast": true,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "shot": true,
+          "click": true,
+          "key": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "archive": false,
+        "cast": false,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "shot": true,
+        "click": true,
+        "key": true
+      }
+    },
+    {
+      "id": "C9.frame-concealed",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "concealed",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame concealed: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame concealed: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame concealed: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame concealed: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame concealed: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame concealed: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame concealed: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame concealed: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame concealed: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame concealed: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame concealed: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame concealed: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is visibility:hidden, transparent and off-screen, as a password manager leaves its closed list",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "archive": true,
+          "cast": true,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "shot": true,
+          "click": true,
+          "key": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "archive": false,
+        "cast": false,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "shot": true,
+        "click": true,
+        "key": true
+      }
+    },
+    {
+      "id": "C9.frame-shown",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "shown",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame shown: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame shown: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame shown: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame shown: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame shown: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame shown: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame shown: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame shown: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame shown: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame shown: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame shown: the screenshot is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame shown: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame shown: the click is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame shown: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame shown: the typing is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is visible in a corner away from the click target",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "archive": true,
+          "cast": true,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "shot": true,
+          "shotRefusal": false,
+          "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "archive": false,
+        "cast": false,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "shot": false,
+        "shotRefusal": true,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true
+      }
+    },
+    {
+      "id": "C9.frame-transparent",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "transparent",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame transparent: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame transparent: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame transparent: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame transparent: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame transparent: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame transparent: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame transparent: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame transparent: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame transparent: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame transparent: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame transparent: the screenshot is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame transparent: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame transparent: the click is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame transparent: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame transparent: the typing is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame is laid out and visible but has opacity 0, so it still takes input",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "archive": true,
+          "cast": true,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "shot": true,
+          "shotRefusal": false,
+          "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "archive": false,
+        "cast": false,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "shot": false,
+        "shotRefusal": true,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true
+      }
+    },
+    {
+      "id": "C9.frame-revealed",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "revealed",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame revealed: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame revealed: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame revealed: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame revealed: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame revealed: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame revealed: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame revealed: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame revealed: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame revealed: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame revealed: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame revealed: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "revealedShot": {
+          "means": "extension frame revealed: a screenshot is taken after the frame is shown",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedShot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "revealedRefusal": {
+          "means": "extension frame revealed: that is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "revealedClick": {
+          "means": "extension frame revealed: a click reaches the page after the frame is shown",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "rehiddenShot": {
+          "means": "extension frame revealed: a screenshot is taken after the frame is hidden again",
+          "check": {
+            "result": "frame",
+            "path": "result.rehiddenShot",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab; the frame starts hidden, is shown after the client attached, then hidden again",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "archive": true,
+          "cast": true,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "shot": true,
+          "click": true,
+          "revealedShot": true,
+          "revealedRefusal": false,
+          "revealedClick": true,
+          "rehiddenShot": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "archive": false,
+        "cast": false,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "shot": true,
+        "click": true,
+        "revealedShot": false,
+        "revealedRefusal": true,
+        "revealedClick": false,
+        "rehiddenShot": true
       }
     },
     {
@@ -15589,7 +16544,9 @@
         {
           "cdp": "Debugger.enable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "Debugger.setBreakpointByUrl",
@@ -15617,7 +16574,9 @@
         {
           "cdp": "Debugger.disable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
@@ -15625,7 +16584,10 @@
         "admissionRefused": {
           "means": "the URL-condition method is refused on the ordinary control",
           "dependsOn": [],
-          "check": { "registration": "any", "observer": "client" }
+          "check": {
+            "registration": "any",
+            "observer": "client"
+          }
         },
         "condition": {
           "means": "a beacon from the breakpoint condition evaluated in {target}/listener.js?n={tag}",
@@ -15760,7 +16722,9 @@
         {
           "cdp": "Debugger.enable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "Debugger.setInstrumentationBreakpoint",
@@ -15790,12 +16754,16 @@
         {
           "cdp": "Debugger.resume",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "Debugger.disable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
@@ -15846,7 +16814,11 @@
           "dependsOn": [],
           "check": {
             "event": "Debugger.paused",
-            "where": { "params": { "reason": "other" } },
+            "where": {
+              "params": {
+                "reason": "other"
+              }
+            },
             "observer": "client"
           }
         }
@@ -15933,7 +16905,9 @@
         {
           "cdp": "Debugger.enable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "DOMDebugger.setEventListenerBreakpoint",
@@ -15963,12 +16937,16 @@
         {
           "cdp": "Debugger.resume",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "cdp": "Debugger.disable",
           "refusable": true,
-          "refusal": { "match": "refused" }
+          "refusal": {
+            "match": "refused"
+          }
         }
       ],
       "targets": ["seven", "vault", "vault-x", "apex"],
@@ -16000,7 +16978,10 @@
         "admissionRefused": {
           "means": "the listener breakpoint method is refused on the ordinary control",
           "dependsOn": [],
-          "check": { "registration": "any", "observer": "client" }
+          "check": {
+            "registration": "any",
+            "observer": "client"
+          }
         }
       },
       "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",

@@ -261,6 +261,16 @@ for (const v of guard.vectors ?? []) {
   if (v.kind === 'cdp' && !v.liveCheck) gv(`${v.id} lacks liveCheck`);
   checkRefusals(v.liveCheck, v.id);
   if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
+  const frames = catalog.protectedOrigins?.extensionFrames ?? {};
+  for (const [key, observation] of Object.entries(v.observe ?? {})) {
+    const text = observation.check?.equals;
+    if (typeof text !== 'string' || !text.startsWith('slicc: refused: ')) continue;
+    if (!key.endsWith('Refusal')) continue;
+    if (![frames.shownRefusal, frames.presentRefusal].includes(text))
+      gv(
+        `${v.id}: ${key} expects a refusal that isn't one of catalog.json's extensionFrames refusals`
+      );
+  }
   if (v.skip && !v.targets.includes(v.skip.target))
     gv(`${v.id} skips ${v.skip.target}, which it doesn't target`);
   if (v.skip && v.targets.every((t) => t === v.skip.target)) gv(`${v.id} skips every target`);

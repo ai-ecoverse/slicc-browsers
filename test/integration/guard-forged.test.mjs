@@ -221,7 +221,7 @@ test('a genuine not-applicable row for an unobservable target or another scope s
 test('a vector skip reason survives run() into a passing summary, and a bare one is forged', async () => {
   const reason = 'not-applicable: on macOS the C9 controls hang inside Chrome (slicc-cli#344)';
   const vectors = full.vectors
-    .filter((v) => v.id.startsWith('C9.'))
+    .filter((v) => v.id.startsWith('C9.') && !v.id.startsWith('C9.frame-'))
     .map((v) => ({ ...v, skip: { target: 'ordinary', reason } }));
   assert.ok(vectors.length > 0);
   const one = { ...full, vectors };

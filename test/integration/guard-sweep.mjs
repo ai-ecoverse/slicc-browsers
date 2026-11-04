@@ -33,6 +33,7 @@ export const capabilities = {
   browserContexts: true,
   chromeUrlsAttach: true,
   extensionWorld: true,
+  extensionFrame: true,
   discovery: true,
   clientExit: true,
   siteIsolationOff: true,

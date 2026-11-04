@@ -8,7 +8,9 @@ import { emulatedGuard } from './guard-emulator.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
-const vectors = set.vectors.filter((vector) => vector.id.startsWith('C9.'));
+const vectors = set.vectors.filter(
+  (vector) => vector.id.startsWith('C9.') && !vector.id.startsWith('C9.frame-')
+);
 const capabilities = {
   autoAttach: true,
   browserSession: true,

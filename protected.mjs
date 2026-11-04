@@ -105,5 +105,11 @@ export function protectedOrigins(rules, extraOrigins = []) {
     );
   };
 
-  return { url, target, cookieDomain, storageKey, unparseable };
+  const extensionFrame = (text) => {
+    const u = parse(text);
+    if (!u || !(rules.extensionFrames?.schemes ?? []).includes(scheme(u))) return false;
+    return !extra.includes(originOf(u));
+  };
+
+  return { url, target, cookieDomain, storageKey, unparseable, extensionFrame };
 }

@@ -310,6 +310,52 @@ export function emulatedGuard(browser, options = {}) {
         await unguarded.send('Target.detachFromTarget', { sessionId }).catch(() => {});
     },
   };
+  async function extensionFramesOf(targetId) {
+    const { targetInfos } = await unguarded.send('Target.getTargets');
+    return targetInfos.filter(
+      (info) =>
+        info.type === 'iframe' && info.parentId === targetId && catalog.extensionFrame(info.url)
+    );
+  }
+  async function frameShown(targetId, list) {
+    if (!list.length || options.frameVisibility === 'ignored') return false;
+    const shieldSession = [...shields].find(([, entry]) => entry.targetId === targetId)?.[0];
+    const root = frames.get(targetId)?.id;
+    if (!shieldSession || !root) return true;
+    const test =
+      options.frameVisibility === 'opacity'
+        ? 'function(){return this.checkVisibility({visibilityProperty:true,opacityProperty:true})}'
+        : 'function(){return this.checkVisibility({visibilityProperty:true})}';
+    try {
+      await unguarded.send('DOM.enable', {}, shieldSession);
+      const world = await unguarded.send(
+        'Page.createIsolatedWorld',
+        { frameId: root, worldName: 'slicc-emulator-frames' },
+        shieldSession
+      );
+      for (const frame of list) {
+        const { backendNodeId } = await unguarded.send(
+          'DOM.getFrameOwner',
+          { frameId: frame.targetId },
+          shieldSession
+        );
+        const { object } = await unguarded.send(
+          'DOM.resolveNode',
+          { backendNodeId, executionContextId: world.executionContextId },
+          shieldSession
+        );
+        const { result } = await unguarded.send(
+          'Runtime.callFunctionOn',
+          { objectId: object.objectId, functionDeclaration: test, returnByValue: true },
+          shieldSession
+        );
+        if (result.value !== false) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
   async function outcomeSend(method, params, sessionId) {
     try {
       return await guardedSend(method, params, sessionId);
@@ -474,7 +520,13 @@ export function emulatedGuard(browser, options = {}) {
               event.sessionId === attached.sessionId &&
               event.params.targetInfo.type === 'iframe'
           );
-        if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
+        if (
+          frames.some(
+            (event) =>
+              catalog.url(event.params.targetInfo.url) &&
+              !(options.extensionFrames && catalog.extensionFrame(event.params.targetInfo.url))
+          )
+        )
           throw refusal('protected out-of-process frame');
       } finally {
         await unguarded.send(
@@ -485,6 +537,16 @@ export function emulatedGuard(browser, options = {}) {
         await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
       }
     }
+    const frameRules = options.extensionFrames ? options.protectedOrigins.extensionFrames : null;
+    const gated =
+      frameRules &&
+      sessionId &&
+      targetId &&
+      (frameRules.whenShown.includes(method) || frameRules.whilePresent.includes(method));
+    const held = gated ? await extensionFramesOf(targetId) : [];
+    if (held.length && frameRules.whilePresent.includes(method))
+      throw new Error(frameRules.presentRefusal);
+    if (held.length && (await frameShown(targetId, held))) throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
     if (failure) throw new Error(failure);
     if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
@@ -518,6 +580,8 @@ export function emulatedGuard(browser, options = {}) {
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
     const result = await client.send(method, params, sessionId);
+    if (held.length && (await frameShown(targetId, await extensionFramesOf(targetId))))
+      throw new Error(frameRules.shownRefusal);
     learnWorlds();
     await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
     if (

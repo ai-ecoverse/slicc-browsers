@@ -21,7 +21,7 @@ const together = set.vectors.filter(
   (vector) =>
     vector.id === 'C2.chain-301-302-303' ||
     vector.id === 'C8.unparseable' ||
-    vector.id.startsWith('C9.')
+    (vector.id.startsWith('C9.') && !vector.id.startsWith('C9.frame-'))
 );
 
 const guardFor = (browser, fixture) =>

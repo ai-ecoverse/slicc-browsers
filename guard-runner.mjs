@@ -3,6 +3,7 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
+import { extensionFrame } from './extension-frame.mjs';
 import { extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
 import {
@@ -701,6 +702,7 @@ class Execution {
       'unparseable',
       'errorPage',
       'extensionWorld',
+      'extensionFrame',
       'frameRead',
       'bfcacheRestore',
     ].find((key) => step[key]);
@@ -897,6 +899,19 @@ class Execution {
           side: this.side,
           controls: (this.clients.extensionWorldControls ??= {}),
           pauseMs: this.bound(this.side === 'control' ? 5000 : 1500, this.side !== 'control'),
+          frameMs: this.bound(1000),
+          extensionId: this.options.extensionWorldId,
+        })
+      );
+    if (step.extensionFrame)
+      return outcome(
+        extensionFrame({
+          client: this.client,
+          reader: this.reader,
+          session,
+          targetId: this.pageTarget,
+          mode: step.extensionFrame,
+          origin: this.vars.ordinary,
           frameMs: this.bound(1000),
           extensionId: this.options.extensionWorldId,
         })

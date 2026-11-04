@@ -252,6 +252,12 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
       secondFrameAttach: true,
       observation: 'frameAttach',
     },
+    {
+      name: 'empty iframe src evaluate',
+      emptyEvaluate: true,
+      incomplete: true,
+      incompleteMatch: /iframe\.src returned no string value/,
+    },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
       name: 'foreign MHTML refusal',
@@ -284,6 +290,13 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
           }
           if (mode.dropInfo && method === 'Target.getTargetInfo')
             throw new Error('Target.getTargetInfo dropped');
+          if (
+            mode.emptyEvaluate &&
+            method === 'Runtime.evaluate' &&
+            typeof params?.expression === 'string' &&
+            params.expression.includes('.src')
+          )
+            return {};
           if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
             throw new Error(mode.mhtmlMessage);
           if (mode.secondFrameAttach && method === 'Target.attachToTarget') {
@@ -348,7 +361,8 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
         if (mode.incomplete) {
           assert.match(
             row.incomplete.join('; '),
-            /Target\.(getTargets returned no targetInfos array|getTargetInfo failed)/
+            mode.incompleteMatch ??
+              /Target\.(getTargets returned no targetInfos array|getTargetInfo failed)/
           );
         }
         if (mode.beginFrame) assert.equal(began, true);
@@ -363,6 +377,15 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
   }
 });
 
+const GESTURE_INPUT = [
+  'Input.dispatchTouchEvent',
+  'Input.dispatchDragEvent',
+  'Input.emulateTouchFromMouseEvent',
+  'Input.synthesizePinchGesture',
+  'Input.synthesizeScrollGesture',
+  'Input.synthesizeTapGesture',
+];
+
 const expectations = {
   catalog: () => 'pass',
   'whole tab': () => 'fail',
@@ -375,6 +398,49 @@ const expectations = {
   'input refused while hidden': (id) =>
     ['C9.frame-hidden', 'C9.frame-concealed'].includes(id) ? 'fail' : undefined,
 };
+
+test('a guard that forwards the six whenShown gesture Input methods fails shown and nested', {
+  timeout: 180000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extensionFrames: true,
+  });
+  try {
+    const client = {
+      ...guard.client,
+      async send(method, params, session) {
+        if (GESTURE_INPUT.includes(method)) return browser.unguarded.send(method, params, session);
+        return guard.client.send(method, params, session);
+      },
+    };
+    const subset = vectors.filter((vector) =>
+      ['C9.frame-shown', 'C9.frame-nested'].includes(vector.id)
+    );
+    const execution = await run(
+      { ...set, vectors: subset, variants: { prompt: 0 } },
+      {
+        client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities,
+        rowTimeoutMs: 60000,
+      }
+    );
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    }
+    assert.equal(execution.summary().pass, false);
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});
 
 test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, async () => {
   const fixture = await fixtureServer();

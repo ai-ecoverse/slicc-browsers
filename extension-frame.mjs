@@ -183,7 +183,7 @@ async function inputMethods(client, session, methods) {
     else if (method === 'Input.synthesizeScrollGesture') params = { x: 20, y: 20, yDistance: -10 };
     else if (method === 'Input.synthesizeTapGesture') params = { x: 20, y: 20 };
     const out = await outcome(client.send(method, params, session));
-    results[method] = { ok: out.ok, refusal: refusal(out) };
+    results[method.slice('Input.'.length)] = { ok: out.ok, refusal: refusal(out) };
   }
   return results;
 }
@@ -192,6 +192,9 @@ function snapshotReadsFrame(snapshot, extensionId, frameURL) {
   if (!snapshot.ok) return false;
   return exposesExtension(snapshot.result, extensionId, frameURL);
 }
+
+const hasPayload = (value) =>
+  value != null && typeof value === 'object' && Object.keys(value).length > 0;
 
 async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   const leaks = {
@@ -204,9 +207,11 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   };
   const tree = await outcome(client.send('Page.getFrameTree', {}, page));
   if (!tree.ok) missing.push('Page.getFrameTree failed');
+  else if (!hasPayload(tree.result)) missing.push('Page.getFrameTree returned no result');
   else leaks.frameTreeLeak = exposesExtension(tree.result, extensionId, frameURL);
   const document = await outcome(client.send('DOM.getDocument', { depth: -1, pierce: true }, page));
   if (!document.ok) missing.push('DOM.getDocument failed');
+  else if (!hasPayload(document.result)) missing.push('DOM.getDocument returned no result');
   else {
     const text = JSON.stringify(document.result);
     leaks.documentLeak = exposesExtension(document.result, extensionId, frameURL);
@@ -214,6 +219,7 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   }
   const ax = await outcome(client.send('Accessibility.getFullAXTree', {}, page));
   if (!ax.ok) missing.push('Accessibility.getFullAXTree failed');
+  else if (!hasPayload(ax.result)) missing.push('Accessibility.getFullAXTree returned no result');
   else leaks.axLeak = exposesExtension(ax.result, extensionId, frameURL);
   const evaluated = await outcome(
     client.send(
@@ -226,17 +232,23 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
     )
   );
   if (!evaluated.ok) missing.push('Runtime.evaluate of iframe.src failed');
+  else if (evaluated.result?.exceptionDetails)
+    missing.push('Runtime.evaluate of iframe.src raised');
+  else if (typeof evaluated.result?.result?.value !== 'string')
+    missing.push('Runtime.evaluate of iframe.src returned no string value');
   else {
-    const value = evaluated.result.result?.value;
+    const value = evaluated.result.result.value;
     leaks.evaluateLeak =
       exposesExtension(evaluated.result, extensionId, frameURL) ||
-      (typeof value === 'string' && exposesExtension(value, extensionId, frameURL));
+      exposesExtension(value, extensionId, frameURL);
   }
   const snapshot = await outcome(
     client.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }, page)
   );
-  leaks.snapshot = snapshot.ok && snapshot.result.documents?.length > 0;
+  leaks.snapshot = snapshot.ok && Array.isArray(snapshot.result?.documents);
   if (!snapshot.ok) missing.push('DOMSnapshot.captureSnapshot failed');
+  else if (!hasPayload(snapshot.result) || !Array.isArray(snapshot.result.documents))
+    missing.push('DOMSnapshot.captureSnapshot returned no documents');
   else leaks.snapshotFrameRead = snapshotReadsFrame(snapshot, extensionId, frameURL);
   return { ...leaks, snapshotOut: snapshot };
 }

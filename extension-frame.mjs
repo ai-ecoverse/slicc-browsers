@@ -538,8 +538,9 @@ async function driveReveal(client, reader, page, observer, frameMs, missing, sid
   if (overlap === 'unknown') missing.push('reveal/capture overlap unproven');
   const shownRefused = Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
   let revealRacePass = false;
-  if (overlap === 'during') revealRacePass = side === 'control' ? ok : shownRefused;
-  else if (overlap === 'after' || overlap === 'before') revealRacePass = ok || shownRefused;
+  if (overlap === 'during' || overlap === 'before')
+    revealRacePass = side === 'control' ? ok : shownRefused;
+  else if (overlap === 'after') revealRacePass = ok || shownRefused;
   const revealedPress = await click(client, reader, page, observer);
   await style(reader, observer, 'hidden', frameMs);
   const rehidden = await shot(client, page);

@@ -17369,7 +17369,7 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "locale": {
-          "means": "{target}/doc?n={tag} formats in the fr-CH locale",
+          "means": "when the client can override locale, {target}/doc?n={tag} formats in fr-CH",
           "dependsOn": ["refused.2"],
           "check": {
             "expression": "(location.href === '{target}/doc?n={tag}') ? Intl.DateTimeFormat().resolvedOptions().locale : 'elsewhere'",
@@ -17387,7 +17387,7 @@
           }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step; Chrome's trusted-client-only refusal of Emulation.setLocaleOverride on the ordinary control is not-supported:trustedEmulation",
       "control": {
         "origin": "ordinary",
         "via": "guard",
@@ -17490,7 +17490,7 @@
       "targets": ["seven", "vault", "vault-x", "apex"],
       "observe": {
         "timezone": {
-          "means": "{target}/doc?n={tag} runs in the Pacific/Chatham time zone",
+          "means": "when the client can override the time zone, {target}/doc?n={tag} runs in Pacific/Chatham",
           "dependsOn": ["refused.2"],
           "check": {
             "expression": "(location.href === '{target}/doc?n={tag}') ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'elsewhere'",
@@ -17508,7 +17508,7 @@
           }
         }
       },
-      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step",
+      "live": "the runner's own CDP sees {target}'s document load (title, marker or URL), or the guard returned its refusal for a refusable step; Chrome's trusted-client-only refusal of Emulation.setTimezoneOverride on the ordinary control is not-supported:trustedEmulation",
       "control": {
         "origin": "ordinary",
         "via": "guard",

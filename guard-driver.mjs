@@ -354,11 +354,25 @@ export const skipReason = (vector, target, scope) => {
 
 export const inapplicable = (vector, target, scope) => skipReason(vector, target, scope) !== null;
 
+const trustedEmulationCdps = new Set([
+  'Emulation.setLocaleOverride',
+  'Emulation.setTimezoneOverride',
+]);
+
+const canTrustedEmulation = (vector) =>
+  flatten(named([...(vector?.setup ?? []), ...(vector?.trigger ?? [])])).some((step) =>
+    trustedEmulationCdps.has(step.cdp)
+  );
+
 function skipWhy(vector, row, known, guard) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
   if (reason === skipReason(vector, row.target, guard)) return null;
   if (originReason(vector, row, reason)) return null;
+  if (reason === 'not-supported:trustedEmulation')
+    return canTrustedEmulation(vector)
+      ? null
+      : `skip with a reason the runner never gives: ${reason}`;
   if (reason.startsWith('not-supported:') && known.has(reason.slice('not-supported:'.length)))
     return null;
   return `skip with a reason the runner never gives: ${reason}`;
@@ -369,6 +383,7 @@ function forgeries(set, results, guard) {
   const known = new Set([
     'browserSession',
     'unguarded-observer',
+    'trustedEmulation',
     ...capabilities(set.vectors).filter((c) => typeof c === 'string' && c !== ''),
   ]);
   return results.flatMap((row) => {

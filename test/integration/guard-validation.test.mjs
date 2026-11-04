@@ -83,6 +83,8 @@ test('auth refusal patterns are declared and malformed observation patterns fail
       'debugger-stage1.json',
       'protected.mjs',
       'seven.mjs',
+      'extension-frames-rules.mjs',
+      'extension-frame.mjs',
     ])
       await symlink(new URL(name, root).pathname, join(directory, name));
     const malformed = structuredClone(vectors);

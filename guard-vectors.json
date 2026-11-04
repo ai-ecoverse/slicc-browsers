@@ -4646,6 +4646,634 @@
       "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {
+      "id": "C9.frame-offscreen",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "offscreen",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame offscreen: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame offscreen: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame offscreen: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame offscreen: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame offscreen: the snapshot exposes the extension document, private contents, or iframe src",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame offscreen: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame offscreen: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame offscreen: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame offscreen: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame offscreen: Runtime.evaluate exposes the light-DOM iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame offscreen: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame offscreen: PDF is refused with a slicc refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame offscreen: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["autoAttach"]
+        },
+        "targetInfoURL": {
+          "means": "extension frame offscreen: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "eventURL": {
+          "means": "extension frame offscreen: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["discovery"]
+        },
+        "archive": {
+          "means": "extension frame offscreen: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archiveRefusal": {
+          "means": "extension frame offscreen: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame offscreen: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame offscreen: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame offscreen: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "listed": {
+          "means": "extension frame offscreen: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "alive": {
+          "means": "extension frame offscreen: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame offscreen: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame offscreen: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame offscreen: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame offscreen: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame offscreen: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame offscreen: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame offscreen: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame offscreen: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame offscreen: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame offscreen: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame offscreen: the screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchKeyEvent": {
+          "means": "extension frame offscreen: dispatchKeyEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchKeyEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchKeyEventRefusal": {
+          "means": "extension frame offscreen: dispatchKeyEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchKeyEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchMouseEvent": {
+          "means": "extension frame offscreen: dispatchMouseEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchMouseEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchMouseEventRefusal": {
+          "means": "extension frame offscreen: dispatchMouseEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchMouseEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchTouchEvent": {
+          "means": "extension frame offscreen: dispatchTouchEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchTouchEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchTouchEventRefusal": {
+          "means": "extension frame offscreen: dispatchTouchEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchTouchEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchDragEvent": {
+          "means": "extension frame offscreen: dispatchDragEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchDragEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchDragEventRefusal": {
+          "means": "extension frame offscreen: dispatchDragEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchDragEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "emulateTouchFromMouseEvent": {
+          "means": "extension frame offscreen: emulateTouchFromMouseEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.emulateTouchFromMouseEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "emulateTouchFromMouseEventRefusal": {
+          "means": "extension frame offscreen: emulateTouchFromMouseEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.emulateTouchFromMouseEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "insertText": {
+          "means": "extension frame offscreen: insertText is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.insertText.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "insertTextRefusal": {
+          "means": "extension frame offscreen: insertText is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.insertText.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "imeSetComposition": {
+          "means": "extension frame offscreen: imeSetComposition is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.imeSetComposition.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "imeSetCompositionRefusal": {
+          "means": "extension frame offscreen: imeSetComposition is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.imeSetComposition.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizePinchGesture": {
+          "means": "extension frame offscreen: synthesizePinchGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizePinchGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizePinchGestureRefusal": {
+          "means": "extension frame offscreen: synthesizePinchGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizePinchGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizeScrollGesture": {
+          "means": "extension frame offscreen: synthesizeScrollGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeScrollGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizeScrollGestureRefusal": {
+          "means": "extension frame offscreen: synthesizeScrollGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeScrollGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizeTapGesture": {
+          "means": "extension frame offscreen: synthesizeTapGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeTapGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizeTapGestureRefusal": {
+          "means": "extension frame offscreen: synthesizeTapGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeTapGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is showing in the ordinary tab; screenshot and input are refused; a race between the visibility or focus check and the CDP reply is accepted",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": "either",
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": "either",
+          "evaluateLeak": true,
+          "archive": true,
+          "archiveRefusal": false,
+          "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
+          "shot": true,
+          "click": true,
+          "key": true,
+          "frameClick": true,
+          "tab": true,
+          "frameVisible": true,
+          "clickRefusal": false,
+          "keyRefusal": false,
+          "tabRefusal": false,
+          "frameClickRefusal": false,
+          "shotRefusal": false,
+          "dispatchKeyEvent": true,
+          "dispatchKeyEventRefusal": false,
+          "dispatchMouseEvent": true,
+          "dispatchMouseEventRefusal": false,
+          "dispatchTouchEvent": true,
+          "dispatchTouchEventRefusal": false,
+          "dispatchDragEvent": true,
+          "dispatchDragEventRefusal": false,
+          "emulateTouchFromMouseEvent": true,
+          "emulateTouchFromMouseEventRefusal": false,
+          "insertText": true,
+          "insertTextRefusal": false,
+          "imeSetComposition": true,
+          "imeSetCompositionRefusal": false,
+          "synthesizePinchGesture": true,
+          "synthesizePinchGestureRefusal": false,
+          "synthesizeScrollGesture": true,
+          "synthesizeScrollGestureRefusal": false,
+          "synthesizeTapGesture": true,
+          "synthesizeTapGestureRefusal": false
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
+        "archive": false,
+        "archiveRefusal": true,
+        "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
+        "shot": false,
+        "click": false,
+        "key": false,
+        "frameClick": false,
+        "tab": false,
+        "frameVisible": true,
+        "clickRefusal": true,
+        "keyRefusal": true,
+        "tabRefusal": true,
+        "frameClickRefusal": true,
+        "shotRefusal": true,
+        "dispatchKeyEvent": false,
+        "dispatchKeyEventRefusal": true,
+        "dispatchMouseEvent": false,
+        "dispatchMouseEventRefusal": true,
+        "dispatchTouchEvent": false,
+        "dispatchTouchEventRefusal": true,
+        "dispatchDragEvent": false,
+        "dispatchDragEventRefusal": true,
+        "emulateTouchFromMouseEvent": false,
+        "emulateTouchFromMouseEventRefusal": true,
+        "insertText": false,
+        "insertTextRefusal": true,
+        "imeSetComposition": false,
+        "imeSetCompositionRefusal": true,
+        "synthesizePinchGesture": false,
+        "synthesizePinchGestureRefusal": true,
+        "synthesizeScrollGesture": false,
+        "synthesizeScrollGestureRefusal": true,
+        "synthesizeTapGesture": false,
+        "synthesizeTapGestureRefusal": true
+      },
+      "designDependent": ["frameTreeLeak", "axLeak"]
+    },
+    {
       "id": "C9.frame-transparent",
       "family": "C",
       "kind": "cdp",

@@ -17,6 +17,8 @@ const STYLES = {
   hidden: 'f.hidden = true; f.style.cssText = ""',
   concealed:
     'f.hidden = false; f.style.cssText = "position:fixed;left:-999999px;top:0;width:300px;height:200px;border:0;visibility:hidden;opacity:0"',
+  offscreen:
+    'f.hidden = false; f.style.cssText = "position:fixed;left:-999999px;top:0;width:300px;height:200px;border:0"',
   shown: `f.hidden = false; f.style.cssText = ${JSON.stringify(BOX)}`,
   transparent: `f.hidden = false; f.style.cssText = ${JSON.stringify(`${BOX};opacity:0`)}`,
   nested: `f.hidden = false; f.style.cssText = ${JSON.stringify(BOX)}`,
@@ -245,11 +247,17 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   const snapshot = await outcome(
     client.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }, page)
   );
-  leaks.snapshot = snapshot.ok && Array.isArray(snapshot.result?.documents);
   if (!snapshot.ok) missing.push('DOMSnapshot.captureSnapshot failed');
-  else if (!hasPayload(snapshot.result) || !Array.isArray(snapshot.result.documents))
+  else if (
+    !hasPayload(snapshot.result) ||
+    !Array.isArray(snapshot.result.documents) ||
+    snapshot.result.documents.length === 0
+  )
     missing.push('DOMSnapshot.captureSnapshot returned no documents');
-  else leaks.snapshotFrameRead = snapshotReadsFrame(snapshot, extensionId, frameURL);
+  else {
+    leaks.snapshot = true;
+    leaks.snapshotFrameRead = snapshotReadsFrame(snapshot, extensionId, frameURL);
+  }
   return { ...leaks, snapshotOut: snapshot };
 }
 
@@ -665,7 +673,7 @@ export async function extensionFrame({
       exists: true,
       attached: attach.ok,
       read: read.ok && read.result.result?.value === origin && !carries(read.result),
-      snapshot: leaks.snapshot === true,
+      snapshot: leaks.snapshot,
       snapshotFrameRead: leaks.snapshotFrameRead,
       frameTreeLeak: leaks.frameTreeLeak,
       documentLeak: leaks.documentLeak,

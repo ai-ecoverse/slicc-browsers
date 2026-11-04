@@ -410,7 +410,14 @@ export function emulatedGuard(browser, options = {}) {
             const r = this.getBoundingClientRect();
             return r.width > 0 && r.height > 0;
           }`
-        : `function(){
+        : options.frameVisibility === 'viewport'
+          ? `function(){
+            if (!this.checkVisibility({visibilityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            if (!(r.width > 0 && r.height > 0)) return false;
+            return r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight;
+          }`
+          : `function(){
             if (!this.checkVisibility({visibilityProperty:true})) return false;
             const r = this.getBoundingClientRect();
             return r.width > 0 && r.height > 0;

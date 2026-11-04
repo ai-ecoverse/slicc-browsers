@@ -258,6 +258,12 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
       incomplete: true,
       incompleteMatch: /iframe\.src returned no string value/,
     },
+    {
+      name: 'empty DOM snapshot documents',
+      emptyDocuments: true,
+      incomplete: true,
+      incompleteMatch: /DOMSnapshot\.captureSnapshot returned no documents/,
+    },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
       name: 'foreign MHTML refusal',
@@ -297,6 +303,8 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
             params.expression.includes('.src')
           )
             return {};
+          if (mode.emptyDocuments && method === 'DOMSnapshot.captureSnapshot')
+            return { documents: [] };
           if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
             throw new Error(mode.mhtmlMessage);
           if (mode.secondFrameAttach && method === 'Target.attachToTarget') {
@@ -393,6 +401,7 @@ const expectations = {
   'visibility ignored': (id) =>
     ['C9.frame-hidden', 'C9.frame-concealed', 'C9.frame-focused'].includes(id) ? 'pass' : 'fail',
   'opacity counts as hidden': (id) => (id === 'C9.frame-transparent' ? 'fail' : 'pass'),
+  'off-screen counts as hidden': (id) => (id === 'C9.frame-offscreen' ? 'fail' : 'pass'),
   'focus ignored': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
   'screenshot ignores focus': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
   'input refused while hidden': (id) =>
@@ -458,7 +467,9 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
                   ? 'ignored'
                   : mode === 'opacity counts as hidden'
                     ? 'opacity'
-                    : undefined,
+                    : mode === 'off-screen counts as hidden'
+                      ? 'viewport'
+                      : undefined,
               frameFocus: mode === 'focus ignored' ? 'ignored' : undefined,
               screenshotFocus: mode === 'screenshot ignores focus' ? 'ignored' : undefined,
               refuse:

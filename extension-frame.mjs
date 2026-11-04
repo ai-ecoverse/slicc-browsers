@@ -510,7 +510,13 @@ async function driveCaptures(client, page, missing) {
 
 async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
   const captureStartedAt = await observe(reader, observer, 'performance.now()');
-  const pending = outcome(client.send('Page.captureScreenshot', { format: 'png' }, page));
+  let captureSettled = false;
+  const pending = outcome(client.send('Page.captureScreenshot', { format: 'png' }, page)).then(
+    (out) => {
+      captureSettled = true;
+      return out;
+    }
+  );
   const revealAt = await observe(
     reader,
     observer,
@@ -521,20 +527,15 @@ async function driveReveal(client, reader, page, observer, frameMs, missing, sid
       return performance.now();
     })()`
   );
+  const pendingWhenRevealAcknowledged = !captureSettled;
   const out = await pending;
-  const captureAnsweredAt = await observe(reader, observer, 'performance.now()');
   const ok = out.ok && typeof out.result?.data === 'string' && out.result.data.length > 0;
   const text = refusal(out);
   let overlap = 'unknown';
-  if (
-    typeof captureStartedAt === 'number' &&
-    typeof revealAt === 'number' &&
-    typeof captureAnsweredAt === 'number'
-  ) {
-    if (revealAt > captureStartedAt && revealAt < captureAnsweredAt) overlap = 'during';
-    else if (revealAt >= captureAnsweredAt) overlap = 'after';
-    else overlap = 'before';
-  }
+  if (typeof captureStartedAt !== 'number' || typeof revealAt !== 'number') overlap = 'unknown';
+  else if (revealAt <= captureStartedAt) overlap = 'before';
+  else if (pendingWhenRevealAcknowledged) overlap = 'during';
+  else if (captureSettled) overlap = 'after';
   if (overlap === 'unknown') missing.push('reveal/capture overlap unproven');
   const shownRefused = Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
   let revealRacePass = false;

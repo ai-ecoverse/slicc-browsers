@@ -158,6 +158,9 @@ test('C9.frame rows keep extensionFrame only; Target caps are per observation', 
     assert.deepEqual(vector.observe.listed.requires, ['browserSession']);
     assert.deepEqual(vector.observe.targetInfoURL.requires, ['browserSession']);
     assert.deepEqual(vector.observe.frameAttach.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.partialAxLeak.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.describeNodeLeak.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.outerHTMLLeak.requires, ['browserSession']);
     assert.deepEqual(vector.observe.eventURL.requires, ['discovery']);
     assert.deepEqual(vector.observe.autoAttached.requires, ['autoAttach']);
     assert.equal(vector.observe.shot.requires, undefined);
@@ -190,6 +193,9 @@ test('C9.frame Target observations skip without their caps; shot still runs', as
       assert.equal(row.observations.guarded.listed, 'not-supported');
       assert.equal(row.observations.guarded.autoAttached, 'not-supported');
       assert.equal(row.observations.guarded.eventURL, 'not-supported');
+      assert.equal(row.observations.guarded.partialAxLeak, 'not-supported');
+      assert.equal(row.observations.guarded.describeNodeLeak, 'not-supported');
+      assert.equal(row.observations.guarded.outerHTMLLeak, 'not-supported');
       assert.equal(typeof row.observations.guarded.shot, 'boolean');
     } finally {
       await guard.stop();
@@ -222,6 +228,16 @@ test('C9.frame without Target caps still passes when the transport rejects Targe
           ].includes(method)
         )
           throw new Error('Target domain unavailable');
+        if (method === 'Target.attachToTarget') {
+          const info = await browser.unguarded
+            .send('Target.getTargetInfo', { targetId: params.targetId })
+            .catch(() => null);
+          if (
+            typeof info?.targetInfo?.url === 'string' &&
+            info.targetInfo.url.startsWith('chrome-extension:')
+          )
+            throw new Error('Target domain unavailable');
+        }
         return guard.client.send(method, params, session);
       },
     };
@@ -244,6 +260,10 @@ test('C9.frame without Target caps still passes when the transport rejects Targe
     assert.equal(row.observations.guarded.targetInfoURL, 'not-supported');
     assert.equal(row.observations.guarded.autoAttached, 'not-supported');
     assert.equal(row.observations.guarded.eventURL, 'not-supported');
+    assert.equal(row.observations.guarded.frameAttach, 'not-supported');
+    assert.equal(row.observations.guarded.partialAxLeak, 'not-supported');
+    assert.equal(row.observations.guarded.describeNodeLeak, 'not-supported');
+    assert.equal(row.observations.guarded.outerHTMLLeak, 'not-supported');
     assert.equal(typeof row.observations.guarded.shot, 'boolean');
     assert.equal(typeof row.observations.guarded.click, 'boolean');
     assert.equal(typeof row.observations.guarded.read, 'boolean');

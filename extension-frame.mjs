@@ -273,6 +273,10 @@ function leakFrom(out, missing, failed, empty, extensionId, frameURL, value = ou
   return exposesExtension(value, extensionId, frameURL);
 }
 
+function hasCapability(capabilities, name) {
+  return Array.isArray(capabilities) ? capabilities.includes(name) : capabilities?.[name] === true;
+}
+
 async function frameReadSurfaceLeaks(
   client,
   page,
@@ -281,9 +285,11 @@ async function frameReadSurfaceLeaks(
   frame,
   extensionId,
   frameURL,
-  missing
+  missing,
+  capabilities = {}
 ) {
   const leaks = { partialAxLeak: false, describeNodeLeak: false, outerHTMLLeak: false };
+  if (!hasCapability(capabilities, 'browserSession')) return leaks;
   const nodes = await frameReadNodes(reader, observer, frame, missing);
   if (!nodes) return leaks;
   try {
@@ -371,6 +377,7 @@ async function pageLeaks({
   extensionId,
   frameURL,
   missing,
+  capabilities = {},
 }) {
   const leaks = {
     frameTreeLeak: false,
@@ -441,14 +448,11 @@ async function pageLeaks({
       frame,
       extensionId,
       frameURL,
-      missing
+      missing,
+      capabilities
     )
   );
   return { ...leaks, snapshotOut: snapshot };
-}
-
-function hasCapability(capabilities, name) {
-  return Array.isArray(capabilities) ? capabilities.includes(name) : capabilities?.[name] === true;
 }
 
 async function targetInfoExposure(client, frames, frameURL, extensionId, missing, result) {
@@ -902,6 +906,7 @@ export async function extensionFrame({
       extensionId,
       frameURL,
       missing,
+      capabilities,
     });
     if (mode === 'focused') await holdFocus(reader, frame);
     const picture = await shot(client, page);

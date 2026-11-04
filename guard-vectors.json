@@ -3204,6 +3204,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame hidden: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -3213,6 +3214,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame hidden: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -3222,6 +3224,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame hidden: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -3700,6 +3703,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame concealed: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -3709,6 +3713,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame concealed: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -3718,6 +3723,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame concealed: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4196,6 +4202,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame shown: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4205,6 +4212,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame shown: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4214,6 +4222,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame shown: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4857,6 +4866,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame offscreen: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4866,6 +4876,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame offscreen: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -4875,6 +4886,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame offscreen: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -5518,6 +5530,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame transparent: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -5527,6 +5540,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame transparent: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -5536,6 +5550,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame transparent: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6179,6 +6194,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame revealed: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6188,6 +6204,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame revealed: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6197,6 +6214,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame revealed: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6743,6 +6761,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame nested: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6752,6 +6771,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame nested: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -6761,6 +6781,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame nested: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -7397,6 +7418,7 @@
           }
         },
         "partialAxLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame focused: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -7406,6 +7428,7 @@
           }
         },
         "describeNodeLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame focused: DOM.describeNode exposes the extension frame URL or private content",
           "check": {
             "result": "frame",
@@ -7415,6 +7438,7 @@
           }
         },
         "outerHTMLLeak": {
+          "requires": ["browserSession"],
           "means": "extension frame focused: DOM.getOuterHTML exposes the extension frame URL or private content",
           "check": {
             "result": "frame",

@@ -89,7 +89,7 @@ async function style(reader, observer, mode, ms) {
   await painted(reader, observer, ms);
 }
 
-async function frameTarget(reader, targetId, extensionId) {
+async function frameTargets(reader, targetId, extensionId) {
   const prefix = `chrome-extension://${extensionId}/`;
   const deadline = Date.now() + 5000;
   do {
@@ -104,10 +104,10 @@ async function frameTarget(reader, targetId, extensionId) {
       }
       return false;
     };
-    const found = targetInfos.find(
+    const found = targetInfos.filter(
       (info) => info.type === 'iframe' && info.url.startsWith(prefix) && under(info)
     );
-    if (found) return found;
+    if (found.length) return found;
     await pause(50);
   } while (Date.now() < deadline);
   throw new Error(`extensionFrame: no frame target for ${extensionId}`);
@@ -243,19 +243,23 @@ async function targetExposure({
   reader,
   observer,
   page,
-  frame,
+  frames,
   frameURL,
   extensionId,
   eventStart,
   frameMs,
   missing,
 }) {
-  const result = {};
-  const info = await outcome(client.send('Target.getTargetInfo', { targetId: frame.targetId }));
-  if (!info.ok) missing.push('Target.getTargetInfo failed');
-  else if (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string')
-    missing.push('Target.getTargetInfo returned no targetInfo URL');
-  else result.targetInfoURL = exposesExtension(info.result, extensionId, frameURL);
+  const result = { autoAttached: false, eventURL: false, listed: false };
+  const ids = new Set(frames.map((frame) => frame.targetId));
+  for (const frame of frames) {
+    const info = await outcome(client.send('Target.getTargetInfo', { targetId: frame.targetId }));
+    if (!info.ok) missing.push('Target.getTargetInfo failed');
+    else if (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string')
+      missing.push('Target.getTargetInfo returned no targetInfo URL');
+    else if (exposesExtension(info.result, extensionId, frameURL)) result.targetInfoURL = true;
+    else if (result.targetInfoURL !== true) result.targetInfoURL = false;
+  }
   const auto = await outcome(
     client.send(
       'Target.setAutoAttach',
@@ -273,7 +277,7 @@ async function targetExposure({
         (event) =>
           event.method === 'Target.attachedToTarget' &&
           event.sessionId === page &&
-          event.params?.targetInfo?.targetId === frame.targetId &&
+          ids.has(event.params?.targetInfo?.targetId) &&
           typeof event.params.sessionId === 'string'
       );
       result.eventURL = events.some(
@@ -617,7 +621,8 @@ export async function extensionFrame({
     await reader.send('DOM.enable', {}, observer);
     await reader.send('Accessibility.enable', {}, observer);
     await embed(reader, observer, mode, frameURL);
-    const frame = await frameTarget(reader, targetId, extensionId);
+    const frames = await frameTargets(reader, targetId, extensionId);
+    const frame = frames[0];
     await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);
     const attach = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
@@ -677,14 +682,18 @@ export async function extensionFrame({
         result,
         await driveReveal(client, reader, page, observer, frameMs, missing, side)
       );
-    const frameAttach = await outcome(
-      client.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
-    );
-    if (frameAttach.ok)
-      await outcome(
-        client.send('Target.detachFromTarget', { sessionId: frameAttach.result.sessionId })
+    result.frameAttach = false;
+    for (const entry of frames) {
+      const frameAttach = await outcome(
+        client.send('Target.attachToTarget', { targetId: entry.targetId, flatten: true })
       );
-    result.frameAttach = frameAttach.ok;
+      if (frameAttach.ok) {
+        result.frameAttach = true;
+        await outcome(
+          client.send('Target.detachFromTarget', { sessionId: frameAttach.result.sessionId })
+        );
+      }
+    }
     Object.assign(
       result,
       await targetExposure({
@@ -692,7 +701,7 @@ export async function extensionFrame({
         reader,
         observer,
         page,
-        frame,
+        frames,
         frameURL,
         extensionId,
         eventStart,

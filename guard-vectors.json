@@ -3107,11 +3107,11 @@
         {
           "extensionFrame": "hidden",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "observe": {
         "exists": {
           "means": "extension frame hidden: the extension frame is in the tab",
@@ -3228,7 +3228,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame hidden: Target.getTargetInfo exposes the extension frame URL",
@@ -3237,7 +3238,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame hidden: target discovery events expose the extension frame URL",
@@ -3246,7 +3248,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame hidden: an MHTML capture is taken",
@@ -3291,7 +3294,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame hidden: Target.getTargets shows the extension frame's URL",
@@ -3300,7 +3304,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame hidden: the page session still answers",
@@ -3455,11 +3460,11 @@
         {
           "extensionFrame": "concealed",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "observe": {
         "exists": {
           "means": "extension frame concealed: the extension frame is in the tab",
@@ -3576,7 +3581,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame concealed: Target.getTargetInfo exposes the extension frame URL",
@@ -3585,7 +3591,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame concealed: target discovery events expose the extension frame URL",
@@ -3594,7 +3601,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame concealed: an MHTML capture is taken",
@@ -3639,7 +3647,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame concealed: Target.getTargets shows the extension frame's URL",
@@ -3648,7 +3657,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame concealed: the page session still answers",
@@ -3803,11 +3813,11 @@
         {
           "extensionFrame": "shown",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "observe": {
         "exists": {
           "means": "extension frame shown: the extension frame is in the tab",
@@ -3924,7 +3934,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame shown: Target.getTargetInfo exposes the extension frame URL",
@@ -3933,7 +3944,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame shown: target discovery events expose the extension frame URL",
@@ -3942,7 +3954,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame shown: an MHTML capture is taken",
@@ -3987,7 +4000,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame shown: Target.getTargets shows the extension frame's URL",
@@ -3996,7 +4010,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame shown: the page session still answers",
@@ -4206,11 +4221,11 @@
         {
           "extensionFrame": "transparent",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "observe": {
         "exists": {
           "means": "extension frame transparent: the extension frame is in the tab",
@@ -4327,7 +4342,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame transparent: Target.getTargetInfo exposes the extension frame URL",
@@ -4336,7 +4352,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame transparent: target discovery events expose the extension frame URL",
@@ -4345,7 +4362,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame transparent: an MHTML capture is taken",
@@ -4390,7 +4408,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame transparent: Target.getTargets shows the extension frame's URL",
@@ -4399,7 +4418,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame transparent: the page session still answers",
@@ -4609,11 +4629,11 @@
         {
           "extensionFrame": "revealed",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "observe": {
         "exists": {
           "means": "extension frame revealed: the extension frame is in the tab",
@@ -4730,7 +4750,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame revealed: Target.getTargetInfo exposes the extension frame URL",
@@ -4739,7 +4760,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame revealed: target discovery events expose the extension frame URL",
@@ -4748,7 +4770,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame revealed: an MHTML capture is taken",
@@ -4793,7 +4816,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame revealed: Target.getTargets shows the extension frame's URL",
@@ -4802,7 +4826,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame revealed: the page session still answers",
@@ -5019,11 +5044,11 @@
         {
           "extensionFrame": "nested",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -5146,7 +5171,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame nested: Target.getTargetInfo exposes the extension frame URL",
@@ -5155,7 +5181,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame nested: target discovery events expose the extension frame URL",
@@ -5164,7 +5191,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame nested: an MHTML capture is taken",
@@ -5209,7 +5237,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame nested: Target.getTargets shows the extension frame's URL",
@@ -5218,7 +5247,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame nested: the page session still answers",
@@ -5419,7 +5449,7 @@
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
+      "requires": ["extensionFrame"],
       "liveCheck": {
         "result": "frame",
         "path": "result.frameFocused",
@@ -5542,7 +5572,8 @@
             "path": "result.autoAttached",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["autoAttach"]
         },
         "targetInfoURL": {
           "means": "extension frame focused: Target.getTargetInfo exposes the extension frame URL",
@@ -5551,7 +5582,8 @@
             "path": "result.targetInfoURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "eventURL": {
           "means": "extension frame focused: target discovery events expose the extension frame URL",
@@ -5560,7 +5592,8 @@
             "path": "result.eventURL",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["discovery"]
         },
         "archive": {
           "means": "extension frame focused: an MHTML capture is taken",
@@ -5605,7 +5638,8 @@
             "path": "result.frameAttach",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "listed": {
           "means": "extension frame focused: Target.getTargets shows the extension frame's URL",
@@ -5614,7 +5648,8 @@
             "path": "result.listed",
             "equals": true,
             "observer": "client"
-          }
+          },
+          "requires": ["browserSession"]
         },
         "alive": {
           "means": "extension frame focused: the page session still answers",
@@ -5879,7 +5914,7 @@
         {
           "extensionFrame": "focused",
           "as": "frame",
-          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
+          "requires": ["extensionFrame"]
         }
       ],
       "live": "the observer confirms the concealed extension frame is focused before screenshot, keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",

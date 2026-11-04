@@ -100,10 +100,51 @@ test('forgeries reject not-supported:extensionFrame when the run declared the ca
   assert.equal(honest.pass, true);
 });
 
-test('C9.frame rows require discovery, autoAttach and browserSession', () => {
+test('C9.frame rows keep extensionFrame only; Target caps are per observation', () => {
   for (const vector of vectors) {
-    for (const cap of ['extensionFrame', 'discovery', 'autoAttach', 'browserSession'])
-      assert.ok(vector.requires.includes(cap), `${vector.id} missing ${cap}`);
+    assert.deepEqual(vector.requires, ['extensionFrame']);
+    assert.deepEqual(vector.observe.listed.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.targetInfoURL.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.frameAttach.requires, ['browserSession']);
+    assert.deepEqual(vector.observe.eventURL.requires, ['discovery']);
+    assert.deepEqual(vector.observe.autoAttached.requires, ['autoAttach']);
+    assert.equal(vector.observe.shot.requires, undefined);
+  }
+});
+
+test('C9.frame Target observations skip without their caps; shot still runs', async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  try {
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extensionFrames: true,
+    });
+    try {
+      const execution = await run(
+        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          targets: origins(fixture),
+          capabilities: { extensionFrame: true, chromeUrlsAttach: true, browserContexts: true },
+          rowTimeoutMs: 60000,
+        }
+      );
+      const row = execution.results[0];
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.equal(row.guarded, 'pass', JSON.stringify(row));
+      assert.equal(row.observations.guarded.listed, 'not-supported');
+      assert.equal(row.observations.guarded.autoAttached, 'not-supported');
+      assert.equal(row.observations.guarded.eventURL, 'not-supported');
+      assert.equal(typeof row.observations.guarded.shot, 'boolean');
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await browser.close();
+    await fixture.close();
   }
 });
 
@@ -154,6 +195,11 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
       redactedOrigin: true,
       observation: 'listed',
     },
+    {
+      name: 'second frame attach',
+      secondFrameAttach: true,
+      observation: 'frameAttach',
+    },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
       name: 'foreign MHTML refusal',
@@ -188,6 +234,18 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
             throw new Error('Target.getTargetInfo dropped');
           if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
             throw new Error(mode.mhtmlMessage);
+          if (mode.secondFrameAttach && method === 'Target.attachToTarget') {
+            const { targetInfo } = await browser.unguarded.send('Target.getTargetInfo', {
+              targetId: params.targetId,
+            });
+            if (targetInfo?.type === 'iframe') {
+              if (!mode.primaryFrameId) {
+                mode.primaryFrameId = params.targetId;
+                throw new Error(frames.shownRefusal);
+              }
+              if (params.targetId === mode.primaryFrameId) throw new Error(frames.shownRefusal);
+            }
+          }
           const answer = await guard.client.send(method, params, session);
           if (mode.redactedOrigin && method === 'Target.getTargets') {
             const origin = `chrome-extension://${DEFAULT_EXTENSION_WORLD_ID}`;

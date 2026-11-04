@@ -198,7 +198,140 @@ function snapshotReadsFrame(snapshot, extensionId, frameURL) {
 const hasPayload = (value) =>
   value != null && typeof value === 'object' && Object.keys(value).length > 0;
 
-async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
+function markerBackendNodeId(node) {
+  if (!node) return null;
+  if (node.nodeType === 3 && typeof node.nodeValue === 'string' && node.nodeValue.includes(MARKER))
+    return node.backendNodeId;
+  const attrs = node.attributes ?? [];
+  for (let i = 0; i + 1 < attrs.length; i += 2)
+    if (typeof attrs[i + 1] === 'string' && attrs[i + 1].includes(MARKER))
+      return node.backendNodeId;
+  for (const child of node.children ?? []) {
+    const hit = markerBackendNodeId(child);
+    if (hit != null) return hit;
+  }
+  return null;
+}
+
+async function frameReadNodes(reader, observer, frame, missing) {
+  const attached = await outcome(
+    reader.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
+  );
+  if (!attached.ok || typeof attached.result?.sessionId !== 'string') {
+    missing.push('observer could not attach to extension frame for frame-read nodes');
+    return null;
+  }
+  const session = attached.result.sessionId;
+  try {
+    await outcome(reader.send('DOM.enable', {}, session));
+    const tree = await outcome(reader.send('Page.getFrameTree', {}, session));
+    const frameId = tree.result?.frameTree?.frame?.id;
+    if (typeof frameId !== 'string' || !frameId) {
+      missing.push('observer extension frame has no frame id');
+      return null;
+    }
+    const owner = await outcome(reader.send('DOM.getFrameOwner', { frameId }, observer));
+    if (!owner.ok || typeof owner.result?.backendNodeId !== 'number') {
+      missing.push('observer DOM.getFrameOwner returned no backendNodeId');
+      return null;
+    }
+    const document = await outcome(
+      reader.send('DOM.getDocument', { depth: -1, pierce: true }, session)
+    );
+    const root = document.result?.root;
+    const markerNodeId = markerBackendNodeId(root) ?? root?.backendNodeId;
+    if (markerNodeId == null) {
+      missing.push('observer found no marker node in the extension frame');
+      return null;
+    }
+    return {
+      session,
+      iframeNodeId: owner.result.backendNodeId,
+      markerNodeId,
+    };
+  } catch (error) {
+    await outcome(reader.send('Target.detachFromTarget', { sessionId: session }));
+    throw error;
+  }
+}
+
+function leakFrom(out, missing, empty, extensionId, frameURL, value = out.result) {
+  if (!out.ok) return false;
+  if (value == null || (typeof value === 'object' && !hasPayload(value))) {
+    missing.push(empty);
+    return false;
+  }
+  return exposesExtension(value, extensionId, frameURL);
+}
+
+async function frameReadSurfaceLeaks(
+  client,
+  page,
+  reader,
+  observer,
+  frame,
+  extensionId,
+  frameURL,
+  missing
+) {
+  const leaks = { partialAxLeak: false, describeNodeLeak: false, outerHTMLLeak: false };
+  const nodes = await frameReadNodes(reader, observer, frame, missing);
+  if (!nodes) return leaks;
+  try {
+    await outcome(client.send('Accessibility.enable', {}, nodes.session));
+    leaks.partialAxLeak = leakFrom(
+      await outcome(
+        client.send(
+          'Accessibility.getPartialAXTree',
+          { backendNodeId: nodes.markerNodeId, fetchRelatives: true },
+          nodes.session
+        )
+      ),
+      missing,
+      'Accessibility.getPartialAXTree returned no result',
+      extensionId,
+      frameURL
+    );
+    leaks.describeNodeLeak = leakFrom(
+      await outcome(
+        client.send(
+          'DOM.describeNode',
+          { backendNodeId: nodes.iframeNodeId, depth: -1, pierce: true },
+          page
+        )
+      ),
+      missing,
+      'DOM.describeNode returned no result',
+      extensionId,
+      frameURL
+    );
+    const html = await outcome(
+      client.send('DOM.getOuterHTML', { backendNodeId: nodes.iframeNodeId }, page)
+    );
+    leaks.outerHTMLLeak = leakFrom(
+      html,
+      missing,
+      'DOM.getOuterHTML returned no outerHTML string',
+      extensionId,
+      frameURL,
+      typeof html.result?.outerHTML === 'string' ? html.result.outerHTML : null
+    );
+    return leaks;
+  } finally {
+    await outcome(reader.send('Target.detachFromTarget', { sessionId: nodes.session }));
+  }
+}
+
+async function pageLeaks({
+  client,
+  page,
+  reader,
+  observer,
+  frame,
+  extensionId,
+  frameURL,
+  missing,
+}) {
   const leaks = {
     frameTreeLeak: false,
     documentLeak: false,
@@ -258,6 +391,19 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
     leaks.snapshot = true;
     leaks.snapshotFrameRead = snapshotReadsFrame(snapshot, extensionId, frameURL);
   }
+  Object.assign(
+    leaks,
+    await frameReadSurfaceLeaks(
+      client,
+      page,
+      reader,
+      observer,
+      frame,
+      extensionId,
+      frameURL,
+      missing
+    )
+  );
   return { ...leaks, snapshotOut: snapshot };
 }
 
@@ -664,7 +810,16 @@ export async function extensionFrame({
     const read = await outcome(
       client.send('Runtime.evaluate', { expression: 'self.origin', returnByValue: true }, page)
     );
-    const leaks = await pageLeaks({ client, page, extensionId, frameURL, missing });
+    const leaks = await pageLeaks({
+      client,
+      page,
+      reader,
+      observer,
+      frame,
+      extensionId,
+      frameURL,
+      missing,
+    });
     if (mode === 'focused') await holdFocus(reader, frame);
     const picture = await shot(client, page);
     const input = await driveInput(client, reader, page, observer, inputList, mode, frame);
@@ -680,6 +835,9 @@ export async function extensionFrame({
       shadowDocumentLeak: leaks.shadowDocumentLeak,
       axLeak: leaks.axLeak,
       evaluateLeak: leaks.evaluateLeak,
+      partialAxLeak: leaks.partialAxLeak,
+      describeNodeLeak: leaks.describeNodeLeak,
+      outerHTMLLeak: leaks.outerHTMLLeak,
       shot: picture.ok,
       shotRefusal: refusal(picture.out),
       click: input.pressed.ok,

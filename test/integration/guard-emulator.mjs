@@ -514,6 +514,7 @@ export function emulatedGuard(browser, options = {}) {
       catalog &&
       !options.catalogAttachOnly &&
       targetId &&
+      !(options.forwardFrameReads ?? []).includes(method) &&
       (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
       (await decision(targetId))
     )
@@ -782,9 +783,13 @@ export function emulatedGuard(browser, options = {}) {
         'DOM.getDocument',
         'DOMSnapshot.captureSnapshot',
         'Accessibility.getFullAXTree',
+        'Accessibility.getPartialAXTree',
+        'DOM.describeNode',
+        'DOM.getOuterHTML',
         'Runtime.evaluate',
       ].includes(method) &&
-      !options.exposeFramePageReads
+      !options.exposeFramePageReads &&
+      !(options.forwardFrameReads ?? []).includes(method)
     )
       return scrubExtensionSecrets(result);
     return options.redirectSecrets && catalog ? redactProtectedURLs(result, catalog) : result;

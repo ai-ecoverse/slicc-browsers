@@ -12,7 +12,6 @@ import {
   debuggerPaused,
   expand,
   hop,
-  idleDebuggerCleanup,
   inapplicable,
   isRefusal,
   knownOrigins,
@@ -21,10 +20,12 @@ import {
   outcome,
   owned,
   parseURL,
+  refusalError,
   summary as report,
   result,
   skipReason,
   steps,
+  trustedClientOnly,
   waitFor,
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
@@ -89,17 +90,6 @@ const stateCheck = (check) =>
     .find(Boolean);
 const refusedOut = (step, out) =>
   step.refusable ? isRefusal(out, step) : /refused/.test(String(out.error?.message ?? out.error));
-const trustedEmulationMethods = new Set([
-  'Emulation.setLocaleOverride',
-  'Emulation.setTimezoneOverride',
-]);
-const trustedClientOnly = (step, out) =>
-  trustedEmulationMethods.has(step.cdp) &&
-  !out.ok &&
-  Number(out.error?.code) === -32000 &&
-  /only available to trusted clients/i.test(String(out.error?.message ?? ''));
-const refusalError = (step, out, refused, gone, phase, vector) =>
-  step.refusable && !out.ok && !refused && !gone && !idleDebuggerCleanup(vector, step, phase, out);
 
 function pageExpression(step, url) {
   let expression;

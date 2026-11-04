@@ -354,14 +354,14 @@ export const skipReason = (vector, target, scope) => {
 
 export const inapplicable = (vector, target, scope) => skipReason(vector, target, scope) !== null;
 
-const trustedEmulationCdps = new Set([
+const trustedEmulationMethods = new Set([
   'Emulation.setLocaleOverride',
   'Emulation.setTimezoneOverride',
 ]);
 
 const canTrustedEmulation = (vector) =>
   flatten(named([...(vector?.setup ?? []), ...(vector?.trigger ?? [])])).some((step) =>
-    trustedEmulationCdps.has(step.cdp)
+    trustedEmulationMethods.has(step.cdp)
   );
 
 function skipWhy(vector, row, known, guard) {
@@ -458,3 +458,12 @@ export const idleDebuggerCleanup = (vector, step, phase, out) =>
 
 export const debuggerPaused = (events, session) =>
   events.some((event) => event.sessionId === session && event.method === 'Debugger.paused');
+
+export const trustedClientOnly = (step, out) =>
+  trustedEmulationMethods.has(step.cdp) &&
+  !out.ok &&
+  Number(out.error?.code) === -32000 &&
+  /only available to trusted clients/i.test(String(out.error?.message ?? ''));
+
+export const refusalError = (step, out, refused, gone, phase, vector) =>
+  step.refusable && !out.ok && !refused && !gone && !idleDebuggerCleanup(vector, step, phase, out);

@@ -3247,7 +3247,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -3295,7 +3295,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -3313,7 +3313,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -3746,7 +3746,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -3794,7 +3794,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -3812,7 +3812,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4245,7 +4245,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4293,7 +4293,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4311,7 +4311,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4909,7 +4909,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4957,7 +4957,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -4975,7 +4975,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -5573,7 +5573,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -5621,7 +5621,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -5639,7 +5639,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6237,7 +6237,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6285,7 +6285,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6303,7 +6303,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6804,7 +6804,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6852,7 +6852,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -6870,7 +6870,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -7461,7 +7461,7 @@
           "check": {
             "result": "frame",
             "path": "result.pdfRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -7509,7 +7509,7 @@
           "check": {
             "result": "frame",
             "path": "result.archiveRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -7527,7 +7527,7 @@
           "check": {
             "result": "frame",
             "path": "result.castRefusal",
-            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
             "observer": "client"
           }
         },
@@ -8045,6 +8045,692 @@
       ],
       "live": "the observer confirms the concealed extension frame is focused before screenshot, keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",
       "designDependent": ["frameTreeLeak", "axLeak"]
+    },
+    {
+      "id": "C9.frame-cast",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "cast",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "observe": {
+        "exists": {
+          "means": "extension frame cast: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame cast: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame cast: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame cast: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame cast: the snapshot exposes the extension document, private contents, or iframe src",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame cast: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame cast: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame cast: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame cast: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame cast: Runtime.evaluate exposes the light-DOM iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "partialAxLeak": {
+          "requires": ["browserSession"],
+          "means": "extension frame cast: Accessibility.getPartialAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.partialAxLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "describeNodeLeak": {
+          "requires": ["browserSession"],
+          "means": "extension frame cast: DOM.describeNode exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.describeNodeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "outerHTMLLeak": {
+          "requires": ["browserSession"],
+          "means": "extension frame cast: DOM.getOuterHTML exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.outerHTMLLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame cast: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame cast: PDF is refused with a slicc refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame cast: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["autoAttach"]
+        },
+        "targetInfoURL": {
+          "means": "extension frame cast: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "eventURL": {
+          "means": "extension frame cast: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["discovery"]
+        },
+        "archive": {
+          "means": "extension frame cast: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archiveRefusal": {
+          "means": "extension frame cast: MHTML is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame cast: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame cast: screencast is refused with a slicc refusal (presentRefusal or any slicc: refused)",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it; an active screencast is stopped or its frames are dropped until the frame is gone",
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame cast: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "listed": {
+          "means": "extension frame cast: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["browserSession"]
+        },
+        "alive": {
+          "means": "extension frame cast: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame cast: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame cast: a click reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame cast: typed text reaches the page a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame cast: a click on the frame box is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame cast: Tab is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame cast: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame cast: the click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame cast: the typing is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame cast: Tab is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameClickRefusal": {
+          "means": "extension frame cast: the frame-box click is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame cast: the screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchKeyEvent": {
+          "means": "extension frame cast: dispatchKeyEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchKeyEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchKeyEventRefusal": {
+          "means": "extension frame cast: dispatchKeyEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchKeyEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchMouseEvent": {
+          "means": "extension frame cast: dispatchMouseEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchMouseEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchMouseEventRefusal": {
+          "means": "extension frame cast: dispatchMouseEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchMouseEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchTouchEvent": {
+          "means": "extension frame cast: dispatchTouchEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchTouchEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchTouchEventRefusal": {
+          "means": "extension frame cast: dispatchTouchEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchTouchEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "dispatchDragEvent": {
+          "means": "extension frame cast: dispatchDragEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchDragEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "dispatchDragEventRefusal": {
+          "means": "extension frame cast: dispatchDragEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.dispatchDragEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "emulateTouchFromMouseEvent": {
+          "means": "extension frame cast: emulateTouchFromMouseEvent is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.emulateTouchFromMouseEvent.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "emulateTouchFromMouseEventRefusal": {
+          "means": "extension frame cast: emulateTouchFromMouseEvent is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.emulateTouchFromMouseEvent.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "insertText": {
+          "means": "extension frame cast: insertText is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.insertText.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "insertTextRefusal": {
+          "means": "extension frame cast: insertText is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.insertText.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "imeSetComposition": {
+          "means": "extension frame cast: imeSetComposition is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.imeSetComposition.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "imeSetCompositionRefusal": {
+          "means": "extension frame cast: imeSetComposition is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.imeSetComposition.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizePinchGesture": {
+          "means": "extension frame cast: synthesizePinchGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizePinchGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizePinchGestureRefusal": {
+          "means": "extension frame cast: synthesizePinchGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizePinchGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizeScrollGesture": {
+          "means": "extension frame cast: synthesizeScrollGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeScrollGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizeScrollGestureRefusal": {
+          "means": "extension frame cast: synthesizeScrollGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeScrollGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "synthesizeTapGesture": {
+          "means": "extension frame cast: synthesizeTapGesture is delivered a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeTapGesture.ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "synthesizeTapGestureRefusal": {
+          "means": "extension frame cast: synthesizeTapGesture is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.inputs.synthesizeTapGesture.refusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "castBefore": {
+          "means": "extension frame cast: Page.startScreencast succeeds on the clean tab before the frame is embedded",
+          "check": {
+            "result": "frame",
+            "path": "result.castBefore",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "castLeak": {
+          "means": "extension frame cast: Page.screencastFrame is delivered after the extension frame appears",
+          "check": {
+            "result": "frame",
+            "path": "result.castLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; no Page.screencastFrame arrives after the frame appears (a refusal of Page.startScreencast on the clean tab also satisfies the row)",
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": "either",
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": "either",
+          "evaluateLeak": true,
+          "archive": true,
+          "archiveRefusal": false,
+          "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
+          "shot": true,
+          "click": true,
+          "key": true,
+          "frameClick": true,
+          "tab": true,
+          "frameVisible": true,
+          "clickRefusal": false,
+          "keyRefusal": false,
+          "tabRefusal": false,
+          "frameClickRefusal": false,
+          "shotRefusal": false,
+          "dispatchKeyEvent": true,
+          "dispatchKeyEventRefusal": false,
+          "dispatchMouseEvent": true,
+          "dispatchMouseEventRefusal": false,
+          "dispatchTouchEvent": true,
+          "dispatchTouchEventRefusal": false,
+          "dispatchDragEvent": true,
+          "dispatchDragEventRefusal": false,
+          "emulateTouchFromMouseEvent": true,
+          "emulateTouchFromMouseEventRefusal": false,
+          "insertText": true,
+          "insertTextRefusal": false,
+          "imeSetComposition": true,
+          "imeSetCompositionRefusal": false,
+          "synthesizePinchGesture": true,
+          "synthesizePinchGestureRefusal": false,
+          "synthesizeScrollGesture": true,
+          "synthesizeScrollGestureRefusal": false,
+          "synthesizeTapGesture": true,
+          "synthesizeTapGestureRefusal": false,
+          "partialAxLeak": true,
+          "describeNodeLeak": true,
+          "outerHTMLLeak": true,
+          "castBefore": true,
+          "castLeak": true
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
+        "archive": false,
+        "archiveRefusal": true,
+        "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
+        "shot": false,
+        "click": false,
+        "key": false,
+        "frameClick": false,
+        "tab": false,
+        "frameVisible": true,
+        "clickRefusal": true,
+        "keyRefusal": true,
+        "tabRefusal": true,
+        "frameClickRefusal": true,
+        "shotRefusal": true,
+        "dispatchKeyEvent": false,
+        "dispatchKeyEventRefusal": true,
+        "dispatchMouseEvent": false,
+        "dispatchMouseEventRefusal": true,
+        "dispatchTouchEvent": false,
+        "dispatchTouchEventRefusal": true,
+        "dispatchDragEvent": false,
+        "dispatchDragEventRefusal": true,
+        "emulateTouchFromMouseEvent": false,
+        "emulateTouchFromMouseEventRefusal": true,
+        "insertText": false,
+        "insertTextRefusal": true,
+        "imeSetComposition": false,
+        "imeSetCompositionRefusal": true,
+        "synthesizePinchGesture": false,
+        "synthesizePinchGestureRefusal": true,
+        "synthesizeScrollGesture": false,
+        "synthesizeScrollGestureRefusal": true,
+        "synthesizeTapGesture": false,
+        "synthesizeTapGestureRefusal": true,
+        "partialAxLeak": false,
+        "describeNodeLeak": false,
+        "outerHTMLLeak": false,
+        "castBefore": "either",
+        "castLeak": false
+      },
+      "designDependent": ["frameTreeLeak", "axLeak", "castBefore"]
     },
     {
       "id": "C1.script-nav",

@@ -92,6 +92,8 @@ export function emulatedGuard(browser, options = {}) {
   const extensionContexts = new Map();
   const cutSessions = new Set();
   const cutFrameSessions = new Set();
+  const casting = new Set();
+  const castStopped = new Set();
   const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
   const learnWorlds = () => {
     for (const event of client.events) {
@@ -263,6 +265,24 @@ export function emulatedGuard(browser, options = {}) {
               cutFrameSessions.has(event.params.sessionId))
           )
             continue;
+          if (
+            event.method === 'Page.screencastFrame' &&
+            !options.keepScreencastStreaming &&
+            (casting.has(event.sessionId) || castStopped.has(event.sessionId))
+          ) {
+            const owner = sessions.get(event.sessionId);
+            if (
+              castStopped.has(event.sessionId) ||
+              (owner && (await extensionFramesOf(owner)).length > 0)
+            ) {
+              if (casting.has(event.sessionId) && !castStopped.has(event.sessionId)) {
+                castStopped.add(event.sessionId);
+                casting.delete(event.sessionId);
+                await client.send('Page.stopScreencast', {}, event.sessionId).catch(() => {});
+              }
+              continue;
+            }
+          }
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
@@ -714,6 +734,11 @@ export function emulatedGuard(browser, options = {}) {
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
     const result = await client.send(method, params, sessionId);
+    if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
+    if (method === 'Page.stopScreencast' && sessionId) {
+      casting.delete(sessionId);
+      castStopped.delete(sessionId);
+    }
     const after = held.length ? await extensionFramesOf(targetId) : [];
     const focusBlocksAfter =
       after.length > 0 &&

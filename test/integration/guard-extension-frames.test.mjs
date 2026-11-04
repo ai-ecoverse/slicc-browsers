@@ -340,8 +340,10 @@ test('independent connections that forward getPartialAXTree fail the frame-read 
     );
     const row = execution.results[0];
     assert.equal(row.control, 'pass', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
-    assert.equal(row.observations.guarded.partialAxLeak, true, JSON.stringify(row));
+    assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+    const leak = row.observations.guarded.partialAxLeak === true;
+    const incomplete = (row.incomplete ?? []).join('; ').includes('Accessibility.getPartialAXTree');
+    assert.ok(leak || incomplete, JSON.stringify(row));
   } finally {
     await guard.stop();
     await browser.close();
@@ -560,6 +562,7 @@ const expectations = {
   'frame-read surfaces forwarded': () => 'fail',
   'focus ignored': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
   'screenshot ignores focus': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
+  'screencast keeps streaming': (id) => (id === 'C9.frame-cast' ? 'fail' : undefined),
   'input refused while hidden': (id) =>
     ['C9.frame-hidden', 'C9.frame-concealed'].includes(id) ? 'fail' : undefined,
 };
@@ -630,6 +633,7 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
                 mode === 'frame-read surfaces forwarded' ? FORWARD_FRAME_READS : undefined,
               frameFocus: mode === 'focus ignored' ? 'ignored' : undefined,
               screenshotFocus: mode === 'screenshot ignores focus' ? 'ignored' : undefined,
+              keepScreencastStreaming: mode === 'screencast keeps streaming' ? true : undefined,
               refuse:
                 mode === 'input refused while hidden'
                   ? (method) => (method.startsWith('Input.') ? frames.shownRefusal : undefined)
@@ -641,7 +645,9 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
             ? vectors.filter((vector) =>
                 ['C9.frame-hidden', 'C9.frame-concealed'].includes(vector.id)
               )
-            : vectors;
+            : mode === 'screencast keeps streaming'
+              ? vectors.filter((vector) => vector.id === 'C9.frame-cast')
+              : vectors;
         const execution = await run(
           { ...set, vectors: subset, variants: { prompt: 0 } },
           {

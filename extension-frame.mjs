@@ -563,11 +563,13 @@ async function embed(reader, observer, mode, frameURL) {
   const styleMode =
     mode === 'revealed'
       ? 'hidden'
-      : mode === 'focused'
-        ? 'focused'
-        : mode === 'nested'
-          ? 'nested'
-          : mode;
+      : mode === 'cast'
+        ? 'shown'
+        : mode === 'focused'
+          ? 'focused'
+          : mode === 'nested'
+            ? 'nested'
+            : mode;
   const src = `${frameURL}?username=${USERNAME}`;
   if (mode === 'nested') {
     return observe(
@@ -799,6 +801,28 @@ async function driveCaptures(client, page, missing) {
   return { archive, pdf, cast, begin };
 }
 
+async function driveCast(client, page, frameMs) {
+  const start = await outcome(
+    client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
+  );
+  const cursor = client.events?.length ?? 0;
+  return {
+    castBefore: start.ok,
+    castBeforeRefusal: presentish(start),
+    async afterEmbed() {
+      await pause(Math.max(frameMs, 200));
+      const frames = (client.events ?? [])
+        .slice(cursor)
+        .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
+      if (start.ok) await outcome(client.send('Page.stopScreencast', {}, page));
+      return {
+        castLeak: frames.length > 0,
+        castFramesAfter: frames.length,
+      };
+    },
+  };
+}
+
 export async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
   const captureStartedAt = await observe(reader, observer, 'performance.now()');
   let captureSettled = false;
@@ -876,6 +900,17 @@ export async function extensionFrame({
     await reader.send('Runtime.enable', {}, observer);
     await reader.send('DOM.enable', {}, observer);
     await reader.send('Accessibility.enable', {}, observer);
+    let castDrive;
+    if (mode === 'cast') {
+      const attachEarly = await outcome(
+        client.send('Target.attachToTarget', { targetId, flatten: true })
+      );
+      page = attachEarly.ok ? attachEarly.result.sessionId : session;
+      pageAttached = attachEarly.ok;
+      await outcome(client.send('DOM.enable', {}, page));
+      await outcome(client.send('Accessibility.enable', {}, page));
+      castDrive = await driveCast(client, page, frameMs);
+    }
     await embed(reader, observer, mode, frameURL);
     const want = mode === 'focused' ? 1 : 2;
     const frames = await frameTargets(
@@ -889,11 +924,16 @@ export async function extensionFrame({
     const frame = frames[0];
     await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);
-    const attach = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
-    page = attach.ok ? attach.result.sessionId : session;
-    pageAttached = attach.ok;
-    await outcome(client.send('DOM.enable', {}, page));
-    await outcome(client.send('Accessibility.enable', {}, page));
+    const castAfter = castDrive ? await castDrive.afterEmbed() : null;
+    if (!page) {
+      const attach = await outcome(
+        client.send('Target.attachToTarget', { targetId, flatten: true })
+      );
+      page = attach.ok ? attach.result.sessionId : session;
+      pageAttached = attach.ok;
+      await outcome(client.send('DOM.enable', {}, page));
+      await outcome(client.send('Accessibility.enable', {}, page));
+    }
     const read = await outcome(
       client.send('Runtime.evaluate', { expression: 'self.origin', returnByValue: true }, page)
     );
@@ -914,7 +954,7 @@ export async function extensionFrame({
     const captures = await driveCaptures(client, page, missing);
     const result = {
       exists: true,
-      attached: attach.ok,
+      attached: pageAttached,
       read: read.ok && read.result.result?.value === origin && !carries(read.result),
       snapshot: leaks.snapshot,
       snapshotFrameRead: leaks.snapshotFrameRead,
@@ -954,6 +994,14 @@ export async function extensionFrame({
       beginFrameRefusal: presentish(captures.begin),
       inputs: input.inputs,
     };
+    if (castDrive) {
+      result.castBefore = castDrive.castBefore;
+      result.castBeforeRefusal = castDrive.castBeforeRefusal;
+      result.castLeak = castAfter.castLeak;
+      result.castFramesAfter = castAfter.castFramesAfter;
+      if (side === 'control' && castDrive.castBefore && !castAfter.castLeak)
+        missing.push('control screencast produced no frames after the extension frame appeared');
+    }
     if (mode === 'revealed')
       Object.assign(
         result,

@@ -537,7 +537,8 @@
                 "transparent",
                 "revealed",
                 "nested",
-                "focused"
+                "focused",
+                "cast"
               ]
             },
             "as": {

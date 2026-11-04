@@ -6,6 +6,7 @@ const INPUT_METHODS = catalog.protectedOrigins.extensionFrames.whenShown.filter(
   method.startsWith('Input.')
 );
 const PRESENT = catalog.protectedOrigins.extensionFrames.presentRefusal;
+const SHOWN = catalog.protectedOrigins.extensionFrames.shownRefusal;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const FRAME = 'slicc-extension-frame';
@@ -507,19 +508,46 @@ async function driveCaptures(client, page, missing) {
   return { archive, pdf, cast, begin };
 }
 
-async function driveReveal(client, reader, page, observer, frameMs) {
-  const flipping = (async () => {
-    await pause(20);
-    await style(reader, observer, 'shown', Math.min(frameMs, 200));
-  })();
-  const revealed = await shot(client, page);
-  await flipping;
+async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
+  const captureStartedAt = await observe(reader, observer, 'performance.now()');
+  const pending = outcome(client.send('Page.captureScreenshot', { format: 'png' }, page));
+  const revealAt = await observe(
+    reader,
+    observer,
+    `(() => {
+      const f = ${frameLookup};
+      if (!f) return null;
+      ${STYLES.shown};
+      return performance.now();
+    })()`
+  );
+  const out = await pending;
+  const captureAnsweredAt = await observe(reader, observer, 'performance.now()');
+  const ok = out.ok && typeof out.result?.data === 'string' && out.result.data.length > 0;
+  const text = refusal(out);
+  let overlap = 'unknown';
+  if (
+    typeof captureStartedAt === 'number' &&
+    typeof revealAt === 'number' &&
+    typeof captureAnsweredAt === 'number'
+  ) {
+    if (revealAt > captureStartedAt && revealAt < captureAnsweredAt) overlap = 'during';
+    else if (revealAt >= captureAnsweredAt) overlap = 'after';
+    else overlap = 'before';
+  }
+  if (overlap === 'unknown') missing.push('reveal/capture overlap unproven');
+  const shownRefused = Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
+  let revealRacePass = false;
+  if (overlap === 'during') revealRacePass = side === 'control' ? ok : shownRefused;
+  else if (overlap === 'after' || overlap === 'before') revealRacePass = ok || shownRefused;
   const revealedPress = await click(client, reader, page, observer);
   await style(reader, observer, 'hidden', frameMs);
   const rehidden = await shot(client, page);
   return {
-    revealedShot: revealed.ok,
-    revealedRefusal: refusal(revealed.out),
+    revealedShot: ok,
+    revealedRefusal: text,
+    revealOverlap: overlap,
+    revealRacePass,
     revealedClick: revealedPress.ok,
     revealedClickRefusal: refusal(revealedPress.out),
     rehiddenShot: rehidden.ok,
@@ -536,6 +564,7 @@ export async function extensionFrame({
   extensionId = DEFAULT_EXTENSION_WORLD_ID,
   frameMs = 1000,
   inputMethods: inputList = INPUT_METHODS,
+  side = 'guarded',
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -562,6 +591,7 @@ export async function extensionFrame({
       client.send('Runtime.evaluate', { expression: 'self.origin', returnByValue: true }, page)
     );
     const leaks = await pageLeaks({ client, page, extensionId, frameURL, missing });
+    if (mode === 'focused') await holdFocus(reader, frame);
     const picture = await shot(client, page);
     const input = await driveInput(client, reader, page, observer, inputList, mode, frame);
     const captures = await driveCaptures(client, page, missing);
@@ -605,7 +635,10 @@ export async function extensionFrame({
       inputs: input.inputs,
     };
     if (mode === 'revealed')
-      Object.assign(result, await driveReveal(client, reader, page, observer, frameMs));
+      Object.assign(
+        result,
+        await driveReveal(client, reader, page, observer, frameMs, missing, side)
+      );
     const frameAttach = await outcome(
       client.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
     );

@@ -677,10 +677,14 @@ export function emulatedGuard(browser, options = {}) {
       !(options.exposeFramePDF && method === 'Page.printToPDF')
     )
       throw new Error(frameRules.presentRefusal);
+    const focusBlocks =
+      held.length > 0 &&
+      (inputMethod || options.screenshotFocus !== 'ignored') &&
+      (await frameFocused(targetId, held));
     const blocked =
       held.length &&
       frameRules.whenShown.includes(method) &&
-      ((await frameShown(targetId, held)) || (inputMethod && (await frameFocused(targetId, held))));
+      ((await frameShown(targetId, held)) || focusBlocks);
     if (blocked) throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
     if (failure) throw new Error(failure);
@@ -714,14 +718,16 @@ export function emulatedGuard(browser, options = {}) {
       throw refusal('cookies in a context slicc did not create');
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
-    if (held.length && method === 'Page.captureScreenshot') await pause(50);
     const result = await client.send(method, params, sessionId);
     const after = held.length ? await extensionFramesOf(targetId) : [];
+    const focusBlocksAfter =
+      after.length > 0 &&
+      (inputMethod || options.screenshotFocus !== 'ignored') &&
+      (await frameFocused(targetId, after));
     if (
       after.length &&
       frameRules.whenShown.includes(method) &&
-      ((await frameShown(targetId, after)) ||
-        (inputMethod && (await frameFocused(targetId, after))))
+      ((await frameShown(targetId, after)) || focusBlocksAfter)
     )
       throw new Error(frameRules.shownRefusal);
     learnWorlds();

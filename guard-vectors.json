@@ -4868,7 +4868,7 @@
           }
         },
         "revealedShot": {
-          "means": "extension frame revealed: a screenshot is taken after the frame is shown a race between the visibility or focus check and the CDP reply is accepted",
+          "means": "extension frame revealed: whether the in-flight screenshot answered with image data",
           "check": {
             "result": "frame",
             "path": "result.revealedShot",
@@ -4911,9 +4911,18 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "revealRacePass": {
+          "means": "extension frame revealed: when the reveal lands during the capture the guarded leg refuses with the shown-or-focused refusal and the control keeps the shot; when the capture finishes first a shot is accepted; unproven overlap is incomplete",
+          "check": {
+            "result": "frame",
+            "path": "result.revealRacePass",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame starts hidden, is shown during a screenshot, then hidden again; a race between the visibility or focus check and the CDP reply is accepted",
+      "live": "the observer confirms a chrome-extension: frame starts hidden, is shown on a runner-controlled signal while a screenshot is in flight, then hidden again; overlap evidence decides refusal vs shot; a race between the visibility or focus check and the CDP reply is accepted",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -4952,11 +4961,10 @@
           "frameClick": true,
           "tab": true,
           "frameVisible": false,
-          "revealedShot": true,
-          "revealedRefusal": false,
           "revealedClick": true,
           "revealedClickRefusal": false,
-          "rehiddenShot": true
+          "rehiddenShot": true,
+          "revealRacePass": true
         }
       },
       "expected": {
@@ -4988,11 +4996,10 @@
         "frameClick": true,
         "tab": true,
         "frameVisible": false,
-        "revealedShot": false,
-        "revealedRefusal": true,
         "revealedClick": false,
         "revealedClickRefusal": true,
-        "rehiddenShot": true
+        "rehiddenShot": true,
+        "revealRacePass": true
       },
       "designDependent": ["frameTreeLeak", "axLeak"]
     },
@@ -5619,7 +5626,7 @@
           }
         },
         "shot": {
-          "means": "extension frame focused: a screenshot is taken a race between the visibility or focus check and the CDP reply is accepted",
+          "means": "extension frame focused: a screenshot is taken while the concealed frame holds focus a race between the visibility or focus check and the CDP reply is accepted",
           "check": {
             "result": "frame",
             "path": "result.shot",
@@ -5770,6 +5777,15 @@
             "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
             "observer": "client"
           }
+        },
+        "shotRefusal": {
+          "means": "extension frame focused: that screenshot is refused with the shown-or-focused refusal a race between the visibility or focus check and the CDP reply is accepted",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing or focused in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
         }
       },
       "expected": {
@@ -5795,7 +5811,7 @@
         "autoAttached": false,
         "targetInfoURL": false,
         "eventURL": false,
-        "shot": true,
+        "shot": false,
         "click": false,
         "key": false,
         "frameClick": false,
@@ -5811,7 +5827,8 @@
         "focusedText": false,
         "focusedTextRefusal": true,
         "focusedIME": false,
-        "focusedIMERefusal": true
+        "focusedIMERefusal": true,
+        "shotRefusal": true
       },
       "control": {
         "origin": "ordinary",
@@ -5865,7 +5882,7 @@
           "requires": ["extensionFrame"]
         }
       ],
-      "live": "the observer confirms the concealed extension frame is focused before keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",
+      "live": "the observer confirms the concealed extension frame is focused before screenshot, keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",
       "designDependent": ["frameTreeLeak", "axLeak"]
     },
     {

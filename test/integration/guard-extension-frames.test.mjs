@@ -218,6 +218,7 @@ const expectations = {
     ['C9.frame-hidden', 'C9.frame-concealed', 'C9.frame-focused'].includes(id) ? 'pass' : 'fail',
   'opacity counts as hidden': (id) => (id === 'C9.frame-transparent' ? 'fail' : 'pass'),
   'focus ignored': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
+  'screenshot ignores focus': (id) => (id === 'C9.frame-focused' ? 'fail' : 'pass'),
   'input refused while hidden': (id) =>
     ['C9.frame-hidden', 'C9.frame-concealed'].includes(id) ? 'fail' : undefined,
 };
@@ -240,6 +241,7 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
                     ? 'opacity'
                     : undefined,
               frameFocus: mode === 'focus ignored' ? 'ignored' : undefined,
+              screenshotFocus: mode === 'screenshot ignores focus' ? 'ignored' : undefined,
               refuse:
                 mode === 'input refused while hidden'
                   ? (method) => (method.startsWith('Input.') ? frames.shownRefusal : undefined)

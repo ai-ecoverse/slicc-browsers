@@ -18,6 +18,7 @@ const capabilities = {
   browserSession: true,
   browserContexts: true,
   chromeUrlsAttach: true,
+  discovery: true,
   extensionFrame: true,
 };
 
@@ -99,6 +100,36 @@ test('forgeries reject not-supported:extensionFrame when the run declared the ca
   assert.equal(honest.pass, true);
 });
 
+test('C9.frame rows require discovery, autoAttach and browserSession', () => {
+  for (const vector of vectors) {
+    for (const cap of ['extensionFrame', 'discovery', 'autoAttach', 'browserSession'])
+      assert.ok(vector.requires.includes(cap), `${vector.id} missing ${cap}`);
+  }
+});
+
+test('run summary keeps the declared capabilities when metadata tries to clear them', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const execution = await run(
+      { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+      {
+        client: { events: [], send: async () => ({}) },
+        unguarded: { events: [], send: async () => ({}) },
+        fixture,
+        targets: origins(fixture),
+        capabilities: {},
+        rowTimeoutMs: 1000,
+      }
+    );
+    const cleared = execution.summary({ capabilities: { extensionFrame: true } });
+    assert.equal(cleared.pass, true);
+    assert.deepEqual(cleared.forged, []);
+    assert.ok(execution.results.every((row) => row.reason === 'not-supported:extensionFrame'));
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('extension-frame rows reject missing evidence and unsafe capture or attachment paths', {
   timeout: 300000,
 }, async () => {
@@ -118,6 +149,11 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
     { name: 'missing target list', listing: {}, incomplete: true },
     { name: 'malformed target list', listing: { targetInfos: {} }, incomplete: true },
     { name: 'dropped target info', dropInfo: true, incomplete: true },
+    {
+      name: 'redacted extension origin',
+      redactedOrigin: true,
+      observation: 'listed',
+    },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
       name: 'foreign MHTML refusal',
@@ -153,6 +189,12 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
           if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
             throw new Error(mode.mhtmlMessage);
           const answer = await guard.client.send(method, params, session);
+          if (mode.redactedOrigin && method === 'Target.getTargets') {
+            const origin = `chrome-extension://${DEFAULT_EXTENSION_WORLD_ID}`;
+            return {
+              targetInfos: [{ targetId: 'ext', type: 'iframe', url: origin, title: origin }],
+            };
+          }
           if (method === 'Target.getTargets' && mode.listing) return mode.listing;
           if (method === 'DOMSnapshot.captureSnapshot') {
             if (mode.marker) answer.strings.push('slicc-private-extension-frame-content');

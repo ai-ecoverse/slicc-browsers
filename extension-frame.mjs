@@ -35,7 +35,19 @@ const carries = (value) => {
   const text = JSON.stringify(value) ?? '';
   return text.includes(USERNAME) || text.includes(MARKER);
 };
+const extensionOrigin = (extensionId) => `chrome-extension://${extensionId}`;
+const exposesExtension = (value, extensionId, frameURL) => {
+  const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+  return (
+    text.includes(USERNAME) ||
+    text.includes(MARKER) ||
+    (typeof frameURL === 'string' && frameURL !== '' && text.includes(frameURL)) ||
+    text.includes(extensionOrigin(extensionId))
+  );
+};
+const frameRef = `__${FRAME}`;
 const frameLookup = `document.getElementById(${JSON.stringify(FRAME)})
+  ?? globalThis[${JSON.stringify(frameRef)}]
   ?? document.getElementById(${JSON.stringify(HOST)})?.contentDocument?.getElementById(${JSON.stringify(FRAME)})`;
 
 async function observe(reader, observer, expression) {
@@ -175,14 +187,7 @@ async function inputMethods(client, session, methods) {
 
 function snapshotReadsFrame(snapshot, extensionId, frameURL) {
   if (!snapshot.ok) return false;
-  const text = JSON.stringify(snapshot.result);
-  if (carries(snapshot.result) || text.includes(frameURL) || text.includes(`${frameURL}?`))
-    return true;
-  return (
-    snapshot.result.documents?.some((doc) =>
-      snapshot.result.strings?.[doc.documentURL]?.startsWith(`chrome-extension://${extensionId}/`)
-    ) ?? false
-  );
+  return exposesExtension(snapshot.result, extensionId, frameURL);
 }
 
 async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
@@ -196,17 +201,17 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   };
   const tree = await outcome(client.send('Page.getFrameTree', {}, page));
   if (!tree.ok) missing.push('Page.getFrameTree failed');
-  else leaks.frameTreeLeak = carries(tree.result) || JSON.stringify(tree.result).includes(frameURL);
+  else leaks.frameTreeLeak = exposesExtension(tree.result, extensionId, frameURL);
   const document = await outcome(client.send('DOM.getDocument', { depth: -1, pierce: true }, page));
   if (!document.ok) missing.push('DOM.getDocument failed');
   else {
     const text = JSON.stringify(document.result);
-    leaks.documentLeak = carries(document.result) || text.includes(frameURL);
+    leaks.documentLeak = exposesExtension(document.result, extensionId, frameURL);
     leaks.shadowDocumentLeak = text.includes(USERNAME) && text.includes(SHADOW);
   }
   const ax = await outcome(client.send('Accessibility.getFullAXTree', {}, page));
   if (!ax.ok) missing.push('Accessibility.getFullAXTree failed');
-  else leaks.axLeak = carries(ax.result) || JSON.stringify(ax.result).includes(frameURL);
+  else leaks.axLeak = exposesExtension(ax.result, extensionId, frameURL);
   const evaluated = await outcome(
     client.send(
       'Runtime.evaluate',
@@ -221,8 +226,8 @@ async function pageLeaks({ client, page, extensionId, frameURL, missing }) {
   else {
     const value = evaluated.result.result?.value;
     leaks.evaluateLeak =
-      carries(evaluated.result) ||
-      (typeof value === 'string' && (value.includes(USERNAME) || value.includes(frameURL)));
+      exposesExtension(evaluated.result, extensionId, frameURL) ||
+      (typeof value === 'string' && exposesExtension(value, extensionId, frameURL));
   }
   const snapshot = await outcome(
     client.send('DOMSnapshot.captureSnapshot', { computedStyles: [] }, page)
@@ -240,6 +245,7 @@ async function targetExposure({
   page,
   frame,
   frameURL,
+  extensionId,
   eventStart,
   frameMs,
   missing,
@@ -249,7 +255,7 @@ async function targetExposure({
   if (!info.ok) missing.push('Target.getTargetInfo failed');
   else if (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string')
     missing.push('Target.getTargetInfo returned no targetInfo URL');
-  else result.targetInfoURL = JSON.stringify(info.result).includes(frameURL);
+  else result.targetInfoURL = exposesExtension(info.result, extensionId, frameURL);
   const auto = await outcome(
     client.send(
       'Target.setAutoAttach',
@@ -274,14 +280,14 @@ async function targetExposure({
         (event) =>
           ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
             event.method
-          ) && JSON.stringify(event.params).includes(frameURL)
+          ) && exposesExtension(event.params, extensionId, frameURL)
       );
     }
     const listing = await outcome(client.send('Target.getTargets'));
     if (!listing.ok || !Array.isArray(listing.result?.targetInfos)) {
       missing.push('Target.getTargets returned no targetInfos array');
     } else {
-      result.listed = JSON.stringify(listing.result.targetInfos).includes(frameURL);
+      result.listed = exposesExtension(listing.result.targetInfos, extensionId, frameURL);
     }
     return result;
   } finally {
@@ -334,6 +340,27 @@ async function embed(reader, observer, mode, frameURL) {
           doc.body.append(f);
         }, { once: true });
         host.src = 'about:blank';
+      })`
+    );
+  }
+  if (mode === 'focused') {
+    return observe(
+      reader,
+      observer,
+      `new Promise((resolve) => {
+        document.body.innerHTML = '<button id="c9-click" style="position:fixed;left:0;top:0;width:100px;height:100px" onclick="document.body.dataset.clicked=\\'yes\\'">C9 click</button><input id="typed" style="position:fixed;left:0;top:120px;width:100px">';
+        const shadowHost = document.createElement('div');
+        shadowHost.id = ${JSON.stringify(SHADOW)};
+        const root = shadowHost.attachShadow({ mode: 'closed' });
+        const shadowFrame = document.createElement('iframe');
+        shadowFrame.id = ${JSON.stringify(FRAME)};
+        ${STYLES.focused.replaceAll(/\bf\./g, 'shadowFrame.')};
+        shadowFrame.addEventListener('load', () => resolve(true), { once: true });
+        setTimeout(() => resolve(false), 5000);
+        shadowFrame.src = ${JSON.stringify(src)};
+        root.append(shadowFrame);
+        globalThis[${JSON.stringify(frameRef)}] = shadowFrame;
+        document.body.append(shadowHost);
       })`
     );
   }
@@ -428,7 +455,14 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
     frameFocused = await observe(
       reader,
       observer,
-      `(() => { const f = ${frameLookup}; if (f) f.focus(); return Boolean(f) && document.activeElement === f; })()`
+      `(() => {
+        const f = ${frameLookup};
+        if (!f) return false;
+        f.focus();
+        try { f.contentWindow?.focus(); } catch {}
+        const host = f.getRootNode?.()?.host;
+        return document.activeElement === f || (host != null && document.activeElement === host);
+      })()`
     );
   }
   const box = await observe(
@@ -660,6 +694,7 @@ export async function extensionFrame({
         page,
         frame,
         frameURL,
+        extensionId,
         eventStart,
         frameMs,
         missing,

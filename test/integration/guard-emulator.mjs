@@ -55,6 +55,12 @@ export function emulatedGuard(browser, options = {}) {
     }
   };
   const redactInfo = (info) => {
+    if (
+      options.extensionFrames &&
+      !options.exposeExtensionFrames &&
+      catalog?.extensionFrame(info.url)
+    )
+      return { ...info, url: '', title: '' };
     if (!catalog?.url(info.url, { readOnly: true })) return info;
     let origin;
     try {
@@ -762,13 +768,20 @@ export function emulatedGuard(browser, options = {}) {
       return { ...result, targetInfo: redactInfo(result.targetInfo) };
     if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
       const visible = [];
-      for (const info of result.targetInfos)
+      for (const info of result.targetInfos) {
+        if (
+          options.extensionFrames &&
+          !options.exposeExtensionFrames &&
+          catalog?.extensionFrame(info.url)
+        )
+          continue;
         if (
           !mentions(info) &&
           !(options.hideTypes ?? []).includes(info.type) &&
           (!catalog || !(await decision(info.targetId)))
         )
           visible.push(info);
+      }
       return {
         ...result,
         targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),

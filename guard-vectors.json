@@ -3107,11 +3107,11 @@
         {
           "extensionFrame": "hidden",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "observe": {
         "exists": {
           "means": "extension frame hidden: the extension frame is in the tab",
@@ -3455,11 +3455,11 @@
         {
           "extensionFrame": "concealed",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "observe": {
         "exists": {
           "means": "extension frame concealed: the extension frame is in the tab",
@@ -3803,11 +3803,11 @@
         {
           "extensionFrame": "shown",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "observe": {
         "exists": {
           "means": "extension frame shown: the extension frame is in the tab",
@@ -4206,11 +4206,11 @@
         {
           "extensionFrame": "transparent",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "observe": {
         "exists": {
           "means": "extension frame transparent: the extension frame is in the tab",
@@ -4609,11 +4609,11 @@
         {
           "extensionFrame": "revealed",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "observe": {
         "exists": {
           "means": "extension frame revealed: the extension frame is in the tab",
@@ -5019,11 +5019,11 @@
         {
           "extensionFrame": "nested",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -5419,7 +5419,7 @@
         }
       ],
       "targets": ["ordinary"],
-      "requires": ["extensionFrame"],
+      "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"],
       "liveCheck": {
         "result": "frame",
         "path": "result.frameFocused",
@@ -5879,7 +5879,7 @@
         {
           "extensionFrame": "focused",
           "as": "frame",
-          "requires": ["extensionFrame"]
+          "requires": ["extensionFrame", "discovery", "autoAttach", "browserSession"]
         }
       ],
       "live": "the observer confirms the concealed extension frame is focused before screenshot, keyboard, text and IME input; a race between the visibility or focus check and the CDP reply is accepted",

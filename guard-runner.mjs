@@ -4,7 +4,7 @@ export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
 import { extensionFrame } from './extension-frame.mjs';
-import { extensionWorld } from './extension-world.mjs';
+import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
 import {
   beacon,
@@ -915,7 +915,7 @@ class Execution {
           mode: step.extensionFrame,
           origin: this.vars.ordinary,
           frameMs: this.bound(1000),
-          extensionId: this.options.extensionWorldId,
+          extensionId: this.options.extensionFrameId ?? DEFAULT_EXTENSION_WORLD_ID,
           side: this.side,
         })
       );
@@ -2084,7 +2084,7 @@ async function runAll(set, options, flights) {
   return {
     results,
     summary: (metadata = {}) =>
-      summary({ set, results, capabilities: opts.capabilities, ...metadata }),
+      summary({ set, results, ...metadata, capabilities: opts.capabilities }),
   };
 }
 

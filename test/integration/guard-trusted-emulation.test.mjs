@@ -20,6 +20,7 @@ const timezoneTrusted = {
 };
 const errorFor = (id) => (id === 'E6.timezone' ? timezoneTrusted : trusted);
 const failure = (cdp) => Object.assign(new Error(cdp.message), { cdp });
+const debuggerFailure = (cdp) => new Error(JSON.stringify(cdp));
 
 const targets = {
   ordinary: 'http://ordinary.test',
@@ -114,8 +115,14 @@ function browser({ emulation }) {
       }
       if (method === 'Emulation.setLocaleOverride' || method === 'Emulation.setTimezoneOverride') {
         const answer = emulation(side, method);
-        if (answer === 'trusted')
-          throw failure(errorFor(method.includes('Timezone') ? 'E6.timezone' : 'E6.locale'));
+        const err = errorFor(method.includes('Timezone') ? 'E6.timezone' : 'E6.locale');
+        if (answer === 'trusted') throw failure(err);
+        if (answer === 'debugger') throw debuggerFailure(err);
+        if (answer === 'debugger-other-code')
+          throw debuggerFailure({ code: -32600, message: err.message });
+        if (answer === 'debugger-message-only') throw debuggerFailure({ message: err.message });
+        if (answer === 'message-only') throw new Error(err.message);
+        if (answer === 'non-json') throw new Error('not a cdp envelope');
         if (answer === 'other') throw failure({ code: -32000, message: 'Internal error' });
         if (answer === 'refused') throw new Error('slicc: refused: emulation override');
         overrides.set(sessionId ?? 'page', method);
@@ -227,6 +234,80 @@ for (const id of ids) {
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
     assert.ok(
       row.errors.some((error) => /Internal error/.test(error)),
+      JSON.stringify(row.errors)
+    );
+    assert.equal(row.reason, undefined);
+  });
+
+  test(`${id}: chrome.debugger JSON trusted-client error on the ordinary control is not-supported on every target`, async () => {
+    const listed = ['seven', 'vault', 'vault-x', 'apex'];
+    const execution = await execute(
+      id,
+      (_side, method) => (method === methods[id] ? 'debugger' : 'ok'),
+      listed
+    );
+    assert.equal(execution.results.length, listed.length);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'skip', JSON.stringify(row));
+      assert.equal(row.guarded, 'skip', JSON.stringify(row));
+      assert.equal(row.live, 'skip', JSON.stringify(row));
+      assert.equal(row.reason, 'not-supported:trustedEmulation', JSON.stringify(row));
+    }
+    assert.deepEqual(execution.summary({ guard: 'fake', sha: 'test' }).forged, []);
+  });
+
+  test(`${id}: chrome.debugger JSON trusted-client error only on the guarded leg fails as today`, async () => {
+    const execution = await execute(id, (side, method) =>
+      method === methods[id] ? (side === 'guarded' ? 'debugger' : 'ok') : 'ok'
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.ok(
+      row.errors.some((error) => /only available to trusted clients/i.test(error)),
+      JSON.stringify(row.errors)
+    );
+  });
+
+  test(`${id}: chrome.debugger JSON with another code keeps today's fail verdict`, async () => {
+    const execution = await execute(id, (_side, method) =>
+      method === methods[id] ? 'debugger-other-code' : 'ok'
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.reason, undefined);
+  });
+
+  test(`${id}: chrome.debugger JSON with only the message keeps today's fail verdict`, async () => {
+    const execution = await execute(id, (_side, method) =>
+      method === methods[id] ? 'debugger-message-only' : 'ok'
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.reason, undefined);
+  });
+
+  test(`${id}: raw trusted-client message without a code keeps today's fail verdict`, async () => {
+    const execution = await execute(id, (_side, method) =>
+      method === methods[id] ? 'message-only' : 'ok'
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.reason, undefined);
+  });
+
+  test(`${id}: a non-JSON control error keeps today's fail verdict`, async () => {
+    const execution = await execute(id, (_side, method) =>
+      method === methods[id] ? 'non-json' : 'ok'
+    );
+    const [row] = execution.results;
+    assert.equal(row.control, 'fail', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.ok(
+      row.errors.some((error) => /not a cdp envelope/.test(error)),
       JSON.stringify(row.errors)
     );
     assert.equal(row.reason, undefined);

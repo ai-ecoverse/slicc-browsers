@@ -83,6 +83,7 @@ export function emulatedGuard(browser, options = {}) {
   const contexts = new Set();
   const extensionContexts = new Map();
   const cutSessions = new Set();
+  const cutFrameSessions = new Set();
   const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
   const learnWorlds = () => {
     for (const event of client.events) {
@@ -236,6 +237,24 @@ export function emulatedGuard(browser, options = {}) {
           }
           events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
           continue;
+        }
+        if (options.extensionFrames && !options.exposeExtensionFrames) {
+          if (
+            event.method === 'Target.attachedToTarget' &&
+            catalog.extensionFrame(event.params.targetInfo.url)
+          ) {
+            cutFrameSessions.add(event.params.sessionId);
+            await client
+              .send('Target.detachFromTarget', { sessionId: event.params.sessionId })
+              .catch(() => {});
+            continue;
+          }
+          if (
+            cutFrameSessions.has(event.sessionId) ||
+            (event.method === 'Target.detachedFromTarget' &&
+              cutFrameSessions.has(event.params.sessionId))
+          )
+            continue;
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
@@ -544,7 +563,11 @@ export function emulatedGuard(browser, options = {}) {
       targetId &&
       (frameRules.whenShown.includes(method) || frameRules.whilePresent.includes(method));
     const held = gated ? await extensionFramesOf(targetId) : [];
-    if (held.length && frameRules.whilePresent.includes(method))
+    if (
+      held.length &&
+      frameRules.whilePresent.includes(method) &&
+      !(options.exposeFramePDF && method === 'Page.printToPDF')
+    )
       throw new Error(frameRules.presentRefusal);
     if (held.length && (await frameShown(targetId, held))) throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));

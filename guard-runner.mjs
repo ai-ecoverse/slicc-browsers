@@ -709,7 +709,9 @@ class Execution {
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'frameRead', 'bfcacheRestore'].includes(probe) &&
+      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
+        probe
+      ) &&
       out.ok &&
       out.result?.incomplete
     )

@@ -3,6 +3,7 @@ import { outcome } from './guard-driver.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const FRAME = 'slicc-extension-frame';
+const MARKER = 'slicc-private-extension-frame-content';
 const BOX = 'position:fixed;right:0;bottom:0;width:300px;height:200px;border:0';
 const STYLES = {
   hidden: 'f.hidden = true; f.style.cssText = ""',
@@ -105,6 +106,78 @@ async function key(client, reader, session, observer) {
   return { out, ok: out.ok && typed === true };
 }
 
+function snapshotReadsFrame(snapshot, extensionId) {
+  return (
+    snapshot.ok &&
+    (JSON.stringify(snapshot.result).includes(MARKER) ||
+      snapshot.result.documents?.some((doc) =>
+        snapshot.result.strings?.[doc.documentURL]?.startsWith(`chrome-extension://${extensionId}/`)
+      ))
+  );
+}
+
+async function targetExposure({
+  client,
+  reader,
+  observer,
+  page,
+  frame,
+  frameURL,
+  eventStart,
+  frameMs,
+  missing,
+}) {
+  const result = {};
+  const info = await outcome(client.send('Target.getTargetInfo', { targetId: frame.targetId }));
+  if (info.ok && (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string'))
+    missing.push('Target.getTargetInfo returned no targetInfo URL');
+  result.targetInfoURL = info.ok && JSON.stringify(info.result).includes(frameURL);
+  const auto = await outcome(
+    client.send(
+      'Target.setAutoAttach',
+      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      page
+    )
+  );
+  try {
+    await painted(reader, observer, frameMs);
+    if (eventStart === undefined || !Array.isArray(client.events)) {
+      missing.push('target event stream is unavailable');
+    } else {
+      const events = client.events.slice(eventStart);
+      result.autoAttached = events.some(
+        (event) =>
+          event.method === 'Target.attachedToTarget' &&
+          event.sessionId === page &&
+          event.params?.targetInfo?.targetId === frame.targetId &&
+          typeof event.params.sessionId === 'string'
+      );
+      result.eventURL = events.some(
+        (event) =>
+          ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
+            event.method
+          ) && JSON.stringify(event.params).includes(frameURL)
+      );
+    }
+    const listing = await outcome(client.send('Target.getTargets'));
+    if (!listing.ok || !Array.isArray(listing.result?.targetInfos)) {
+      missing.push('Target.getTargets returned no targetInfos array');
+    } else {
+      result.listed = JSON.stringify(listing.result.targetInfos).includes(frameURL);
+    }
+    return result;
+  } finally {
+    if (auto.ok)
+      await outcome(
+        client.send(
+          'Target.setAutoAttach',
+          { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+          page
+        )
+      );
+  }
+}
+
 export async function extensionFrame({
   client,
   reader,
@@ -117,6 +190,12 @@ export async function extensionFrame({
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
+  const missing = [];
+  const eventStart = client.events?.length;
+  const frameURL = `chrome-extension://${extensionId}/frame.html`;
+  let page;
+  let pageAttached = false;
+  const discovery = await outcome(client.send('Target.setDiscoverTargets', { discover: true }));
   try {
     await reader.send('Runtime.enable', {}, observer);
     await observe(
@@ -129,14 +208,27 @@ export async function extensionFrame({
         ${STYLES[mode === 'revealed' ? 'hidden' : mode]};
         f.addEventListener('load', () => resolve(true), { once: true });
         setTimeout(() => resolve(false), 5000);
-        f.src = ${JSON.stringify(`chrome-extension://${extensionId}/frame.html`)};
+        f.src = ${JSON.stringify(`${frameURL}?username=slicc-frame-test-user`)};
         document.body.append(f);
       })`
     );
     const frame = await frameTarget(reader, targetId, extensionId);
+    const privateSession = (
+      await reader.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
+    ).sessionId;
+    try {
+      await observe(
+        reader,
+        privateSession,
+        `document.body.textContent = ${JSON.stringify(MARKER)}`
+      );
+    } finally {
+      await reader.send('Target.detachFromTarget', { sessionId: privateSession });
+    }
     await painted(reader, observer, frameMs);
     const attach = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
-    const page = attach.ok ? attach.result.sessionId : session;
+    page = attach.ok ? attach.result.sessionId : session;
+    pageAttached = attach.ok;
     const read = await outcome(
       client.send('Runtime.evaluate', { expression: 'self.origin', returnByValue: true }, page)
     );
@@ -147,6 +239,9 @@ export async function extensionFrame({
     const pressed = await click(client, reader, page, observer);
     const typed = await key(client, reader, page, observer);
     const archive = await outcome(client.send('Page.captureSnapshot', { format: 'mhtml' }, page));
+    const pdf = await outcome(client.send('Page.printToPDF', {}, page));
+    if (pdf.ok && !(typeof pdf.result.data === 'string' && pdf.result.data.length > 0))
+      missing.push('Page.printToPDF returned no PDF data');
     const cast = await outcome(
       client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
     );
@@ -156,6 +251,7 @@ export async function extensionFrame({
       attached: attach.ok,
       read: read.ok && read.result.result?.value === origin,
       snapshot: snapshot.ok && snapshot.result.documents?.length > 0,
+      snapshotFrameRead: snapshotReadsFrame(snapshot, extensionId),
       shot: picture.ok,
       shotRefusal: refusal(picture.out),
       click: pressed.ok,
@@ -164,6 +260,8 @@ export async function extensionFrame({
       keyRefusal: refusal(typed.out),
       archive: archive.ok,
       archiveRefusal: refusal(archive),
+      pdf: pdf.ok,
+      pdfRefusal: refusal(pdf),
       cast: cast.ok,
       castRefusal: refusal(cast),
     };
@@ -187,21 +285,29 @@ export async function extensionFrame({
       await outcome(
         client.send('Target.detachFromTarget', { sessionId: frameAttach.result.sessionId })
       );
-    const listing = await outcome(client.send('Target.getTargets'));
     result.frameAttach = frameAttach.ok;
-    result.listed =
-      listing.ok &&
-      JSON.stringify(listing.result.targetInfos ?? []).includes(
-        `chrome-extension://${extensionId}/frame.html`
-      );
+    Object.assign(
+      result,
+      await targetExposure({
+        client,
+        reader,
+        observer,
+        page,
+        frame,
+        frameURL,
+        eventStart,
+        frameMs,
+        missing,
+      })
+    );
     const alive = await outcome(
       client.send('Runtime.evaluate', { expression: 'self.origin', returnByValue: true }, page)
     );
     result.alive = alive.ok && alive.result.result?.value === origin;
-    if (attach.ok)
-      await outcome(client.send('Target.detachFromTarget', { sessionId: attach.result.sessionId }));
-    return result;
+    return missing.length ? { ...result, incomplete: missing.join('; ') } : result;
   } finally {
+    if (pageAttached) await outcome(client.send('Target.detachFromTarget', { sessionId: page }));
+    if (discovery.ok) await outcome(client.send('Target.setDiscoverTargets', { discover: false }));
     await outcome(reader.send('Target.detachFromTarget', { sessionId: observer }));
   }
 }

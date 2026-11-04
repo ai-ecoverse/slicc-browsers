@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { DEFAULT_EXTENSION_WORLD_ID } from '../../extension-world.mjs';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
 import { protectedOrigins } from '../../protected.mjs';
@@ -48,6 +49,94 @@ test('extension-frame rows skip transports that do not declare extensionFrame', 
       }
     }
   } finally {
+    await fixture.close();
+  }
+});
+
+test('extension-frame rows reject missing evidence and unsafe capture or attachment paths', {
+  timeout: 300000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const cases = [
+    { name: 'auto-attach', options: { exposeExtensionFrames: true }, observation: 'autoAttached' },
+    { name: 'PDF', options: { exposeFramePDF: true }, observation: 'pdf' },
+    { name: 'snapshot content', marker: true, observation: 'snapshotFrameRead' },
+    { name: 'snapshot document', document: true, observation: 'snapshotFrameRead' },
+    { name: 'missing target list', listing: {}, incomplete: true },
+    { name: 'malformed target list', listing: { targetInfos: {} }, incomplete: true },
+    { name: 'HeadlessExperimental gate', beginFrame: true },
+  ];
+  try {
+    for (const mode of cases) {
+      const guard = emulatedGuard(browser, {
+        protectedOrigins: catalog.protectedOrigins,
+        extensionFrames: true,
+        ...mode.options,
+      });
+      let began = false;
+      const client = {
+        ...guard.client,
+        async send(method, params, session) {
+          if (mode.beginFrame && method === 'Page.printToPDF') {
+            await assert.rejects(
+              guard.client.send(
+                'HeadlessExperimental.beginFrame',
+                { screenshot: { format: 'png' } },
+                session
+              ),
+              { message: catalog.protectedOrigins.extensionFrames.presentRefusal }
+            );
+            began = true;
+          }
+          const answer = await guard.client.send(method, params, session);
+          if (method === 'Target.getTargets' && mode.listing) return mode.listing;
+          if (method === 'DOMSnapshot.captureSnapshot') {
+            if (mode.marker) answer.strings.push('slicc-private-extension-frame-content');
+            if (mode.document) {
+              answer.documents.push({ documentURL: answer.strings.length });
+              answer.strings.push(`chrome-extension://${DEFAULT_EXTENSION_WORLD_ID}/frame.html`);
+            }
+          }
+          return answer;
+        },
+      };
+      try {
+        const execution = await run(
+          { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+          {
+            client,
+            unguarded: browser.unguarded,
+            fixture,
+            targets: origins(fixture),
+            capabilities,
+            rowTimeoutMs: 60000,
+          }
+        );
+        const row = execution.results[0];
+        assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
+        assert.equal(
+          row.guarded,
+          mode.incomplete ? 'incomplete' : mode.beginFrame ? 'pass' : 'fail',
+          JSON.stringify({ mode, row })
+        );
+        if (mode.observation)
+          assert.equal(row.observations.guarded[mode.observation], true, mode.name);
+        if (mode.incomplete) {
+          assert.match(
+            row.incomplete.join('; '),
+            /Target.getTargets returned no targetInfos array/
+          );
+          assert.equal(execution.summary().incomplete, 1);
+        }
+        if (mode.beginFrame) assert.equal(began, true);
+        assert.equal(execution.summary().pass, Boolean(mode.beginFrame));
+      } finally {
+        await guard.stop();
+      }
+    }
+  } finally {
+    await browser.close();
     await fixture.close();
   }
 });

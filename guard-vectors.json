@@ -3149,6 +3149,51 @@
             "observer": "client"
           }
         },
+        "snapshotFrameRead": {
+          "means": "extension frame hidden: the snapshot exposes the extension document or its private contents",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame hidden: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame hidden: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame hidden: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame hidden: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "archive": {
           "means": "extension frame hidden: an MHTML capture is taken",
           "check": {
@@ -3244,7 +3289,12 @@
           "alive": true,
           "shot": true,
           "click": true,
-          "key": true
+          "key": true,
+          "snapshotFrameRead": false,
+          "pdf": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true
         }
       },
       "expected": {
@@ -3259,7 +3309,12 @@
         "alive": true,
         "shot": true,
         "click": true,
-        "key": true
+        "key": true,
+        "snapshotFrameRead": false,
+        "pdf": false,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false
       }
     },
     {
@@ -3316,6 +3371,51 @@
           "check": {
             "result": "frame",
             "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame concealed: the snapshot exposes the extension document or its private contents",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame concealed: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame concealed: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame concealed: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame concealed: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
             "equals": true,
             "observer": "client"
           }
@@ -3415,7 +3515,12 @@
           "alive": true,
           "shot": true,
           "click": true,
-          "key": true
+          "key": true,
+          "snapshotFrameRead": false,
+          "pdf": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true
         }
       },
       "expected": {
@@ -3430,7 +3535,12 @@
         "alive": true,
         "shot": true,
         "click": true,
-        "key": true
+        "key": true,
+        "snapshotFrameRead": false,
+        "pdf": false,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false
       }
     },
     {
@@ -3487,6 +3597,51 @@
           "check": {
             "result": "frame",
             "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame shown: the snapshot exposes the extension document or its private contents",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame shown: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame shown: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame shown: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame shown: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
             "equals": true,
             "observer": "client"
           }
@@ -3616,7 +3771,12 @@
           "click": true,
           "clickRefusal": false,
           "key": true,
-          "keyRefusal": false
+          "keyRefusal": false,
+          "snapshotFrameRead": false,
+          "pdf": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true
         }
       },
       "expected": {
@@ -3634,7 +3794,12 @@
         "click": false,
         "clickRefusal": true,
         "key": false,
-        "keyRefusal": true
+        "keyRefusal": true,
+        "snapshotFrameRead": false,
+        "pdf": false,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false
       }
     },
     {
@@ -3691,6 +3856,51 @@
           "check": {
             "result": "frame",
             "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame transparent: the snapshot exposes the extension document or its private contents",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame transparent: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame transparent: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame transparent: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame transparent: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
             "equals": true,
             "observer": "client"
           }
@@ -3820,7 +4030,12 @@
           "click": true,
           "clickRefusal": false,
           "key": true,
-          "keyRefusal": false
+          "keyRefusal": false,
+          "snapshotFrameRead": false,
+          "pdf": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true
         }
       },
       "expected": {
@@ -3838,7 +4053,12 @@
         "click": false,
         "clickRefusal": true,
         "key": false,
-        "keyRefusal": true
+        "keyRefusal": true,
+        "snapshotFrameRead": false,
+        "pdf": false,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false
       }
     },
     {
@@ -3895,6 +4115,51 @@
           "check": {
             "result": "frame",
             "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame revealed: the snapshot exposes the extension document or its private contents",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame revealed: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame revealed: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame revealed: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame revealed: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
             "equals": true,
             "observer": "client"
           }
@@ -4024,7 +4289,12 @@
           "revealedShot": true,
           "revealedRefusal": false,
           "revealedClick": true,
-          "rehiddenShot": true
+          "rehiddenShot": true,
+          "snapshotFrameRead": false,
+          "pdf": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true
         }
       },
       "expected": {
@@ -4042,7 +4312,12 @@
         "revealedShot": false,
         "revealedRefusal": true,
         "revealedClick": false,
-        "rehiddenShot": true
+        "rehiddenShot": true,
+        "snapshotFrameRead": false,
+        "pdf": false,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false
       }
     },
     {

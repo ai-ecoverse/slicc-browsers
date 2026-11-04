@@ -3150,10 +3150,55 @@
           }
         },
         "snapshotFrameRead": {
-          "means": "extension frame hidden: the snapshot exposes the extension document or its private contents",
+          "means": "extension frame hidden: the snapshot exposes the extension document, private contents, or iframe src",
           "check": {
             "result": "frame",
             "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame hidden: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame hidden: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame hidden: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame hidden: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame hidden: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
             "equals": true,
             "observer": "client"
           }
@@ -3164,6 +3209,15 @@
             "result": "frame",
             "path": "result.pdf",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame hidden: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3203,12 +3257,30 @@
             "observer": "client"
           }
         },
+        "archiveRefusal": {
+          "means": "extension frame hidden: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
         "cast": {
           "means": "extension frame hidden: a screencast starts",
           "check": {
             "result": "frame",
             "path": "result.cast",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame hidden: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3257,11 +3329,65 @@
             "observer": "client"
           }
         },
+        "clickRefusal": {
+          "means": "extension frame hidden: the click is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
         "key": {
           "means": "extension frame hidden: typed text reaches the page",
           "check": {
             "result": "frame",
             "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame hidden: the typing is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame hidden: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame hidden: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame hidden: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame hidden: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
             "equals": true,
             "observer": "client"
           }
@@ -3282,19 +3408,33 @@
           "attached": true,
           "read": true,
           "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
           "archive": true,
+          "archiveRefusal": false,
           "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
           "frameAttach": true,
           "listed": true,
           "alive": true,
-          "shot": true,
-          "click": true,
-          "key": true,
-          "snapshotFrameRead": false,
-          "pdf": true,
           "autoAttached": true,
           "targetInfoURL": true,
-          "eventURL": true
+          "eventURL": true,
+          "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false,
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
+          "frameVisible": false
         }
       },
       "expected": {
@@ -3302,19 +3442,33 @@
         "attached": true,
         "read": true,
         "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
         "archive": false,
+        "archiveRefusal": true,
         "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
         "frameAttach": false,
         "listed": false,
         "alive": true,
-        "shot": true,
-        "click": true,
-        "key": true,
-        "snapshotFrameRead": false,
-        "pdf": false,
         "autoAttached": false,
         "targetInfoURL": false,
-        "eventURL": false
+        "eventURL": false,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true,
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
+        "shot": true,
+        "frameVisible": false
       }
     },
     {
@@ -3376,10 +3530,55 @@
           }
         },
         "snapshotFrameRead": {
-          "means": "extension frame concealed: the snapshot exposes the extension document or its private contents",
+          "means": "extension frame concealed: the snapshot exposes the extension document, private contents, or iframe src",
           "check": {
             "result": "frame",
             "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame concealed: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame concealed: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame concealed: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame concealed: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame concealed: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
             "equals": true,
             "observer": "client"
           }
@@ -3390,6 +3589,15 @@
             "result": "frame",
             "path": "result.pdf",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame concealed: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3429,12 +3637,30 @@
             "observer": "client"
           }
         },
+        "archiveRefusal": {
+          "means": "extension frame concealed: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
         "cast": {
           "means": "extension frame concealed: a screencast starts",
           "check": {
             "result": "frame",
             "path": "result.cast",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame concealed: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3483,11 +3709,65 @@
             "observer": "client"
           }
         },
+        "clickRefusal": {
+          "means": "extension frame concealed: the click is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
         "key": {
           "means": "extension frame concealed: typed text reaches the page",
           "check": {
             "result": "frame",
             "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame concealed: the typing is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame concealed: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame concealed: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame concealed: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame concealed: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
             "equals": true,
             "observer": "client"
           }
@@ -3508,19 +3788,33 @@
           "attached": true,
           "read": true,
           "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
           "archive": true,
+          "archiveRefusal": false,
           "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
           "frameAttach": true,
           "listed": true,
           "alive": true,
-          "shot": true,
-          "click": true,
-          "key": true,
-          "snapshotFrameRead": false,
-          "pdf": true,
           "autoAttached": true,
           "targetInfoURL": true,
-          "eventURL": true
+          "eventURL": true,
+          "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false,
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
+          "frameVisible": false
         }
       },
       "expected": {
@@ -3528,19 +3822,33 @@
         "attached": true,
         "read": true,
         "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
         "archive": false,
+        "archiveRefusal": true,
         "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
         "frameAttach": false,
         "listed": false,
         "alive": true,
-        "shot": true,
-        "click": true,
-        "key": true,
-        "snapshotFrameRead": false,
-        "pdf": false,
         "autoAttached": false,
         "targetInfoURL": false,
-        "eventURL": false
+        "eventURL": false,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true,
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
+        "shot": true,
+        "frameVisible": false
       }
     },
     {
@@ -3602,10 +3910,55 @@
           }
         },
         "snapshotFrameRead": {
-          "means": "extension frame shown: the snapshot exposes the extension document or its private contents",
+          "means": "extension frame shown: the snapshot exposes the extension document, private contents, or iframe src",
           "check": {
             "result": "frame",
             "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame shown: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame shown: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame shown: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame shown: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame shown: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
             "equals": true,
             "observer": "client"
           }
@@ -3616,6 +3969,15 @@
             "result": "frame",
             "path": "result.pdf",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame shown: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3655,12 +4017,30 @@
             "observer": "client"
           }
         },
+        "archiveRefusal": {
+          "means": "extension frame shown: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
         "cast": {
           "means": "extension frame shown: a screencast starts",
           "check": {
             "result": "frame",
             "path": "result.cast",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame shown: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3700,15 +4080,6 @@
             "observer": "client"
           }
         },
-        "shotRefusal": {
-          "means": "extension frame shown: the screenshot is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.shotRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
-            "observer": "client"
-          }
-        },
         "click": {
           "means": "extension frame shown: a click reaches the page",
           "check": {
@@ -3719,11 +4090,11 @@
           }
         },
         "clickRefusal": {
-          "means": "extension frame shown: the click is refused with the extension-frame refusal",
+          "means": "extension frame shown: the click is refused with the input refusal",
           "check": {
             "result": "frame",
             "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
             "observer": "client"
           }
         },
@@ -3737,11 +4108,56 @@
           }
         },
         "keyRefusal": {
-          "means": "extension frame shown: the typing is refused with the extension-frame refusal",
+          "means": "extension frame shown: the typing is refused with the input refusal",
           "check": {
             "result": "frame",
             "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame shown: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame shown: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame shown: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame shown: the screenshot is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
             "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame shown: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
             "observer": "client"
           }
         }
@@ -3761,22 +4177,34 @@
           "attached": true,
           "read": true,
           "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
           "archive": true,
+          "archiveRefusal": false,
           "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
           "frameAttach": true,
           "listed": true,
           "alive": true,
-          "shot": true,
-          "shotRefusal": false,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
           "click": true,
           "clickRefusal": false,
           "key": true,
           "keyRefusal": false,
-          "snapshotFrameRead": false,
-          "pdf": true,
-          "autoAttached": true,
-          "targetInfoURL": true,
-          "eventURL": true
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
+          "shotRefusal": false,
+          "frameVisible": true
         }
       },
       "expected": {
@@ -3784,22 +4212,34 @@
         "attached": true,
         "read": true,
         "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
         "archive": false,
+        "archiveRefusal": true,
         "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
         "frameAttach": false,
         "listed": false,
         "alive": true,
-        "shot": false,
-        "shotRefusal": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
         "click": false,
         "clickRefusal": true,
         "key": false,
         "keyRefusal": true,
-        "snapshotFrameRead": false,
-        "pdf": false,
-        "autoAttached": false,
-        "targetInfoURL": false,
-        "eventURL": false
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
+        "shot": false,
+        "shotRefusal": true,
+        "frameVisible": true
       }
     },
     {
@@ -3861,10 +4301,55 @@
           }
         },
         "snapshotFrameRead": {
-          "means": "extension frame transparent: the snapshot exposes the extension document or its private contents",
+          "means": "extension frame transparent: the snapshot exposes the extension document, private contents, or iframe src",
           "check": {
             "result": "frame",
             "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame transparent: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame transparent: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame transparent: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame transparent: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame transparent: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
             "equals": true,
             "observer": "client"
           }
@@ -3875,6 +4360,15 @@
             "result": "frame",
             "path": "result.pdf",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame transparent: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3914,12 +4408,30 @@
             "observer": "client"
           }
         },
+        "archiveRefusal": {
+          "means": "extension frame transparent: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
         "cast": {
           "means": "extension frame transparent: a screencast starts",
           "check": {
             "result": "frame",
             "path": "result.cast",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame transparent: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -3959,15 +4471,6 @@
             "observer": "client"
           }
         },
-        "shotRefusal": {
-          "means": "extension frame transparent: the screenshot is refused with the extension-frame refusal",
-          "check": {
-            "result": "frame",
-            "path": "result.shotRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
-            "observer": "client"
-          }
-        },
         "click": {
           "means": "extension frame transparent: a click reaches the page",
           "check": {
@@ -3978,11 +4481,11 @@
           }
         },
         "clickRefusal": {
-          "means": "extension frame transparent: the click is refused with the extension-frame refusal",
+          "means": "extension frame transparent: the click is refused with the input refusal",
           "check": {
             "result": "frame",
             "path": "result.clickRefusal",
-            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
             "observer": "client"
           }
         },
@@ -3996,11 +4499,56 @@
           }
         },
         "keyRefusal": {
-          "means": "extension frame transparent: the typing is refused with the extension-frame refusal",
+          "means": "extension frame transparent: the typing is refused with the input refusal",
           "check": {
             "result": "frame",
             "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame transparent: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame transparent: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame transparent: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame transparent: the screenshot is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
             "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame transparent: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
             "observer": "client"
           }
         }
@@ -4020,22 +4568,34 @@
           "attached": true,
           "read": true,
           "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
           "archive": true,
+          "archiveRefusal": false,
           "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
           "frameAttach": true,
           "listed": true,
           "alive": true,
-          "shot": true,
-          "shotRefusal": false,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
           "click": true,
           "clickRefusal": false,
           "key": true,
           "keyRefusal": false,
-          "snapshotFrameRead": false,
-          "pdf": true,
-          "autoAttached": true,
-          "targetInfoURL": true,
-          "eventURL": true
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
+          "shotRefusal": false,
+          "frameVisible": true
         }
       },
       "expected": {
@@ -4043,22 +4603,34 @@
         "attached": true,
         "read": true,
         "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
         "archive": false,
+        "archiveRefusal": true,
         "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
         "frameAttach": false,
         "listed": false,
         "alive": true,
-        "shot": false,
-        "shotRefusal": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
         "click": false,
         "clickRefusal": true,
         "key": false,
         "keyRefusal": true,
-        "snapshotFrameRead": false,
-        "pdf": false,
-        "autoAttached": false,
-        "targetInfoURL": false,
-        "eventURL": false
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
+        "shot": false,
+        "shotRefusal": true,
+        "frameVisible": true
       }
     },
     {
@@ -4120,10 +4692,55 @@
           }
         },
         "snapshotFrameRead": {
-          "means": "extension frame revealed: the snapshot exposes the extension document or its private contents",
+          "means": "extension frame revealed: the snapshot exposes the extension document, private contents, or iframe src",
           "check": {
             "result": "frame",
             "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame revealed: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame revealed: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame revealed: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame revealed: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame revealed: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
             "equals": true,
             "observer": "client"
           }
@@ -4134,6 +4751,15 @@
             "result": "frame",
             "path": "result.pdf",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame revealed: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -4173,12 +4799,30 @@
             "observer": "client"
           }
         },
+        "archiveRefusal": {
+          "means": "extension frame revealed: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
         "cast": {
           "means": "extension frame revealed: a screencast starts",
           "check": {
             "result": "frame",
             "path": "result.cast",
             "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame revealed: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
             "observer": "client"
           }
         },
@@ -4227,6 +4871,60 @@
             "observer": "client"
           }
         },
+        "clickRefusal": {
+          "means": "extension frame revealed: the click is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame revealed: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame revealed: the typing is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame revealed: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame revealed: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame revealed: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
         "revealedShot": {
           "means": "extension frame revealed: a screenshot is taken after the frame is shown",
           "check": {
@@ -4254,11 +4952,29 @@
             "observer": "client"
           }
         },
+        "revealedClickRefusal": {
+          "means": "extension frame revealed: that click is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.revealedClickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
         "rehiddenShot": {
           "means": "extension frame revealed: a screenshot is taken after the frame is hidden again",
           "check": {
             "result": "frame",
             "path": "result.rehiddenShot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame revealed: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
             "equals": true,
             "observer": "client"
           }
@@ -4279,22 +4995,38 @@
           "attached": true,
           "read": true,
           "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
           "archive": true,
+          "archiveRefusal": false,
           "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
           "frameAttach": true,
           "listed": true,
           "alive": true,
-          "shot": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
           "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false,
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
           "revealedShot": true,
           "revealedRefusal": false,
           "revealedClick": true,
+          "revealedClickRefusal": false,
           "rehiddenShot": true,
-          "snapshotFrameRead": false,
-          "pdf": true,
-          "autoAttached": true,
-          "targetInfoURL": true,
-          "eventURL": true
+          "frameVisible": false
         }
       },
       "expected": {
@@ -4302,23 +5034,430 @@
         "attached": true,
         "read": true,
         "snapshot": true,
+        "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
         "archive": false,
+        "archiveRefusal": true,
         "cast": false,
+        "castRefusal": true,
+        "pdf": false,
+        "pdfRefusal": true,
         "frameAttach": false,
         "listed": false,
         "alive": true,
+        "autoAttached": false,
+        "targetInfoURL": false,
+        "eventURL": false,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true,
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
         "shot": true,
-        "click": true,
         "revealedShot": false,
         "revealedRefusal": true,
         "revealedClick": false,
+        "revealedClickRefusal": true,
         "rehiddenShot": true,
+        "frameVisible": false
+      }
+    },
+    {
+      "id": "C9.frame-nested",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "extensionFrame": "nested",
+          "as": "frame",
+          "requires": ["extensionFrame"]
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["extensionFrame"],
+      "liveCheck": {
+        "result": "frame",
+        "path": "result.exists",
+        "equals": true,
+        "observer": "client"
+      },
+      "observe": {
+        "exists": {
+          "means": "extension frame nested: the extension frame is in the tab",
+          "check": {
+            "result": "frame",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attached": {
+          "means": "extension frame nested: the tab attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.attached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "read": {
+          "means": "extension frame nested: the page evaluates",
+          "check": {
+            "result": "frame",
+            "path": "result.read",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshot": {
+          "means": "extension frame nested: the page DOM snapshots",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "snapshotFrameRead": {
+          "means": "extension frame nested: the snapshot exposes the extension document, private contents, or iframe src",
+          "check": {
+            "result": "frame",
+            "path": "result.snapshotFrameRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "frameTreeLeak": {
+          "means": "extension frame nested: Page.getFrameTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.frameTreeLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "documentLeak": {
+          "means": "extension frame nested: DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.documentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shadowDocumentLeak": {
+          "means": "extension frame nested: a pierced closed-shadow DOM.getDocument exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.shadowDocumentLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "axLeak": {
+          "means": "extension frame nested: Accessibility.getFullAXTree exposes the extension frame URL or private content",
+          "check": {
+            "result": "frame",
+            "path": "result.axLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateLeak": {
+          "means": "extension frame nested: Runtime.evaluate exposes the iframe src username",
+          "check": {
+            "result": "frame",
+            "path": "result.evaluateLeak",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdf": {
+          "means": "extension frame nested: a PDF capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.pdf",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pdfRefusal": {
+          "means": "extension frame nested: PDF is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.pdfRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "autoAttached": {
+          "means": "extension frame nested: auto-attach exposes an extension frame session",
+          "check": {
+            "result": "frame",
+            "path": "result.autoAttached",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "targetInfoURL": {
+          "means": "extension frame nested: Target.getTargetInfo exposes the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.targetInfoURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "eventURL": {
+          "means": "extension frame nested: target discovery events expose the extension frame URL",
+          "check": {
+            "result": "frame",
+            "path": "result.eventURL",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archive": {
+          "means": "extension frame nested: an MHTML capture is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.archive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "archiveRefusal": {
+          "means": "extension frame nested: MHTML is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.archiveRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "cast": {
+          "means": "extension frame nested: a screencast starts",
+          "check": {
+            "result": "frame",
+            "path": "result.cast",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "castRefusal": {
+          "means": "extension frame nested: screencast is refused with the present refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.castRefusal",
+            "equals": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+            "observer": "client"
+          }
+        },
+        "frameAttach": {
+          "means": "extension frame nested: the extension frame attaches",
+          "check": {
+            "result": "frame",
+            "path": "result.frameAttach",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "extension frame nested: Target.getTargets shows the extension frame's URL",
+          "check": {
+            "result": "frame",
+            "path": "result.listed",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "alive": {
+          "means": "extension frame nested: the page session still answers",
+          "check": {
+            "result": "frame",
+            "path": "result.alive",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "shot": {
+          "means": "extension frame nested: a screenshot is taken",
+          "check": {
+            "result": "frame",
+            "path": "result.shot",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "click": {
+          "means": "extension frame nested: a click reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.click",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clickRefusal": {
+          "means": "extension frame nested: the click is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.clickRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "key": {
+          "means": "extension frame nested: typed text reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.key",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "keyRefusal": {
+          "means": "extension frame nested: the typing is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.keyRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "frameClick": {
+          "means": "extension frame nested: a click on the frame box reaches the page",
+          "check": {
+            "result": "frame",
+            "path": "result.frameClick",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "extension frame nested: Tab is delivered",
+          "check": {
+            "result": "frame",
+            "path": "result.tab",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "tabRefusal": {
+          "means": "extension frame nested: Tab is refused with the input refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.tabRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click",
+            "observer": "client"
+          }
+        },
+        "shotRefusal": {
+          "means": "extension frame nested: the screenshot is refused with the extension-frame refusal",
+          "check": {
+            "result": "frame",
+            "path": "result.shotRefusal",
+            "equals": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
+            "observer": "client"
+          }
+        },
+        "frameVisible": {
+          "means": "extension frame nested: the frame element is visible to checkVisibility",
+          "check": {
+            "result": "frame",
+            "path": "result.frameVisible",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "expected": {
+        "exists": true,
+        "attached": true,
+        "read": true,
+        "snapshot": true,
         "snapshotFrameRead": false,
+        "frameTreeLeak": false,
+        "documentLeak": false,
+        "shadowDocumentLeak": false,
+        "axLeak": false,
+        "evaluateLeak": false,
+        "archive": false,
+        "archiveRefusal": true,
+        "cast": false,
+        "castRefusal": true,
         "pdf": false,
+        "pdfRefusal": true,
+        "frameAttach": false,
+        "listed": false,
+        "alive": true,
         "autoAttached": false,
         "targetInfoURL": false,
-        "eventURL": false
-      }
+        "eventURL": false,
+        "click": false,
+        "clickRefusal": true,
+        "key": false,
+        "keyRefusal": true,
+        "frameClick": false,
+        "tab": false,
+        "tabRefusal": true,
+        "shot": false,
+        "shotRefusal": true,
+        "frameVisible": true
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "exists": true,
+          "attached": true,
+          "read": true,
+          "snapshot": true,
+          "snapshotFrameRead": true,
+          "frameTreeLeak": true,
+          "documentLeak": true,
+          "shadowDocumentLeak": true,
+          "axLeak": true,
+          "evaluateLeak": true,
+          "archive": true,
+          "archiveRefusal": false,
+          "cast": true,
+          "castRefusal": false,
+          "pdf": true,
+          "pdfRefusal": false,
+          "frameAttach": true,
+          "listed": true,
+          "alive": true,
+          "autoAttached": true,
+          "targetInfoURL": true,
+          "eventURL": true,
+          "click": true,
+          "clickRefusal": false,
+          "key": true,
+          "keyRefusal": false,
+          "frameClick": true,
+          "tab": true,
+          "tabRefusal": false,
+          "shot": true,
+          "shotRefusal": false,
+          "frameVisible": true
+        }
+      },
+      "live": "the observer confirms a chrome-extension: frame nested under another frame is in the ordinary tab"
     },
     {
       "id": "C1.script-nav",

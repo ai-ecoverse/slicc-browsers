@@ -364,7 +364,14 @@ const canTrustedEmulation = (vector) =>
     trustedEmulationMethods.has(step.cdp)
   );
 
-function skipWhy(vector, row, known, guard) {
+function declaredCapabilities(value) {
+  if (Array.isArray(value)) return value.filter((cap) => typeof cap === 'string' && cap !== '');
+  if (value && typeof value === 'object')
+    return Object.keys(value).filter((key) => value[key] === true);
+  return [];
+}
+
+function skipWhy(vector, row, known, guard, declared) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
   if (reason === skipReason(vector, row.target, guard)) return null;
@@ -373,13 +380,18 @@ function skipWhy(vector, row, known, guard) {
     return canTrustedEmulation(vector)
       ? null
       : `skip with a reason the runner never gives: ${reason}`;
-  if (reason.startsWith('not-supported:') && known.has(reason.slice('not-supported:'.length)))
-    return null;
+  if (reason.startsWith('not-supported:')) {
+    const cap = reason.slice('not-supported:'.length);
+    if (declared.includes(cap))
+      return `skip with not-supported:${cap} while the run declared ${cap}`;
+    if (known.has(cap)) return null;
+  }
   return `skip with a reason the runner never gives: ${reason}`;
 }
 
-function forgeries(set, results, guard) {
+function forgeries(set, results, guard, capabilitiesList) {
   const vectors = new Map(set.vectors.map((v) => [v.id, v]));
+  const declared = declaredCapabilities(capabilitiesList);
   const known = new Set([
     'browserSession',
     'unguarded-observer',
@@ -392,7 +404,7 @@ function forgeries(set, results, guard) {
     const why = [];
     if (legs.includes('not-run') && vector?.kind !== 'text')
       why.push('not-run on a vector that is not kind text');
-    if (legs.includes('skip')) why.push(skipWhy(vector, row, known, guard));
+    if (legs.includes('skip')) why.push(skipWhy(vector, row, known, guard, declared));
     const found = why.filter(Boolean);
     if (!found.length) return [];
     const { id, target, variant, transport } = row;
@@ -400,7 +412,7 @@ function forgeries(set, results, guard) {
   });
 }
 
-export function summary({ guard, sha, set, results }) {
+export function summary({ guard, sha, set, results, capabilities: runCapabilities }) {
   const uniq = (k) => [...new Set(results.map((r) => r[k]))].sort();
   const variants = [...new Set([...Object.keys(set.variants ?? {}), ...uniq('variant')])].sort();
   const has = new Set(results.map((r) => q([r.id, r.target, r.variant, r.transport])));
@@ -410,7 +422,7 @@ export function summary({ guard, sha, set, results }) {
     .flatMap((row) => variants.map((variant) => ({ ...row, variant })))
     .flatMap((row) => uniq('transport').map((transport) => ({ ...row, transport })))
     .filter((r) => !has.has(q([r.id, r.target, r.variant, r.transport])));
-  const forged = forgeries(set, results, guard);
+  const forged = forgeries(set, results, guard, runCapabilities);
   const pass =
     results.length > 0 && missing.length === 0 && forged.length === 0 && results.every(passed);
   const name = `@ai-ecoverse/slicc-browsers@${set.setVersion}`;

@@ -7,7 +7,9 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function emulatedGuard(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
-  const catalog = options.protectedOrigins ? protectedOrigins(options.protectedOrigins) : null;
+  const catalog = options.protectedOrigins
+    ? protectedOrigins(options.protectedOrigins, options.extraOrigins ?? [])
+    : null;
   const pages = new Set();
   const shielded = new Set();
   const foreign = new Set();
@@ -331,10 +333,49 @@ export function emulatedGuard(browser, options = {}) {
   };
   async function extensionFramesOf(targetId) {
     const { targetInfos } = await unguarded.send('Target.getTargets');
+    const byId = new Map(targetInfos.map((info) => [info.targetId, info]));
+    const under = (info) => {
+      let cur = info;
+      while (cur) {
+        if (cur.parentId === targetId) return true;
+        if (!cur.parentId) return false;
+        cur = byId.get(cur.parentId);
+      }
+      return false;
+    };
     return targetInfos.filter(
-      (info) =>
-        info.type === 'iframe' && info.parentId === targetId && catalog.extensionFrame(info.url)
+      (info) => info.type === 'iframe' && catalog.extensionFrame(info.url) && under(info)
     );
+  }
+  function scrubExtensionSecrets(value) {
+    if (!options.extensionFrames || !catalog) return value;
+    const text = JSON.stringify(value);
+    if (
+      !text.includes('slicc-frame-test-user') &&
+      !text.includes('slicc-private-extension-frame-content') &&
+      !text.includes('chrome-extension://')
+    )
+      return value;
+    const walk = (entry) => {
+      if (typeof entry === 'string') {
+        if (
+          entry.includes('slicc-frame-test-user') ||
+          entry.includes('slicc-private-extension-frame-content') ||
+          catalog.extensionFrame(entry) ||
+          entry.startsWith('chrome-extension://')
+        )
+          return '';
+        return entry;
+      }
+      if (Array.isArray(entry)) return entry.map(walk);
+      if (entry && typeof entry === 'object') {
+        const copy = {};
+        for (const [key, child] of Object.entries(entry)) copy[key] = walk(child);
+        return copy;
+      }
+      return entry;
+    };
+    return walk(value);
   }
   async function frameShown(targetId, list) {
     if (!list.length || options.frameVisibility === 'ignored') return false;
@@ -520,9 +561,12 @@ export function emulatedGuard(browser, options = {}) {
       });
       try {
         const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
+        const allowExtension = (url) => options.extensionFrames && catalog.extensionFrame(url);
         const protectedFrame = (tree) =>
-          catalog.url(tree.frame.url) ||
-          (tree.frame.securityOrigin && catalog.url(tree.frame.securityOrigin)) ||
+          (catalog.url(tree.frame.url) && !allowExtension(tree.frame.url)) ||
+          (tree.frame.securityOrigin &&
+            catalog.url(tree.frame.securityOrigin) &&
+            !allowExtension(tree.frame.securityOrigin)) ||
           (tree.childFrames ?? []).some(protectedFrame);
         if (protectedFrame(frameTree)) throw refusal('protected frame');
         const start = unguarded.events.length;
@@ -543,7 +587,7 @@ export function emulatedGuard(browser, options = {}) {
           frames.some(
             (event) =>
               catalog.url(event.params.targetInfo.url) &&
-              !(options.extensionFrames && catalog.extensionFrame(event.params.targetInfo.url))
+              !allowExtension(event.params.targetInfo.url)
           )
         )
           throw refusal('protected out-of-process frame');
@@ -557,11 +601,14 @@ export function emulatedGuard(browser, options = {}) {
       }
     }
     const frameRules = options.extensionFrames ? options.protectedOrigins.extensionFrames : null;
+    const inputMethods = frameRules?.inputWhilePresent ?? [];
     const gated =
       frameRules &&
       sessionId &&
       targetId &&
-      (frameRules.whenShown.includes(method) || frameRules.whilePresent.includes(method));
+      (frameRules.whenShown.includes(method) ||
+        frameRules.whilePresent.includes(method) ||
+        inputMethods.includes(method));
     const held = gated ? await extensionFramesOf(targetId) : [];
     if (
       held.length &&
@@ -569,7 +616,10 @@ export function emulatedGuard(browser, options = {}) {
       !(options.exposeFramePDF && method === 'Page.printToPDF')
     )
       throw new Error(frameRules.presentRefusal);
-    if (held.length && (await frameShown(targetId, held))) throw new Error(frameRules.shownRefusal);
+    if (held.length && inputMethods.includes(method) && options.frameInput !== 'ignored')
+      throw new Error(frameRules.inputRefusal);
+    if (held.length && frameRules.whenShown.includes(method) && (await frameShown(targetId, held)))
+      throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
     if (failure) throw new Error(failure);
     if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
@@ -602,8 +652,13 @@ export function emulatedGuard(browser, options = {}) {
       throw refusal('cookies in a context slicc did not create');
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
+    if (held.length && method === 'Page.captureScreenshot') await pause(50);
     const result = await client.send(method, params, sessionId);
-    if (held.length && (await frameShown(targetId, await extensionFramesOf(targetId))))
+    if (
+      held.length &&
+      frameRules.whenShown.includes(method) &&
+      (await frameShown(targetId, await extensionFramesOf(targetId)))
+    )
       throw new Error(frameRules.shownRefusal);
     learnWorlds();
     await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
@@ -649,6 +704,18 @@ export function emulatedGuard(browser, options = {}) {
         targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
       };
     }
+    if (
+      options.extensionFrames &&
+      [
+        'Page.getFrameTree',
+        'DOM.getDocument',
+        'DOMSnapshot.captureSnapshot',
+        'Accessibility.getFullAXTree',
+        'Runtime.evaluate',
+      ].includes(method) &&
+      !options.exposeFramePageReads
+    )
+      return scrubExtensionSecrets(result);
     return options.redirectSecrets && catalog ? redactProtectedURLs(result, catalog) : result;
   }
 }

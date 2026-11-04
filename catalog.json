@@ -747,8 +747,14 @@
     "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
     "extensionFrames": {
       "schemes": ["chrome-extension"],
-      "whenShown": [
-        "Page.captureScreenshot",
+      "whenShown": ["Page.captureScreenshot"],
+      "whilePresent": [
+        "Page.captureSnapshot",
+        "Page.printToPDF",
+        "Page.startScreencast",
+        "HeadlessExperimental.beginFrame"
+      ],
+      "inputWhilePresent": [
         "Input.dispatchKeyEvent",
         "Input.dispatchMouseEvent",
         "Input.dispatchTouchEvent",
@@ -760,14 +766,9 @@
         "Input.synthesizeScrollGesture",
         "Input.synthesizeTapGesture"
       ],
-      "whilePresent": [
-        "Page.captureSnapshot",
-        "Page.printToPDF",
-        "Page.startScreencast",
-        "HeadlessExperimental.beginFrame"
-      ],
       "shownRefusal": "slicc: refused: a browser extension's frame (chrome-extension://) is showing in this tab, such as a password manager's autofill list; close it or reload the tab",
-      "presentRefusal": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it"
+      "presentRefusal": "slicc: refused: this tab holds a browser extension's frame (chrome-extension://), such as a password manager's autofill list, so it can't be captured whole or streamed; reload the tab to remove it",
+      "inputRefusal": "slicc: refused: a browser extension's frame (chrome-extension://) is in this tab, such as a password manager's autofill list; reload the tab to type or click"
     },
     "refusal": "slicc: refused: target is on seven's origin"
   },

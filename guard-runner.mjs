@@ -2080,10 +2080,14 @@ async function runAll(set, options, flights) {
     row.transport = transport;
     opts.log?.(row);
   }
-  return { results, summary: (metadata = {}) => summary({ set, results, ...metadata }) };
+  return {
+    results,
+    summary: (metadata = {}) =>
+      summary({ set, results, capabilities: opts.capabilities, ...metadata }),
+  };
 }
 
-export function summary({ set, results, guard = 'reference', sha = 'unknown' }) {
+export function summary({ set, results, guard = 'reference', sha = 'unknown', capabilities }) {
   const value = report({
     set: {
       ...set,
@@ -2094,6 +2098,7 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown' }) 
     results,
     guard,
     sha,
+    capabilities,
   });
   const observerSkipped = results.filter(
     (row) => row.reason === 'not-supported:unguarded-observer'

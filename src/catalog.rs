@@ -187,8 +187,10 @@ pub struct ExtensionFrameRule {
     pub schemes: Vec<String>,
     pub when_shown: Vec<String>,
     pub while_present: Vec<String>,
+    pub input_while_present: Vec<String>,
     pub shown_refusal: String,
     pub present_refusal: String,
+    pub input_refusal: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

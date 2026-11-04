@@ -508,12 +508,14 @@ async function driveCaptures(client, page, missing) {
   return { archive, pdf, cast, begin };
 }
 
-async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
+export async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
   const captureStartedAt = await observe(reader, observer, 'performance.now()');
   let captureSettled = false;
+  let captureSettledAt;
   const pending = outcome(client.send('Page.captureScreenshot', { format: 'png' }, page)).then(
-    (out) => {
+    async (out) => {
       captureSettled = true;
+      captureSettledAt = await observe(reader, observer, 'performance.now()');
       return out;
     }
   );
@@ -535,7 +537,7 @@ async function driveReveal(client, reader, page, observer, frameMs, missing, sid
   if (typeof captureStartedAt !== 'number' || typeof revealAt !== 'number') overlap = 'unknown';
   else if (revealAt <= captureStartedAt) overlap = 'before';
   else if (pendingWhenRevealAcknowledged) overlap = 'during';
-  else if (captureSettled) overlap = 'after';
+  else if (typeof captureSettledAt === 'number' && captureSettledAt < revealAt) overlap = 'after';
   if (overlap === 'unknown') missing.push('reveal/capture overlap unproven');
   const shownRefused = Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
   let revealRacePass = false;

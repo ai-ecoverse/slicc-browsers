@@ -459,11 +459,31 @@ export const idleDebuggerCleanup = (vector, step, phase, out) =>
 export const debuggerPaused = (events, session) =>
   events.some((event) => event.sessionId === session && event.method === 'Debugger.paused');
 
-export const trustedClientOnly = (step, out) =>
-  trustedEmulationMethods.has(step.cdp) &&
-  !out.ok &&
-  Number(out.error?.code) === -32000 &&
-  /only available to trusted clients/i.test(String(out.error?.message ?? ''));
+const cdpError = (error) => {
+  const code = error?.code;
+  const message = error?.message;
+  if (code !== undefined && code !== null) return { code, message };
+  if (typeof message !== 'string') return { code, message };
+  try {
+    const parsed = JSON.parse(message);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof parsed.code === 'number' &&
+      typeof parsed.message === 'string'
+    )
+      return { code: parsed.code, message: parsed.message };
+  } catch {}
+  return { code, message };
+};
+
+export const trustedClientOnly = (step, out) => {
+  if (!trustedEmulationMethods.has(step.cdp) || out.ok) return false;
+  const { code, message } = cdpError(out.error);
+  return (
+    Number(code) === -32000 && /only available to trusted clients/i.test(String(message ?? ''))
+  );
+};
 
 export const refusalError = (step, out, refused, gone, phase, vector) =>
   step.refusable && !out.ok && !refused && !gone && !idleDebuggerCleanup(vector, step, phase, out);

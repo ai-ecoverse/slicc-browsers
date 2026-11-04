@@ -28,6 +28,7 @@ pub const CAP_BROWSER_SESSION: &str = "browserSession";
 pub const CAP_BROWSER_CONTEXTS: &str = "browserContexts";
 pub const CAP_CHROME_URLS_ATTACH: &str = "chromeUrlsAttach";
 pub const CAP_EXTENSION_WORLD: &str = "extensionWorld";
+pub const CAP_EXTENSION_FRAME: &str = "extensionFrame";
 pub const CAP_DISCOVERY: &str = "discovery";
 pub const CAP_CLIENT_EXIT: &str = "clientExit";
 pub const CAP_SITE_ISOLATION_OFF: &str = "siteIsolationOff";
@@ -195,6 +196,12 @@ pub struct Step {
     pub secret: Option<String>,
     #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]
     pub extension_world: Option<String>,
+    #[serde(
+        default,
+        rename = "extensionFrame",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub extension_frame: Option<String>,
     #[serde(rename = "frameRead", skip_serializing_if = "Option::is_none")]
     pub frame_read: Option<String>,
     #[serde(rename = "bfcacheRestore", skip_serializing_if = "Option::is_none")]

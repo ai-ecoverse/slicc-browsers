@@ -247,6 +247,10 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 	if !slices.Contains(po.Domains, "sliccy.ai") || !slices.Contains(po.Hosts, "vault.sliccy.ai") || !slices.Contains(po.Schemes, "https") || po.Refusal != "slicc: refused: target is on seven's origin" {
 		t.Fatalf("protectedOrigins: %+v", po)
 	}
+	ef := po.ExtensionFrames
+	if !slices.Equal(ef.Schemes, []string{"chrome-extension"}) || !slices.Contains(ef.WhenShown, "Page.captureScreenshot") || !slices.Contains(ef.WhenShown, "Input.dispatchMouseEvent") || !slices.Contains(ef.WhilePresent, "Page.startScreencast") || !strings.Contains(ef.ShownRefusal, "showing or focused") || !strings.Contains(ef.PresentRefusal, "chrome-extension://") {
+		t.Fatalf("extensionFrames: %+v", ef)
+	}
 	s, ok := decode(t, sliccbrowsers.ProtectedSchemaJSON()).(map[string]any)
 	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/protected.schema.json") {
 		t.Fatalf("protected schema: %v", s["$id"])
@@ -302,7 +306,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 			t.Fatalf("no vector %s", id)
 		}
 	}
-	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapDiscovery, sliccbrowsers.GuardCapClientExit, sliccbrowsers.GuardCapSiteIsolationOff} {
+	for _, c := range []string{sliccbrowsers.GuardCapAutoAttach, sliccbrowsers.GuardCapBrowserSession, sliccbrowsers.GuardCapBrowserContexts, sliccbrowsers.GuardCapChromeURLsAttach, sliccbrowsers.GuardCapExtensionWorld, sliccbrowsers.GuardCapExtensionFrame, sliccbrowsers.GuardCapDiscovery, sliccbrowsers.GuardCapClientExit, sliccbrowsers.GuardCapSiteIsolationOff} {
 		if v.Capabilities[c] == "" {
 			t.Fatalf("capability %s: %v", c, v.Capabilities)
 		}

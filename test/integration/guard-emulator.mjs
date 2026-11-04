@@ -7,7 +7,9 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export function emulatedGuard(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
-  const catalog = options.protectedOrigins ? protectedOrigins(options.protectedOrigins) : null;
+  const catalog = options.protectedOrigins
+    ? protectedOrigins(options.protectedOrigins, options.extraOrigins ?? [])
+    : null;
   const pages = new Set();
   const shielded = new Set();
   const foreign = new Set();
@@ -53,6 +55,12 @@ export function emulatedGuard(browser, options = {}) {
     }
   };
   const redactInfo = (info) => {
+    if (
+      options.extensionFrames &&
+      !options.exposeExtensionFrames &&
+      catalog?.extensionFrame(info.url)
+    )
+      return { ...info, url: '', title: '' };
     if (!catalog?.url(info.url, { readOnly: true })) return info;
     let origin;
     try {
@@ -83,6 +91,9 @@ export function emulatedGuard(browser, options = {}) {
   const contexts = new Set();
   const extensionContexts = new Map();
   const cutSessions = new Set();
+  const cutFrameSessions = new Set();
+  const casting = new Set();
+  const castStopped = new Set();
   const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
   const learnWorlds = () => {
     for (const event of client.events) {
@@ -237,6 +248,42 @@ export function emulatedGuard(browser, options = {}) {
           events.push({ ...event, params: { ...event.params, waitingForDebugger: false } });
           continue;
         }
+        if (options.extensionFrames && !options.exposeExtensionFrames) {
+          if (
+            event.method === 'Target.attachedToTarget' &&
+            catalog.extensionFrame(event.params.targetInfo.url)
+          ) {
+            cutFrameSessions.add(event.params.sessionId);
+            await client
+              .send('Target.detachFromTarget', { sessionId: event.params.sessionId })
+              .catch(() => {});
+            continue;
+          }
+          if (
+            cutFrameSessions.has(event.sessionId) ||
+            (event.method === 'Target.detachedFromTarget' &&
+              cutFrameSessions.has(event.params.sessionId))
+          )
+            continue;
+          if (
+            event.method === 'Page.screencastFrame' &&
+            !options.keepScreencastStreaming &&
+            (casting.has(event.sessionId) || castStopped.has(event.sessionId))
+          ) {
+            const owner = sessions.get(event.sessionId);
+            if (
+              castStopped.has(event.sessionId) ||
+              (owner && (await extensionFramesOf(owner)).length > 0)
+            ) {
+              if (casting.has(event.sessionId) && !castStopped.has(event.sessionId)) {
+                castStopped.add(event.sessionId);
+                casting.delete(event.sessionId);
+                await client.send('Page.stopScreencast', {}, event.sessionId).catch(() => {});
+              }
+              continue;
+            }
+          }
+        }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {
@@ -310,6 +357,142 @@ export function emulatedGuard(browser, options = {}) {
         await unguarded.send('Target.detachFromTarget', { sessionId }).catch(() => {});
     },
   };
+  async function extensionFramesOf(targetId) {
+    const { targetInfos } = await unguarded.send('Target.getTargets');
+    const byId = new Map(targetInfos.map((info) => [info.targetId, info]));
+    const under = (info) => {
+      let cur = info;
+      while (cur) {
+        if (cur.parentId === targetId) return true;
+        if (!cur.parentId) return false;
+        cur = byId.get(cur.parentId);
+      }
+      return false;
+    };
+    return targetInfos.filter(
+      (info) => info.type === 'iframe' && catalog.extensionFrame(info.url) && under(info)
+    );
+  }
+  function scrubExtensionSecrets(value) {
+    if (!options.extensionFrames || !catalog) return value;
+    const text = JSON.stringify(value);
+    if (
+      !text.includes('slicc-frame-test-user') &&
+      !text.includes('slicc-private-extension-frame-content') &&
+      !text.includes('chrome-extension://')
+    )
+      return value;
+    const walk = (entry) => {
+      if (typeof entry === 'string') {
+        if (
+          entry.includes('slicc-frame-test-user') ||
+          entry.includes('slicc-private-extension-frame-content') ||
+          catalog.extensionFrame(entry) ||
+          entry.startsWith('chrome-extension://')
+        )
+          return '';
+        return entry;
+      }
+      if (Array.isArray(entry)) return entry.map(walk);
+      if (entry && typeof entry === 'object') {
+        const copy = {};
+        for (const [key, child] of Object.entries(entry)) copy[key] = walk(child);
+        return copy;
+      }
+      return entry;
+    };
+    return walk(value);
+  }
+  async function frameOwner(targetId, frameId) {
+    const shieldSession = [...shields].find(([, entry]) => entry.targetId === targetId)?.[0];
+    const root = frames.get(targetId)?.id;
+    if (!shieldSession || !root) return null;
+    await unguarded.send('DOM.enable', {}, shieldSession);
+    const world = await unguarded.send(
+      'Page.createIsolatedWorld',
+      { frameId: root, worldName: 'slicc-emulator-frames' },
+      shieldSession
+    );
+    const { backendNodeId } = await unguarded.send('DOM.getFrameOwner', { frameId }, shieldSession);
+    const { object } = await unguarded.send(
+      'DOM.resolveNode',
+      { backendNodeId, executionContextId: world.executionContextId },
+      shieldSession
+    );
+    return { shieldSession, objectId: object.objectId };
+  }
+  async function frameShown(targetId, list) {
+    if (!list.length || options.frameVisibility === 'ignored') return false;
+    const test =
+      options.frameVisibility === 'opacity'
+        ? `function(){
+            if (!this.checkVisibility({visibilityProperty:true,opacityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          }`
+        : options.frameVisibility === 'viewport'
+          ? `function(){
+            if (!this.checkVisibility({visibilityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            if (!(r.width > 0 && r.height > 0)) return false;
+            return r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight;
+          }`
+          : `function(){
+            if (!this.checkVisibility({visibilityProperty:true})) return false;
+            const r = this.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          }`;
+    try {
+      for (const frame of list) {
+        const owner = await frameOwner(targetId, frame.targetId);
+        if (!owner) return true;
+        const { result } = await unguarded.send(
+          'Runtime.callFunctionOn',
+          {
+            objectId: owner.objectId,
+            functionDeclaration: test,
+            returnByValue: true,
+          },
+          owner.shieldSession
+        );
+        if (result.value !== false) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+  async function frameFocused(targetId, list) {
+    if (!list.length || options.frameFocus === 'ignored') return false;
+    try {
+      for (const frame of list) {
+        const owner = await frameOwner(targetId, frame.targetId);
+        if (!owner) return true;
+        const { result } = await unguarded.send(
+          'Runtime.callFunctionOn',
+          {
+            objectId: owner.objectId,
+            functionDeclaration: `function () {
+              let node = this;
+              for (let depth = 0; depth < 64; depth++) {
+                const root = node.getRootNode();
+                if (root.activeElement !== node) return false;
+                if (!root.host) return true;
+                node = root.host;
+              }
+              return true;
+            }`,
+            returnByValue: true,
+          },
+          owner.shieldSession
+        );
+        if (result.value === true) return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
   async function outcomeSend(method, params, sessionId) {
     try {
       return await guardedSend(method, params, sessionId);
@@ -351,6 +534,7 @@ export function emulatedGuard(browser, options = {}) {
       catalog &&
       !options.catalogAttachOnly &&
       targetId &&
+      !(options.forwardFrameReads ?? []).includes(method) &&
       (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
       (await decision(targetId))
     )
@@ -455,9 +639,12 @@ export function emulatedGuard(browser, options = {}) {
       });
       try {
         const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
+        const allowExtension = (url) => options.extensionFrames && catalog.extensionFrame(url);
         const protectedFrame = (tree) =>
-          catalog.url(tree.frame.url) ||
-          (tree.frame.securityOrigin && catalog.url(tree.frame.securityOrigin)) ||
+          (catalog.url(tree.frame.url) && !allowExtension(tree.frame.url)) ||
+          (tree.frame.securityOrigin &&
+            catalog.url(tree.frame.securityOrigin) &&
+            !allowExtension(tree.frame.securityOrigin)) ||
           (tree.childFrames ?? []).some(protectedFrame);
         if (protectedFrame(frameTree)) throw refusal('protected frame');
         const start = unguarded.events.length;
@@ -474,7 +661,13 @@ export function emulatedGuard(browser, options = {}) {
               event.sessionId === attached.sessionId &&
               event.params.targetInfo.type === 'iframe'
           );
-        if (frames.some((event) => catalog.url(event.params.targetInfo.url)))
+        if (
+          frames.some(
+            (event) =>
+              catalog.url(event.params.targetInfo.url) &&
+              !allowExtension(event.params.targetInfo.url)
+          )
+        )
           throw refusal('protected out-of-process frame');
       } finally {
         await unguarded.send(
@@ -485,6 +678,29 @@ export function emulatedGuard(browser, options = {}) {
         await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
       }
     }
+    const frameRules = options.extensionFrames ? options.protectedOrigins.extensionFrames : null;
+    const inputMethod = method.startsWith('Input.');
+    const gated =
+      frameRules &&
+      sessionId &&
+      targetId &&
+      (frameRules.whenShown.includes(method) || frameRules.whilePresent.includes(method));
+    const held = gated ? await extensionFramesOf(targetId) : [];
+    if (
+      held.length &&
+      frameRules.whilePresent.includes(method) &&
+      !(options.exposeFramePDF && method === 'Page.printToPDF')
+    )
+      throw new Error(frameRules.presentRefusal);
+    const focusBlocks =
+      held.length > 0 &&
+      (inputMethod || options.screenshotFocus !== 'ignored') &&
+      (await frameFocused(targetId, held));
+    const blocked =
+      held.length &&
+      frameRules.whenShown.includes(method) &&
+      ((await frameShown(targetId, held)) || focusBlocks);
+    if (blocked) throw new Error(frameRules.shownRefusal);
     const failure = options.fail?.(method, params ?? {}, children.has(sessionId));
     if (failure) throw new Error(failure);
     if (options.refuse?.(method, params ?? {}, children.has(sessionId))) {
@@ -518,6 +734,22 @@ export function emulatedGuard(browser, options = {}) {
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
     const result = await client.send(method, params, sessionId);
+    if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
+    if (method === 'Page.stopScreencast' && sessionId) {
+      casting.delete(sessionId);
+      castStopped.delete(sessionId);
+    }
+    const after = held.length ? await extensionFramesOf(targetId) : [];
+    const focusBlocksAfter =
+      after.length > 0 &&
+      (inputMethod || options.screenshotFocus !== 'ignored') &&
+      (await frameFocused(targetId, after));
+    if (
+      after.length &&
+      frameRules.whenShown.includes(method) &&
+      ((await frameShown(targetId, after)) || focusBlocksAfter)
+    )
+      throw new Error(frameRules.shownRefusal);
     learnWorlds();
     await pause(options.replyLatency?.(method, params ?? {}) ?? 0);
     if (
@@ -550,18 +782,41 @@ export function emulatedGuard(browser, options = {}) {
       return { ...result, targetInfo: redactInfo(result.targetInfo) };
     if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
       const visible = [];
-      for (const info of result.targetInfos)
+      for (const info of result.targetInfos) {
+        if (
+          options.extensionFrames &&
+          !options.exposeExtensionFrames &&
+          catalog?.extensionFrame(info.url)
+        )
+          continue;
         if (
           !mentions(info) &&
           !(options.hideTypes ?? []).includes(info.type) &&
           (!catalog || !(await decision(info.targetId)))
         )
           visible.push(info);
+      }
       return {
         ...result,
         targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
       };
     }
+    if (
+      options.extensionFrames &&
+      [
+        'Page.getFrameTree',
+        'DOM.getDocument',
+        'DOMSnapshot.captureSnapshot',
+        'Accessibility.getFullAXTree',
+        'Accessibility.getPartialAXTree',
+        'DOM.describeNode',
+        'DOM.getOuterHTML',
+        'Runtime.evaluate',
+      ].includes(method) &&
+      !options.exposeFramePageReads &&
+      !(options.forwardFrameReads ?? []).includes(method)
+    )
+      return scrubExtensionSecrets(result);
     return options.redirectSecrets && catalog ? redactProtectedURLs(result, catalog) : result;
   }
 }

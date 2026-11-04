@@ -183,6 +183,16 @@ pub struct ErrorPageRule {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ExtensionFrameRule {
+    pub schemes: Vec<String>,
+    pub when_shown: Vec<String>,
+    pub while_present: Vec<String>,
+    pub shown_refusal: String,
+    pub present_refusal: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProtectedOrigins {
     #[serde(default)]
     pub error_page: ErrorPageRule,
@@ -204,6 +214,8 @@ pub struct ProtectedOrigins {
     pub unparseable: String,
     #[serde(default)]
     pub unparseable_refusal: String,
+    #[serde(default)]
+    pub extension_frames: ExtensionFrameRule,
     pub refusal: String,
 }
 

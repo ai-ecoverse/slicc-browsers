@@ -25,21 +25,30 @@ type ErrorPageRule struct {
 	Redact string `json:"redact"`
 }
 
+type ExtensionFrameRule struct {
+	Schemes        []string `json:"schemes"`
+	WhenShown      []string `json:"whenShown"`
+	WhilePresent   []string `json:"whilePresent"`
+	ShownRefusal   string   `json:"shownRefusal"`
+	PresentRefusal string   `json:"presentRefusal"`
+}
+
 type ProtectedOrigins struct {
-	ErrorPage          ErrorPageRule `json:"errorPage"`
-	Domains            []string      `json:"domains"`
-	Hosts              []string      `json:"hosts"`
-	Schemes            []string      `json:"schemes"`
-	InnerSchemes       []string      `json:"innerSchemes"`
-	AnySchemes         []string      `json:"anySchemes"`
-	ProtectedSchemes   []string      `json:"protectedSchemes"`
-	SchemeExceptions   []string      `json:"schemeExceptions"`
-	AboutScheme        string        `json:"aboutScheme"`
-	TargetTypes        []string      `json:"targetTypes"`
-	Inheriting         []string      `json:"inheriting"`
-	Unparseable        string        `json:"unparseable"`
-	UnparseableRefusal string        `json:"unparseableRefusal"`
-	Refusal            string        `json:"refusal"`
+	ErrorPage          ErrorPageRule      `json:"errorPage"`
+	Domains            []string           `json:"domains"`
+	Hosts              []string           `json:"hosts"`
+	Schemes            []string           `json:"schemes"`
+	InnerSchemes       []string           `json:"innerSchemes"`
+	AnySchemes         []string           `json:"anySchemes"`
+	ProtectedSchemes   []string           `json:"protectedSchemes"`
+	SchemeExceptions   []string           `json:"schemeExceptions"`
+	AboutScheme        string             `json:"aboutScheme"`
+	TargetTypes        []string           `json:"targetTypes"`
+	Inheriting         []string           `json:"inheriting"`
+	Unparseable        string             `json:"unparseable"`
+	UnparseableRefusal string             `json:"unparseableRefusal"`
+	ExtensionFrames    ExtensionFrameRule `json:"extensionFrames"`
+	Refusal            string             `json:"refusal"`
 }
 
 type ProtectedVectors struct {

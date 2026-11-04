@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { presentRefusal, shownRefusal, whenShownInput } from '../extension-frames-rules.mjs';
 import { protectedOrigins } from '../protected.mjs';
 import { isSevenLabel } from '../seven.mjs';
 import { bundle } from './corpus.mjs';
@@ -42,6 +43,21 @@ function check(name, data, label) {
 
 const catalog = read('catalog.json');
 check('catalog', catalog, 'catalog.json');
+{
+  const frames = catalog.protectedOrigins?.extensionFrames ?? {};
+  const input = (frames.whenShown ?? []).filter((method) => method.startsWith('Input.'));
+  if (shownRefusal !== frames.shownRefusal)
+    fail('extension-frames-rules.mjs: shownRefusal does not match catalog.json');
+  if (presentRefusal !== frames.presentRefusal)
+    fail('extension-frames-rules.mjs: presentRefusal does not match catalog.json');
+  if (JSON.stringify(whenShownInput) !== JSON.stringify(input))
+    fail(
+      'extension-frames-rules.mjs: whenShownInput does not match catalog.json whenShown Input.*'
+    );
+  const graph = readFileSync(join(root, 'extension-frame.mjs'), 'utf8');
+  if (/\.json['"]/.test(graph) || /with\s*\{\s*type:\s*['"]json['"]/.test(graph))
+    fail('extension-frame.mjs: keep the runner import graph .mjs-only (no catalog.json import)');
+}
 
 function unique(label, values) {
   const seen = new Set();
@@ -261,6 +277,16 @@ for (const v of guard.vectors ?? []) {
   if (v.kind === 'cdp' && !v.liveCheck) gv(`${v.id} lacks liveCheck`);
   checkRefusals(v.liveCheck, v.id);
   if (v.family !== v.id[0]) gv(`${v.id} is not in family ${v.family}`);
+  const frames = catalog.protectedOrigins?.extensionFrames ?? {};
+  for (const [key, observation] of Object.entries(v.observe ?? {})) {
+    const text = observation.check?.equals;
+    if (typeof text !== 'string' || !text.startsWith('slicc: refused: ')) continue;
+    if (!key.endsWith('Refusal')) continue;
+    if (![frames.shownRefusal, frames.presentRefusal].includes(text))
+      gv(
+        `${v.id}: ${key} expects a refusal that isn't one of catalog.json's extensionFrames refusals`
+      );
+  }
   if (v.skip && !v.targets.includes(v.skip.target))
     gv(`${v.id} skips ${v.skip.target}, which it doesn't target`);
   if (v.skip && v.targets.every((t) => t === v.skip.target)) gv(`${v.id} skips every target`);
@@ -272,6 +298,7 @@ for (const v of guard.vectors ?? []) {
       st.cdp ||
       st.page ||
       st.extensionWorld ||
+      st.extensionFrame ||
       st.unparseable ||
       st.errorPage ||
       st.redirectSecret ||

@@ -165,6 +165,8 @@ Browser control must never navigate to, open, attach to, or read the cookies or 
 
 URLs are judged the way the browser parses them, so `blob:`, `view-source:` and `about:` aliases, backslashes, encoded dots and full-width letters can't sneak past. A URL the guard can't parse counts as protected wherever the browser might load it. A tab that seven opened keeps seven's origin when it goes to `about:blank`. A refused call fails with `slicc: refused: target is on seven's origin`.
 
+A browser extension's frame inside an ordinary page, such as a password manager's autofill list, doesn't make the tab protected. The frame itself stays out of reach: it can't be attached or read, and its URL never appears in target discovery, page reads, snapshots, accessibility trees or evaluate results. The tab's own page can still be read and snapshotted. Screenshots and input are allowed only while every extension frame is hidden (no layout box or `visibility: hidden`) and none holds focus through nested documents or shadow roots; a screenshot taken while one became shown is thrown away. Opacity and position don't count as hidden. A race between the visibility or focus check and the CDP reply is accepted. Whole-page captures and starting a screencast are refused while any extension frame is in the tab. If a screencast is already running when an extension frame appears, the guard stops it or drops every later `Page.screencastFrame` until the frame is gone; refusing `Page.startScreencast` on a clean tab is also fine. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, the methods and the refusals, and `protected.mjs` offers `extensionFrame(url)`.
+
 `catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. `protected.mjs` is the reference implementation:
 
 ```js
@@ -228,6 +230,7 @@ You supply:
 | `discovery` | report target creation and changes without a session |
 | `chromeUrlsAttach` | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't) |
 | `extensionWorld` | host a foreign extension's content script on the test page |
+| `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
 | `clientExit` | close the guarded client in the middle of a row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
 

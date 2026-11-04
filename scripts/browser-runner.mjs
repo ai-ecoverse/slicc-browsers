@@ -20,6 +20,10 @@ export async function browserRunner(entry) {
   const module = (path) => {
     if (modules.has(path)) return modules.get(path);
     const source = readFileSync(path, 'utf8');
+    if (path.endsWith('.json'))
+      throw new Error(
+        `${basename(path)}: JSON modules are not browser-graph safe; keep catalog values in a .mjs`
+      );
     const forbidden =
       /\b(Buffer|process|require|__dirname|__filename|setImmediate|clearImmediate)\b/.exec(source);
     if (forbidden) throw new Error(`${basename(path)}: Node-only global ${forbidden[1]}`);

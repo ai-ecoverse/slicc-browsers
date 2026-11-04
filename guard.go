@@ -42,6 +42,7 @@ const (
 	GuardCapBrowserContexts  = "browserContexts"
 	GuardCapChromeURLsAttach = "chromeUrlsAttach"
 	GuardCapExtensionWorld   = "extensionWorld"
+	GuardCapExtensionFrame   = "extensionFrame"
 	GuardCapDiscovery        = "discovery"
 	GuardCapClientExit       = "clientExit"
 	GuardCapSiteIsolationOff = "siteIsolationOff"
@@ -175,6 +176,7 @@ type GuardStep struct {
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
+	ExtensionFrame string          `json:"extensionFrame,omitempty"`
 	FrameRead      string          `json:"frameRead,omitempty"`
 	BFCacheRestore string          `json:"bfcacheRestore,omitempty"`
 	Origin         string          `json:"origin,omitempty"`

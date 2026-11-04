@@ -60,7 +60,9 @@ test('all C9 rows select the harness world when another real content-script worl
       const execution = await run(
         {
           ...set,
-          vectors: set.vectors.filter((vector) => vector.id.startsWith('C9.')),
+          vectors: set.vectors.filter(
+            (vector) => vector.id.startsWith('C9.') && !vector.id.startsWith('C9.frame-')
+          ),
           variants: { prompt: 0 },
         },
         {

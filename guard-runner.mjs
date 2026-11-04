@@ -3,7 +3,8 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
-import { extensionWorld } from './extension-world.mjs';
+import { extensionFrame } from './extension-frame.mjs';
+import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
 import {
   beacon,
@@ -701,13 +702,16 @@ class Execution {
       'unparseable',
       'errorPage',
       'extensionWorld',
+      'extensionFrame',
       'frameRead',
       'bfcacheRestore',
     ].find((key) => step[key]);
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'frameRead', 'bfcacheRestore'].includes(probe) &&
+      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
+        probe
+      ) &&
       out.ok &&
       out.result?.incomplete
     )
@@ -899,6 +903,21 @@ class Execution {
           pauseMs: this.bound(this.side === 'control' ? 5000 : 1500, this.side !== 'control'),
           frameMs: this.bound(1000),
           extensionId: this.options.extensionWorldId,
+        })
+      );
+    if (step.extensionFrame)
+      return outcome(
+        extensionFrame({
+          client: this.client,
+          reader: this.reader,
+          session,
+          targetId: this.pageTarget,
+          mode: step.extensionFrame,
+          origin: this.vars.ordinary,
+          frameMs: this.bound(1000),
+          extensionId: this.options.extensionFrameId ?? DEFAULT_EXTENSION_WORLD_ID,
+          side: this.side,
+          capabilities: this.options.capabilities,
         })
       );
     if (step.guess) return this.guess(step.guess, session);
@@ -2063,10 +2082,14 @@ async function runAll(set, options, flights) {
     row.transport = transport;
     opts.log?.(row);
   }
-  return { results, summary: (metadata = {}) => summary({ set, results, ...metadata }) };
+  return {
+    results,
+    summary: (metadata = {}) =>
+      summary({ set, results, ...metadata, capabilities: opts.capabilities }),
+  };
 }
 
-export function summary({ set, results, guard = 'reference', sha = 'unknown' }) {
+export function summary({ set, results, guard = 'reference', sha = 'unknown', capabilities }) {
   const value = report({
     set: {
       ...set,
@@ -2077,6 +2100,7 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown' }) 
     results,
     guard,
     sha,
+    capabilities,
   });
   const observerSkipped = results.filter(
     (row) => row.reason === 'not-supported:unguarded-observer'

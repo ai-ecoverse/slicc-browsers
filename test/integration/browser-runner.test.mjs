@@ -65,3 +65,19 @@ test('a Node-only global or import anywhere in the runtime graph fails verificat
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('a JSON module anywhere in the runtime graph fails verification', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'browser-runner-json-'));
+  try {
+    await writeFile(join(directory, 'data.json'), '{"ok":true}');
+    await writeFile(
+      join(directory, 'guard-runner.mjs'),
+      'import data from "./data.json" with { type: "json" }; export const run = () => data;'
+    );
+    await assert.rejects(invoke(join(directory, 'guard-runner.mjs')), (error) =>
+      /JSON modules are not browser-graph safe/.test(error.stderr)
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -182,6 +182,22 @@ fn the_protected_vectors_parse_and_round_trip() {
     assert!(po.domains.iter().any(|d| d == "sliccy.ai"));
     assert!(po.hosts.iter().any(|h| h == "vault.sliccy.ai"));
     assert_eq!(po.refusal, "slicc: refused: target is on seven's origin");
+    let frames = &po.extension_frames;
+    assert_eq!(frames.schemes, ["chrome-extension"]);
+    assert!(frames
+        .when_shown
+        .iter()
+        .any(|m| m == "Page.captureScreenshot"));
+    assert!(frames
+        .when_shown
+        .iter()
+        .any(|m| m == "Input.dispatchMouseEvent"));
+    assert!(frames
+        .while_present
+        .iter()
+        .any(|m| m == "Page.startScreencast"));
+    assert!(frames.shown_refusal.contains("showing or focused"));
+    assert!(frames.present_refusal.contains("chrome-extension://"));
     assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
 }
 
@@ -246,6 +262,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_BROWSER_CONTEXTS,
         guard::CAP_CHROME_URLS_ATTACH,
         guard::CAP_EXTENSION_WORLD,
+        guard::CAP_EXTENSION_FRAME,
         guard::CAP_DISCOVERY,
         guard::CAP_CLIENT_EXIT,
         guard::CAP_SITE_ISOLATION_OFF,
@@ -305,7 +322,7 @@ fn the_guard_vectors_parse_and_round_trip() {
     let worlds: Vec<_> = v
         .vectors
         .iter()
-        .filter(|x| x.id.starts_with("C9."))
+        .filter(|x| x.id.starts_with("C9.") && !x.id.starts_with("C9.frame-"))
         .collect();
     assert_eq!(worlds.len(), 4);
     for world in worlds {
@@ -313,6 +330,17 @@ fn the_guard_vectors_parse_and_round_trip() {
         assert_eq!(world.requires, vec![guard::CAP_EXTENSION_WORLD.to_string()]);
         assert!(world.trigger[0].extension_world.is_some());
         assert_eq!(world.control.via, guard::VIA_UNGUARDED);
+    }
+    let extension_frames: Vec<_> = v
+        .vectors
+        .iter()
+        .filter(|x| x.id.starts_with("C9.frame-"))
+        .collect();
+    assert_eq!(extension_frames.len(), 9);
+    for frame in extension_frames {
+        assert_eq!(frame.requires, vec![guard::CAP_EXTENSION_FRAME.to_string()]);
+        assert!(frame.trigger[0].extension_frame.is_some());
+        assert_eq!(frame.control.via, guard::VIA_UNGUARDED);
     }
     let unparseable = v.vectors.iter().find(|x| x.id == "C8.unparseable").unwrap();
     assert!(unparseable.default_context);

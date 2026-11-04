@@ -917,6 +917,7 @@ class Execution {
           frameMs: this.bound(1000),
           extensionId: this.options.extensionFrameId ?? DEFAULT_EXTENSION_WORLD_ID,
           side: this.side,
+          capabilities: this.options.capabilities,
         })
       );
     if (step.guess) return this.guess(step.guess, session);

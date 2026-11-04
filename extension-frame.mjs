@@ -255,8 +255,17 @@ async function frameReadNodes(reader, observer, frame, missing) {
   }
 }
 
-function leakFrom(out, missing, empty, extensionId, frameURL, value = out.result) {
-  if (!out.ok) return false;
+function protectedRefusal(out) {
+  const text = String(out?.error?.message ?? out?.error ?? '');
+  return text === PRESENT || text === SHOWN || /^slicc: refused/.test(text);
+}
+
+function leakFrom(out, missing, failed, empty, extensionId, frameURL, value = out.result) {
+  if (!out.ok) {
+    if (protectedRefusal(out)) return false;
+    missing.push(failed);
+    return false;
+  }
   if (value == null || (typeof value === 'object' && !hasPayload(value))) {
     missing.push(empty);
     return false;
@@ -278,45 +287,76 @@ async function frameReadSurfaceLeaks(
   const nodes = await frameReadNodes(reader, observer, frame, missing);
   if (!nodes) return leaks;
   try {
-    await outcome(client.send('Accessibility.enable', {}, nodes.session));
-    leaks.partialAxLeak = leakFrom(
-      await outcome(
-        client.send(
-          'Accessibility.getPartialAXTree',
-          { backendNodeId: nodes.markerNodeId, fetchRelatives: true },
-          nodes.session
-        )
-      ),
-      missing,
-      'Accessibility.getPartialAXTree returned no result',
-      extensionId,
-      frameURL
+    const attached = await outcome(
+      client.send('Target.attachToTarget', { targetId: frame.targetId, flatten: true })
     );
-    leaks.describeNodeLeak = leakFrom(
-      await outcome(
-        client.send(
-          'DOM.describeNode',
-          { backendNodeId: nodes.iframeNodeId, depth: -1, pierce: true },
-          page
-        )
-      ),
-      missing,
-      'DOM.describeNode returned no result',
-      extensionId,
-      frameURL
-    );
-    const html = await outcome(
-      client.send('DOM.getOuterHTML', { backendNodeId: nodes.iframeNodeId }, page)
-    );
-    leaks.outerHTMLLeak = leakFrom(
-      html,
-      missing,
-      'DOM.getOuterHTML returned no outerHTML string',
-      extensionId,
-      frameURL,
-      typeof html.result?.outerHTML === 'string' ? html.result.outerHTML : null
-    );
-    return leaks;
+    let frameSession;
+    if (attached.ok && typeof attached.result?.sessionId === 'string') {
+      frameSession = attached.result.sessionId;
+      await outcome(client.send('DOM.enable', {}, frameSession));
+      await outcome(client.send('Accessibility.enable', {}, frameSession));
+    } else if (attached.ok) {
+      missing.push('guarded attach to extension frame for frame-read returned no session');
+    } else if (!protectedRefusal(attached)) {
+      missing.push(
+        `guarded attach to extension frame for frame-read failed: ${attached.error?.message ?? attached.error}`
+      );
+    }
+    try {
+      if (frameSession) {
+        const document = await outcome(
+          client.send('DOM.getDocument', { depth: -1, pierce: true }, frameSession)
+        );
+        const markerNodeId =
+          markerBackendNodeId(document.result?.root) ??
+          document.result?.root?.backendNodeId ??
+          nodes.markerNodeId;
+        leaks.partialAxLeak = leakFrom(
+          await outcome(
+            client.send(
+              'Accessibility.getPartialAXTree',
+              { backendNodeId: markerNodeId, fetchRelatives: true },
+              frameSession
+            )
+          ),
+          missing,
+          'Accessibility.getPartialAXTree failed',
+          'Accessibility.getPartialAXTree returned no result',
+          extensionId,
+          frameURL
+        );
+      }
+      leaks.describeNodeLeak = leakFrom(
+        await outcome(
+          client.send(
+            'DOM.describeNode',
+            { backendNodeId: nodes.iframeNodeId, depth: -1, pierce: true },
+            page
+          )
+        ),
+        missing,
+        'DOM.describeNode failed',
+        'DOM.describeNode returned no result',
+        extensionId,
+        frameURL
+      );
+      const html = await outcome(
+        client.send('DOM.getOuterHTML', { backendNodeId: nodes.iframeNodeId }, page)
+      );
+      leaks.outerHTMLLeak = leakFrom(
+        html,
+        missing,
+        'DOM.getOuterHTML failed',
+        'DOM.getOuterHTML returned no outerHTML string',
+        extensionId,
+        frameURL,
+        typeof html.result?.outerHTML === 'string' ? html.result.outerHTML : null
+      );
+      return leaks;
+    } finally {
+      if (frameSession)
+        await outcome(client.send('Target.detachFromTarget', { sessionId: frameSession }));
+    }
   } finally {
     await outcome(reader.send('Target.detachFromTarget', { sessionId: nodes.session }));
   }
@@ -407,6 +447,63 @@ async function pageLeaks({
   return { ...leaks, snapshotOut: snapshot };
 }
 
+function hasCapability(capabilities, name) {
+  return Array.isArray(capabilities) ? capabilities.includes(name) : capabilities?.[name] === true;
+}
+
+async function targetInfoExposure(client, frames, frameURL, extensionId, missing, result) {
+  for (const frame of frames) {
+    const info = await outcome(client.send('Target.getTargetInfo', { targetId: frame.targetId }));
+    if (!info.ok) missing.push('Target.getTargetInfo failed');
+    else if (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string')
+      missing.push('Target.getTargetInfo returned no targetInfo URL');
+    else if (exposesExtension(info.result, extensionId, frameURL)) result.targetInfoURL = true;
+    else if (result.targetInfoURL !== true) result.targetInfoURL = false;
+  }
+}
+
+async function targetListExposure(client, frameURL, extensionId, missing, result) {
+  const listing = await outcome(client.send('Target.getTargets'));
+  if (!listing.ok || !Array.isArray(listing.result?.targetInfos)) {
+    missing.push('Target.getTargets returned no targetInfos array');
+  } else {
+    result.listed = exposesExtension(listing.result.targetInfos, extensionId, frameURL);
+  }
+}
+
+function targetEventExposure(
+  client,
+  page,
+  ids,
+  frameURL,
+  extensionId,
+  eventStart,
+  missing,
+  result,
+  { autoAttach, discovery }
+) {
+  if (eventStart === undefined || !Array.isArray(client.events)) {
+    missing.push('target event stream is unavailable');
+    return;
+  }
+  const events = client.events.slice(eventStart);
+  if (autoAttach)
+    result.autoAttached = events.some(
+      (event) =>
+        event.method === 'Target.attachedToTarget' &&
+        event.sessionId === page &&
+        ids.has(event.params?.targetInfo?.targetId) &&
+        typeof event.params.sessionId === 'string'
+    );
+  if (discovery)
+    result.eventURL = events.some(
+      (event) =>
+        ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
+          event.method
+        ) && exposesExtension(event.params, extensionId, frameURL)
+    );
+}
+
 async function targetExposure({
   client,
   reader,
@@ -418,50 +515,33 @@ async function targetExposure({
   eventStart,
   frameMs,
   missing,
+  capabilities = {},
 }) {
   const result = { autoAttached: false, eventURL: false, listed: false };
   const ids = new Set(frames.map((frame) => frame.targetId));
-  for (const frame of frames) {
-    const info = await outcome(client.send('Target.getTargetInfo', { targetId: frame.targetId }));
-    if (!info.ok) missing.push('Target.getTargetInfo failed');
-    else if (!info.result?.targetInfo || typeof info.result.targetInfo.url !== 'string')
-      missing.push('Target.getTargetInfo returned no targetInfo URL');
-    else if (exposesExtension(info.result, extensionId, frameURL)) result.targetInfoURL = true;
-    else if (result.targetInfoURL !== true) result.targetInfoURL = false;
-  }
-  const auto = await outcome(
-    client.send(
-      'Target.setAutoAttach',
-      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-      page
-    )
-  );
+  const browserSession = hasCapability(capabilities, 'browserSession');
+  const autoAttach = hasCapability(capabilities, 'autoAttach');
+  const discovery = hasCapability(capabilities, 'discovery');
+  if (browserSession)
+    await targetInfoExposure(client, frames, frameURL, extensionId, missing, result);
+  const auto = autoAttach
+    ? await outcome(
+        client.send(
+          'Target.setAutoAttach',
+          { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+          page
+        )
+      )
+    : { ok: false };
   try {
-    await painted(reader, observer, frameMs);
-    if (eventStart === undefined || !Array.isArray(client.events)) {
-      missing.push('target event stream is unavailable');
-    } else {
-      const events = client.events.slice(eventStart);
-      result.autoAttached = events.some(
-        (event) =>
-          event.method === 'Target.attachedToTarget' &&
-          event.sessionId === page &&
-          ids.has(event.params?.targetInfo?.targetId) &&
-          typeof event.params.sessionId === 'string'
-      );
-      result.eventURL = events.some(
-        (event) =>
-          ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
-            event.method
-          ) && exposesExtension(event.params, extensionId, frameURL)
-      );
+    if (autoAttach || discovery) {
+      await painted(reader, observer, frameMs);
+      targetEventExposure(client, page, ids, frameURL, extensionId, eventStart, missing, result, {
+        autoAttach,
+        discovery,
+      });
     }
-    const listing = await outcome(client.send('Target.getTargets'));
-    if (!listing.ok || !Array.isArray(listing.result?.targetInfos)) {
-      missing.push('Target.getTargets returned no targetInfos array');
-    } else {
-      result.listed = exposesExtension(listing.result.targetInfos, extensionId, frameURL);
-    }
+    if (browserSession) await targetListExposure(client, frameURL, extensionId, missing, result);
     return result;
   } finally {
     if (auto.ok)
@@ -776,6 +856,7 @@ export async function extensionFrame({
   frameMs = 1000,
   inputMethods: inputList = INPUT_METHODS,
   side = 'guarded',
+  capabilities = {},
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -784,7 +865,9 @@ export async function extensionFrame({
   const frameURL = `chrome-extension://${extensionId}/frame.html`;
   let page;
   let pageAttached = false;
-  const discovery = await outcome(client.send('Target.setDiscoverTargets', { discover: true }));
+  const discovery = hasCapability(capabilities, 'discovery')
+    ? await outcome(client.send('Target.setDiscoverTargets', { discover: true }))
+    : { ok: false };
   try {
     await reader.send('Runtime.enable', {}, observer);
     await reader.send('DOM.enable', {}, observer);
@@ -896,6 +979,7 @@ export async function extensionFrame({
         eventStart,
         frameMs,
         missing,
+        capabilities,
       })
     );
     const alive = await outcome(

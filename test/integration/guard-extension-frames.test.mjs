@@ -200,6 +200,135 @@ test('C9.frame Target observations skip without their caps; shot still runs', as
   }
 });
 
+test('C9.frame without Target caps still passes when the transport rejects Target commands', {
+  timeout: 120000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extensionFrames: true,
+  });
+  try {
+    const client = {
+      events: guard.client.events,
+      async send(method, params, session) {
+        if (
+          [
+            'Target.getTargetInfo',
+            'Target.setAutoAttach',
+            'Target.getTargets',
+            'Target.setDiscoverTargets',
+          ].includes(method)
+        )
+          throw new Error('Target domain unavailable');
+        return guard.client.send(method, params, session);
+      },
+    };
+    const execution = await run(
+      { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+      {
+        client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities: { extensionFrame: true, chromeUrlsAttach: true, browserContexts: true },
+        rowTimeoutMs: 60000,
+      }
+    );
+    const row = execution.results[0];
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.incomplete, undefined, JSON.stringify(row));
+    assert.equal(row.observations.guarded.listed, 'not-supported');
+    assert.equal(row.observations.guarded.targetInfoURL, 'not-supported');
+    assert.equal(row.observations.guarded.autoAttached, 'not-supported');
+    assert.equal(row.observations.guarded.eventURL, 'not-supported');
+    assert.equal(typeof row.observations.guarded.shot, 'boolean');
+    assert.equal(typeof row.observations.guarded.click, 'boolean');
+    assert.equal(typeof row.observations.guarded.read, 'boolean');
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});
+
+test('independent connections that forward getPartialAXTree fail the frame-read rows', {
+  timeout: 180000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extensionFrames: true,
+  });
+  try {
+    const owned = new Set();
+    const client = {
+      events: guard.client.events,
+      async send(method, params, session) {
+        if (session != null && !owned.has(session)) {
+          const error = new Error('Session with given id not found');
+          error.cdp = { message: 'Session with given id not found', code: -32001 };
+          throw error;
+        }
+        if (method === 'Target.attachToTarget') {
+          const info = await browser.unguarded
+            .send('Target.getTargetInfo', { targetId: params.targetId })
+            .catch(() => null);
+          const extension =
+            typeof info?.targetInfo?.url === 'string' &&
+            info.targetInfo.url.startsWith('chrome-extension:');
+          const result = await (extension ? browser.client : guard.client).send(
+            method,
+            params,
+            session
+          );
+          if (typeof result?.sessionId === 'string') owned.add(result.sessionId);
+          return result;
+        }
+        if (
+          session != null &&
+          owned.has(session) &&
+          [
+            'Accessibility.getPartialAXTree',
+            'Accessibility.enable',
+            'DOM.enable',
+            'DOM.getDocument',
+            'Target.detachFromTarget',
+          ].includes(method)
+        )
+          return browser.client.send(method, params, session);
+        return guard.client.send(method, params, session);
+      },
+    };
+    const execution = await run(
+      {
+        ...set,
+        vectors: vectors.filter((vector) => vector.id === 'C9.frame-hidden'),
+        variants: { prompt: 0 },
+      },
+      {
+        client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities,
+        rowTimeoutMs: 60000,
+      }
+    );
+    const row = execution.results[0];
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.guarded.partialAxLeak, true, JSON.stringify(row));
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});
+
 test('run summary keeps the declared capabilities when metadata tries to clear them', async () => {
   const fixture = await fixtureServer();
   try {

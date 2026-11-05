@@ -198,12 +198,45 @@ async function sendPair(client, session, method, down, up) {
   return [first, await outcome(client.send(method, up, session))];
 }
 
-async function inputMethods(client, session, methods, point, missing, side) {
+const POINTER_METHODS = new Set([
+  'Input.dispatchMouseEvent',
+  'Input.dispatchTouchEvent',
+  'Input.dispatchDragEvent',
+  'Input.emulateTouchFromMouseEvent',
+  'Input.synthesizePinchGesture',
+  'Input.synthesizeScrollGesture',
+  'Input.synthesizeTapGesture',
+]);
+
+async function pageFocus(reader, observer) {
+  await observe(
+    reader,
+    observer,
+    '(() => { window.focus(); const i = document.getElementById("typed"); if (i) i.focus(); return true; })()'
+  );
+}
+
+async function inputMethods(
+  client,
+  session,
+  methods,
+  point,
+  missing,
+  side,
+  reader,
+  observer,
+  mode
+) {
   const results = {};
   const { x, y } = point;
   const drag = { items: [], files: [], dragOperationsMask: 1 };
-  for (const method of methods) {
+  const ordered = [
+    ...methods.filter((method) => method !== 'Input.dispatchKeyEvent'),
+    ...methods.filter((method) => method === 'Input.dispatchKeyEvent'),
+  ];
+  for (const method of ordered) {
     const name = method.slice('Input.'.length);
+    if (mode !== 'focused' && POINTER_METHODS.has(method)) await pageFocus(reader, observer);
     let outs;
     if (method === 'Input.dispatchKeyEvent')
       outs = [
@@ -833,7 +866,17 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
   await refocus();
   const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
   await refocus();
-  const inputs = await inputMethods(client, page, inputList, point, missing, side);
+  const inputs = await inputMethods(
+    client,
+    page,
+    inputList,
+    point,
+    missing,
+    side,
+    reader,
+    observer,
+    mode
+  );
   await refocus();
   const focusedKey = await outcome(
     client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA' }, page)

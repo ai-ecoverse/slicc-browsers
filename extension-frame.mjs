@@ -175,13 +175,21 @@ function shownish(text) {
   return Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
 }
 
-function inputOutcome(outs, missing, name) {
-  const refused = outs.map(refusal).find(shownish);
-  if (refused) return { ok: false, refusal: refused };
-  if (outs.every((out) => out.ok)) return { ok: true, refusal: null };
-  const detail = outs.map(refusal).filter(Boolean).map(String).join('; ');
-  missing.push(`${name}: ${detail || 'transport error'}`);
-  return { ok: 'incomplete', refusal: null };
+function inputOutcome(outs, missing, name, side) {
+  const [first, ...rest] = outs;
+  const firstRefusal = refusal(first);
+  if (shownish(firstRefusal)) return { ok: false, refusal: firstRefusal };
+  if (!first.ok) {
+    missing.push(`${name}: ${firstRefusal || 'transport error'}`);
+    return { ok: 'incomplete', refusal: null };
+  }
+  if (side === 'control') {
+    for (const out of rest) {
+      if (out.ok) continue;
+      missing.push(`${name}: cleanup ${refusal(out) || 'transport error'}`);
+    }
+  }
+  return { ok: true, refusal: null };
 }
 
 async function sendPair(client, session, method, down, up) {
@@ -190,7 +198,7 @@ async function sendPair(client, session, method, down, up) {
   return [first, await outcome(client.send(method, up, session))];
 }
 
-async function inputMethods(client, session, methods, point, missing) {
+async function inputMethods(client, session, methods, point, missing, side) {
   const results = {};
   const { x, y } = point;
   const drag = { items: [], files: [], dragOperationsMask: 1 };
@@ -248,7 +256,7 @@ async function inputMethods(client, session, methods, point, missing) {
     else if (method === 'Input.synthesizeTapGesture')
       outs = [await outcome(client.send(method, { x, y }, session))];
     else outs = [await outcome(client.send(method, {}, session))];
-    results[name] = inputOutcome(outs, missing, name);
+    results[name] = inputOutcome(outs, missing, name, side);
   }
   return results;
 }
@@ -760,7 +768,7 @@ async function holdFocus(reader, frame) {
   }
 }
 
-async function driveInput(client, reader, page, observer, inputList, mode, frame, missing) {
+async function driveInput(client, reader, page, observer, inputList, mode, frame, missing, side) {
   const visible = await observe(
     reader,
     observer,
@@ -825,7 +833,7 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
   await refocus();
   const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
   await refocus();
-  const inputs = await inputMethods(client, page, inputList, point, missing);
+  const inputs = await inputMethods(client, page, inputList, point, missing, side);
   await refocus();
   const focusedKey = await outcome(
     client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA' }, page)
@@ -937,6 +945,51 @@ export async function driveReveal(client, reader, page, observer, frameMs, missi
   };
 }
 
+function frameObservations({ pageAttached, origin, read, leaks, picture, input, captures }) {
+  return {
+    exists: true,
+    attached: pageAttached,
+    read: read.ok && read.result.result?.value === origin && !carries(read.result),
+    snapshot: leaks.snapshot,
+    snapshotFrameRead: leaks.snapshotFrameRead,
+    frameTreeLeak: leaks.frameTreeLeak,
+    documentLeak: leaks.documentLeak,
+    shadowDocumentLeak: leaks.shadowDocumentLeak,
+    axLeak: leaks.axLeak,
+    evaluateLeak: leaks.evaluateLeak,
+    partialAxLeak: leaks.partialAxLeak,
+    describeNodeLeak: leaks.describeNodeLeak,
+    outerHTMLLeak: leaks.outerHTMLLeak,
+    shot: picture.ok,
+    shotRefusal: refusal(picture.out),
+    click: input.pressed.ok,
+    clickRefusal: refusal(input.pressed.out),
+    key: input.typed.ok,
+    keyRefusal: refusal(input.typed.out),
+    frameClick: input.frameClick.ok,
+    frameClickRefusal: refusal(input.frameClick.out),
+    tab: input.tab.ok,
+    tabRefusal: refusal(input.tab),
+    frameVisible: input.visible === true,
+    frameFocused: input.frameFocused === true,
+    focusedKey: input.focusedKey.ok,
+    focusedKeyRefusal: refusal(input.focusedKey),
+    focusedText: input.focusedText.ok,
+    focusedTextRefusal: refusal(input.focusedText),
+    focusedIME: input.focusedIME.ok,
+    focusedIMERefusal: refusal(input.focusedIME),
+    archive: captures.archive.ok,
+    archiveRefusal: presentish(captures.archive),
+    pdf: captures.pdf.ok,
+    pdfRefusal: presentish(captures.pdf),
+    cast: captures.cast.ok,
+    castRefusal: presentish(captures.cast),
+    beginFrame: captures.begin.ok,
+    beginFrameRefusal: presentish(captures.begin),
+    inputs: input.inputs,
+  };
+}
+
 export async function extensionFrame({
   client,
   reader,
@@ -1014,50 +1067,27 @@ export async function extensionFrame({
     });
     if (mode === 'focused') await holdFocus(reader, frame);
     const picture = await shot(client, page);
-    const input = await driveInput(client, reader, page, observer, inputList, mode, frame, missing);
+    const input = await driveInput(
+      client,
+      reader,
+      page,
+      observer,
+      inputList,
+      mode,
+      frame,
+      missing,
+      side
+    );
     const captures = await driveCaptures(client, page, missing);
-    const result = {
-      exists: true,
-      attached: pageAttached,
-      read: read.ok && read.result.result?.value === origin && !carries(read.result),
-      snapshot: leaks.snapshot,
-      snapshotFrameRead: leaks.snapshotFrameRead,
-      frameTreeLeak: leaks.frameTreeLeak,
-      documentLeak: leaks.documentLeak,
-      shadowDocumentLeak: leaks.shadowDocumentLeak,
-      axLeak: leaks.axLeak,
-      evaluateLeak: leaks.evaluateLeak,
-      partialAxLeak: leaks.partialAxLeak,
-      describeNodeLeak: leaks.describeNodeLeak,
-      outerHTMLLeak: leaks.outerHTMLLeak,
-      shot: picture.ok,
-      shotRefusal: refusal(picture.out),
-      click: input.pressed.ok,
-      clickRefusal: refusal(input.pressed.out),
-      key: input.typed.ok,
-      keyRefusal: refusal(input.typed.out),
-      frameClick: input.frameClick.ok,
-      frameClickRefusal: refusal(input.frameClick.out),
-      tab: input.tab.ok,
-      tabRefusal: refusal(input.tab),
-      frameVisible: input.visible === true,
-      frameFocused: input.frameFocused === true,
-      focusedKey: input.focusedKey.ok,
-      focusedKeyRefusal: refusal(input.focusedKey),
-      focusedText: input.focusedText.ok,
-      focusedTextRefusal: refusal(input.focusedText),
-      focusedIME: input.focusedIME.ok,
-      focusedIMERefusal: refusal(input.focusedIME),
-      archive: captures.archive.ok,
-      archiveRefusal: presentish(captures.archive),
-      pdf: captures.pdf.ok,
-      pdfRefusal: presentish(captures.pdf),
-      cast: captures.cast.ok,
-      castRefusal: presentish(captures.cast),
-      beginFrame: captures.begin.ok,
-      beginFrameRefusal: presentish(captures.begin),
-      inputs: input.inputs,
-    };
+    const result = frameObservations({
+      pageAttached,
+      origin,
+      read,
+      leaks,
+      picture,
+      input,
+      captures,
+    });
     if (castDrive) {
       result.castBefore = castDrive.castBefore;
       result.castBeforeRefusal = castDrive.castBeforeRefusal;

@@ -24,9 +24,21 @@ function mouseTransport({
   leaveDownAfterClicks = 0,
   failPressAfter = Infinity,
   refuseShown = false,
+  refuseReleaseAfterPresses = Infinity,
+  refuseEndAfterStarts = Infinity,
+  refuseCancelAfterEnters = Infinity,
 } = {}) {
   const sessions = new Map();
-  const mouse = { down: false, releases: 0, presses: 0, sent: [] };
+  const mouse = {
+    down: false,
+    releases: 0,
+    presses: 0,
+    starts: 0,
+    ends: 0,
+    enters: 0,
+    cancels: 0,
+    sent: [],
+  };
   let next = 0;
   const attach = (targetId) => {
     const sessionId = `S${++next}`;
@@ -121,8 +133,31 @@ function mouseTransport({
         }
         if (params.type === 'mouseReleased') {
           mouse.releases += 1;
+          if (mouse.presses >= refuseReleaseAfterPresses) throw new Error(shownRefusal);
           if (!(leaveDownAfterClicks > 0 && mouse.releases === leaveDownAfterClicks))
             mouse.down = false;
+          return {};
+        }
+      }
+      if (method === 'Input.dispatchTouchEvent') {
+        if (params.type === 'touchStart') {
+          mouse.starts += 1;
+          return {};
+        }
+        if (params.type === 'touchEnd') {
+          mouse.ends += 1;
+          if (mouse.starts >= refuseEndAfterStarts) throw new Error(shownRefusal);
+          return {};
+        }
+      }
+      if (method === 'Input.dispatchDragEvent') {
+        if (params.type === 'dragEnter') {
+          mouse.enters += 1;
+          return {};
+        }
+        if (params.type === 'dragCancel') {
+          mouse.cancels += 1;
+          if (mouse.enters >= refuseCancelAfterEnters) throw new Error(shownRefusal);
           return {};
         }
       }
@@ -134,7 +169,7 @@ function mouseTransport({
   return { client, mouse, reader: client };
 }
 
-async function probe(mode, transport, side = 'control') {
+async function probe(mode, transport, side = 'control', methods = ['Input.dispatchMouseEvent']) {
   return extensionFrame({
     client: transport.client,
     reader: transport.reader,
@@ -144,7 +179,7 @@ async function probe(mode, transport, side = 'control') {
     origin,
     extensionId,
     frameMs: 0,
-    inputMethods: ['Input.dispatchMouseEvent'],
+    inputMethods: methods,
     side,
     capabilities,
   });
@@ -203,4 +238,45 @@ test('catalog shownRefusal still refuses Input.dispatchMouseEvent on shown frame
   assert.equal(result.inputs.dispatchMouseEvent.ok, false);
   assert.equal(result.inputs.dispatchMouseEvent.refusal, shownRefusal);
   assert.equal(result.incomplete, undefined);
+});
+
+test('a refused mouseReleased after a delivered mousePressed still counts as delivery on shown rows', async () => {
+  const vector = set.vectors.find((item) => item.id === 'C9.frame-offscreen');
+  assert.equal(vector.expected.dispatchMouseEvent, false);
+  assert.equal(vector.expected.dispatchMouseEventRefusal, true);
+  const transport = mouseTransport({ refuseReleaseAfterPresses: 3 });
+  const result = await probe('offscreen', transport, 'guarded');
+  assert.equal(result.inputs.dispatchMouseEvent.ok, true, JSON.stringify(result.inputs));
+  assert.equal(result.inputs.dispatchMouseEvent.refusal, null);
+  assert.equal(result.incomplete, undefined);
+});
+
+test('a refused touchEnd after a delivered touchStart still counts as delivery on shown rows', async () => {
+  const vector = set.vectors.find((item) => item.id === 'C9.frame-offscreen');
+  assert.equal(vector.expected.dispatchTouchEvent, false);
+  assert.equal(vector.expected.dispatchTouchEventRefusal, true);
+  const transport = mouseTransport({ refuseEndAfterStarts: 1 });
+  const result = await probe('offscreen', transport, 'guarded', ['Input.dispatchTouchEvent']);
+  assert.equal(result.inputs.dispatchTouchEvent.ok, true, JSON.stringify(result.inputs));
+  assert.equal(result.inputs.dispatchTouchEvent.refusal, null);
+  assert.equal(result.incomplete, undefined);
+});
+
+test('a refused dragCancel after a delivered dragEnter still counts as delivery on shown rows', async () => {
+  const vector = set.vectors.find((item) => item.id === 'C9.frame-offscreen');
+  assert.equal(vector.expected.dispatchDragEvent, false);
+  assert.equal(vector.expected.dispatchDragEventRefusal, true);
+  const transport = mouseTransport({ refuseCancelAfterEnters: 1 });
+  const result = await probe('offscreen', transport, 'guarded', ['Input.dispatchDragEvent']);
+  assert.equal(result.inputs.dispatchDragEvent.ok, true, JSON.stringify(result.inputs));
+  assert.equal(result.inputs.dispatchDragEvent.refusal, null);
+  assert.equal(result.incomplete, undefined);
+});
+
+test('a control records cleanup failure when release is refused after a delivered press', async () => {
+  const transport = mouseTransport({ refuseReleaseAfterPresses: 3 });
+  const result = await probe('offscreen', transport, 'control');
+  assert.equal(result.inputs.dispatchMouseEvent.ok, true, JSON.stringify(result.inputs));
+  assert.equal(result.inputs.dispatchMouseEvent.refusal, null);
+  assert.match(result.incomplete ?? '', /dispatchMouseEvent: cleanup/);
 });

@@ -160,32 +160,103 @@ async function key(client, reader, session, observer, beforeSend, requireTyped =
   return { out, ok: out.ok && (!requireTyped || typed === true) };
 }
 
-async function inputMethods(client, session, methods) {
+function clearPoint(box) {
+  const point = { x: 20, y: 20 };
+  if (!box || !(box.w > 0) || !(box.h > 0)) return point;
+  const left = box.x - box.w / 2;
+  const right = box.x + box.w / 2;
+  const top = box.y - box.h / 2;
+  const bottom = box.y + box.h / 2;
+  if (point.x < left || point.x > right || point.y < top || point.y > bottom) return point;
+  return { x: 20, y: Math.max(20, bottom + 40) };
+}
+
+function shownish(text) {
+  return Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
+}
+
+function inputOutcome(outs, missing, name, side) {
+  const [first, ...rest] = outs;
+  const firstRefusal = refusal(first);
+  if (shownish(firstRefusal)) return { ok: false, refusal: firstRefusal };
+  if (!first.ok) {
+    missing.push(`${name}: ${firstRefusal || 'transport error'}`);
+    return { ok: 'incomplete', refusal: null };
+  }
+  if (side === 'control') {
+    for (const out of rest) {
+      if (out.ok) continue;
+      missing.push(`${name}: cleanup ${refusal(out) || 'transport error'}`);
+    }
+  }
+  return { ok: true, refusal: null };
+}
+
+async function sendPair(client, session, method, down, up) {
+  const first = await outcome(client.send(method, down, session));
+  if (shownish(refusal(first))) return [first];
+  return [first, await outcome(client.send(method, up, session))];
+}
+
+async function inputMethods(client, session, methods, point, missing, side) {
   const results = {};
+  const { x, y } = point;
+  const drag = { items: [], files: [], dragOperationsMask: 1 };
   for (const method of methods) {
-    let params = {};
-    if (method === 'Input.dispatchKeyEvent') params = { type: 'keyDown', key: 'Tab', code: 'Tab' };
+    const name = method.slice('Input.'.length);
+    let outs;
+    if (method === 'Input.dispatchKeyEvent')
+      outs = [
+        await outcome(client.send(method, { type: 'keyDown', key: 'Tab', code: 'Tab' }, session)),
+      ];
     else if (method === 'Input.dispatchMouseEvent')
-      params = { type: 'mousePressed', x: 20, y: 20, button: 'left', clickCount: 1 };
+      outs = await sendPair(
+        client,
+        session,
+        method,
+        { type: 'mousePressed', x, y, button: 'left', clickCount: 1 },
+        { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }
+      );
     else if (method === 'Input.dispatchTouchEvent')
-      params = { type: 'touchStart', touchPoints: [{ x: 20, y: 20 }] };
+      outs = await sendPair(
+        client,
+        session,
+        method,
+        { type: 'touchStart', touchPoints: [{ x, y }] },
+        { type: 'touchEnd', touchPoints: [] }
+      );
     else if (method === 'Input.dispatchDragEvent')
-      params = {
-        type: 'dragEnter',
-        x: 20,
-        y: 20,
-        data: { items: [], files: [], dragOperationsMask: 1 },
-      };
+      outs = await sendPair(
+        client,
+        session,
+        method,
+        { type: 'dragEnter', x, y, data: drag },
+        { type: 'dragCancel', x, y, data: drag }
+      );
     else if (method === 'Input.emulateTouchFromMouseEvent')
-      params = { type: 'mousePressed', x: 20, y: 20, button: 'left', clickCount: 1 };
-    else if (method === 'Input.insertText') params = { text: 'k' };
+      outs = await sendPair(
+        client,
+        session,
+        method,
+        { type: 'mousePressed', x, y, button: 'left', clickCount: 1 },
+        { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }
+      );
+    else if (method === 'Input.insertText')
+      outs = [await outcome(client.send(method, { text: 'k' }, session))];
     else if (method === 'Input.imeSetComposition')
-      params = { text: 'k', selectionStart: 1, selectionEnd: 1 };
-    else if (method === 'Input.synthesizePinchGesture') params = { x: 20, y: 20, scaleFactor: 1.1 };
-    else if (method === 'Input.synthesizeScrollGesture') params = { x: 20, y: 20, yDistance: -10 };
-    else if (method === 'Input.synthesizeTapGesture') params = { x: 20, y: 20 };
-    const out = await outcome(client.send(method, params, session));
-    results[method.slice('Input.'.length)] = { ok: out.ok, refusal: refusal(out) };
+      outs = [
+        await outcome(
+          client.send(method, { text: 'k', selectionStart: 1, selectionEnd: 1 }, session)
+        ),
+      ];
+    else if (method === 'Input.synthesizePinchGesture')
+      outs = [await outcome(client.send(method, { x, y, scaleFactor: 1.1 }, session))];
+    else if (method === 'Input.synthesizeScrollGesture')
+      outs = [await outcome(client.send(method, { x, y, yDistance: -10 }, session))];
+    else if (method === 'Input.synthesizeTapGesture')
+      outs = [await outcome(client.send(method, { x, y }, session))];
+    else outs = [await outcome(client.send(method, {}, session))];
+    results[name] = inputOutcome(outs, missing, name, side);
   }
   return results;
 }
@@ -697,7 +768,7 @@ async function holdFocus(reader, frame) {
   }
 }
 
-async function driveInput(client, reader, page, observer, inputList, mode, frame) {
+async function driveInput(client, reader, page, observer, inputList, mode, frame, missing, side) {
   const visible = await observe(
     reader,
     observer,
@@ -734,6 +805,7 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
     })()`
   );
+  const point = clearPoint(box);
   const refocus = async () => {
     if (!(mode === 'focused' && frame)) return;
     await holdFocus(reader, frame);
@@ -761,7 +833,7 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
   await refocus();
   const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
   await refocus();
-  const inputs = await inputMethods(client, page, inputList);
+  const inputs = await inputMethods(client, page, inputList, point, missing, side);
   await refocus();
   const focusedKey = await outcome(
     client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA' }, page)
@@ -873,6 +945,51 @@ export async function driveReveal(client, reader, page, observer, frameMs, missi
   };
 }
 
+function frameObservations({ pageAttached, origin, read, leaks, picture, input, captures }) {
+  return {
+    exists: true,
+    attached: pageAttached,
+    read: read.ok && read.result.result?.value === origin && !carries(read.result),
+    snapshot: leaks.snapshot,
+    snapshotFrameRead: leaks.snapshotFrameRead,
+    frameTreeLeak: leaks.frameTreeLeak,
+    documentLeak: leaks.documentLeak,
+    shadowDocumentLeak: leaks.shadowDocumentLeak,
+    axLeak: leaks.axLeak,
+    evaluateLeak: leaks.evaluateLeak,
+    partialAxLeak: leaks.partialAxLeak,
+    describeNodeLeak: leaks.describeNodeLeak,
+    outerHTMLLeak: leaks.outerHTMLLeak,
+    shot: picture.ok,
+    shotRefusal: refusal(picture.out),
+    click: input.pressed.ok,
+    clickRefusal: refusal(input.pressed.out),
+    key: input.typed.ok,
+    keyRefusal: refusal(input.typed.out),
+    frameClick: input.frameClick.ok,
+    frameClickRefusal: refusal(input.frameClick.out),
+    tab: input.tab.ok,
+    tabRefusal: refusal(input.tab),
+    frameVisible: input.visible === true,
+    frameFocused: input.frameFocused === true,
+    focusedKey: input.focusedKey.ok,
+    focusedKeyRefusal: refusal(input.focusedKey),
+    focusedText: input.focusedText.ok,
+    focusedTextRefusal: refusal(input.focusedText),
+    focusedIME: input.focusedIME.ok,
+    focusedIMERefusal: refusal(input.focusedIME),
+    archive: captures.archive.ok,
+    archiveRefusal: presentish(captures.archive),
+    pdf: captures.pdf.ok,
+    pdfRefusal: presentish(captures.pdf),
+    cast: captures.cast.ok,
+    castRefusal: presentish(captures.cast),
+    beginFrame: captures.begin.ok,
+    beginFrameRefusal: presentish(captures.begin),
+    inputs: input.inputs,
+  };
+}
+
 export async function extensionFrame({
   client,
   reader,
@@ -950,50 +1067,27 @@ export async function extensionFrame({
     });
     if (mode === 'focused') await holdFocus(reader, frame);
     const picture = await shot(client, page);
-    const input = await driveInput(client, reader, page, observer, inputList, mode, frame);
+    const input = await driveInput(
+      client,
+      reader,
+      page,
+      observer,
+      inputList,
+      mode,
+      frame,
+      missing,
+      side
+    );
     const captures = await driveCaptures(client, page, missing);
-    const result = {
-      exists: true,
-      attached: pageAttached,
-      read: read.ok && read.result.result?.value === origin && !carries(read.result),
-      snapshot: leaks.snapshot,
-      snapshotFrameRead: leaks.snapshotFrameRead,
-      frameTreeLeak: leaks.frameTreeLeak,
-      documentLeak: leaks.documentLeak,
-      shadowDocumentLeak: leaks.shadowDocumentLeak,
-      axLeak: leaks.axLeak,
-      evaluateLeak: leaks.evaluateLeak,
-      partialAxLeak: leaks.partialAxLeak,
-      describeNodeLeak: leaks.describeNodeLeak,
-      outerHTMLLeak: leaks.outerHTMLLeak,
-      shot: picture.ok,
-      shotRefusal: refusal(picture.out),
-      click: input.pressed.ok,
-      clickRefusal: refusal(input.pressed.out),
-      key: input.typed.ok,
-      keyRefusal: refusal(input.typed.out),
-      frameClick: input.frameClick.ok,
-      frameClickRefusal: refusal(input.frameClick.out),
-      tab: input.tab.ok,
-      tabRefusal: refusal(input.tab),
-      frameVisible: input.visible === true,
-      frameFocused: input.frameFocused === true,
-      focusedKey: input.focusedKey.ok,
-      focusedKeyRefusal: refusal(input.focusedKey),
-      focusedText: input.focusedText.ok,
-      focusedTextRefusal: refusal(input.focusedText),
-      focusedIME: input.focusedIME.ok,
-      focusedIMERefusal: refusal(input.focusedIME),
-      archive: captures.archive.ok,
-      archiveRefusal: presentish(captures.archive),
-      pdf: captures.pdf.ok,
-      pdfRefusal: presentish(captures.pdf),
-      cast: captures.cast.ok,
-      castRefusal: presentish(captures.cast),
-      beginFrame: captures.begin.ok,
-      beginFrameRefusal: presentish(captures.begin),
-      inputs: input.inputs,
-    };
+    const result = frameObservations({
+      pageAttached,
+      origin,
+      read,
+      leaks,
+      picture,
+      input,
+      captures,
+    });
     if (castDrive) {
       result.castBefore = castDrive.castBefore;
       result.castBeforeRefusal = castDrive.castBeforeRefusal;

@@ -938,7 +938,48 @@ async function driveCast(client, page, frameMs) {
   };
 }
 
-export async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
+function classifyRevealOverlap(
+  captureStartedAt,
+  revealAt,
+  pendingWhenRevealAcknowledged,
+  captureSettledAt
+) {
+  if (typeof captureStartedAt !== 'number' || typeof revealAt !== 'number') return 'unknown';
+  if (revealAt <= captureStartedAt) return 'before';
+  if (pendingWhenRevealAcknowledged) return 'during';
+  if (typeof captureSettledAt === 'number' && captureSettledAt < revealAt) return 'after';
+  return 'unknown';
+}
+
+function revealRaceVerdict(overlap, side, ok, shownRefused) {
+  if (overlap === 'during' || overlap === 'before') return side === 'control' ? ok : shownRefused;
+  if (overlap === 'after') return ok || shownRefused;
+  return false;
+}
+
+async function finishReveal(
+  client,
+  reader,
+  page,
+  observer,
+  frameMs,
+  { ok, text, overlap, revealRacePass }
+) {
+  const revealedPress = await click(client, reader, page, observer);
+  await style(reader, observer, 'hidden', frameMs);
+  const rehidden = await shot(client, page);
+  return {
+    revealedShot: ok,
+    revealedRefusal: text,
+    revealOverlap: overlap,
+    revealRacePass,
+    revealedClick: revealedPress.ok,
+    revealedClickRefusal: refusal(revealedPress.out),
+    rehiddenShot: rehidden.ok,
+  };
+}
+
+async function attemptRevealCapture(client, reader, page, observer, side) {
   const captureStartedAt = await observe(reader, observer, 'performance.now()');
   let captureSettled = false;
   let captureSettledAt;
@@ -963,29 +1004,36 @@ export async function driveReveal(client, reader, page, observer, frameMs, missi
   const out = await pending;
   const ok = out.ok && typeof out.result?.data === 'string' && out.result.data.length > 0;
   const text = refusal(out);
-  let overlap = 'unknown';
-  if (typeof captureStartedAt !== 'number' || typeof revealAt !== 'number') overlap = 'unknown';
-  else if (revealAt <= captureStartedAt) overlap = 'before';
-  else if (pendingWhenRevealAcknowledged) overlap = 'during';
-  else if (typeof captureSettledAt === 'number' && captureSettledAt < revealAt) overlap = 'after';
-  if (overlap === 'unknown') missing.push('reveal/capture overlap unproven');
+  const overlap = classifyRevealOverlap(
+    captureStartedAt,
+    revealAt,
+    pendingWhenRevealAcknowledged,
+    captureSettledAt
+  );
   const shownRefused = Boolean(text && (text === SHOWN || /^slicc: refused/.test(text)));
-  let revealRacePass = false;
-  if (overlap === 'during' || overlap === 'before')
-    revealRacePass = side === 'control' ? ok : shownRefused;
-  else if (overlap === 'after') revealRacePass = ok || shownRefused;
-  const revealedPress = await click(client, reader, page, observer);
-  await style(reader, observer, 'hidden', frameMs);
-  const rehidden = await shot(client, page);
   return {
-    revealedShot: ok,
-    revealedRefusal: text,
-    revealOverlap: overlap,
-    revealRacePass,
-    revealedClick: revealedPress.ok,
-    revealedClickRefusal: refusal(revealedPress.out),
-    rehiddenShot: rehidden.ok,
+    ok,
+    text,
+    overlap,
+    revealRacePass: revealRaceVerdict(overlap, side, ok, shownRefused),
   };
+}
+
+export async function driveReveal(client, reader, page, observer, frameMs, missing, side) {
+  const maxAttempts = 3;
+  let last = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    last = await attemptRevealCapture(client, reader, page, observer, side);
+    if (last.overlap !== 'unknown')
+      return finishReveal(client, reader, page, observer, frameMs, last);
+    if (attempt < maxAttempts) await style(reader, observer, 'hidden', frameMs);
+  }
+  missing.push(`reveal/capture overlap unproven (${maxAttempts} attempts)`);
+  return finishReveal(client, reader, page, observer, frameMs, {
+    ...last,
+    overlap: 'unknown',
+    revealRacePass: false,
+  });
 }
 
 function frameObservations({ pageAttached, origin, read, leaks, picture, input, captures }) {

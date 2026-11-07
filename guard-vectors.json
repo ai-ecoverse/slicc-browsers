@@ -24855,6 +24855,17 @@
           },
           "as": "removeScript",
           "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.removeScriptToEvaluateOnNewDocument",
+          "params": {
+            "identifier": {
+              "$result": "immediateWorld",
+              "path": "result.identifier"
+            }
+          },
+          "as": "removeImmediate",
+          "requires": ["stockSetup"]
         }
       ],
       "trigger": [
@@ -24874,7 +24885,7 @@
       "requires": ["stockSetup"],
       "observe": {
         "admitted": {
-          "means": "the guard answered removedWorld, playwrightWorld, puppeteerWorld, immediateWorld, keptScript, droppedScript, emptyScript, pptrScript, commentScript, removeWorld, removeScript without an error",
+          "means": "the guard answered removedWorld, playwrightWorld, puppeteerWorld, immediateWorld, keptScript, droppedScript, emptyScript, pptrScript, commentScript, removeWorld, removeScript, removeImmediate without an error",
           "check": {
             "all": [
               {
@@ -24942,6 +24953,12 @@
                 "path": "ok",
                 "equals": true,
                 "observer": "client"
+              },
+              {
+                "result": "removeImmediate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
               }
             ],
             "observer": "client"
@@ -24964,7 +24981,7 @@
           }
         },
         "immediateWorld": {
-          "means": "the unguarded observer saw Chrome create a runImmediately world",
+          "means": "the unguarded observer saw Chrome create a runImmediately world in the start document; its script is removed before the navigation, so no later document creates it",
           "check": {
             "world": "slicc-immediate-{tag}",
             "observer": "unguarded"

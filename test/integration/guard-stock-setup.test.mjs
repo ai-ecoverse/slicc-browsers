@@ -31,21 +31,33 @@ const stock = new Set([
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const declared = { ...base, stockSetup: true, syntheticAutoAttach: true };
 
-async function execute(mode, capabilities) {
+async function execute(mode, capabilities, only = vectors) {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
+  const stripped = {
+    get events() {
+      return browser.client.events;
+    },
+    waitEvent: (...args) => browser.client.waitEvent(...args),
+    send: (method, params = {}, sessionId) => {
+      const { runImmediately: _, ...rest } = params;
+      return browser.client.send(method, rest, sessionId);
+    },
+  };
   const guard =
     mode === 'none'
       ? { client: browser.client, stop: async () => {} }
-      : emulatedGuard(
-          browser,
-          mode === 'refuse'
-            ? { refuse: (method) => stock.has(method) }
-            : { swallow: (method) => stock.has(method) }
-        );
+      : mode === 'strip'
+        ? { client: stripped, stop: async () => {} }
+        : emulatedGuard(
+            browser,
+            mode === 'refuse'
+              ? { refuse: (method) => stock.has(method) }
+              : { swallow: (method) => stock.has(method) }
+          );
   try {
     return await run(
-      { ...set, vectors, variants: { prompt: 0 } },
+      { ...set, vectors: only, variants: { prompt: 0 } },
       {
         client: guard.client,
         unguarded: browser.unguarded,
@@ -98,6 +110,21 @@ for (const mode of ['refuse', 'swallow'])
     assert.equal(summary.pass, false);
     assert.match(summary.line, /^GUARD-FAIL /);
   });
+
+test('a guard that forwards init scripts without runImmediately fails E7.init-script', {
+  timeout: 300000,
+}, async () => {
+  const execution = await execute(
+    'strip',
+    declared,
+    vectors.filter((vector) => vector.id === 'E7.init-script')
+  );
+  const [row] = execution.results;
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.immediateWorld, false, JSON.stringify(row));
+  assert.equal(row.observations.guarded.playwrightWorld, true, JSON.stringify(row));
+});
 
 test('a guard that declares neither capability skips every row, never passes it', async () => {
   const client = { events: [], send: async () => assert.fail('a skipped row sent CDP') };

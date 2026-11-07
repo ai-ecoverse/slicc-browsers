@@ -530,6 +530,7 @@ class Execution {
 
   async pump() {
     while (!this.stopped && !this.clients.flight?.abandoned) {
+      this.failWatched();
       for (const event of this.client.events.slice(this.eventStart)) {
         if (this.processed.has(event)) continue;
         this.processed.add(event);
@@ -740,6 +741,10 @@ class Execution {
         phase,
         Boolean(childSession) && !out.ok && this.detached(childSession)
       );
+      if ((step.isolatedWorld || step.observer) && !out.ok)
+        this.notes.push(
+          `${step.isolatedWorld ? `isolatedWorld ${step.isolatedWorld}` : `observer ${step.observer}`}: ${out.error?.message ?? 'failed'}`
+        );
       this.options.debug?.({ step, out, side: this.side });
     }
   }
@@ -921,9 +926,130 @@ class Execution {
         })
       );
     if (step.guess) return this.guess(step.guess, session);
+    if (step.isolatedWorld) return outcome(this.isolatedWorld(step));
+    if (step.observer) return outcome(this.watchPage(step));
     if (step.cdp) return this.cdp(step, session, phase);
     if (step.page) return this.page(step, session, phase);
     throw new Error('Unknown step kind');
+  }
+
+  referenced(value, session) {
+    if (Array.isArray(value)) return value.map((item) => this.referenced(item, session));
+    if (!value || typeof value !== 'object') return value;
+    if (Object.hasOwn(value, '$result') || Object.hasOwn(value, '$event')) {
+      const source = Object.hasOwn(value, '$result')
+        ? this.calls[value.$result]
+        : this.actor()
+            .events.slice(this.eventStart)
+            .filter(
+              (event) =>
+                event.method === value.$event &&
+                (session === undefined || event.sessionId === session) &&
+                matches(event, value.where ?? {})
+            )
+            .at(-1);
+      const found = at(source, value.path);
+      if (found === undefined)
+        throw new Error(`unresolved reference ${value.$result ?? value.$event} ${value.path}`);
+      return found;
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, this.referenced(item, session)])
+    );
+  }
+
+  async isolatedWorld(step) {
+    const targetId = step.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    const { sessionId } = await this.reader.send('Target.attachToTarget', {
+      targetId,
+      flatten: true,
+    });
+    try {
+      const { frameTree } = await this.reader.send('Page.getFrameTree', {}, sessionId);
+      const { executionContextId } = await this.reader.send(
+        'Page.createIsolatedWorld',
+        { frameId: frameTree.frame.id, worldName: step.isolatedWorld },
+        sessionId
+      );
+      const read = await this.reader.send(
+        'Runtime.evaluate',
+        {
+          expression: step.expression,
+          contextId: executionContextId,
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        sessionId
+      );
+      return {
+        contextId: executionContextId,
+        value: read.result?.value,
+        url: frameTree.frame.url,
+        ...(read.exceptionDetails ? { exception: true } : {}),
+      };
+    } finally {
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
+    }
+  }
+
+  async watchPage(step) {
+    if (!this.watch) {
+      const start = this.reader.events.length;
+      const { sessionId } = await this.reader.send('Target.attachToTarget', {
+        targetId: this.pageTarget,
+        flatten: true,
+      });
+      this.watch = { sessionId, start, failed: new Set() };
+      await this.reader.send('Page.enable', {}, sessionId);
+      await this.reader.send('Runtime.enable', {}, sessionId);
+      await this.reader.send('Debugger.enable', {}, sessionId);
+    }
+    if (step.observer === 'fail') {
+      await this.reader.send(
+        'Fetch.enable',
+        { patterns: [{ urlPattern: step.url, requestStage: 'Request' }] },
+        this.watch.sessionId
+      );
+      this.watch.failing = true;
+    }
+    return { watching: true };
+  }
+
+  failWatched() {
+    if (!this.watch?.failing) return;
+    for (const event of this.reader.events.slice(this.watch.start)) {
+      if (
+        event.method !== 'Fetch.requestPaused' ||
+        event.sessionId !== this.watch.sessionId ||
+        this.watch.failed.has(event.params.requestId)
+      )
+        continue;
+      this.watch.failed.add(event.params.requestId);
+      this.pending.push(
+        outcome(
+          this.reader.send(
+            'Fetch.failRequest',
+            { requestId: event.params.requestId, errorReason: 'BlockedByClient' },
+            this.watch.sessionId
+          )
+        )
+      );
+    }
+  }
+
+  watched(c) {
+    if (!this.watch) return false;
+    return this.reader.events
+      .slice(this.watch.start)
+      .some(
+        (event) =>
+          event.sessionId === this.watch.sessionId &&
+          (c.world !== undefined
+            ? event.method === 'Runtime.executionContextCreated' &&
+              event.params.context.name === c.world &&
+              (c.origin === undefined || event.params.context.origin === c.origin)
+            : event.method === 'Debugger.scriptParsed' && event.params.url === c.script)
+      );
   }
 
   async settle(settle) {
@@ -1000,7 +1126,12 @@ class Execution {
     if (step.cdp === 'Target.detachFromTarget') await sleep(this.delay);
     if (step.cdp === 'Target.setAutoAttach' && step.params?.autoAttach === false)
       this.cleanupEventStart = this.client.events.length;
-    const params = { ...step.params };
+    let params;
+    try {
+      params = this.referenced({ ...step.params }, sessionId);
+    } catch (error) {
+      return { ok: false, error: { message: error.message } };
+    }
     const session =
       step.session === 'page-or-browser' &&
       supported(['browserSession'], this.options.capabilities) &&
@@ -1157,8 +1288,8 @@ class Execution {
               supported(step.requires, this.options.capabilities)
           )
         : [];
-    if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
-      return this.check(check);
+    const polled = check?.observer === 'fixture' || check?.world !== undefined || check?.script;
+    if (want !== true || (!polled && !snapshots.length)) return this.check(check);
     let seen = false;
     const met = await this.poll(
       async () => {
@@ -1279,6 +1410,7 @@ class Execution {
     if (c.history) return this.history(c.history);
     if (c.frameBlocked) return this.frameBlocked(c.frameBlocked);
     if (c.pre || c.loaded) return this.attemptCheck(c);
+    if (c.world !== undefined || c.script !== undefined) return this.watched(c);
   }
 
   callCheck(c) {
@@ -1476,6 +1608,10 @@ class Execution {
     } finally {
       this.stopped = true;
       await pumping;
+      if (this.watch)
+        await outcome(
+          this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
+        );
       for (const session of this.attachSettings.keys())
         await outcome(
           this.client.send(
@@ -1519,6 +1655,9 @@ const observerRequired = (check) => {
 };
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
+  allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
+    (step) => step.isolatedWorld || step.observer
+  ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(
     (observation) => observerRequired(observation.check) || observerRequired(observation.eitherWhen)

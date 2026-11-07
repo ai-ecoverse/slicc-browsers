@@ -183,17 +183,21 @@ It also offers `storageKey(key)` and `unparseable(text)`. A Go or Rust implement
 
 ## Guard vectors
 
-A guard sits between a CDP client, such as an agent's browser tool, and the browser, and keeps the client away from protected origins. `guard-vectors.json` holds more than a hundred attacks on that promise, and every guard must pass them all. They include navigation, redirect chains, popups and frames, request interception, cookie and storage access, privileged pages, error pages, foreign extension worlds, debugger and instrumentation tricks, and session overrides that would leak into a protected page.
+A guard sits between a CDP client, such as an agent's browser tool, and the browser, and keeps the client away from protected origins. `guard-vectors.json` holds more than a hundred attacks on that promise, and every guard must pass them all. They cover navigation, redirect chains, popups, frames, request interception, cookies, storage, privileged and error pages, foreign extension worlds, debugger tricks and session overrides that would leak into a protected page.
 
 Each vector runs twice. The **control** runs it against an ordinary origin, where it must work. The **guarded** leg runs it through the guard against a protected target, where it must be refused or have no effect. A **liveness** check, made outside the guard, proves the protected target was really there. A row passes only when all three do, so a guard can't pass by breaking everything, and a test can't pass by never reaching the target.
 
-When a vector compares ordinary and protected fixture markers, those markers do not contain one another. Protected-marker checks still examine complete probe replies, including errors, and the vector's client events and messages, including encoded values.
-
 A guard may refuse every client navigation to an `about:` URL that inherits an origin, such as `about:blank`. Refusing an ordinary navigation away from a protected page still fails.
 
-Client-exit controls use the unguarded observer; persistent-capability refusals are valid evidence, granted instruments must leave no effects after exit, and missing answers remain incomplete.
+### What a guard must let through
 
-Forwarding audits retain early snapshots as evidence. A complete final ledger supersedes an incomplete early snapshot, but any forwarding reported in either audit remains a failure. An incomplete final audit remains missing evidence.
+For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stockSetup` admits on ordinary pages:
+- `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` (no code), with any `worldName` or `runImmediately`, and its removal;
+- exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
+- `Page.createIsolatedWorld`, and `Runtime.addBinding` scoped to an isolated world it placed as ordinary, by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from such worlds;
+- tab targets in `Target.setAutoAttach`, placed and held like pages; a transport that synthesizes it declares `syntheticAutoAttach`.
+
+Code init scripts, main-world bindings and other overrides stay refused or harmless; the unguarded observer reads every effect, so refusing or faking a call fails. Undeclared, these rows skip, never pass.
 
 ### Running them
 
@@ -233,8 +237,7 @@ You supply:
 | `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
 | `clientExit` | close the guarded client in the middle of a row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
-
-`forwardAudit` permits observer restore after a client history timeout only with terminal `historyTrigger: { id: "history-trigger", complete: true, forwarded: false }` proof from `audit({ historyTrigger: command, probes: [], final: false })`, keeping the probe ledger open; missing proof, forwarding or a late successful reply never qualifies as refusal.
+| `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 
 ### Reading the result
 

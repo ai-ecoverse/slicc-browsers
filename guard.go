@@ -48,6 +48,10 @@ const (
 	GuardCapSiteIsolationOff = "siteIsolationOff"
 	GuardCapInboundDelay     = "inboundDelay"
 	GuardCapForwardAudit     = "forwardAudit"
+	GuardCapStockSetup       = "stockSetup"
+	GuardCapSyntheticAttach  = "syntheticAutoAttach"
+	GuardObserverWatch       = "watch"
+	GuardObserverFail        = "fail"
 	GuardClientExit          = "exit"
 	GuardPageScript          = "script"
 	GuardSessionPage         = "page"
@@ -179,6 +183,8 @@ type GuardStep struct {
 	ExtensionFrame string          `json:"extensionFrame,omitempty"`
 	FrameRead      string          `json:"frameRead,omitempty"`
 	BFCacheRestore string          `json:"bfcacheRestore,omitempty"`
+	IsolatedWorld  string          `json:"isolatedWorld,omitempty"`
+	Observer       string          `json:"observer,omitempty"`
 	Origin         string          `json:"origin,omitempty"`
 	Text           string          `json:"text,omitempty"`
 	CDP            string          `json:"cdp,omitempty"`

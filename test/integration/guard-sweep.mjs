@@ -37,6 +37,8 @@ export const capabilities = {
   discovery: true,
   clientExit: true,
   siteIsolationOff: true,
+  stockSetup: true,
+  syntheticAutoAttach: true,
 };
 
 export const drivable = new Set([
@@ -45,6 +47,13 @@ export const drivable = new Set([
   'C8.iframe-error',
   'C9.page-drivable',
   'X1.after-exit',
+  'E7.init-script',
+  'E7.emulation',
+  'E7.binding',
+  'C3.tab-attach',
+  'C3.tab-create',
+  'C3.tab-attach.synthetic',
+  'C3.tab-create.synthetic',
 ]);
 
 const every = ['seven', 'vault', 'vault-x', 'apex'];

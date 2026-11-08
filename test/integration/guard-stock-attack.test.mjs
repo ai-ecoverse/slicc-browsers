@@ -26,7 +26,6 @@ const attackIds = [
   'C3.tab-worker-leak',
   'C3.tab-iframe-leak',
 ];
-const admitEffectIds = new Set(['E7.init-boundary']);
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const stockCaps = { ...base, stockSetup: true, syntheticAutoAttach: true, forwardAudit: true };
@@ -92,7 +91,11 @@ test('E7.init-boundary sources hold real CR, LS, PS, NUL and BOM characters', ()
   assert.ok(source('boundBom').includes('\ufeff'));
   assert.equal(source('boundCr').includes('\\r'), false);
   assert.equal(source('boundNul').includes('\\0'), false);
-  assert.equal(vector.expected.installedNul, true);
+  assert.equal(vector.expected.installedNul, false);
+  assert.equal(
+    set.vectors.find((item) => item.id === 'E7.init-script').expected.installedNul,
+    true
+  );
   assert.deepEqual(vector.observe.ranCr.dependsOn, []);
   assert.deepEqual(vector.observe.installedNul.dependsOn, []);
 });
@@ -246,7 +249,7 @@ test('C3.tab-service-worker-leak control passes on a secure origin', {
   }
 });
 
-test('a refuse-all reference passes E7 attack rows that do not require an admitted effect', {
+test('a refuse-all reference passes every E7 stock-setup attack row', {
   timeout: 900000,
 }, async () => {
   const fixture = await fixtureServer();
@@ -269,18 +272,12 @@ test('a refuse-all reference passes E7 attack rows that do not require an admitt
         rowTimeoutMs: 90000,
       }
     );
-    for (const row of execution.results) {
-      if (admitEffectIds.has(row.id)) {
-        assert.equal(row.control, 'pass', JSON.stringify(row));
-        assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
-        continue;
-      }
+    for (const row of execution.results)
       assert.deepEqual(
         [row.control, row.guarded, row.live],
         ['pass', 'pass', 'pass'],
         JSON.stringify(row)
       );
-    }
   } finally {
     await guard.stop();
     await browser.close();

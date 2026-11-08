@@ -24840,6 +24840,15 @@
           "requires": ["stockSetup"]
         },
         {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc\u0000fetch(new URL('/doc?n=nul-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-nul-{tag}\n",
+            "worldName": "slicc-nul-{tag}"
+          },
+          "as": "nulScript",
+          "requires": ["stockSetup"]
+        },
+        {
           "wait": 500
         },
         {
@@ -24896,7 +24905,7 @@
       "requires": ["stockSetup"],
       "observe": {
         "admitted": {
-          "means": "the guard answered removedWorld, playwrightWorld, puppeteerWorld, immediateWorld, keptScript, droppedScript, emptyScript, pptrScript, commentScript, removeWorld, removeScript, removeImmediate without an error",
+          "means": "the guard answered removedWorld, playwrightWorld, puppeteerWorld, immediateWorld, keptScript, droppedScript, emptyScript, pptrScript, commentScript, nulScript, removeWorld, removeScript, removeImmediate without an error",
           "check": {
             "all": [
               {
@@ -24949,6 +24958,12 @@
               },
               {
                 "result": "commentScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "nulScript",
                 "path": "ok",
                 "equals": true,
                 "observer": "client"
@@ -25070,6 +25085,22 @@
             "observer": "unguarded",
             "afterClear": true
           }
+        },
+        "installedNul": {
+          "means": "the unguarded observer saw Chrome create the NUL no-code world in the new ordinary document",
+          "check": {
+            "world": "slicc-nul-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}",
+            "afterClear": true
+          }
+        },
+        "ranNul": {
+          "means": "the NUL no-code source did not fetch {target}/doc?n=nul-{tag}",
+          "check": {
+            "served": "{target}/doc?n=nul-{tag}",
+            "observer": "fixture"
+          }
         }
       },
       "live": "the stand-in served {target}/doc?n={tag}, which the client navigated to",
@@ -25093,7 +25124,9 @@
           "installedDropped": true,
           "immediateCarried": false,
           "emptyWorld": true,
-          "pptrCompiled": true
+          "pptrCompiled": true,
+          "installedNul": true,
+          "ranNul": false
         }
       },
       "expected": {
@@ -25109,7 +25142,9 @@
         "installedDropped": true,
         "immediateCarried": false,
         "emptyWorld": true,
-        "pptrCompiled": true
+        "pptrCompiled": true,
+        "installedNul": true,
+        "ranNul": false
       }
     },
     {
@@ -26360,7 +26395,7 @@
           }
         },
         "installedNul": {
-          "means": "the unguarded observer saw the admitted NUL-boundary world on the document",
+          "means": "the unguarded observer saw no NUL-boundary world on the protected document",
           "dependsOn": [],
           "check": {
             "world": "slicc-bound-nul-{tag}",
@@ -26451,7 +26486,7 @@
         "ranCr": false,
         "ranLs": false,
         "ranPs": false,
-        "installedNul": true,
+        "installedNul": false,
         "ranNul": false,
         "ranBlock": false,
         "ranBom": false,
@@ -26930,9 +26965,9 @@
           }
         },
         "exposed": {
-          "means": "the unguarded observer finds the admitted display overrides on a document at {target}",
+          "means": "the unguarded observer finds the admitted display overrides (focus, media, viewport, touch) on a document at {target}",
           "check": {
-            "expression": "location.href.includes('/doc?n={tag}') && location.href.includes(location.origin) && matchMedia('(prefers-reduced-motion: reduce)').matches && innerWidth === 1001 && navigator.maxTouchPoints === 2",
+            "expression": "location.href.includes('/doc?n={tag}') && location.href.includes(location.origin) && document.hasFocus() && matchMedia('(prefers-reduced-motion: reduce)').matches && innerWidth === 1001 && navigator.maxTouchPoints === 2",
             "equals": true,
             "via": "unguarded",
             "observer": "unguarded"

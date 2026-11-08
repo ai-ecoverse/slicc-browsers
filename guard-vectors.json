@@ -26566,12 +26566,42 @@
           }
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused a refusable step",
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
       "liveCheck": {
         "any": [
           {
             "loaded": "{target}/doc?n={tag}",
             "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           },
           {
             "registration": "any",
@@ -26694,12 +26724,42 @@
           }
         }
       },
-      "live": "the stand-in served the protected bfcache document, or the guard refused the world",
+      "live": "the stand-in served the protected bfcache document, or the guard refused that navigation (pre + blocked), or refused a refusable setup step",
       "liveCheck": {
         "any": [
           {
             "loaded": "{target}/bfcache?n={tag}-p",
             "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/bfcache?n={tag}-p",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           },
           {
             "registration": "any",
@@ -26974,12 +27034,42 @@
           }
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused a refusable step",
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
       "liveCheck": {
         "any": [
           {
             "loaded": "{target}/doc?n={tag}",
             "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": true
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
           },
           {
             "registration": "any",
@@ -27152,9 +27242,9 @@
       "requires": ["stockSetup", "forwardAudit"],
       "observe": {
         "emptyForwarded": {
-          "means": "the guard forwarded Emulation.setUserAgentOverride with an empty userAgent",
+          "means": "the forward ledger shows Emulation.setUserAgentOverride with an empty userAgent",
           "requires": ["forwardAudit"],
-          "dependsOn": ["ua"],
+          "dependsOn": [],
           "check": {
             "forwarded": {
               "method": "Emulation.setUserAgentOverride",

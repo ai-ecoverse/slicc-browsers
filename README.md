@@ -197,7 +197,7 @@ For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stoc
 - `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
 - `Target.setAutoAttach`: accept the call but narrow the filter to tab targets, hold pages under the tab like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
 
-The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Undeclared, they skip, never pass.
+The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Admitted display overrides and no-code init scripts must not remain in effect on a protected document — refuse that navigation, or clear them before it runs. Undeclared, they skip, never pass.
 
 ### Running them
 
@@ -229,20 +229,20 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
-| `browserSession` | send commands to the browser session, not only to a page |
+| `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
-| `discovery` | report target creation and changes without a session |
-| `chromeUrlsAttach` | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't) |
-| `extensionWorld` | host a foreign extension's content script on the test page |
-| `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
-| `clientExit` | close the guarded client in the middle of a row |
-| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound messages; audit forwarded commands and params |
-| `secureOrigin` | HTTPS fixture origins (service worker registration) |
+| `discovery` | report target create/change without a session |
+| `chromeUrlsAttach` | attach to `chrome://` pages (DevTools-port CDP; not `chrome.debugger`) |
+| `extensionWorld` | host a foreign extension content script on the test page |
+| `extensionFrame` | host the harness extension frame an ordinary test page embeds |
+| `clientExit` | close the guarded client mid-row |
+| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
+| `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 
 ### Reading the result
 
-Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `incomplete` (the test couldn't gather its own evidence) or `not-run` (vectors described only in words). `summary()` turns the rows into one line:
+Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `incomplete` (evidence missing) or `not-run` (words only). `summary()` makes one line:
 
 ```text
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)

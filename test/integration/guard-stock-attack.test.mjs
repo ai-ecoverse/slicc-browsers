@@ -249,6 +249,122 @@ test('C3.tab-service-worker-leak control passes on a secure origin', {
   }
 });
 
+const carryIds = ['E7.emulation-carry', 'E7.init-world-carry', 'E7.init-world-bfcache'];
+const carryVectors = set.vectors.filter((vector) => carryIds.includes(vector.id));
+
+function clearingStockClient(browser, targets) {
+  const protectedOrigins = new Set(
+    [targets.seven, targets.vault, targets.apex, targets['vault-x']]
+      .filter(Boolean)
+      .map((origin) => new URL(origin).origin)
+  );
+  const scripts = new Map();
+  const raw = browser.client;
+  const forwarded = [];
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.addScriptToEvaluateOnNewDocument') {
+      const result = await raw.send(method, params, sessionId);
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      const list = scripts.get(sessionId) ?? [];
+      if (result?.identifier) list.push(result.identifier);
+      scripts.set(sessionId, list);
+      return result;
+    }
+    if (
+      method === 'Page.navigate' &&
+      params?.url &&
+      protectedOrigins.has(new URL(params.url).origin)
+    ) {
+      for (const identifier of scripts.get(sessionId) ?? [])
+        await raw
+          .send('Page.removeScriptToEvaluateOnNewDocument', { identifier }, sessionId)
+          .catch(() => {});
+      scripts.set(sessionId, []);
+      await raw.send('Emulation.clearDeviceMetricsOverride', {}, sessionId).catch(() => {});
+      await raw
+        .send('Emulation.setFocusEmulationEnabled', { enabled: false }, sessionId)
+        .catch(() => {});
+      await raw
+        .send('Emulation.setEmulatedMedia', { media: '', features: [] }, sessionId)
+        .catch(() => {});
+      await raw
+        .send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
+        .catch(() => {});
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded };
+}
+
+async function runCarry(mode) {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  record(browser.unguarded);
+  const targets = origins(fixture);
+  let guard;
+  if (mode === 'refuse-nav') {
+    guard = emulatedGuard(browser, {
+      failDocumentOrigins: [targets.seven, targets.vault],
+    });
+  } else if (mode === 'clear') {
+    guard = { client: clearingStockClient(browser, targets), stop: async () => {} };
+  } else {
+    guard = { client: browser.client, stop: async () => {} };
+  }
+  record(guard.client);
+  try {
+    return await run(
+      { ...set, vectors: carryVectors, variants: { prompt: 0 } },
+      {
+        client: guard.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets,
+        capabilities: stockCaps,
+        rowTimeoutMs: 90000,
+      }
+    );
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+}
+
+test('a guard that refuses the protected navigation passes the three carry rows live', {
+  timeout: 600000,
+}, async () => {
+  const execution = await runCarry('refuse-nav');
+  assert.equal(execution.results.length, carryIds.length * 2);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that loads the protected document and keeps admitted state fails the three carry rows', {
+  timeout: 600000,
+}, async () => {
+  const execution = await runCarry('keep');
+  for (const row of execution.results.filter((item) => item.target !== 'ordinary')) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('a guard that clears admitted state before the protected document runs passes the three carry rows', {
+  timeout: 600000,
+}, async () => {
+  const execution = await runCarry('clear');
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
 test('a refuse-all reference passes every E7 stock-setup attack row', {
   timeout: 900000,
 }, async () => {

@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { judge } from '../../guard-driver.mjs';
+import {
+  debuggerCleanup,
+  debuggerPaused,
+  idleDebuggerCleanup,
+  isRefusal,
+  judge,
+  outcome,
+  refusalError,
+  trustedClientOnly,
+} from '../../guard-driver.mjs';
+import { reusableAttachSession } from '../../guard-runner.mjs';
 import { probeWorkerSessions } from '../../protected-worker.mjs';
 import { drivable } from './guard-sweep.mjs';
 
@@ -145,6 +155,9 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     assert.equal(probe?.probeSessions?.since, 'spawn', id);
     assert.equal(probe?.probeSessions?.path, kind.path, id);
     assert.deepEqual(probe?.probeSessions?.attach, ['attach'], id);
+    const attach = vector.trigger.find((step) => step.cdp === 'Target.attachToTarget');
+    assert.equal(attach?.reuseSession, true, id);
+    assert.equal(attach?.params?.targetId, '{workerTarget}', id);
     const wait = vector.trigger.findIndex((step) => step.wait === 1500);
     const targets = vector.trigger.findIndex((step) => step.as === 'targets');
     const probeAt = vector.trigger.findIndex((step) => step.probeSessions);
@@ -492,3 +505,220 @@ test('stockSetup and README admit either narrowing or per-target hiding for work
   assert.match(set.capabilities.stockSetup, /worker/);
   assert.equal(set.placeholders.workerTarget.includes('spawnWorker'), true);
 });
+
+const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];
+
+test('C8 attach rows do not opt into session reuse', () => {
+  for (const id of c8AttachRows) {
+    const attach = [...byId[id].setup, ...byId[id].trigger].find(
+      (step) => step.cdp === 'Target.attachToTarget'
+    );
+    assert.ok(attach, id);
+    assert.equal(Object.hasOwn(attach, 'reuseSession'), false, id);
+  }
+});
+
+test('a refused C8-shaped trigger attach stays refused when setup already attached the page', () => {
+  const events = [
+    {
+      method: 'Target.attachedToTarget',
+      params: { targetInfo: { targetId: 'page-1' }, sessionId: 's-page' },
+    },
+  ];
+  const refused = { ok: false, error: { message: 'slicc: refused' } };
+  const step = { cdp: 'Target.attachToTarget', as: 'attach' };
+  assert.equal(reusableAttachSession(step, refused, { targetId: 'page-1' }, events, 0), undefined);
+  assert.equal(isRefusal(refused, { ...step, refusal: { match: 'refused' } }), true);
+  assert.equal(refused.ok, false);
+});
+
+test('reuseSession recovers an already-attached worker answer from the auto-attach event', () => {
+  const events = [
+    {
+      method: 'Target.attachedToTarget',
+      params: { targetInfo: { targetId: 'w1' }, sessionId: 'ws' },
+    },
+  ];
+  assert.equal(
+    reusableAttachSession(
+      { cdp: 'Target.attachToTarget', reuseSession: true },
+      { ok: false, error: { message: 'Target is attaching or attached already.' } },
+      { targetId: 'w1' },
+      events,
+      0
+    ),
+    'ws'
+  );
+  assert.equal(
+    reusableAttachSession(
+      { cdp: 'Target.attachToTarget', reuseSession: true },
+      { ok: true, result: {} },
+      { targetId: 'w1' },
+      events,
+      0
+    ),
+    'ws'
+  );
+});
+
+test('a worker attach refusal stays refused when an attachedToTarget event already exists', () => {
+  const events = [
+    {
+      method: 'Target.attachedToTarget',
+      params: { targetInfo: { targetId: 'w1' }, sessionId: 'ws' },
+    },
+  ];
+  const refused = { ok: false, error: { message: 'slicc: refused' } };
+  assert.equal(
+    reusableAttachSession(
+      {
+        cdp: 'Target.attachToTarget',
+        reuseSession: true,
+        refusable: true,
+        refusal: { match: 'refused' },
+      },
+      refused,
+      { targetId: 'w1' },
+      events,
+      0
+    ),
+    undefined
+  );
+  assert.equal(
+    reusableAttachSession(
+      { cdp: 'Target.attachToTarget', reuseSession: true },
+      { ok: false, error: { code: -32000, message: 'Internal error' } },
+      { targetId: 'w1' },
+      events,
+      0
+    ),
+    undefined
+  );
+});
+
+{
+  const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
+  const cdpStart = source.indexOf('  async cdp(step, sessionId');
+  const cdpEnd = source.indexOf('\n  async seedContext', cdpStart);
+  const recordStart = source.indexOf('  record(step, out, session, phase, gone)');
+  const recordEnd = source.indexOf('\n  async execute', recordStart);
+  const methods = new Function(
+    'debuggerCleanup',
+    'debuggerPaused',
+    'idleDebuggerCleanup',
+    'outcome',
+    'supported',
+    'sleep',
+    'refusedOut',
+    'exitsClient',
+    'refusalError',
+    'trustedClientOnly',
+    'reusableAttachSession',
+    `return { ${source.slice(cdpStart, cdpEnd)}, ${source.slice(recordStart, recordEnd)} };`
+  )(
+    debuggerCleanup,
+    debuggerPaused,
+    idleDebuggerCleanup,
+    outcome,
+    () => false,
+    async () => {},
+    (step, out) => isRefusal(out, step),
+    () => false,
+    refusalError,
+    trustedClientOnly,
+    reusableAttachSession
+  );
+
+  test('extracted cdp keeps a C8-shaped refusal when setup already attached the page', async () => {
+    const notes = [];
+    const execution = {
+      vector: { id: 'C8.newtab' },
+      client: {
+        events: [
+          {
+            method: 'Target.attachedToTarget',
+            params: { targetInfo: { targetId: 'page-1' }, sessionId: 's-page' },
+          },
+        ],
+        send: async () => {
+          throw Object.assign(new Error('slicc: refused'), {
+            cdp: { message: 'slicc: refused' },
+          });
+        },
+      },
+      eventStart: 0,
+      options: {},
+      vars: {},
+      notes,
+      attachSettings: new Map(),
+      targets: [],
+      contexts: [],
+      referenced: (value) => value,
+      actor: () => execution.client,
+      bound: (ms) => ms,
+    };
+    const out = await methods.cdp.call(execution, {
+      cdp: 'Target.attachToTarget',
+      params: { targetId: 'page-1', flatten: true },
+      as: 'attach',
+    });
+    assert.equal(out.ok, false);
+    assert.match(String(out.error?.message ?? ''), /refused/);
+    assert.equal(notes.length, 0);
+  });
+
+  test('extracted cdp reuses only an already-attached worker answer when reuseSession is set', async () => {
+    let mode = 'already';
+    const notes = [];
+    const execution = {
+      vector: { id: 'C3.protected-worker-dedicated' },
+      client: {
+        events: [
+          {
+            method: 'Target.attachedToTarget',
+            params: { targetInfo: { targetId: 'w1' }, sessionId: 'ws' },
+          },
+        ],
+        send: async () => {
+          if (mode === 'already')
+            throw Object.assign(new Error('Target is attaching or attached already.'), {
+              cdp: { message: 'Target is attaching or attached already.' },
+            });
+          throw Object.assign(new Error('slicc: refused'), {
+            cdp: { message: 'slicc: refused' },
+          });
+        },
+      },
+      eventStart: 0,
+      options: {},
+      vars: {},
+      notes,
+      attachSettings: new Map(),
+      targets: [],
+      contexts: [],
+      referenced: (value) => value,
+      actor: () => execution.client,
+      bound: (ms) => ms,
+    };
+    const reused = await methods.cdp.call(execution, {
+      cdp: 'Target.attachToTarget',
+      params: { targetId: 'w1', flatten: true },
+      reuseSession: true,
+      as: 'attach',
+    });
+    assert.equal(reused.ok, true);
+    assert.equal(reused.result.sessionId, 'ws');
+    assert.equal(reused.result.reused, true);
+    mode = 'refuse';
+    const kept = await methods.cdp.call(execution, {
+      cdp: 'Target.attachToTarget',
+      params: { targetId: 'w1', flatten: true },
+      reuseSession: true,
+      refusable: true,
+      refusal: { match: 'refused' },
+      as: 'attach',
+    });
+    assert.equal(kept.ok, false);
+    assert.match(String(kept.error?.message ?? ''), /refused/);
+  });
+}

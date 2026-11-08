@@ -29470,6 +29470,7 @@
           "session": "browser",
           "as": "attach",
           "requires": ["browserSession"],
+          "reuseSession": true,
           "refusable": true,
           "refusal": {
             "match": "refused"
@@ -29894,6 +29895,7 @@
           "session": "browser",
           "as": "attach",
           "requires": ["browserSession"],
+          "reuseSession": true,
           "refusable": true,
           "refusal": {
             "match": "refused"
@@ -30318,6 +30320,7 @@
           "session": "browser",
           "as": "attach",
           "requires": ["browserSession"],
+          "reuseSession": true,
           "refusable": true,
           "refusal": {
             "match": "refused"
@@ -30743,6 +30746,7 @@
           "session": "browser",
           "as": "attach",
           "requires": ["browserSession"],
+          "reuseSession": true,
           "refusable": true,
           "refusal": {
             "match": "refused"

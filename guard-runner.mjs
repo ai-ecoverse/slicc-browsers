@@ -50,6 +50,19 @@ function autoAttachSession(events, start, targetId) {
     )
     .at(-1)?.params?.sessionId;
 }
+
+export function reusableAttachSession(step, out, params, events, start) {
+  if (!step?.reuseSession || step.cdp !== 'Target.attachToTarget' || !params?.targetId)
+    return undefined;
+  if (out?.ok && out.result?.sessionId) return undefined;
+  const message = String(out?.error?.message ?? '');
+  if (/refused|not allowed/i.test(message)) return undefined;
+  const already =
+    (out?.ok === true && !out.result?.sessionId) ||
+    /already attached|attached already|Target is attaching or attached/i.test(message);
+  if (!already) return undefined;
+  return autoAttachSession(events, start, params.targetId);
+}
 const browserUiAttempts = 3;
 const browserUiMs = 5000;
 const q = JSON.stringify;
@@ -1374,14 +1387,14 @@ class Execution {
       this.contexts.push(this.vars.context);
       await this.seedContext(this.vars.context);
     }
-    const reused =
-      step.cdp === 'Target.attachToTarget' &&
-      !(out.ok && out.result?.sessionId) &&
-      params?.targetId &&
-      autoAttachSession(this.client.events, this.eventStart, params.targetId);
-    if (!reused) return out;
-    this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
-    return { ok: true, result: { sessionId: reused, reused: true } };
+    if (step.reuseSession) {
+      const reused = reusableAttachSession(step, out, params, this.client.events, this.eventStart);
+      if (reused) {
+        this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
+        return { ok: true, result: { sessionId: reused, reused: true } };
+      }
+    }
+    return out;
   }
 
   async seedContext(context) {

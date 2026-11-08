@@ -247,6 +247,12 @@ pub struct Step {
     pub params: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refusable: bool,
+    #[serde(
+        default,
+        rename = "reuseSession",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub reuse_session: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<Refusal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

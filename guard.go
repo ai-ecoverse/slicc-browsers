@@ -195,6 +195,7 @@ type GuardStep struct {
 	CDP            string          `json:"cdp,omitempty"`
 	Params         json.RawMessage `json:"params,omitempty"`
 	Refusable      bool            `json:"refusable,omitempty"`
+	ReuseSession   bool            `json:"reuseSession,omitempty"`
 	Refusal        *GuardRefusal   `json:"refusal,omitempty"`
 	Page           string          `json:"page,omitempty"`
 	URL            string          `json:"url,omitempty"`

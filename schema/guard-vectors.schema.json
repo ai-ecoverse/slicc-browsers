@@ -729,6 +729,9 @@
             "refusable": {
               "const": true
             },
+            "reuseSession": {
+              "const": true
+            },
             "refusal": {
               "type": "object",
               "additionalProperties": false,

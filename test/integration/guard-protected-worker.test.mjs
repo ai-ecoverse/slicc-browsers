@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { judge } from '../../guard-driver.mjs';
+import { probeWorkerSessions } from '../../protected-worker.mjs';
 import { drivable } from './guard-sweep.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
@@ -296,6 +297,39 @@ test('a lying attach reply that still returns a session id fails attachSession',
       id
     );
   }
+});
+
+test('probeWorkerSessions fails closed when any session evaluate errors', async () => {
+  const client = {
+    async send(_method, _params, sessionId) {
+      if (sessionId === 'decoy') throw new Error('slicc: refused: protected target');
+      return { result: { value: false } };
+    },
+  };
+  const out = await probeWorkerSessions({
+    client,
+    sessions: ['decoy', 'page'],
+    path: '/worker.js',
+    tag: 't',
+  });
+  assert.equal(out.reachable, false);
+  assert.match(out.incomplete ?? '', /evaluate failed/);
+});
+
+test('probeWorkerSessions reports reachable when a later session evaluates true', async () => {
+  const client = {
+    async send(_method, _params, sessionId) {
+      return { result: { value: sessionId === 'worker' } };
+    },
+  };
+  const out = await probeWorkerSessions({
+    client,
+    sessions: ['page', 'worker'],
+    path: '/worker.js',
+    tag: 't',
+  });
+  assert.equal(out.reachable, true);
+  assert.equal(out.incomplete, undefined);
 });
 
 test('stockSetup and README admit either narrowing or per-target hiding for workers', () => {

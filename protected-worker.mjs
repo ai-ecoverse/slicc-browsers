@@ -93,7 +93,6 @@ export async function probeWorkerSessions({ client, sessions, path, tag, detache
   if (!ids.length) return { reachable: false, probed: 0, sessions: [] };
   let reachable = false;
   let probed = 0;
-  let ran = 0;
   for (const sessionId of ids) {
     if (detached(sessionId)) continue;
     probed++;
@@ -104,20 +103,15 @@ export async function probeWorkerSessions({ client, sessions, path, tag, detache
         sessionId
       )
     );
-    if (!out.ok) continue;
-    ran++;
-    if (out.result?.result?.value === true) {
-      reachable = true;
-      break;
-    }
+    if (!out.ok)
+      return {
+        reachable: false,
+        probed,
+        sessions: ids,
+        incomplete: `probeSessions evaluate failed: ${out.error?.message ?? 'error'}`,
+      };
+    if (out.result?.result?.value === true) reachable = true;
   }
-  if (probed > 0 && ran === 0 && !reachable)
-    return {
-      reachable: false,
-      probed,
-      sessions: ids,
-      incomplete: 'probeSessions could not evaluate any session',
-    };
   return { reachable, probed, sessions: ids };
 }
 

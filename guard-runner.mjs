@@ -1078,7 +1078,7 @@ class Execution {
     return out;
   }
 
-  async probeSessions(step) {
+  probeSessionIds(step) {
     const mark = this.eventMarks.get(step.probeSessions.since) ?? this.eventStart;
     const sessions = [];
     for (const event of this.client.events.slice(mark)) {
@@ -1089,15 +1089,71 @@ class Execution {
       const sessionId = this.calls[name]?.result?.sessionId;
       if (sessionId) sessions.push(sessionId);
     }
+    return sessions;
+  }
+
+  async probeSessions(step) {
     return outcome(
       probeWorkerSessions({
         client: this.client,
-        sessions,
+        sessions: this.probeSessionIds(step),
         path: expand(step.probeSessions.path, this.vars),
         tag: this.vars.tag,
         detached: (sessionId) => this.detached(sessionId),
       })
     );
+  }
+
+  async reprobeSessions(observed) {
+    const step = [...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])].find(
+      (entry) => entry.probeSessions
+    );
+    if (!step?.probeSessions || !this.calls.probe) return;
+    const expanded = expand(step, this.vars);
+    const seen = new Set(this.calls.probe.result?.sessions ?? []);
+    const late = this.probeSessionIds(expanded).filter(
+      (sessionId) => sessionId && !seen.has(sessionId)
+    );
+    if (!late.length) return;
+    const out = await probeWorkerSessions({
+      client: this.client,
+      sessions: late,
+      path: expand(expanded.probeSessions.path, this.vars),
+      tag: this.vars.tag,
+      detached: (sessionId) => this.detached(sessionId),
+    });
+    const sessions = [...seen, ...late];
+    if (out.incomplete) {
+      this.calls.probe = {
+        ok: true,
+        result: { ...(this.calls.probe.result ?? {}), ...out, sessions },
+      };
+      this.incomplete.push(`probeSessions: ${out.incomplete}`);
+      if (Object.hasOwn(observed, 'workerReachable')) observed.workerReachable = 'incomplete';
+      return;
+    }
+    if (!out.reachable) {
+      this.calls.probe = {
+        ok: true,
+        result: {
+          ...(this.calls.probe.result ?? {}),
+          reachable: this.calls.probe.result?.reachable === true,
+          probed: (this.calls.probe.result?.probed ?? 0) + out.probed,
+          sessions,
+        },
+      };
+      return;
+    }
+    this.calls.probe = {
+      ok: true,
+      result: {
+        ...(this.calls.probe.result ?? {}),
+        reachable: true,
+        probed: (this.calls.probe.result?.probed ?? 0) + out.probed,
+        sessions,
+      },
+    };
+    if (Object.hasOwn(observed, 'workerReachable')) observed.workerReachable = true;
   }
 
   async watchPage(step) {
@@ -1769,6 +1825,7 @@ class Execution {
       await sleep(100);
       const unseen = await this.awaitPre();
       const { observed, incomplete } = await this.observeAll(unseen);
+      await this.reprobeSessions(observed);
       this.options.debug?.({
         events: this.client.events.slice(this.eventStart),
         calls: this.calls,

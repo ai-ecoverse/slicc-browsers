@@ -16,8 +16,6 @@ const attackIds = [
   'E7.init-world-carry.script',
   'E7.init-world-bfcache',
   'E7.init-world-bfcache.script',
-  'E7.init-world-error',
-  'E7.init-world-error.script',
   'E7.emulation-carry',
   'E7.emulation-carry.script',
   'E7.isolated-foreign',
@@ -33,6 +31,7 @@ const attackIds = [
   'C3.tab-iframe-leak',
 ];
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
+const positiveStockIds = ['E7.init-world-error', 'E7.init-world-error.script'];
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const stockCaps = { ...base, stockSetup: true, syntheticAutoAttach: true, forwardAudit: true };
 
@@ -81,6 +80,13 @@ async function execute(mode, only = stripVectors) {
 
 test('the published attack and strip rows are present', () => {
   assert.deepEqual(attackVectors.map((vector) => vector.id).sort(), [...attackIds].sort());
+  for (const id of positiveStockIds) {
+    assert.ok(
+      set.vectors.some((vector) => vector.id === id),
+      id
+    );
+    assert.equal(attackIds.includes(id), false, id);
+  }
   assert.equal(stripVectors.length, 1);
   assert.deepEqual(stripVectors[0].targets, ['ordinary']);
   assert.equal(stripVectors[0].control.via, 'unguarded');
@@ -794,7 +800,10 @@ test('a guard that fails the protected navigate without a matched refusal fails 
     vectors: carryVectors,
   });
   for (const row of execution.results) {
-    assert.equal(row.control, 'pass', JSON.stringify(row));
+    const control = row.observations.control;
+    assert.equal(control.loaded, true, JSON.stringify(row));
+    if (row.id === 'E7.emulation-carry') assert.equal(control.exposed, true, JSON.stringify(row));
+    else assert.equal(control.worldOnProtected, true, JSON.stringify(row));
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
     assert.ok(
       row.errors.some((error) => /failed without a refusal/.test(error)),

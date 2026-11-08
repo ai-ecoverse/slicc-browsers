@@ -508,6 +508,20 @@ test('stockSetup and README admit either narrowing or per-target hiding for work
 
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];
 
+test('adopt resumes a paused worker even when its browser context does not match', async () => {
+  const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
+  const adopt = source.indexOf('  adopt(event) {');
+  const foreign = source.indexOf(
+    'info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context',
+    adopt
+  );
+  const resume = source.indexOf('Runtime.runIfWaitingForDebugger', foreign);
+  const matched = source.indexOf('const matched =', foreign);
+  assert.ok(adopt >= 0 && foreign > adopt);
+  assert.ok(resume > foreign && resume < matched);
+  assert.ok(source.includes('async resumeWaiting('));
+});
+
 test('C8 attach rows do not opt into session reuse', () => {
   for (const id of c8AttachRows) {
     const attach = [...byId[id].setup, ...byId[id].trigger].find(

@@ -613,6 +613,19 @@ class Execution {
     }
   }
 
+  async resumeWaiting(from = this.eventStart) {
+    for (const event of this.client.events.slice(from)) {
+      if (
+        event.method === 'Target.attachedToTarget' &&
+        event.params?.waitingForDebugger &&
+        event.params?.sessionId
+      )
+        await outcome(
+          this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+        );
+    }
+  }
+
   adopt(event) {
     const info = event.params.targetInfo;
     const child = event.params.sessionId;
@@ -622,8 +635,15 @@ class Execution {
       this.deferred.push(event);
       return;
     }
-    if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
+    if (
+      info?.browserContextId &&
+      this.vars.context &&
+      info.browserContextId !== this.vars.context
+    ) {
+      if (paused)
+        this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
       return;
+    }
     const matched = !this.childWhere || this.childMatches(info);
     const isTab = info?.type === 'tab';
     if (!matched && !isTab) {
@@ -1390,6 +1410,7 @@ class Execution {
     if (step.reuseSession) {
       const reused = reusableAttachSession(step, out, params, this.client.events, this.eventStart);
       if (reused) {
+        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, reused));
         this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
         return { ok: true, result: { sessionId: reused, reused: true } };
       }
@@ -1941,8 +1962,20 @@ class Execution {
             session
           )
         );
+      await this.resumeWaiting();
       for (const targetId of new Set(this.targets))
         await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
+      const listed = await outcome((this.reader ?? this.client).send('Target.getTargets', {}));
+      for (const info of listed.result?.targetInfos ?? []) {
+        if (
+          (info.type === 'shared_worker' || info.type === 'service_worker') &&
+          typeof info.url === 'string' &&
+          info.url.includes(this.vars.tag)
+        )
+          await outcome(
+            (this.reader ?? this.client).send('Target.closeTarget', { targetId: info.targetId })
+          );
+      }
       for (const browserContextId of new Set(this.contexts))
         await outcome(
           (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })

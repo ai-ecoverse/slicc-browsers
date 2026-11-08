@@ -1092,7 +1092,40 @@ class Execution {
     return sessions;
   }
 
+  ownProbeTargets() {
+    return new Set(
+      [
+        this.pageTarget,
+        this.canaryTarget,
+        this.calls.spawn?.result?.pageTargetId,
+        ...this.targets.filter((targetId) => targetId && targetId !== this.vars.workerTarget),
+      ].filter(Boolean)
+    );
+  }
+
+  ownProbeSessions(step) {
+    const own = new Set();
+    if (this.sessions.page) own.add(this.sessions.page);
+    if (this.sessions.child) own.add(this.sessions.child);
+    if (this.canarySession) own.add(this.canarySession);
+    for (const sessionId of this.internalSessions) own.add(sessionId);
+    for (const [name, out] of Object.entries(this.calls)) {
+      if (name === 'attach' || name === 'probe') continue;
+      if (out?.result?.sessionId) own.add(out.result.sessionId);
+    }
+    const mark = this.eventMarks.get(step.probeSessions.since) ?? this.eventStart;
+    const ownTargets = this.ownProbeTargets();
+    for (const event of this.client.events.slice(mark)) {
+      if (event.method !== 'Target.attachedToTarget') continue;
+      const sessionId = event.params?.sessionId;
+      const targetId = event.params?.targetInfo?.targetId;
+      if (sessionId && ownTargets.has(targetId)) own.add(sessionId);
+    }
+    return own;
+  }
+
   async probeSessions(step) {
+    const own = this.ownProbeSessions(step);
     const out = await outcome(
       probeWorkerSessions({
         client: this.client,
@@ -1100,6 +1133,7 @@ class Execution {
         path: expand(step.probeSessions.path, this.vars),
         tag: this.vars.tag,
         detached: (sessionId) => this.detached(sessionId),
+        ownSession: (sessionId) => own.has(sessionId),
       })
     );
     this.probedSessionIds ??= new Set();
@@ -1122,12 +1156,14 @@ class Execution {
       (sessionId) => sessionId && !this.probedSessionIds.has(sessionId)
     );
     if (!fresh.length) return this.calls.probe?.result?.reachable === true;
+    const own = this.ownProbeSessions(expanded);
     const out = await probeWorkerSessions({
       client: this.client,
       sessions: fresh,
       path: expand(expanded.probeSessions.path, this.vars),
       tag: this.vars.tag,
       detached: (sessionId) => this.detached(sessionId),
+      ownSession: (sessionId) => own.has(sessionId),
     });
     for (const sessionId of out.probedIds ?? []) this.probedSessionIds.add(sessionId);
     const sessions = [

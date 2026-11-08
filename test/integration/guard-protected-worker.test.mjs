@@ -300,7 +300,7 @@ test('a lying attach reply that still returns a session id fails attachSession',
   }
 });
 
-test('probeWorkerSessions treats tab refusal plus page false as not reachable', async () => {
+test('probeWorkerSessions soft-skips refusal only on own sessions', async () => {
   const client = {
     async send(_method, _params, sessionId) {
       if (sessionId === 'tab') throw new Error('slicc: refused: protected target');
@@ -312,13 +312,61 @@ test('probeWorkerSessions treats tab refusal plus page false as not reachable', 
     sessions: ['tab', 'page'],
     path: '/worker.js',
     tag: 't',
+    ownSession: (sessionId) => sessionId === 'tab' || sessionId === 'page',
   });
   assert.equal(out.reachable, false);
   assert.equal(out.incomplete, undefined);
   assert.deepEqual(out.probedIds, ['tab', 'page']);
 });
 
-test('probeWorkerSessions keeps a true after an earlier rejection', async () => {
+test('probeWorkerSessions fails closed when a foreign worker session is refused', async () => {
+  const alone = await probeWorkerSessions({
+    client: {
+      async send() {
+        throw new Error('slicc: refused: protected target');
+      },
+    },
+    sessions: ['worker'],
+    path: '/worker.js',
+    tag: 't',
+    ownSession: () => false,
+  });
+  assert.equal(alone.reachable, false);
+  assert.match(alone.incomplete ?? '', /foreign session failed/);
+  const withOwn = await probeWorkerSessions({
+    client: {
+      async send(_method, _params, sessionId) {
+        if (sessionId === 'worker') throw new Error('slicc: refused: protected target');
+        return { result: { value: false } };
+      },
+    },
+    sessions: ['worker', 'page'],
+    path: '/worker.js',
+    tag: 't',
+    ownSession: (sessionId) => sessionId === 'page',
+  });
+  assert.equal(withOwn.reachable, false);
+  assert.match(withOwn.incomplete ?? '', /foreign session failed/);
+});
+
+test('probeWorkerSessions fails closed when a foreign worker session times out', async () => {
+  const out = await probeWorkerSessions({
+    client: {
+      async send(_method, _params, sessionId) {
+        if (sessionId === 'worker') throw new Error('waitEvent timed out');
+        return { result: { value: false } };
+      },
+    },
+    sessions: ['worker', 'other'],
+    path: '/worker.js',
+    tag: 't',
+    ownSession: () => false,
+  });
+  assert.equal(out.reachable, false);
+  assert.match(out.incomplete ?? '', /foreign session failed/);
+});
+
+test('probeWorkerSessions keeps a true after an own-session rejection', async () => {
   const client = {
     async send(_method, _params, sessionId) {
       if (sessionId === 'tab') throw new Error('Runtime.evaluate: not allowed');
@@ -330,6 +378,7 @@ test('probeWorkerSessions keeps a true after an earlier rejection', async () => 
     sessions: ['tab', 'worker'],
     path: '/worker.js',
     tag: 't',
+    ownSession: (sessionId) => sessionId === 'tab',
   });
   assert.equal(first.reachable, true);
   assert.equal(first.incomplete, undefined);
@@ -338,25 +387,10 @@ test('probeWorkerSessions keeps a true after an earlier rejection', async () => 
     sessions: ['worker', 'tab'],
     path: '/worker.js',
     tag: 't',
+    ownSession: (sessionId) => sessionId === 'tab',
   });
   assert.equal(second.reachable, true);
   assert.equal(second.incomplete, undefined);
-});
-
-test('probeWorkerSessions is incomplete only when every probe is a harness error', async () => {
-  const client = {
-    async send() {
-      throw new Error('waitEvent timed out');
-    },
-  };
-  const out = await probeWorkerSessions({
-    client,
-    sessions: ['a', 'b'],
-    path: '/worker.js',
-    tag: 't',
-  });
-  assert.equal(out.reachable, false);
-  assert.match(out.incomplete ?? '', /harness error/);
 });
 
 test('stockSetup and README admit either narrowing or per-target hiding for workers', () => {

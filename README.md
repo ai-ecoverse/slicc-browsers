@@ -252,10 +252,6 @@ The run passes only when every row passes and none is missing. A skip with a rea
 
 To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 
-### Known limits
-
-A guard that delivers a rewritten worker session, refuses `Runtime.evaluate` on it, but still allows other commands there is not caught by the protected-worker vectors ([#263](https://github.com/ai-ecoverse/slicc-browsers/issues/263)). Same class as [#255](https://github.com/ai-ecoverse/slicc-browsers/issues/255).
-
 ## Development
 
 You need Go 1.26, Rust stable with the `wasm32-wasip1` target, Node 24 or later, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or the Chrome for Testing that `npx slicc-cdp install-browser` installs, and run it headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).

@@ -753,11 +753,10 @@ class Execution {
   }
 
   childMatches(info) {
-    if (this.childWhere.type !== undefined) {
-      const types = Array.isArray(this.childWhere.type)
-        ? this.childWhere.type
-        : [this.childWhere.type];
-      if (!types.includes(info?.type)) return false;
+    if (this.childWhere.types !== undefined) {
+      if (!this.childWhere.types.includes(info?.type)) return false;
+    } else if (this.childWhere.type !== undefined) {
+      if (this.childWhere.type !== info?.type) return false;
     }
     if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
     if (this.childWhere.urlPrefix !== undefined)
@@ -1141,11 +1140,11 @@ class Execution {
         pageUrl,
         hostUrl,
         tag: this.vars.tag,
-        context: this.vars.context,
         notes: this.notes,
         budget: this.bound(5000),
       })
     );
+    if (out.ok && out.result?.browserContextId) this.contexts.push(out.result.browserContextId);
     if (out.ok && out.result?.pageTargetId) this.targets.push(out.result.pageTargetId);
     if (out.ok && out.result?.workerTargetId) {
       this.vars.workerTarget = out.result.workerTargetId;
@@ -1997,13 +1996,13 @@ class Execution {
         this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
       );
     await Promise.allSettled(this.pending);
-    const workerKind = this.spawnWorkerKind();
-    if (workerKind === 'shared' || workerKind === 'service') await this.cleanupPersistentWorkers();
+    if (this.spawnWorkerKind()) await this.cleanupSpawnedWorkerLeg();
     else await this.cleanupTargets();
     for (const browserContextId of new Set(this.contexts))
       await outcome(
         (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
       );
+    this.contexts = [];
     if (
       this.side === 'guarded' &&
       this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
@@ -2016,7 +2015,7 @@ class Execution {
     }
   }
 
-  async cleanupPersistentWorkers() {
+  async cleanupSpawnedWorkerLeg() {
     await this.resumeWaiting();
     await releasePersistentWorkerSessions({
       client: this.client,

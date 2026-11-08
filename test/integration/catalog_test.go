@@ -257,6 +257,17 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 	}
 }
 
+func TestGuardWhereTypeStaysString(t *testing.T) {
+	w := sliccbrowsers.GuardWhere{Type: "page"}
+	if w.Type != "page" {
+		t.Fatalf("Type = %q, want page", w.Type)
+	}
+	w.Types = []string{"page", "iframe"}
+	if len(w.Types) != 2 || w.Types[0] != "page" || w.Types[1] != "iframe" {
+		t.Fatalf("Types = %#v", w.Types)
+	}
+}
+
 func TestTheGuardVectorsParse(t *testing.T) {
 	d := json.NewDecoder(bytes.NewReader(sliccbrowsers.GuardVectorsJSON()))
 	d.DisallowUnknownFields()

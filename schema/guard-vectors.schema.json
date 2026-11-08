@@ -903,20 +903,23 @@
                   "required": ["type"],
                   "properties": {
                     "type": {
-                      "oneOf": [
-                        {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        {
-                          "type": "array",
-                          "minItems": 1,
-                          "items": {
-                            "type": "string",
-                            "minLength": 1
-                          }
-                        }
-                      ]
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["types"],
+                  "properties": {
+                    "types": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     }
                   }
                 }

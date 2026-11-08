@@ -220,9 +220,10 @@ type GuardStep struct {
 }
 
 type GuardWhere struct {
-	OpenerID  string          `json:"openerId,omitempty"`
-	URLPrefix string          `json:"urlPrefix,omitempty"`
-	Type      json.RawMessage `json:"type,omitempty"`
+	OpenerID  string   `json:"openerId,omitempty"`
+	URLPrefix string   `json:"urlPrefix,omitempty"`
+	Type      string   `json:"type,omitempty"`
+	Types     []string `json:"types,omitempty"`
 }
 
 type GuardRefusal struct {

@@ -191,7 +191,9 @@ pub struct Where {
     #[serde(default, rename = "urlPrefix", skip_serializing_if = "Option::is_none")]
     pub url_prefix: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<serde_json::Value>,
+    pub r#type: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

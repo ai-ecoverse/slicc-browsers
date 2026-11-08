@@ -168,7 +168,10 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     const probeAt = vector.trigger.findIndex((step) => step.probeSessions);
     assert.ok(wait >= 0 && targets > wait && probeAt > targets, `${id} getTargets after wait`);
     if (id === 'C3.protected-worker-framed')
-      assert.deepEqual(vector.setup.find((step) => step.children)?.where?.type, ['page', 'iframe']);
+      assert.deepEqual(vector.setup.find((step) => step.children)?.where?.types, [
+        'page',
+        'iframe',
+      ]);
     identityAny(vector.observe.workerAttached.check, kind.type, kind.path);
     listedAny(vector.observe.workerListed.check, kind.type, kind.path);
     identityAny(vector.observe.workerDiscovered.check, kind.type, kind.path);
@@ -324,7 +327,11 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   const reader = {
     events: [],
     async send(method, params = {}, sessionId) {
-      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.createBrowserContext') return { browserContextId: 'ctx-1' };
+      if (method === 'Target.createTarget') {
+        assert.equal(params.browserContextId, 'ctx-1');
+        return { targetId: 'page-1' };
+      }
       if (method === 'Target.getTargetInfo')
         return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
       if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
@@ -359,6 +366,7 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   });
   assert.equal(out.workerTargetId, 'worker-1');
   assert.equal(out.exists, true);
+  assert.equal(out.browserContextId, 'ctx-1');
 });
 
 test('framed protectedWorker evaluates inside an iframe target session', async () => {
@@ -370,7 +378,11 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
   const reader = {
     events,
     async send(method, params = {}, sessionId) {
-      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.createBrowserContext') return { browserContextId: 'ctx-1' };
+      if (method === 'Target.createTarget') {
+        assert.equal(params.browserContextId, 'ctx-1');
+        return { targetId: 'page-1' };
+      }
       if (method === 'Target.getTargetInfo')
         return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
       if (method === 'Target.attachToTarget') {
@@ -525,6 +537,14 @@ test('adopt resumes a paused worker even when its browser context does not match
   assert.ok(source.includes("byId.get(targetId)?.type === 'iframe'"));
   assert.ok(source.includes('releasePersistentWorkerSessions'));
   assert.ok(source.includes('ensurePriorWorkersGone'));
+  assert.ok(source.includes('cleanupSpawnedWorkerLeg'));
+  assert.ok(source.includes('browserContextId'));
+  const workerSource = await readFile(
+    new URL('../../protected-worker.mjs', import.meta.url),
+    'utf8'
+  );
+  assert.ok(workerSource.includes('Target.createBrowserContext'));
+  assert.ok(workerSource.includes('Target.disposeBrowserContext'));
 });
 
 test('shared and service browser auto-attach do not wait for debugger on start', () => {
@@ -538,6 +558,12 @@ test('shared and service browser auto-attach do not wait for debugger on start',
     (step) => step.cdp === 'Target.setAutoAttach' && step.session === 'browser'
   );
   assert.equal(dedicated.params.waitForDebuggerOnStart, true);
+});
+
+test('framed protected worker where uses types array', () => {
+  const step = byId['C3.protected-worker-framed'].setup.find((entry) => entry.where);
+  assert.deepEqual(step.where, { types: ['page', 'iframe'] });
+  assert.equal(Object.hasOwn(step.where, 'type'), false);
 });
 
 test('emulator stall: leftover paused shared worker blocks the next createTarget until released', async () => {
@@ -604,6 +630,69 @@ test('emulator stall: leftover paused shared worker blocks the next createTarget
     await leftoverPersistentWorker(client, { type: 'shared_worker', url: workers[0]?.url }),
     undefined
   );
+  const created = await client.send('Target.createTarget', { url: 'about:blank' });
+  assert.ok(created.targetId);
+});
+
+test('emulator stall: disposing the spawn browser context also unblocks createTarget', async () => {
+  const workers = [
+    {
+      targetId: 'w2',
+      type: 'shared_worker',
+      url: 'http://ordinary.example.test/shared-worker.js?n=host-control-2',
+    },
+  ];
+  const contexts = new Set(['ctx-stall']);
+  const pages = [{ targetId: 'page-2', type: 'page', url: 'about:blank' }];
+  const base = {
+    events: [
+      {
+        method: 'Target.attachedToTarget',
+        params: {
+          waitingForDebugger: true,
+          sessionId: 'ws2',
+          targetInfo: workers[0],
+        },
+      },
+    ],
+    send: async (method, params = {}, sessionId) => {
+      if (method === 'Runtime.runIfWaitingForDebugger' && sessionId) return {};
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Target.getTargets') return { targetInfos: [...workers, ...pages] };
+      if (method === 'Target.disposeBrowserContext') {
+        contexts.delete(params.browserContextId);
+        workers.length = 0;
+        pages.length = 0;
+        return {};
+      }
+      if (method === 'Target.createTarget') {
+        if (contexts.has('ctx-stall') && workers.length)
+          throw new Error('CDP timed out: Target.createTarget');
+        const targetId = `p${pages.length + 3}`;
+        pages.push({ targetId, type: 'page', url: params.url ?? 'about:blank' });
+        return { targetId };
+      }
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Target.closeTarget') return { success: true };
+      return {};
+    },
+  };
+  const client = withPausedSharedWorkerStall(base);
+  await assert.rejects(
+    () => client.send('Target.createTarget', { url: 'about:blank' }),
+    /CDP timed out: Target.createTarget/
+  );
+  await releasePersistentWorkerSessions({
+    client,
+    reader: client,
+    events: client.events,
+    from: 0,
+    tag: 'host-control-2',
+    targets: [],
+    attachSessions: [],
+  });
+  await client.send('Target.disposeBrowserContext', { browserContextId: 'ctx-stall' });
+  assert.equal(client.pausedSharedSessions.size, 0);
   const created = await client.send('Target.createTarget', { url: 'about:blank' });
   assert.ok(created.targetId);
 });

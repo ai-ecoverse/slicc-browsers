@@ -157,6 +157,7 @@ const harnessProbeError = (error) => {
 };
 
 export const persistentWorkerTypes = new Set(['shared_worker', 'service_worker']);
+export const attachedWorkerTypes = new Set(['shared_worker', 'service_worker', 'worker']);
 
 export function workerTypeForKind(kind) {
   return kinds[kind]?.type;
@@ -170,13 +171,14 @@ export async function releasePersistentWorkerSessions({
   tag,
   targets = [],
   attachSessions = [],
+  types = attachedWorkerTypes,
 }) {
   const closer = reader ?? client;
   const seen = new Map();
   for (const event of events.slice(from)) {
     if (event.method !== 'Target.attachedToTarget') continue;
     const info = event.params?.targetInfo;
-    if (!persistentWorkerTypes.has(info?.type)) continue;
+    if (!types.has(info?.type)) continue;
     const sessionId = event.params?.sessionId;
     if (!sessionId || seen.has(sessionId)) continue;
     seen.set(sessionId, info?.targetId);
@@ -192,12 +194,7 @@ export async function releasePersistentWorkerSessions({
     await outcome(closer.send('Target.closeTarget', { targetId }));
   }
   for (const info of listed.result?.targetInfos ?? []) {
-    if (
-      persistentWorkerTypes.has(info.type) &&
-      typeof info.url === 'string' &&
-      tag &&
-      info.url.includes(tag)
-    )
+    if (types.has(info.type) && typeof info.url === 'string' && tag && info.url.includes(tag))
       await outcome(closer.send('Target.closeTarget', { targetId: info.targetId }));
   }
   for (const session of attachSessions)
@@ -275,29 +272,36 @@ export async function protectedWorker({
   pageUrl,
   hostUrl,
   tag,
-  context,
   notes = [],
   budget = 5000,
 }) {
   const spec = kinds[kind];
   if (!spec) throw new Error(`unknown protected worker kind ${kind}`);
   if (!reader) throw new Error('protected worker needs an unguarded observer');
-  const created = await createObserverTarget(
-    reader,
-    {
-      url: 'about:blank',
-      background: true,
-      ...(context ? { browserContextId: context } : {}),
-    },
-    notes
-  );
-  const pageTargetId = created.targetId;
-  const { sessionId } = await reader.send('Target.attachToTarget', {
-    targetId: pageTargetId,
-    flatten: true,
-  });
+  const opened = await outcome(reader.send('Target.createBrowserContext', {}));
+  if (!opened.ok || !opened.result?.browserContextId)
+    throw new Error(
+      `protected worker context failed: ${opened.error?.message ?? 'no browserContextId'}`
+    );
+  const browserContextId = opened.result.browserContextId;
+  let pageTargetId;
+  let sessionId;
   const sessions = [];
   try {
+    const created = await createObserverTarget(
+      reader,
+      {
+        url: 'about:blank',
+        background: true,
+        browserContextId,
+      },
+      notes
+    );
+    pageTargetId = created.targetId;
+    ({ sessionId } = await reader.send('Target.attachToTarget', {
+      targetId: pageTargetId,
+      flatten: true,
+    }));
     await reader.send('Page.enable', {}, sessionId);
     await reader.send('Runtime.enable', {}, sessionId);
     const nav = await outcome(reader.send('Page.navigate', { url: hostUrl ?? pageUrl }, sessionId));
@@ -359,10 +363,14 @@ export async function protectedWorker({
       workerUrl: found.url,
       type: spec.type,
       framed: Boolean(hostUrl),
+      browserContextId,
     };
+  } catch (error) {
+    await outcome(reader.send('Target.disposeBrowserContext', { browserContextId }));
+    throw error;
   } finally {
     for (const sid of sessions)
       await outcome(reader.send('Target.detachFromTarget', { sessionId: sid }));
-    await outcome(reader.send('Target.detachFromTarget', { sessionId }));
+    if (sessionId) await outcome(reader.send('Target.detachFromTarget', { sessionId }));
   }
 }

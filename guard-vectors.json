@@ -30718,7 +30718,7 @@
           ],
           "requires": ["autoAttach"],
           "where": {
-            "type": ["page", "iframe"]
+            "types": ["page", "iframe"]
           }
         }
       ],

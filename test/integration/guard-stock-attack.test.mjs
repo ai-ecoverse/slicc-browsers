@@ -31,6 +31,7 @@ const attackIds = [
   'C3.protected-worker-dedicated',
   'C3.protected-worker-shared',
   'C3.protected-service-worker',
+  'C3.protected-worker-framed',
 ];
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
 const positiveStockIds = [
@@ -1234,6 +1235,7 @@ const protectedWorkerIds = [
   'C3.protected-worker-dedicated',
   'C3.protected-worker-shared',
   'C3.protected-service-worker',
+  'C3.protected-worker-framed',
 ];
 const protectedWorkerVectors = set.vectors.filter((vector) =>
   protectedWorkerIds.includes(vector.id)
@@ -1241,53 +1243,6 @@ const protectedWorkerVectors = set.vectors.filter((vector) =>
 const ordinaryWorkerVectors = set.vectors.filter((vector) =>
   ['C3.tab-worker-leak', 'C3.tab-service-worker-leak'].includes(vector.id)
 );
-
-function lyingAttachClient(browser) {
-  const raw = browser.client;
-  const events = [];
-  const waiters = new Set();
-  const client = {
-    events,
-    forwarded: [],
-    waitEvent(predicate, ms = 1000) {
-      for (const event of events) if (predicate(event)) return Promise.resolve(event);
-      return new Promise((resolve, reject) => {
-        const waiter = { pred: predicate, resolve, reject };
-        waiters.add(waiter);
-        setTimeout(() => {
-          waiters.delete(waiter);
-          reject(new Error('waitEvent timed out'));
-        }, ms);
-      });
-    },
-    async send(method, params = {}, sessionId) {
-      if (method === 'Target.attachToTarget') {
-        const result = await raw.send(method, params, sessionId);
-        client.forwarded.push({ method, params, sessionId, sentAt: Date.now() });
-        const error = new Error('slicc: refused: protected target');
-        error.code = -32000;
-        throw error;
-      }
-      return raw.send(method, params, sessionId);
-    },
-  };
-  void (async () => {
-    let cursor = 0;
-    for (;;) {
-      for (const event of raw.events.slice(cursor)) {
-        cursor++;
-        events.push(event);
-        for (const waiter of waiters)
-          if (waiter.pred(event)) {
-            waiters.delete(waiter);
-            waiter.resolve(event);
-          }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    }
-  })();
-  return client;
-}
 
 async function runProtectedWorkers(mode) {
   const tls = {
@@ -1300,20 +1255,27 @@ async function runProtectedWorkers(mode) {
   const fixture = await fixtureServer({ tls });
   const browser = await launch(fixture, { spki });
   const targets = origins(fixture);
+  const catalogOpts = {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [targets.seven, targets.vault],
+  };
   let guard;
   if (mode === 'narrow') {
-    guard = emulatedGuard(browser, {
-      narrowAutoAttach: true,
-      protectedOrigins: catalog.protectedOrigins,
-      extraOrigins: [targets.seven, targets.vault],
-    });
+    guard = emulatedGuard(browser, { ...catalogOpts, narrowAutoAttach: true });
   } else if (mode === 'hide') {
+    guard = emulatedGuard(browser, catalogOpts);
+  } else if (mode === 'hide-cut-attach') {
+    guard = emulatedGuard(browser, { ...catalogOpts, cutProtectedAttach: true });
+  } else if (mode === 'redact-url') {
+    guard = emulatedGuard(browser, { ...catalogOpts, exposeProtectedWorkers: true });
+  } else if (mode === 'late-worker') {
     guard = emulatedGuard(browser, {
-      protectedOrigins: catalog.protectedOrigins,
-      extraOrigins: [targets.seven, targets.vault],
+      ...catalogOpts,
+      exposeProtectedWorkers: true,
+      delayProtectedWorkerMs: 800,
     });
   } else if (mode === 'lying-attach') {
-    guard = { client: lyingAttachClient(browser), stop: async () => {} };
+    guard = emulatedGuard(browser, { ...catalogOpts, allowProtectedAttach: true });
   } else {
     guard = { client: browser.client, stop: async () => {} };
   }
@@ -1399,6 +1361,18 @@ test('a per-target-hiding guard that still delivers ordinary workers passes the 
     );
 });
 
+test('a per-target-hiding guard that forwards attach then cuts the session passes', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('hide-cut-attach');
+  for (const row of execution.results)
+    assert.deepEqual(
+      [row.control, row.guarded, row.live],
+      ['pass', 'pass', 'pass'],
+      JSON.stringify(row)
+    );
+});
+
 test('a guard that delivers a protected worker fails each protected worker row', {
   timeout: 900000,
 }, async () => {
@@ -1410,7 +1384,21 @@ test('a guard that delivers a protected worker fails each protected worker row',
   }
 });
 
-test('a lying attach refusal that still forwards Target.attachToTarget fails the protected rows', {
+test('a guard that delivers protected workers with redacted URLs fails each row', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('redact-url');
+  for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('a late protected-worker delivery fails each protected worker row', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('late-worker');
+  for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('a lying attach reply that still returns a session id fails the protected rows', {
   timeout: 900000,
 }, async () => {
   const execution = await runProtectedWorkers('lying-attach');

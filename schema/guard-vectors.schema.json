@@ -549,6 +549,10 @@
               "type": "string",
               "minLength": 1
             },
+            "frame": {
+              "type": "string",
+              "minLength": 1
+            },
             "requires": {
               "$ref": "#/$defs/requires"
             },

@@ -179,6 +179,7 @@ type GuardStep struct {
 	RedirectSecret string          `json:"redirectSecret,omitempty"`
 	ErrorPage      string          `json:"errorPage,omitempty"`
 	SpawnWorker    string          `json:"spawnWorker,omitempty"`
+	Frame          string          `json:"frame,omitempty"`
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`

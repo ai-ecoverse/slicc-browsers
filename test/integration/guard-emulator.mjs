@@ -223,6 +223,28 @@ export function emulatedGuard(browser, options = {}) {
         cursor++;
         options.trace?.push({ at: Date.now(), event });
         if (
+          catalog &&
+          ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
+            event.method
+          ) &&
+          ['worker', 'shared_worker', 'service_worker'].includes(event.params?.targetInfo?.type) &&
+          (await decision(event.params.targetInfo.targetId))
+        ) {
+          if (!options.exposeProtectedWorkers) {
+            if (event.method === 'Target.attachedToTarget') {
+              if (event.params.waitingForDebugger)
+                await client
+                  .send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+                  .catch(() => {});
+              await client
+                .send('Target.detachFromTarget', { sessionId: event.params.sessionId })
+                .catch(() => {});
+            }
+            continue;
+          }
+          if (options.delayProtectedWorkerMs) await pause(options.delayProtectedWorkerMs);
+        }
+        if (
           options.hideOpened &&
           event.method === 'Target.attachedToTarget' &&
           pages.has(event.params.targetInfo?.openerId)
@@ -538,9 +560,20 @@ export function emulatedGuard(browser, options = {}) {
       targetId &&
       !(options.forwardFrameReads ?? []).includes(method) &&
       (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
+      !(method === 'Target.attachToTarget' && options.allowProtectedAttach) &&
       (await decision(targetId))
-    )
+    ) {
+      if (method === 'Target.attachToTarget' && options.cutProtectedAttach) {
+        const attached = await unguarded.send('Target.attachToTarget', {
+          targetId: params.targetId,
+          flatten: true,
+        });
+        await unguarded
+          .send('Target.detachFromTarget', { sessionId: attached.sessionId })
+          .catch(() => {});
+      }
       throw refusal('protected target');
+    }
     learnWorlds();
     if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
     if (catalog && !options.exposeExtensionWorlds && sessionId) {
@@ -631,10 +664,15 @@ export function emulatedGuard(browser, options = {}) {
       const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
         targetId: params.targetId,
       });
-      if (await decision(params.targetId))
+      if ((await decision(params.targetId)) && !options.allowProtectedAttach)
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
           : refusal('protected target');
+      if ((await decision(params.targetId)) && options.allowProtectedAttach)
+        return unguarded.send('Target.attachToTarget', {
+          targetId: params.targetId,
+          flatten: true,
+        });
       const attached = await unguarded.send('Target.attachToTarget', {
         targetId: params.targetId,
         flatten: true,
@@ -812,7 +850,7 @@ export function emulatedGuard(browser, options = {}) {
         if (
           !mentions(info) &&
           !(options.hideTypes ?? []).includes(info.type) &&
-          (!catalog || !(await decision(info.targetId)))
+          (!catalog || options.exposeProtectedWorkers || !(await decision(info.targetId)))
         )
           visible.push(info);
       }

@@ -29481,10 +29481,13 @@
           "refusal": {
             "match": "refused"
           }
+        },
+        {
+          "wait": 1500
         }
       ],
       "targets": ["seven", "vault"],
-      "requires": ["autoAttach", "browserSession", "stockSetup", "forwardAudit"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
       "observe": {
         "admitted": {
           "means": "the guard answered tabs without an error and the unguarded spawn finished",
@@ -29521,17 +29524,58 @@
           "means": "the client got Target.attachedToTarget for a worker",
           "dependsOn": [],
           "check": {
-            "event": "Target.attachedToTarget",
-            "where": {
-              "params": {
-                "targetInfo": {
-                  "type": "worker",
-                  "url": {
-                    "$contains": "/worker.js"
+            "any": [
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
                   }
-                }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "/worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -29539,16 +29583,54 @@
           "means": "Target.getTargets shows the protected worker script URL to the client",
           "dependsOn": [],
           "check": {
-            "result": "targets",
-            "path": "result.targetInfos",
-            "equals": {
-              "$some": {
-                "type": "worker",
-                "url": {
-                  "$contains": "/worker.js"
-                }
+            "any": [
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "targetId": "{workerTarget}"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker",
+                    "url": {
+                      "$contains": "{target}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker",
+                    "url": {
+                      "$contains": "/worker.js"
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -29563,9 +29645,81 @@
                 "where": {
                   "params": {
                     "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
                       "type": "worker",
                       "url": {
                         "$contains": "/worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
                       }
                     }
                   }
@@ -29609,20 +29763,6 @@
             "refused": ["attach"],
             "observer": "client"
           }
-        },
-        "attachForwarded": {
-          "means": "Target.attachToTarget for the worker targetId was forwarded to the browser",
-          "dependsOn": [],
-          "requires": ["forwardAudit"],
-          "check": {
-            "forwarded": {
-              "method": "Target.attachToTarget",
-              "params": {
-                "targetId": "{workerTarget}"
-              }
-            },
-            "observer": "client"
-          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -29650,8 +29790,7 @@
           "workerAttached": "either",
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false,
-          "attachForwarded": true
+          "attachRefused": false
         }
       },
       "expected": {
@@ -29661,8 +29800,7 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either",
-        "attachForwarded": false
+        "attachRefused": "either"
       },
       "designDependent": ["attachRefused", "workerAttached"]
     },
@@ -29745,10 +29883,13 @@
           "refusal": {
             "match": "refused"
           }
+        },
+        {
+          "wait": 1500
         }
       ],
       "targets": ["seven", "vault"],
-      "requires": ["autoAttach", "browserSession", "stockSetup", "forwardAudit"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
       "observe": {
         "admitted": {
           "means": "the guard answered tabs without an error and the unguarded spawn finished",
@@ -29785,17 +29926,58 @@
           "means": "the client got Target.attachedToTarget for a shared_worker",
           "dependsOn": [],
           "check": {
-            "event": "Target.attachedToTarget",
-            "where": {
-              "params": {
-                "targetInfo": {
-                  "type": "shared_worker",
-                  "url": {
-                    "$contains": "/shared-worker.js"
+            "any": [
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
                   }
-                }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker",
+                      "url": {
+                        "$contains": "/shared-worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -29803,16 +29985,54 @@
           "means": "Target.getTargets shows the protected worker script URL to the client",
           "dependsOn": [],
           "check": {
-            "result": "targets",
-            "path": "result.targetInfos",
-            "equals": {
-              "$some": {
-                "type": "shared_worker",
-                "url": {
-                  "$contains": "/shared-worker.js"
-                }
+            "any": [
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "targetId": "{workerTarget}"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "shared_worker"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "shared_worker",
+                    "url": {
+                      "$contains": "{target}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "shared_worker",
+                    "url": {
+                      "$contains": "/shared-worker.js"
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -29827,9 +30047,81 @@
                 "where": {
                   "params": {
                     "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
                       "type": "shared_worker",
                       "url": {
                         "$contains": "/shared-worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "shared_worker",
+                      "url": {
+                        "$contains": "{target}"
                       }
                     }
                   }
@@ -29873,20 +30165,6 @@
             "refused": ["attach"],
             "observer": "client"
           }
-        },
-        "attachForwarded": {
-          "means": "Target.attachToTarget for the worker targetId was forwarded to the browser",
-          "dependsOn": [],
-          "requires": ["forwardAudit"],
-          "check": {
-            "forwarded": {
-              "method": "Target.attachToTarget",
-              "params": {
-                "targetId": "{workerTarget}"
-              }
-            },
-            "observer": "client"
-          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -29914,8 +30192,7 @@
           "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false,
-          "attachForwarded": true
+          "attachRefused": false
         }
       },
       "expected": {
@@ -29925,8 +30202,7 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either",
-        "attachForwarded": false
+        "attachRefused": "either"
       },
       "designDependent": ["attachRefused"]
     },
@@ -30009,10 +30285,13 @@
           "refusal": {
             "match": "refused"
           }
+        },
+        {
+          "wait": 1500
         }
       ],
       "targets": ["seven", "vault"],
-      "requires": ["autoAttach", "browserSession", "stockSetup", "secureOrigin", "forwardAudit"],
+      "requires": ["autoAttach", "browserSession", "stockSetup", "secureOrigin"],
       "observe": {
         "admitted": {
           "means": "the guard answered tabs without an error and the unguarded spawn finished",
@@ -30049,17 +30328,58 @@
           "means": "the client got Target.attachedToTarget for a service_worker",
           "dependsOn": [],
           "check": {
-            "event": "Target.attachedToTarget",
-            "where": {
-              "params": {
-                "targetInfo": {
-                  "type": "service_worker",
-                  "url": {
-                    "$contains": "/sw.js"
+            "any": [
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
                   }
-                }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker",
+                      "url": {
+                        "$contains": "/sw.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -30067,16 +30387,54 @@
           "means": "Target.getTargets shows the protected worker script URL to the client",
           "dependsOn": [],
           "check": {
-            "result": "targets",
-            "path": "result.targetInfos",
-            "equals": {
-              "$some": {
-                "type": "service_worker",
-                "url": {
-                  "$contains": "/sw.js"
-                }
+            "any": [
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "targetId": "{workerTarget}"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "service_worker"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "service_worker",
+                    "url": {
+                      "$contains": "{target}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "service_worker",
+                    "url": {
+                      "$contains": "/sw.js"
+                    }
+                  }
+                },
+                "observer": "client"
               }
-            },
+            ],
             "observer": "client"
           }
         },
@@ -30091,9 +30449,81 @@
                 "where": {
                   "params": {
                     "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
                       "type": "service_worker",
                       "url": {
                         "$contains": "/sw.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "service_worker",
+                      "url": {
+                        "$contains": "{target}"
                       }
                     }
                   }
@@ -30137,20 +30567,6 @@
             "refused": ["attach"],
             "observer": "client"
           }
-        },
-        "attachForwarded": {
-          "means": "Target.attachToTarget for the worker targetId was forwarded to the browser",
-          "dependsOn": [],
-          "requires": ["forwardAudit"],
-          "check": {
-            "forwarded": {
-              "method": "Target.attachToTarget",
-              "params": {
-                "targetId": "{workerTarget}"
-              }
-            },
-            "observer": "client"
-          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -30178,8 +30594,7 @@
           "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false,
-          "attachForwarded": true
+          "attachRefused": false
         }
       },
       "expected": {
@@ -30189,10 +30604,416 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either",
-        "attachForwarded": false
+        "attachRefused": "either"
       },
       "designDependent": ["attachRefused"]
+    },
+    {
+      "id": "C3.protected-worker-framed",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "spawnWorker": "dedicated",
+          "url": "{target}/doc?n=host-{tag}",
+          "frame": "{ordinary}/doc?n=host-{tag}",
+          "as": "spawn",
+          "requires": ["autoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=host-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"]
+        },
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{workerTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "wait": 1500
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs without an error and the unguarded framed spawn finished",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "spawn",
+                "path": "result.exists",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "workerExists": {
+          "means": "the unguarded spawn left a live worker from a protected-origin iframe",
+          "dependsOn": [],
+          "check": {
+            "result": "spawn",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "workerAttached": {
+          "means": "the client got Target.attachedToTarget for a worker from a protected iframe",
+          "dependsOn": [],
+          "check": {
+            "any": [
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.attachedToTarget",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "/worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "workerListed": {
+          "means": "Target.getTargets shows the protected worker script URL to the client",
+          "dependsOn": [],
+          "check": {
+            "any": [
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "targetId": "{workerTarget}"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker"
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker",
+                    "url": {
+                      "$contains": "{target}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "result": "targets",
+                "path": "result.targetInfos",
+                "equals": {
+                  "$some": {
+                    "type": "worker",
+                    "url": {
+                      "$contains": "/worker.js"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "workerDiscovered": {
+          "means": "a discovery event carries the protected worker script URL to the client",
+          "dependsOn": [],
+          "requires": ["discovery"],
+          "check": {
+            "any": [
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{workerTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "/worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "{target}"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "type": "worker",
+                      "url": {
+                        "$contains": "/worker.js"
+                      }
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "attachSession": {
+          "means": "Target.attachToTarget on the worker targetId returned a session",
+          "dependsOn": [],
+          "check": {
+            "result": "attach",
+            "path": "result.sessionId",
+            "equals": {
+              "$regex": "."
+            },
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "Target.attachToTarget on the worker targetId was refused",
+          "dependsOn": [],
+          "check": {
+            "refused": ["attach"],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served the protected iframe document and the unguarded framed worker still exists",
+      "liveCheck": {
+        "all": [
+          {
+            "loaded": "{ordinary}/doc?n=host-{tag}",
+            "observer": "fixture"
+          },
+          {
+            "loaded": "{target}/doc?n=host-{tag}",
+            "observer": "fixture"
+          },
+          {
+            "result": "spawn",
+            "path": "result.exists",
+            "equals": true,
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "workerExists": true,
+          "workerAttached": "either",
+          "workerListed": true,
+          "attachSession": true,
+          "attachRefused": false
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "workerExists": true,
+        "workerAttached": false,
+        "workerListed": false,
+        "workerDiscovered": false,
+        "attachSession": false,
+        "attachRefused": "either"
+      },
+      "designDependent": ["attachRefused", "workerAttached"]
     }
   ]
 }

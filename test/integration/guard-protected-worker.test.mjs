@@ -12,6 +12,7 @@ const protectedRows = [
   'C3.protected-worker-dedicated',
   'C3.protected-worker-shared',
   'C3.protected-service-worker',
+  'C3.protected-worker-framed',
 ];
 const kinds = {
   'C3.protected-worker-dedicated': { spawn: 'dedicated', type: 'worker', path: '/worker.js' },
@@ -26,6 +27,68 @@ const kinds = {
     path: '/sw.js',
     secure: true,
   },
+  'C3.protected-worker-framed': {
+    spawn: 'dedicated',
+    type: 'worker',
+    path: '/worker.js',
+    frame: '{ordinary}/doc?n=host-{tag}',
+  },
+};
+
+const identityAny = (check, type, path) => {
+  const arms = check?.any ?? [];
+  assert.ok(
+    arms.some((arm) => arm.where?.params?.targetInfo?.targetId === '{workerTarget}'),
+    'targetId arm'
+  );
+  assert.ok(
+    arms.some(
+      (arm) =>
+        arm.where?.params?.targetInfo?.type === type &&
+        arm.where?.params?.targetInfo?.url === undefined
+    ),
+    'type arm'
+  );
+  assert.ok(
+    arms.some(
+      (arm) =>
+        arm.where?.params?.targetInfo?.type === type &&
+        arm.where?.params?.targetInfo?.url?.$contains === '{target}'
+    ),
+    'origin arm'
+  );
+  assert.ok(
+    arms.some(
+      (arm) =>
+        arm.where?.params?.targetInfo?.type === type &&
+        arm.where?.params?.targetInfo?.url?.$contains === path
+    ),
+    'url arm'
+  );
+};
+
+const listedAny = (check, type, path) => {
+  const arms = check?.any ?? [];
+  assert.ok(
+    arms.some((arm) => arm.equals?.$some?.targetId === '{workerTarget}'),
+    'listed targetId'
+  );
+  assert.ok(
+    arms.some((arm) => arm.equals?.$some?.type === type && arm.equals?.$some?.url === undefined),
+    'listed type'
+  );
+  assert.ok(
+    arms.some(
+      (arm) => arm.equals?.$some?.type === type && arm.equals?.$some?.url?.$contains === '{target}'
+    ),
+    'listed origin'
+  );
+  assert.ok(
+    arms.some(
+      (arm) => arm.equals?.$some?.type === type && arm.equals?.$some?.url?.$contains === path
+    ),
+    'listed url'
+  );
 };
 
 test('ordinary worker rows allow either attachment under a correct guard', () => {
@@ -50,6 +113,7 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     const spawn = [...vector.setup, ...vector.trigger].find((step) => step.spawnWorker);
     assert.equal(spawn?.spawnWorker, kind.spawn, id);
     assert.equal(spawn?.url, '{target}/doc?n=host-{tag}', id);
+    assert.equal(spawn?.frame, kind.frame, id);
     assert.deepEqual(vector.targets, ['seven', 'vault'], id);
     assert.ok(vector.requires.includes('stockSetup'), id);
     assert.ok(vector.requires.includes('autoAttach'), id);
@@ -60,12 +124,12 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     assert.equal(vector.expected.workerDiscovered, false, id);
     assert.equal(vector.expected.attachSession, false, id);
     assert.equal(vector.expected.attachRefused, 'either', id);
-    assert.equal(vector.expected.attachForwarded, false, id);
+    assert.equal(Object.hasOwn(vector.expected, 'attachForwarded'), false, id);
+    assert.equal(Object.hasOwn(vector.control.expected, 'attachForwarded'), false, id);
+    assert.equal(vector.requires.includes('forwardAudit'), false, id);
     assert.equal(vector.control.expected.workerExists, true, id);
     assert.equal(vector.control.expected.attachSession, true, id);
     assert.equal(vector.control.expected.attachRefused, false, id);
-    assert.equal(vector.control.expected.attachForwarded, true, id);
-    assert.ok(vector.requires.includes('forwardAudit'), id);
     assert.ok(
       Object.hasOwn(vector.observe.workerExists, 'dependsOn') &&
         Object.hasOwn(vector.observe.workerAttached, 'dependsOn') &&
@@ -82,12 +146,11 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     assert.equal(attach?.cdp, 'Target.attachToTarget', id);
     assert.equal(attach?.params?.targetId, '{workerTarget}', id);
     assert.equal(attach?.refusable, true, id);
-    assert.equal(vector.observe.workerAttached.check.where.params.targetInfo.type, kind.type, id);
-    assert.equal(
-      vector.observe.workerAttached.check.where.params.targetInfo.url.$contains,
-      kind.path,
-      id
-    );
+    const settle = vector.trigger.find((step) => step.wait === 1500);
+    assert.ok(settle, `${id} settle after attach`);
+    identityAny(vector.observe.workerAttached.check, kind.type, kind.path);
+    listedAny(vector.observe.workerListed.check, kind.type, kind.path);
+    identityAny(vector.observe.workerDiscovered.check, kind.type, kind.path);
   }
 });
 
@@ -102,13 +165,17 @@ test('a narrowing or per-target-hiding guard passes the protected worker rows', 
       workerDiscovered: false,
       attachSession: false,
       attachRefused: true,
-      attachForwarded: false,
     };
     assert.equal(judge(vector, 'guarded', observed).pass, true, id);
     assert.equal(
       judge(vector, 'guarded', { ...observed, attachRefused: false }).pass,
       true,
       `${id} attach fail without refusal`
+    );
+    assert.equal(
+      judge(vector, 'guarded', { ...observed, attachForwarded: true }).pass,
+      true,
+      `${id} forward-and-cut is not judged on the ledger`
     );
   }
   for (const id of ordinary) {
@@ -137,7 +204,6 @@ test('a guard that delivers a protected worker fails each protected row', () => 
       workerDiscovered: false,
       attachSession: false,
       attachRefused: true,
-      attachForwarded: false,
     };
     assert.equal(
       judge(vector, 'guarded', { ...base, workerAttached: true }).pass,
@@ -154,7 +220,6 @@ test('a guard that delivers a protected worker fails each protected row', () => 
         ...base,
         attachSession: true,
         attachRefused: false,
-        attachForwarded: true,
       }).pass,
       false,
       `${id} attach session`
@@ -162,7 +227,26 @@ test('a guard that delivers a protected worker fails each protected row', () => 
   }
 });
 
-test('a lying attach refusal that still forwards Target.attachToTarget fails the protected rows', () => {
+test('a redacted-URL worker delivery still fails each protected row via identity', () => {
+  for (const id of protectedRows) {
+    const vector = byId[id];
+    assert.equal(
+      judge(vector, 'guarded', {
+        admitted: true,
+        workerExists: true,
+        workerAttached: true,
+        workerListed: true,
+        workerDiscovered: true,
+        attachSession: false,
+        attachRefused: true,
+      }).pass,
+      false,
+      id
+    );
+  }
+});
+
+test('a lying attach reply that still returns a session id fails attachSession', () => {
   for (const id of protectedRows) {
     const vector = byId[id];
     assert.equal(
@@ -172,9 +256,8 @@ test('a lying attach refusal that still forwards Target.attachToTarget fails the
         workerAttached: false,
         workerListed: false,
         workerDiscovered: false,
-        attachSession: false,
+        attachSession: true,
         attachRefused: true,
-        attachForwarded: true,
       }).pass,
       false,
       id

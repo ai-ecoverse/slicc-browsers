@@ -1044,11 +1044,13 @@ class Execution {
 
   async spawnWorker(step) {
     const pageUrl = expand(step.url ?? '{target}/doc?n=host-{tag}', this.vars);
+    const hostUrl = step.frame ? expand(step.frame, this.vars) : undefined;
     const out = await outcome(
       protectedWorker({
         reader: this.reader,
         kind: step.spawnWorker,
         pageUrl,
+        hostUrl,
         tag: this.vars.tag,
         context: this.vars.context,
         notes: this.notes,
@@ -1389,9 +1391,15 @@ class Execution {
               supported(step.requires, this.options.capabilities)
           )
         : [];
+    const hasEvent = (node) =>
+      Boolean(node?.event) ||
+      [...(node?.all ?? []), ...(node?.any ?? []), ...(node?.not ? [node.not] : [])].some(hasEvent);
     const polled =
       check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
-    if (want === false && (check?.world !== undefined || check?.script !== undefined))
+    if (
+      want === false &&
+      (check?.world !== undefined || check?.script !== undefined || hasEvent(check))
+    )
       return this.absenceCheck(check);
     if (want !== true || (!polled && !snapshots.length)) return this.check(check);
     let seen = false;

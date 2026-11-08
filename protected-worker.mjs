@@ -25,10 +25,69 @@ const kinds = {
   },
 };
 
+async function frameContext(reader, sessionId, frameId, budget) {
+  const found = await waitFor(
+    () => {
+      for (const event of reader.events) {
+        if (event.sessionId !== sessionId) continue;
+        if (event.method !== 'Runtime.executionContextCreated') continue;
+        const context = event.params?.context;
+        if (context?.auxData?.frameId === frameId && context.auxData?.isDefault) return context.id;
+      }
+      return null;
+    },
+    Math.min(budget, 1500)
+  );
+  if (found) return found;
+  const worlds = await outcome(
+    reader.send(
+      'Page.createIsolatedWorld',
+      { frameId, worldName: `slicc-pw-${frameId}` },
+      sessionId
+    )
+  );
+  if (!worlds.ok) return null;
+  return worlds.result?.executionContextId ?? null;
+}
+
+async function framedEvaluate(reader, sessionId, pageUrl, budget) {
+  const framed = await outcome(
+    reader.send(
+      'Runtime.evaluate',
+      {
+        expression: `(() => { const f=document.createElement('iframe'); f.src=${JSON.stringify(pageUrl)}; document.body.append(f); return true; })()`,
+        returnByValue: true,
+      },
+      sessionId
+    )
+  );
+  if (!framed.ok || framed.result?.result?.value !== true)
+    throw new Error(`protected worker iframe insert failed: ${framed.error?.message ?? 'unknown'}`);
+  const child = await waitFor(async () => {
+    const tree = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
+    if (!tree.ok) return null;
+    return (
+      (tree.result.frameTree.childFrames ?? []).find((node) =>
+        String(node.frame?.url ?? '').startsWith(pageUrl.split('?')[0])
+      ) ?? null
+    );
+  }, budget);
+  if (!child) throw new Error('protected worker iframe frame did not appear');
+  const contextId = await frameContext(reader, sessionId, child.frame.id, budget);
+  if (!contextId) throw new Error('protected worker iframe context missing');
+  return (expression) =>
+    reader.send(
+      'Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true, contextId },
+      sessionId
+    );
+}
+
 export async function protectedWorker({
   reader,
   kind,
   pageUrl,
+  hostUrl,
   tag,
   context,
   notes = [],
@@ -54,7 +113,7 @@ export async function protectedWorker({
   try {
     await reader.send('Page.enable', {}, sessionId);
     await reader.send('Runtime.enable', {}, sessionId);
-    const nav = await outcome(reader.send('Page.navigate', { url: pageUrl }, sessionId));
+    const nav = await outcome(reader.send('Page.navigate', { url: hostUrl ?? pageUrl }, sessionId));
     if (!nav.ok || nav.result?.errorText)
       throw new Error(
         `protected worker page navigate failed: ${nav.error?.message ?? nav.result?.errorText ?? 'unknown'}`
@@ -70,19 +129,17 @@ export async function protectedWorker({
       return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
     }, budget);
     if (!loaded) throw new Error('protected worker page did not become ready');
+    const evaluate = hostUrl
+      ? await framedEvaluate(reader, sessionId, pageUrl, budget)
+      : (expression) =>
+          reader.send(
+            'Runtime.evaluate',
+            { expression, awaitPromise: true, returnByValue: true },
+            sessionId
+          );
     const script = new URL(spec.path, pageUrl);
     script.searchParams.set('n', tag);
-    const spawn = await outcome(
-      reader.send(
-        'Runtime.evaluate',
-        {
-          expression: spec.expression(script.href),
-          awaitPromise: true,
-          returnByValue: true,
-        },
-        sessionId
-      )
-    );
+    const spawn = await outcome(evaluate(spec.expression(script.href)));
     const value = spawn.result?.result?.value;
     if (!spawn.ok || (kind === 'service' ? value !== 'registered' : value !== 'spawned'))
       throw new Error(
@@ -102,21 +159,11 @@ export async function protectedWorker({
       );
     }, budget);
     if (!found) throw new Error(`protected ${kind} worker target did not appear`);
-    const exists = await outcome(
-      reader.send(
-        'Runtime.evaluate',
-        {
-          expression: spec.exists,
-          awaitPromise: true,
-          returnByValue: true,
-        },
-        sessionId
-      )
-    );
+    const exists = await outcome(evaluate(spec.exists));
     if (!exists.ok || exists.result?.result?.value !== true)
       throw new Error(`protected ${kind} worker existence check failed`);
     notes.push(
-      `protected worker ${kind}: page ${pageTargetId}, worker ${found.targetId}, url ${found.url}`
+      `protected worker ${kind}${hostUrl ? ' framed' : ''}: page ${pageTargetId}, worker ${found.targetId}, url ${found.url}`
     );
     return {
       exists: true,
@@ -124,6 +171,7 @@ export async function protectedWorker({
       workerTargetId: found.targetId,
       workerUrl: found.url,
       type: spec.type,
+      framed: Boolean(hostUrl),
     };
   } finally {
     await outcome(reader.send('Target.detachFromTarget', { sessionId }));

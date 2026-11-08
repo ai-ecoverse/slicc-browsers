@@ -216,6 +216,7 @@ type GuardStep struct {
 type GuardWhere struct {
 	OpenerID  string `json:"openerId,omitempty"`
 	URLPrefix string `json:"urlPrefix,omitempty"`
+	Type      string `json:"type,omitempty"`
 }
 
 type GuardRefusal struct {

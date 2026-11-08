@@ -39,6 +39,7 @@ export const capabilities = {
   siteIsolationOff: true,
   stockSetup: true,
   syntheticAutoAttach: true,
+  forwardAudit: true,
 };
 
 export const drivable = new Set([

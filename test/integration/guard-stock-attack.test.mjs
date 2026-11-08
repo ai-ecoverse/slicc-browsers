@@ -149,3 +149,83 @@ test('without a guard every stock-setup attack control passes', {
     await fixture.close();
   }
 });
+
+const attackStock = new Set([
+  'Page.addScriptToEvaluateOnNewDocument',
+  'Page.removeScriptToEvaluateOnNewDocument',
+  'Emulation.setFocusEmulationEnabled',
+  'Emulation.setEmulatedMedia',
+  'Emulation.setDeviceMetricsOverride',
+  'Emulation.setTouchEmulationEnabled',
+  'Emulation.setUserAgentOverride',
+  'Runtime.addBinding',
+  'Page.createIsolatedWorld',
+  'Target.setAutoAttach',
+]);
+
+test('an admit-all reference fails every protected-target stock-setup attack row', {
+  timeout: 900000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  record(browser.client);
+  record(browser.unguarded);
+  try {
+    const execution = await run(
+      { ...set, vectors: attackVectors, variants: { prompt: 0 } },
+      {
+        client: browser.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities: stockCaps,
+        rowTimeoutMs: 90000,
+      }
+    );
+    const leaking = execution.results.filter(
+      (row) => row.target !== 'ordinary' && row.id !== 'E7.ua-empty'
+    );
+    assert.ok(leaking.length > 0);
+    for (const row of leaking) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(execution.summary({ guard: 'admit-all' }).pass, false);
+  } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});
+
+test('a refuse-all reference passes every E7 stock-setup attack row', {
+  timeout: 900000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  record(browser.client);
+  record(browser.unguarded);
+  const guard = emulatedGuard(browser, {
+    refuse: (method) => attackStock.has(method),
+  });
+  const e7 = attackVectors.filter((vector) => vector.id.startsWith('E7.'));
+  try {
+    const execution = await run(
+      { ...set, vectors: e7, variants: { prompt: 0 } },
+      {
+        client: guard.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities: stockCaps,
+        rowTimeoutMs: 90000,
+      }
+    );
+    for (const row of execution.results)
+      assert.deepEqual(
+        [row.control, row.guarded, row.live],
+        ['pass', 'pass', 'pass'],
+        JSON.stringify(row)
+      );
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});

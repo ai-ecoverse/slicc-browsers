@@ -183,6 +183,8 @@ pub struct Where {
     pub opener_id: Option<String>,
     #[serde(default, rename = "urlPrefix", skip_serializing_if = "Option::is_none")]
     pub url_prefix: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

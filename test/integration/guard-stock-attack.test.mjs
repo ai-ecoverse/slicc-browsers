@@ -16,6 +16,8 @@ const attackIds = [
   'E7.init-world-carry.script',
   'E7.init-world-bfcache',
   'E7.init-world-bfcache.script',
+  'E7.init-world-error',
+  'E7.init-world-error.script',
   'E7.emulation-carry',
   'E7.emulation-carry.script',
   'E7.isolated-foreign',
@@ -257,6 +259,9 @@ const carryIds = ['E7.emulation-carry', 'E7.init-world-carry', 'E7.init-world-bf
 const carryScriptIds = carryIds.map((id) => `${id}.script`);
 const carryVectors = set.vectors.filter((vector) => carryIds.includes(vector.id));
 const carryScriptVectors = set.vectors.filter((vector) => carryScriptIds.includes(vector.id));
+const errorScriptVectors = set.vectors.filter(
+  (vector) => vector.id === 'E7.init-world-error.script'
+);
 const commandNavIds = [
   ...carryIds,
   'E7.init-world-error',
@@ -277,6 +282,21 @@ function protectedCommand(method, params, targets) {
   return false;
 }
 
+function lyingRefuseClient(browser, targets) {
+  const raw = browser.client;
+  const forwarded = [];
+  const send = async (method, params = {}, sessionId) => {
+    if (protectedCommand(method, params, targets)) {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      await raw.send(method, params, sessionId);
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events: raw.events };
+}
+
 function clearingStockClient(browser, targets) {
   const protectedOrigins = new Set(
     [targets.seven, targets.vault, targets.apex, targets['vault-x']]
@@ -284,22 +304,21 @@ function clearingStockClient(browser, targets) {
       .map((origin) => new URL(origin).origin)
   );
   const scripts = new Map();
+  const fetchReady = new Set();
+  const clearing = new Set();
   const raw = browser.client;
   const forwarded = [];
-  const send = async (method, params = {}, sessionId) => {
-    if (method === 'Page.addScriptToEvaluateOnNewDocument') {
-      const result = await raw.send(method, params, sessionId);
-      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
-      const list = scripts.get(sessionId) ?? [];
-      if (result?.identifier) list.push(result.identifier);
-      scripts.set(sessionId, list);
-      return result;
+  const protectedUrl = (url) => {
+    try {
+      return protectedOrigins.has(new URL(url).origin);
+    } catch {
+      return false;
     }
-    if (
-      method === 'Page.navigate' &&
-      params?.url &&
-      protectedOrigins.has(new URL(params.url).origin)
-    ) {
+  };
+  const clearAdmitted = async (sessionId) => {
+    if (!sessionId || clearing.has(sessionId)) return;
+    clearing.add(sessionId);
+    try {
       for (const identifier of scripts.get(sessionId) ?? [])
         await raw
           .send('Page.removeScriptToEvaluateOnNewDocument', { identifier }, sessionId)
@@ -315,11 +334,70 @@ function clearingStockClient(browser, targets) {
       await raw
         .send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
         .catch(() => {});
+    } finally {
+      clearing.delete(sessionId);
+    }
+  };
+  const ensureFetch = async (sessionId) => {
+    if (!sessionId || fetchReady.has(sessionId)) return;
+    fetchReady.add(sessionId);
+    await raw
+      .send(
+        'Fetch.enable',
+        {
+          patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }],
+        },
+        sessionId
+      )
+      .catch(() => fetchReady.delete(sessionId));
+  };
+  const events = raw.events;
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    for (const event of items) {
+      if (event?.method === 'Fetch.requestPaused') {
+        const url = event.params?.request?.url ?? '';
+        const sessionId = event.sessionId;
+        const requestId = event.params?.requestId;
+        void (async () => {
+          if (event.params?.resourceType === 'Document' && protectedUrl(url))
+            await clearAdmitted(sessionId);
+          if (requestId)
+            await raw.send('Fetch.continueRequest', { requestId }, sessionId).catch(() => {});
+        })();
+      }
+      if (event?.method === 'Page.frameNavigated' && !event.params?.frame?.parentId) {
+        const frame = event.params.frame;
+        const url = frame.unreachableUrl || frame.url;
+        if (protectedUrl(url)) void clearAdmitted(event.sessionId);
+      }
+    }
+    return push(...items);
+  };
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.addScriptToEvaluateOnNewDocument') {
+      const result = await raw.send(method, params, sessionId);
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      const list = scripts.get(sessionId) ?? [];
+      if (result?.identifier) list.push(result.identifier);
+      scripts.set(sessionId, list);
+      return result;
+    }
+    if (method === 'Page.enable') await ensureFetch(sessionId);
+    if (method === 'Page.navigate' && params?.url && protectedUrl(params.url))
+      await clearAdmitted(sessionId);
+    if (method === 'Runtime.evaluate' && typeof params.expression === 'string') {
+      const match = /^location\.href=(.*)$/.exec(params.expression);
+      if (match) {
+        try {
+          if (protectedUrl(JSON.parse(match[1]))) await clearAdmitted(sessionId);
+        } catch {}
+      }
     }
     forwarded.push({ method, params, sessionId, sentAt: Date.now() });
     return raw.send(method, params, sessionId);
   };
-  return { ...raw, send, forwarded };
+  return { ...raw, send, forwarded, events };
 }
 
 function pageEvidenceOnly(client, { rewrite } = {}) {
@@ -359,6 +437,8 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
     guard = emulatedGuard(browser, {
       refuse: (method, params) => protectedCommand(method, params, targets),
     });
+  } else if (mode === 'lying-refuse') {
+    guard = { client: lyingRefuseClient(browser, targets), stop: async () => {} };
   } else if (mode === 'refuse-command-and-block-script') {
     guard = emulatedGuard(browser, {
       refuse: (method, params) => protectedCommand(method, params, targets),
@@ -457,6 +537,14 @@ test('a guard that clears admitted state before the protected document runs pass
   }
 });
 
+const effectLieIds = [
+  ...carryIds,
+  'E7.isolated-foreign',
+  'C3.tab-protected',
+  'C3.tab-protected.synthetic',
+];
+const effectLieVectors = set.vectors.filter((vector) => effectLieIds.includes(vector.id));
+
 test('a guard that refuses the protected navigate or createTarget command passes those rows', {
   timeout: 900000,
 }, async () => {
@@ -465,6 +553,27 @@ test('a guard that refuses the protected navigate or createTarget command passes
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a correct refusal of the protected command still passes the effect-checked rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: effectLieVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that replies with a refusal but still forwards the protected command fails those rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('lying-refuse', { vectors: effectLieVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
   }
 });
 
@@ -493,6 +602,17 @@ test('a guard that refuses the command but keeps admitted state on a script load
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('E7.init-world-error.script still proves the admitted world on the error page under a command refusal', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: errorScriptVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
   }
 });
 

@@ -326,10 +326,11 @@ for (const v of guard.vectors ?? []) {
   const refusals = steps.flatMap((st, i) => (st.refusable ? [st.as ?? `refused.${i}`] : []));
   const first = steps.findIndex((st) => st.refusable);
   const before = new Set(first < 0 ? [] : steps.slice(0, first).flatMap((st) => st.as ?? []));
+  const want = typeof v.expected === 'object' ? v.expected : {};
   for (const [name, o] of Object.entries(v.observe ?? {})) {
     if (!o.check) gv(`${v.id}: ${name} lacks a check`);
     checkRefusals(o.check, v.id);
-    if (first >= 0 && !before.has(name) && !o.dependsOn)
+    if (first >= 0 && !before.has(name) && !o.dependsOn && want[name] !== false)
       gv(`${v.id} observes ${name} after a refusable step without dependsOn`);
     for (const d of o.dependsOn ?? []) {
       if (!refusals.includes(d))

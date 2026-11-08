@@ -50,6 +50,7 @@ export const drivable = new Set([
   'X1.after-exit',
   'E7.init-script',
   'E7.init-world-error',
+  'E7.init-world-error.script',
   'E7.emulation',
   'E7.binding',
   'C3.tab-attach',

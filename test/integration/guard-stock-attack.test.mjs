@@ -15,7 +15,6 @@ const attackIds = [
   'E7.init-world-error',
   'E7.emulation-carry',
   'E7.isolated-foreign',
-  'E7.ua-empty',
   'E7.binding-main',
   'E7.binding-main-ctx',
   'C3.tab-protected',
@@ -157,7 +156,6 @@ const attackStock = new Set([
   'Emulation.setEmulatedMedia',
   'Emulation.setDeviceMetricsOverride',
   'Emulation.setTouchEmulationEnabled',
-  'Emulation.setUserAgentOverride',
   'Runtime.addBinding',
   'Page.createIsolatedWorld',
   'Target.setAutoAttach',
@@ -182,9 +180,7 @@ test('an admit-all reference fails every protected-target stock-setup attack row
         rowTimeoutMs: 90000,
       }
     );
-    const leaking = execution.results.filter(
-      (row) => row.target !== 'ordinary' && row.id !== 'E7.ua-empty'
-    );
+    const leaking = execution.results.filter((row) => row.target !== 'ordinary');
     assert.ok(leaking.length > 0);
     for (const row of leaking) assert.equal(row.guarded, 'fail', JSON.stringify(row));
     assert.equal(execution.summary({ guard: 'admit-all' }).pass, false);

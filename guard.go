@@ -178,6 +178,7 @@ type GuardStep struct {
 	Client         string          `json:"client,omitempty"`
 	RedirectSecret string          `json:"redirectSecret,omitempty"`
 	ErrorPage      string          `json:"errorPage,omitempty"`
+	SpawnWorker    string          `json:"spawnWorker,omitempty"`
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`

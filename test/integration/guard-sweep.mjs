@@ -59,6 +59,8 @@ export const drivable = new Set([
   'C3.tab-create.synthetic',
   'C3.tab-blank',
   'C3.tab-blank.synthetic',
+  'C3.tab-worker-leak',
+  'C3.tab-service-worker-leak',
 ]);
 
 const every = ['seven', 'vault', 'vault-x', 'apex'];

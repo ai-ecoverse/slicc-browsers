@@ -301,6 +301,7 @@ for (const v of guard.vectors ?? []) {
       st.extensionFrame ||
       st.unparseable ||
       st.errorPage ||
+      st.spawnWorker ||
       st.redirectSecret ||
       st.frameRead ||
       st.bfcacheRestore ||

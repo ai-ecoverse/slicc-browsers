@@ -199,6 +199,8 @@ pub struct Step {
     pub unparseable: bool,
     #[serde(rename = "errorPage", skip_serializing_if = "Option::is_none")]
     pub error_page: Option<String>,
+    #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
+    pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<String>,
     #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]

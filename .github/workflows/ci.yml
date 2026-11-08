@@ -52,6 +52,7 @@ jobs:
         test/integration/debugger-stage1-packaging.test.mjs
         test/integration/protected-premise.test.mjs
         test/integration/guard-refusable-nav.test.mjs
+        test/integration/guard-protected-worker.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

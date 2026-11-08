@@ -183,9 +183,9 @@ It also offers `storageKey(key)` and `unparseable(text)`. A Go or Rust implement
 
 ## Guard vectors
 
-A guard sits between a CDP client, such as an agent's browser tool, and the browser, and keeps the client away from protected origins. `guard-vectors.json` holds more than a hundred attacks on that promise, and every guard must pass them all. They cover navigation, redirect chains, popups, frames, request interception, cookies, storage, privileged and error pages, foreign extension worlds, debugger tricks and session overrides that would leak into a protected page.
+A guard sits between a CDP client and the browser and keeps the client away from protected origins. `guard-vectors.json` holds the attacks every guard must pass: navigation, redirects, popups, frames, interception, cookies, storage, privileged and error pages, foreign worlds, debugger tricks and session overrides.
 
-Each vector runs twice. The **control** runs it against an ordinary origin, where it must work. The **guarded** leg runs it through the guard against a protected target, where it must be refused or have no effect. A **liveness** check, made outside the guard, proves the protected target was really there. A row passes only when all three do, so a guard can't pass by breaking everything, and a test can't pass by never reaching the target.
+Each vector runs twice. The **control** runs against an ordinary origin and must work. The **guarded** leg runs through the guard against a protected target and must be refused or have no effect. A **liveness** check outside the guard proves the target was really there. All three must pass.
 
 A guard may refuse every client navigation to an `about:` URL that inherits an origin, such as `about:blank`. Refusing an ordinary navigation away from a protected page still fails.
 
@@ -195,7 +195,7 @@ For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stoc
 - `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` on the whole string without the multiline flag (no code), with any `worldName` or `runImmediately`, and its removal;
 - exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
 - `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
-- `Target.setAutoAttach`: accept the call but narrow the filter to tab targets, hold pages under the tab like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
+- `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe or worker (dedicated, shared or service) may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
 
 The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Admitted display overrides and no-code init scripts must not remain in effect on a protected document — refuse that navigation, or clear them before it runs. Undeclared, they skip, never pass.
 

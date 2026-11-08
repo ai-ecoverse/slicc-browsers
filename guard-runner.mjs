@@ -31,6 +31,7 @@ import {
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
+import { protectedWorker } from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
@@ -744,6 +745,7 @@ class Execution {
       'redirectSecret',
       'unparseable',
       'errorPage',
+      'spawnWorker',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -752,9 +754,14 @@ class Execution {
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
-        probe
-      ) &&
+      [
+        'errorPage',
+        'redirectSecret',
+        'extensionFrame',
+        'frameRead',
+        'bfcacheRestore',
+        'spawnWorker',
+      ].includes(probe) &&
       out.ok &&
       out.result?.incomplete
     )
@@ -892,6 +899,7 @@ class Execution {
           budget: this.bound(5000),
         })
       );
+    if (step.spawnWorker) return this.spawnWorker(step);
     if (step.bfcacheRestore)
       return outcome(
         bfcacheRestore({
@@ -1032,6 +1040,27 @@ class Execution {
     } finally {
       await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
     }
+  }
+
+  async spawnWorker(step) {
+    const pageUrl = expand(step.url ?? '{target}/doc?n=host-{tag}', this.vars);
+    const out = await outcome(
+      protectedWorker({
+        reader: this.reader,
+        kind: step.spawnWorker,
+        pageUrl,
+        tag: this.vars.tag,
+        context: this.vars.context,
+        notes: this.notes,
+        budget: this.bound(5000),
+      })
+    );
+    if (out.ok && out.result?.pageTargetId) this.targets.push(out.result.pageTargetId);
+    if (out.ok && out.result?.workerTargetId) {
+      this.vars.workerTarget = out.result.workerTargetId;
+      this.targets.push(out.result.workerTargetId);
+    }
+    return out;
   }
 
   async watchPage(step) {
@@ -1757,7 +1786,7 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
-    (step) => step.isolatedWorld || step.observer
+    (step) => step.isolatedWorld || step.observer || step.spawnWorker
   ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(

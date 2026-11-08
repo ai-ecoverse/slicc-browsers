@@ -153,3 +153,19 @@ test('false-by-construction effect checks run on a refused navigation, not only 
   assert.equal(byId['E7.isolated-foreign'].observe.world.check.origin, '{target}');
   assert.equal(byId['E7.isolated-foreign.script'].observe.world.check.origin, '{target}');
 });
+
+test('post-navigation settles wait for load or served, not the start-page title', () => {
+  for (const id of [
+    'E7.emulation-carry',
+    'E7.emulation-carry.script',
+    'E7.isolated-foreign',
+    'E7.isolated-foreign.script',
+  ]) {
+    const settles = [...byId[id].trigger].filter((step) => step.settle).map((step) => step.settle);
+    assert.ok(settles.length > 0, id);
+    for (const settle of settles) {
+      assert.equal(settle.title, undefined, `${id} must not settle on title`);
+      assert.ok(settle.or?.served || settle.served || settle.ms !== undefined, id);
+    }
+  }
+});

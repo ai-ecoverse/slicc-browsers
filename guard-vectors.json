@@ -27437,7 +27437,6 @@
         },
         {
           "settle": {
-            "title": "doc",
             "ms": 5000,
             "or": {
               "served": "{target}/doc?n={tag}",
@@ -27666,7 +27665,6 @@
         },
         {
           "settle": {
-            "title": "doc",
             "ms": 5000,
             "or": {
               "served": "{target}/doc?n={tag}",
@@ -27839,10 +27837,11 @@
         },
         {
           "settle": {
-            "title": "doc",
             "ms": 5000,
-            "required": true,
-            "dependsOn": ["nav"]
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
           }
         },
         {
@@ -27960,8 +27959,11 @@
         },
         {
           "settle": {
-            "title": "doc",
             "ms": 5000,
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            },
             "required": true
           }
         },

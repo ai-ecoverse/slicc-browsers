@@ -312,6 +312,75 @@ function lyingRefuseWorldClient(browser) {
   return { ...raw, send, forwarded, events: raw.events };
 }
 
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function lateCommitClient(
+  raw,
+  targets,
+  { refuse = false, refuseWorld = false, delayMs = 400 } = {}
+) {
+  const origins = new Set([targets.seven, targets.vault].map((origin) => new URL(origin).origin));
+  const protectedUrl = (url) => {
+    try {
+      return origins.has(new URL(url).origin);
+    } catch {
+      return false;
+    }
+  };
+  const fetchReady = new Set();
+  const forwarded = [];
+  const events = raw.events;
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    for (const event of items) {
+      if (event?.method !== 'Fetch.requestPaused') continue;
+      const url = event.params?.request?.url ?? '';
+      const sessionId = event.sessionId;
+      const requestId = event.params?.requestId;
+      void (async () => {
+        if (event.params?.resourceType === 'Document' && protectedUrl(url)) await pause(delayMs);
+        if (requestId)
+          await raw.send('Fetch.continueRequest', { requestId }, sessionId).catch(() => {});
+      })();
+    }
+    return push(...items);
+  };
+  const ensureFetch = async (sessionId) => {
+    if (!sessionId || fetchReady.has(sessionId)) return;
+    fetchReady.add(sessionId);
+    await raw
+      .send(
+        'Fetch.enable',
+        {
+          patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }],
+        },
+        sessionId
+      )
+      .catch(() => fetchReady.delete(sessionId));
+  };
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.enable') await ensureFetch(sessionId);
+    if (refuseWorld && method === 'Page.createIsolatedWorld') {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    if (protectedCommand(method, params, targets)) {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      if (refuse) {
+        setTimeout(() => {
+          raw.send(method, params, sessionId).catch(() => {});
+        }, delayMs);
+        throw new Error('slicc: refused: browser-wide call');
+      }
+      await pause(delayMs);
+      return raw.send(method, params, sessionId);
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events };
+}
+
 function clearingStockClient(browser, targets) {
   const protectedOrigins = new Set(
     [targets.seven, targets.vault, targets.apex, targets['vault-x']]
@@ -440,8 +509,8 @@ function pageEvidenceOnly(client, { rewrite } = {}) {
 async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
-  record(browser.unguarded);
   const targets = origins(fixture);
+  let unguarded = browser.unguarded;
   let guard;
   if (mode === 'refuse-nav' || mode === 'wrong-url') {
     guard = emulatedGuard(browser, {
@@ -460,6 +529,24 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
     guard = emulatedGuard(browser, {
       refuse: (method) => method === 'Page.createIsolatedWorld',
     });
+  } else if (mode === 'late-lying-refuse') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { refuse: true, delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
+  } else if (mode === 'late-keep') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
+  } else if (mode === 'late-refuse-world') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { refuseWorld: true, delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
   } else if (mode === 'refuse-command-and-block-script') {
     guard = emulatedGuard(browser, {
       refuse: (method, params) => protectedCommand(method, params, targets),
@@ -480,13 +567,14 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
   } else {
     guard = { client: browser.client, stop: async () => {} };
   }
+  record(unguarded);
   record(guard.client);
   try {
     const execution = await run(
       { ...set, vectors, variants: { prompt: 0 } },
       {
         client: guard.client,
-        unguarded: browser.unguarded,
+        unguarded,
         fixture,
         targets,
         capabilities: stockCaps,
@@ -621,6 +709,42 @@ test('a guard that forwards createIsolatedWorld but replies refused fails E7.iso
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
     assert.equal(row.observations.guarded.world, true, JSON.stringify(row));
+  }
+});
+
+const emulationCarry = set.vectors.filter((vector) => vector.id === 'E7.emulation-carry');
+const emulationCarryScript = set.vectors.filter(
+  (vector) => vector.id === 'E7.emulation-carry.script'
+);
+
+test('a late-commit lying refusal still fails E7.emulation-carry after the navigation commits', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-lying-refuse', { vectors: emulationCarry });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('a late-commit keep fails E7.emulation-carry.script while the delayed control still passes', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-keep', { vectors: emulationCarryScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('E7.isolated-foreign.script control and a correct world refusal pass under a late document commit', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
   }
 });
 

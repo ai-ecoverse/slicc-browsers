@@ -746,7 +746,28 @@
             },
             "requires": {
               "$ref": "#/$defs/requires"
+            },
+            "refusable": {
+              "const": true
+            },
+            "refusal": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["match"],
+              "properties": {
+                "onlyProtected": {
+                  "type": "boolean"
+                },
+                "match": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
             }
+          },
+          "dependentRequired": {
+            "refusable": ["refusal"],
+            "refusal": ["refusable"]
           }
         },
         {

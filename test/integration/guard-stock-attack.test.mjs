@@ -13,9 +13,13 @@ const stripVectors = set.vectors.filter((vector) => vector.id === stripId);
 const attackIds = [
   'E7.init-boundary',
   'E7.init-world-carry',
+  'E7.init-world-carry.script',
   'E7.init-world-bfcache',
+  'E7.init-world-bfcache.script',
   'E7.emulation-carry',
+  'E7.emulation-carry.script',
   'E7.isolated-foreign',
+  'E7.isolated-foreign.script',
   'E7.ua-empty',
   'E7.binding-main',
   'E7.binding-main-ctx',
@@ -27,6 +31,7 @@ const attackIds = [
   'C3.tab-iframe-leak',
 ];
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
+const positiveStockIds = ['E7.init-world-error', 'E7.init-world-error.script'];
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const stockCaps = { ...base, stockSetup: true, syntheticAutoAttach: true, forwardAudit: true };
 
@@ -75,6 +80,13 @@ async function execute(mode, only = stripVectors) {
 
 test('the published attack and strip rows are present', () => {
   assert.deepEqual(attackVectors.map((vector) => vector.id).sort(), [...attackIds].sort());
+  for (const id of positiveStockIds) {
+    assert.ok(
+      set.vectors.some((vector) => vector.id === id),
+      id
+    );
+    assert.equal(attackIds.includes(id), false, id);
+  }
   assert.equal(stripVectors.length, 1);
   assert.deepEqual(stripVectors[0].targets, ['ordinary']);
   assert.equal(stripVectors[0].control.via, 'unguarded');
@@ -250,7 +262,130 @@ test('C3.tab-service-worker-leak control passes on a secure origin', {
 });
 
 const carryIds = ['E7.emulation-carry', 'E7.init-world-carry', 'E7.init-world-bfcache'];
+const carryScriptIds = carryIds.map((id) => `${id}.script`);
 const carryVectors = set.vectors.filter((vector) => carryIds.includes(vector.id));
+const carryScriptVectors = set.vectors.filter((vector) => carryScriptIds.includes(vector.id));
+const errorScriptVectors = set.vectors.filter(
+  (vector) => vector.id === 'E7.init-world-error.script'
+);
+const commandNavIds = [
+  ...carryIds,
+  'E7.init-world-error',
+  'E7.isolated-foreign',
+  'C3.tab-protected',
+  'C3.tab-protected.synthetic',
+];
+const commandNavVectors = set.vectors.filter((vector) => commandNavIds.includes(vector.id));
+const scriptAttackVectors = set.vectors.filter((vector) =>
+  [...carryScriptIds, 'E7.isolated-foreign.script'].includes(vector.id)
+);
+
+function protectedCommand(method, params, targets) {
+  const origins = new Set([targets.seven, targets.vault].map((origin) => new URL(origin).origin));
+  if (method === 'Page.navigate' && params?.url) return origins.has(new URL(params.url).origin);
+  if (method === 'Target.createTarget' && params?.url)
+    return origins.has(new URL(params.url).origin);
+  return false;
+}
+
+function lyingRefuseClient(browser, targets) {
+  const raw = browser.client;
+  const forwarded = [];
+  const send = async (method, params = {}, sessionId) => {
+    if (protectedCommand(method, params, targets)) {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      await raw.send(method, params, sessionId);
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events: raw.events };
+}
+
+function lyingRefuseWorldClient(browser) {
+  const raw = browser.client;
+  const forwarded = [];
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.createIsolatedWorld') {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      await raw.send(method, params, sessionId);
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events: raw.events };
+}
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function lateCommitClient(
+  raw,
+  targets,
+  { refuse = false, refuseWorld = false, delayMs = 400 } = {}
+) {
+  const origins = new Set([targets.seven, targets.vault].map((origin) => new URL(origin).origin));
+  const protectedUrl = (url) => {
+    try {
+      return origins.has(new URL(url).origin);
+    } catch {
+      return false;
+    }
+  };
+  const fetchReady = new Set();
+  const forwarded = [];
+  const events = raw.events;
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    for (const event of items) {
+      if (event?.method !== 'Fetch.requestPaused') continue;
+      const url = event.params?.request?.url ?? '';
+      const sessionId = event.sessionId;
+      const requestId = event.params?.requestId;
+      void (async () => {
+        if (event.params?.resourceType === 'Document' && protectedUrl(url)) await pause(delayMs);
+        if (requestId)
+          await raw.send('Fetch.continueRequest', { requestId }, sessionId).catch(() => {});
+      })();
+    }
+    return push(...items);
+  };
+  const ensureFetch = async (sessionId) => {
+    if (!sessionId || fetchReady.has(sessionId)) return;
+    fetchReady.add(sessionId);
+    await raw
+      .send(
+        'Fetch.enable',
+        {
+          patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }],
+        },
+        sessionId
+      )
+      .catch(() => fetchReady.delete(sessionId));
+  };
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.enable') await ensureFetch(sessionId);
+    if (refuseWorld && method === 'Page.createIsolatedWorld') {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    if (protectedCommand(method, params, targets)) {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      if (refuse) {
+        setTimeout(() => {
+          raw.send(method, params, sessionId).catch(() => {});
+        }, delayMs);
+        throw new Error('slicc: refused: browser-wide call');
+      }
+      await pause(delayMs);
+      return raw.send(method, params, sessionId);
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events };
+}
 
 function clearingStockClient(browser, targets) {
   const protectedOrigins = new Set(
@@ -259,22 +394,21 @@ function clearingStockClient(browser, targets) {
       .map((origin) => new URL(origin).origin)
   );
   const scripts = new Map();
+  const fetchReady = new Set();
+  const clearing = new Set();
   const raw = browser.client;
   const forwarded = [];
-  const send = async (method, params = {}, sessionId) => {
-    if (method === 'Page.addScriptToEvaluateOnNewDocument') {
-      const result = await raw.send(method, params, sessionId);
-      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
-      const list = scripts.get(sessionId) ?? [];
-      if (result?.identifier) list.push(result.identifier);
-      scripts.set(sessionId, list);
-      return result;
+  const protectedUrl = (url) => {
+    try {
+      return protectedOrigins.has(new URL(url).origin);
+    } catch {
+      return false;
     }
-    if (
-      method === 'Page.navigate' &&
-      params?.url &&
-      protectedOrigins.has(new URL(params.url).origin)
-    ) {
+  };
+  const clearAdmitted = async (sessionId) => {
+    if (!sessionId || clearing.has(sessionId)) return;
+    clearing.add(sessionId);
+    try {
       for (const identifier of scripts.get(sessionId) ?? [])
         await raw
           .send('Page.removeScriptToEvaluateOnNewDocument', { identifier }, sessionId)
@@ -290,11 +424,70 @@ function clearingStockClient(browser, targets) {
       await raw
         .send('Emulation.setTouchEmulationEnabled', { enabled: false }, sessionId)
         .catch(() => {});
+    } finally {
+      clearing.delete(sessionId);
+    }
+  };
+  const ensureFetch = async (sessionId) => {
+    if (!sessionId || fetchReady.has(sessionId)) return;
+    fetchReady.add(sessionId);
+    await raw
+      .send(
+        'Fetch.enable',
+        {
+          patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }],
+        },
+        sessionId
+      )
+      .catch(() => fetchReady.delete(sessionId));
+  };
+  const events = raw.events;
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    for (const event of items) {
+      if (event?.method === 'Fetch.requestPaused') {
+        const url = event.params?.request?.url ?? '';
+        const sessionId = event.sessionId;
+        const requestId = event.params?.requestId;
+        void (async () => {
+          if (event.params?.resourceType === 'Document' && protectedUrl(url))
+            await clearAdmitted(sessionId);
+          if (requestId)
+            await raw.send('Fetch.continueRequest', { requestId }, sessionId).catch(() => {});
+        })();
+      }
+      if (event?.method === 'Page.frameNavigated' && !event.params?.frame?.parentId) {
+        const frame = event.params.frame;
+        const url = frame.unreachableUrl || frame.url;
+        if (protectedUrl(url)) void clearAdmitted(event.sessionId);
+      }
+    }
+    return push(...items);
+  };
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.addScriptToEvaluateOnNewDocument') {
+      const result = await raw.send(method, params, sessionId);
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      const list = scripts.get(sessionId) ?? [];
+      if (result?.identifier) list.push(result.identifier);
+      scripts.set(sessionId, list);
+      return result;
+    }
+    if (method === 'Page.enable') await ensureFetch(sessionId);
+    if (method === 'Page.navigate' && params?.url && protectedUrl(params.url))
+      await clearAdmitted(sessionId);
+    if (method === 'Runtime.evaluate' && typeof params.expression === 'string') {
+      const match = /^location\.href=(.*)$/.exec(params.expression);
+      if (match) {
+        try {
+          if (protectedUrl(JSON.parse(match[1]))) await clearAdmitted(sessionId);
+        } catch {}
+      }
     }
     forwarded.push({ method, params, sessionId, sentAt: Date.now() });
     return raw.send(method, params, sessionId);
   };
-  return { ...raw, send, forwarded };
+  return { ...raw, send, forwarded, events };
 }
 
 function pageEvidenceOnly(client, { rewrite } = {}) {
@@ -322,26 +515,72 @@ function pageEvidenceOnly(client, { rewrite } = {}) {
 async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
-  record(browser.unguarded);
   const targets = origins(fixture);
+  let unguarded = browser.unguarded;
   let guard;
   if (mode === 'refuse-nav' || mode === 'wrong-url') {
     guard = emulatedGuard(browser, {
       failDocumentOrigins: [targets.seven, targets.vault],
     });
     pageEvidenceOnly(guard.client, mode === 'wrong-url' ? { rewrite } : undefined);
+  } else if (mode === 'refuse-command') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+    });
+  } else if (mode === 'lying-refuse') {
+    guard = { client: lyingRefuseClient(browser, targets), stop: async () => {} };
+  } else if (mode === 'lying-refuse-world') {
+    guard = { client: lyingRefuseWorldClient(browser), stop: async () => {} };
+  } else if (mode === 'refuse-world') {
+    guard = emulatedGuard(browser, {
+      refuse: (method) => method === 'Page.createIsolatedWorld',
+    });
+  } else if (mode === 'late-lying-refuse') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { refuse: true, delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
+  } else if (mode === 'late-keep') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
+  } else if (mode === 'late-refuse-world') {
+    guard = {
+      client: lateCommitClient(browser.client, targets, { refuseWorld: true, delayMs: 400 }),
+      stop: async () => {},
+    };
+    unguarded = lateCommitClient(browser.unguarded, targets, { delayMs: 400 });
+  } else if (mode === 'refuse-command-and-block-script') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+      failDocumentOrigins: [targets.seven, targets.vault],
+    });
+    pageEvidenceOnly(guard.client);
+  } else if (mode === 'refuse-command-keep-script') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+    });
+  } else if (mode === 'unrelated-error') {
+    guard = emulatedGuard(browser, {
+      fail: (method, params) =>
+        protectedCommand(method, params, targets) ? 'Internal error' : undefined,
+    });
   } else if (mode === 'clear') {
     guard = { client: clearingStockClient(browser, targets), stop: async () => {} };
   } else {
     guard = { client: browser.client, stop: async () => {} };
   }
+  record(unguarded);
   record(guard.client);
   try {
     const execution = await run(
       { ...set, vectors, variants: { prompt: 0 } },
       {
         client: guard.client,
-        unguarded: browser.unguarded,
+        unguarded,
         fixture,
         targets,
         capabilities: stockCaps,
@@ -406,6 +645,179 @@ test('a guard that clears admitted state before the protected document runs pass
   timeout: 600000,
 }, async () => {
   const { execution } = await runCarry('clear');
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+const effectLieIds = [
+  ...carryIds,
+  'E7.isolated-foreign',
+  'C3.tab-protected',
+  'C3.tab-protected.synthetic',
+];
+const effectLieVectors = set.vectors.filter((vector) => effectLieIds.includes(vector.id));
+
+test('a guard that refuses the protected navigate or createTarget command passes those rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: commandNavVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a correct refusal of the protected command still passes the effect-checked rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: effectLieVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that replies with a refusal but still forwards the protected command fails those rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('lying-refuse', { vectors: effectLieVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+const isolatedForeignScript = set.vectors.filter(
+  (vector) => vector.id === 'E7.isolated-foreign.script'
+);
+
+test('a correct refusal of createIsolatedWorld passes E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that forwards createIsolatedWorld but replies refused fails E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('lying-refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.guarded.world, true, JSON.stringify(row));
+  }
+});
+
+const emulationCarry = set.vectors.filter((vector) => vector.id === 'E7.emulation-carry');
+const emulationCarryScript = set.vectors.filter(
+  (vector) => vector.id === 'E7.emulation-carry.script'
+);
+
+test('a late-commit lying refusal still fails E7.emulation-carry after the navigation commits', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-lying-refuse', { vectors: emulationCarry });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('a late-commit keep fails E7.emulation-carry.script while the delayed control still passes', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-keep', { vectors: emulationCarryScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('E7.isolated-foreign.script control and a correct world refusal pass under a late document commit', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('late-refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that refuses the command and blocks script navigation passes command and script carry rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command-and-block-script', {
+    vectors: [
+      ...commandNavVectors.filter((vector) => carryIds.includes(vector.id)),
+      ...carryScriptVectors,
+    ],
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that refuses the command but keeps admitted state on a script load fails the script variants', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command-keep-script', {
+    vectors: scriptAttackVectors,
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('E7.init-world-error.script still proves the admitted world on the error page under a command refusal', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: errorScriptVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that fails the protected navigate without a matched refusal fails the command rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('unrelated-error', {
+    vectors: carryVectors,
+  });
+  for (const row of execution.results) {
+    const control = row.observations.control;
+    assert.equal(control.loaded, true, JSON.stringify(row));
+    if (row.id === 'E7.emulation-carry') assert.equal(control.exposed, true, JSON.stringify(row));
+    else assert.equal(control.worldOnProtected, true, JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.ok(
+      row.errors.some((error) => /failed without a refusal/.test(error)),
+      JSON.stringify(row)
+    );
+  }
+});
+
+test('clear-then-load still passes command and script carry rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('clear', {
+    vectors: [...carryVectors, ...carryScriptVectors],
+  });
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));

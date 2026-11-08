@@ -61,7 +61,7 @@ test('the sweep partitions take every published target exactly once, each in its
 test('the sweep declares every capability a published vector requires but the ones a real browser lacks', () => {
   const required = new Set(published.vectors.flatMap((v) => v.requires ?? []));
   const missing = [...required].filter((capability) => capabilities[capability] !== true).sort();
-  assert.deepEqual(missing, ['inboundDelay']);
+  assert.deepEqual(missing, ['inboundDelay', 'secureOrigin']);
   for (const id of drivable)
     assert.ok(
       vector((v) => v.id === id),

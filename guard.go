@@ -47,7 +47,12 @@ const (
 	GuardCapClientExit       = "clientExit"
 	GuardCapSiteIsolationOff = "siteIsolationOff"
 	GuardCapInboundDelay     = "inboundDelay"
+	GuardCapSecureOrigin     = "secureOrigin"
 	GuardCapForwardAudit     = "forwardAudit"
+	GuardCapStockSetup       = "stockSetup"
+	GuardCapSyntheticAttach  = "syntheticAutoAttach"
+	GuardObserverWatch       = "watch"
+	GuardObserverFail        = "fail"
 	GuardClientExit          = "exit"
 	GuardPageScript          = "script"
 	GuardSessionPage         = "page"
@@ -179,6 +184,8 @@ type GuardStep struct {
 	ExtensionFrame string          `json:"extensionFrame,omitempty"`
 	FrameRead      string          `json:"frameRead,omitempty"`
 	BFCacheRestore string          `json:"bfcacheRestore,omitempty"`
+	IsolatedWorld  string          `json:"isolatedWorld,omitempty"`
+	Observer       string          `json:"observer,omitempty"`
 	Origin         string          `json:"origin,omitempty"`
 	Text           string          `json:"text,omitempty"`
 	CDP            string          `json:"cdp,omitempty"`
@@ -210,6 +217,7 @@ type GuardStep struct {
 type GuardWhere struct {
 	OpenerID  string `json:"openerId,omitempty"`
 	URLPrefix string `json:"urlPrefix,omitempty"`
+	Type      string `json:"type,omitempty"`
 }
 
 type GuardRefusal struct {

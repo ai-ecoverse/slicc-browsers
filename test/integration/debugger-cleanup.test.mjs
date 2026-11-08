@@ -61,6 +61,7 @@ function lane(id, events, error) {
     incomplete: [],
     errors: [],
     calls: {},
+    referenced: (value) => value,
     actor: () => ({
       send: async (method, params, session) => {
         calls.push({ method, params, session });

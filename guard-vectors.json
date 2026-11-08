@@ -102,7 +102,10 @@
     "clientExit": "closing the guarded client mid-row: the client has close(), the clientFactory makes a fresh guarded client for the next leg, and an independent unguarded observer outlives it",
     "siteIsolationOff": "the browser runs without site isolation, so a cross-site iframe shares its parent's process",
     "inboundDelay": "a harness gate holding browser-to-guard messages until release during a history restore, with seed and release evidence",
-    "forwardAudit": "a complete browser-side forwarding ledger for every history-restore probe"
+    "forwardAudit": "a complete browser-side forwarding ledger for history-restore probes and for checks of a command's forwarded params (client.forwarded)",
+    "stockSetup": "the guard admits stock clients' setup calls: init scripts with no code (the no-code regex is matched on the whole string without the multiline flag), the four display emulation calls, bindings scoped to an isolated world, Page.createIsolatedWorld on an ordinary frame with grantUniveralAccess and contentSecurityPolicy stripped and no executionContextId for any other frame, and Target.setAutoAttach narrowed to tab targets (pages under the tab held like pages, with the same URL redaction in targetInfo)",
+    "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
+    "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -24734,6 +24737,3785 @@
       "liveCheck": {
         "loaded": "{target}/canary/{tag}",
         "observer": "fixture"
+      }
+    },
+    {
+      "id": "E7.init-script",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-removed-{tag}",
+            "runImmediately": true
+          },
+          "as": "removedWorld",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-playwright-{tag}"
+          },
+          "as": "playwrightWorld",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "//# sourceURL=pptr:internal",
+            "worldName": "slicc-puppeteer-{tag}"
+          },
+          "as": "puppeteerWorld",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-immediate-{tag}",
+            "runImmediately": true
+          },
+          "as": "immediateWorld",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "//# sourceURL=slicc-kept-{tag}"
+          },
+          "as": "keptScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "//# sourceURL=slicc-dropped-{tag}",
+            "worldName": "slicc-dropped-world-{tag}",
+            "runImmediately": true
+          },
+          "as": "droppedScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-empty-{tag}"
+          },
+          "as": "emptyScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "//# sourceURL=pptr:internal"
+          },
+          "as": "pptrScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": " \t\n// slicc\n//# sourceURL=slicc-comment-{tag}\n"
+          },
+          "as": "commentScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc\u0000fetch(new URL('/doc?n=nul-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-nul-{tag}\n",
+            "worldName": "slicc-nul-{tag}"
+          },
+          "as": "nulScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "wait": 500
+        },
+        {
+          "cdp": "Page.removeScriptToEvaluateOnNewDocument",
+          "params": {
+            "identifier": {
+              "$result": "removedWorld",
+              "path": "result.identifier"
+            }
+          },
+          "as": "removeWorld",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.removeScriptToEvaluateOnNewDocument",
+          "params": {
+            "identifier": {
+              "$result": "droppedScript",
+              "path": "result.identifier"
+            }
+          },
+          "as": "removeScript",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Page.removeScriptToEvaluateOnNewDocument",
+          "params": {
+            "identifier": {
+              "$result": "immediateWorld",
+              "path": "result.identifier"
+            }
+          },
+          "as": "removeImmediate",
+          "requires": ["stockSetup"]
+        },
+        {
+          "observer": "watch"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered removedWorld, playwrightWorld, puppeteerWorld, immediateWorld, keptScript, droppedScript, emptyScript, pptrScript, commentScript, nulScript, removeWorld, removeScript, removeImmediate without an error",
+          "check": {
+            "all": [
+              {
+                "result": "removedWorld",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "playwrightWorld",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "puppeteerWorld",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "immediateWorld",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "keptScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "droppedScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "emptyScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "pptrScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "commentScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "nulScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "removeWorld",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "removeScript",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "removeImmediate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "playwrightWorld": {
+          "means": "the unguarded observer saw Chrome create the isolated world of Playwright's empty utility script in the new document",
+          "check": {
+            "world": "slicc-playwright-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}",
+            "afterClear": true
+          }
+        },
+        "puppeteerWorld": {
+          "means": "the unguarded observer saw Chrome create the isolated world of Puppeteer's sourceURL-only utility script in the new document",
+          "check": {
+            "world": "slicc-puppeteer-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}",
+            "afterClear": true
+          }
+        },
+        "immediateWorld": {
+          "means": "the unguarded observer saw Chrome create a runImmediately world in the start document; its script is removed before the navigation, so no later document creates it",
+          "check": {
+            "world": "slicc-immediate-{tag}",
+            "observer": "unguarded"
+          }
+        },
+        "removedWorld": {
+          "means": "after removal, the unguarded observer saw the removed world on a later document",
+          "check": {
+            "world": "slicc-removed-{tag}",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "keptScript": {
+          "means": "the unguarded observer saw Chrome compile a comment-only main-world script in the new document",
+          "check": {
+            "script": "slicc-kept-{tag}",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "commentScript": {
+          "means": "the unguarded observer saw Chrome compile a whitespace-and-comments script in the new document",
+          "check": {
+            "script": "slicc-comment-{tag}",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "droppedScript": {
+          "means": "after removal, the unguarded observer saw the dropped world on a later document",
+          "check": {
+            "world": "slicc-dropped-world-{tag}",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "installedRemoved": {
+          "means": "the unguarded observer saw the runImmediately removed world in the start document before its script was removed",
+          "check": {
+            "world": "slicc-removed-{tag}",
+            "observer": "unguarded"
+          }
+        },
+        "installedDropped": {
+          "means": "the unguarded observer saw the runImmediately dropped world in the start document before its script was removed",
+          "check": {
+            "world": "slicc-dropped-world-{tag}",
+            "observer": "unguarded"
+          }
+        },
+        "immediateCarried": {
+          "means": "after removal, the unguarded observer saw the runImmediately world on a later document",
+          "check": {
+            "world": "slicc-immediate-{tag}",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "emptyWorld": {
+          "means": "the unguarded observer saw Chrome create the emptyScript world in the new document",
+          "check": {
+            "world": "slicc-empty-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}",
+            "afterClear": true
+          }
+        },
+        "pptrCompiled": {
+          "means": "the unguarded observer saw Chrome compile the pptr sourceURL-only script in the new document",
+          "check": {
+            "script": "pptr:internal",
+            "observer": "unguarded",
+            "afterClear": true
+          }
+        },
+        "installedNul": {
+          "means": "the unguarded observer saw Chrome create the NUL no-code world in the new ordinary document",
+          "check": {
+            "world": "slicc-nul-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}",
+            "afterClear": true
+          }
+        },
+        "ranNul": {
+          "means": "the NUL no-code source did not fetch {target}/doc?n=nul-{tag}",
+          "check": {
+            "served": "{target}/doc?n=nul-{tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, which the client navigated to",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "playwrightWorld": true,
+          "puppeteerWorld": true,
+          "immediateWorld": true,
+          "removedWorld": false,
+          "keptScript": true,
+          "commentScript": true,
+          "droppedScript": false,
+          "installedRemoved": true,
+          "installedDropped": true,
+          "immediateCarried": false,
+          "emptyWorld": true,
+          "pptrCompiled": true,
+          "installedNul": true,
+          "ranNul": false
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "playwrightWorld": true,
+        "puppeteerWorld": true,
+        "immediateWorld": true,
+        "removedWorld": false,
+        "keptScript": true,
+        "commentScript": true,
+        "droppedScript": false,
+        "installedRemoved": true,
+        "installedDropped": true,
+        "immediateCarried": false,
+        "emptyWorld": true,
+        "pptrCompiled": true,
+        "installedNul": true,
+        "ranNul": false
+      }
+    },
+    {
+      "id": "E7.emulation",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setFocusEmulationEnabled",
+          "params": {
+            "enabled": true
+          },
+          "as": "focus",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setEmulatedMedia",
+          "params": {
+            "media": "",
+            "features": [
+              {
+                "name": "prefers-color-scheme",
+                "value": "light"
+              },
+              {
+                "name": "prefers-reduced-motion",
+                "value": "reduce"
+              },
+              {
+                "name": "forced-colors",
+                "value": "none"
+              },
+              {
+                "name": "prefers-contrast",
+                "value": "no-preference"
+              }
+            ]
+          },
+          "as": "media",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setDeviceMetricsOverride",
+          "params": {
+            "width": 1001,
+            "height": 601,
+            "deviceScaleFactor": 1,
+            "mobile": false,
+            "screenWidth": 1001,
+            "screenHeight": 601
+          },
+          "as": "metrics",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setTouchEmulationEnabled",
+          "params": {
+            "enabled": true,
+            "maxTouchPoints": 2
+          },
+          "as": "touch",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "settle": {
+            "ms": 500
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered focus, media, metrics, touch without an error",
+          "check": {
+            "all": [
+              {
+                "result": "focus",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "media",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "metrics",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "touch",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "focused": {
+          "means": "the unguarded observer reads document.hasFocus() as true in the background tab",
+          "check": {
+            "expression": "document.hasFocus()",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "media": {
+          "means": "the unguarded observer matches prefers-reduced-motion: reduce",
+          "check": {
+            "expression": "matchMedia('(prefers-reduced-motion: reduce)').matches",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "viewport": {
+          "means": "the unguarded observer reads the overridden 1001x601 viewport",
+          "check": {
+            "expression": "innerWidth + 'x' + innerHeight",
+            "equals": "1001x601",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "touch": {
+          "means": "the unguarded observer reads navigator.maxTouchPoints as 2",
+          "check": {
+            "expression": "navigator.maxTouchPoints",
+            "equals": 2,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag} to the client's tab",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "focused": true,
+          "media": true,
+          "viewport": true,
+          "touch": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "focused": true,
+        "media": true,
+        "viewport": true,
+        "touch": true
+      }
+    },
+    {
+      "id": "E7.binding",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-named-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "sliccStockNamed",
+            "executionContextName": "slicc-named-{tag}"
+          },
+          "as": "named",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "tree"
+        },
+        {
+          "cdp": "Page.createIsolatedWorld",
+          "params": {
+            "frameId": {
+              "$result": "tree",
+              "path": "result.frameTree.frame.id"
+            },
+            "worldName": "slicc-placed-{tag}",
+            "grantUniveralAccess": true
+          },
+          "as": "placed",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "sliccStockPlaced",
+            "executionContextId": {
+              "$result": "placed",
+              "path": "result.executionContextId"
+            }
+          },
+          "as": "byId",
+          "requires": ["stockSetup"]
+        },
+        {
+          "isolatedWorld": "slicc-named-{tag}",
+          "expression": "typeof sliccStockNamed === 'function' ? (sliccStockNamed('named-{tag}'), 'function') : typeof sliccStockNamed",
+          "as": "namedSeen"
+        },
+        {
+          "isolatedWorld": "slicc-placed-{tag}",
+          "expression": "typeof sliccStockPlaced === 'function' ? (sliccStockPlaced('placed-{tag}'), 'function') : typeof sliccStockPlaced",
+          "as": "placedSeen"
+        },
+        {
+          "settle": {
+            "ms": 500
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered world, named, placed, byId without an error",
+          "check": {
+            "all": [
+              {
+                "result": "world",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "named",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "placed",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "byId",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "namedExposed": {
+          "means": "the unguarded observer finds the binding scoped by executionContextName in that isolated world",
+          "check": {
+            "result": "namedSeen",
+            "path": "result.value",
+            "equals": "function",
+            "observer": "unguarded"
+          }
+        },
+        "placedExposed": {
+          "means": "the unguarded observer finds the binding scoped by executionContextId in the client's placed isolated world",
+          "check": {
+            "result": "placedSeen",
+            "path": "result.value",
+            "equals": "function",
+            "observer": "unguarded"
+          }
+        },
+        "mainHidden": {
+          "means": "the unguarded observer finds neither binding in the main world",
+          "check": {
+            "expression": "typeof sliccStockNamed + ' ' + typeof sliccStockPlaced",
+            "equals": "undefined undefined",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "namedCalled": {
+          "means": "the client got the Runtime.bindingCalled that the observer's call in the named world fired",
+          "check": {
+            "event": "Runtime.bindingCalled",
+            "where": {
+              "params": {
+                "name": "sliccStockNamed",
+                "payload": "named-{tag}"
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "placedCalled": {
+          "means": "the client got the Runtime.bindingCalled that the observer's call in the placed world fired",
+          "check": {
+            "event": "Runtime.bindingCalled",
+            "where": {
+              "params": {
+                "name": "sliccStockPlaced",
+                "payload": "placed-{tag}"
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, which the client navigated to",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "namedExposed": true,
+          "placedExposed": true,
+          "mainHidden": true,
+          "namedCalled": true,
+          "placedCalled": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "namedExposed": true,
+        "placedExposed": true,
+        "mainHidden": true,
+        "namedCalled": true,
+        "placedCalled": true
+      }
+    },
+    {
+      "id": "C3.tab-attach",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}/doc?n=child-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["autoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=child-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, childNavigate without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childNavigate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the popup page at the URL the client navigated it to through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{target}/doc?n=child-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the popup's first document",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "tab": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "tab": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "C3.tab-create",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "about:blank",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}/doc?n=child-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["autoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=child-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, created, childNavigate without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "created",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childNavigate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the created page at the URL the client navigated it to through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{target}/doc?n=child-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the document the client navigated the created page to",
+      "liveCheck": {
+        "loaded": "{target}/doc?n=child-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "tab": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "tab": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "C3.tab-attach.synthetic",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["syntheticAutoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "open",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}/doc?n=child-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["syntheticAutoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=child-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, childNavigate without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childNavigate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the popup page at the URL the client navigated it to through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{target}/doc?n=child-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the popup's first document",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "tab": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "tab": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "C3.tab-create.synthetic",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["syntheticAutoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "about:blank",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}/doc?n=child-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["syntheticAutoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=child-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, created, childNavigate without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "created",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childNavigate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the created page at the URL the client navigated it to through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{target}/doc?n=child-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the document the client navigated the created page to",
+      "liveCheck": {
+        "loaded": "{target}/doc?n=child-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "tab": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "tab": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "E7.isolated-world",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "tree"
+        },
+        {
+          "cdp": "Page.createIsolatedWorld",
+          "params": {
+            "frameId": {
+              "$result": "tree",
+              "path": "result.frameTree.frame.id"
+            },
+            "worldName": "slicc-ua-{tag}",
+            "grantUniveralAccess": true,
+            "contentSecurityPolicy": "default-src 'none'"
+          },
+          "as": "placed",
+          "requires": ["stockSetup"]
+        },
+        {
+          "isolatedWorld": "slicc-ua-{tag}",
+          "expression": "location.origin + '|' + document.title",
+          "as": "sameOrigin"
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup", "forwardAudit"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered placed without an error",
+          "check": {
+            "result": "placed",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "worldWorks": {
+          "means": "the unguarded observer evaluates in the client's isolated world on the ordinary document",
+          "check": {
+            "result": "sameOrigin",
+            "path": "result.value",
+            "equals": "{target}|doc",
+            "observer": "unguarded"
+          }
+        },
+        "stripped": {
+          "means": "the guard forwarded Page.createIsolatedWorld without grantUniveralAccess and without contentSecurityPolicy, or with each false",
+          "requires": ["forwardAudit"],
+          "check": {
+            "forwarded": {
+              "method": "Page.createIsolatedWorld",
+              "where": {
+                "params": {
+                  "worldName": "slicc-ua-{tag}"
+                }
+              },
+              "params": {
+                "grantUniveralAccess": {
+                  "$absentOr": false
+                },
+                "contentSecurityPolicy": {
+                  "$absentOr": false
+                }
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, which the client navigated to",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "worldWorks": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "worldWorks": true,
+        "stripped": true
+      }
+    },
+    {
+      "id": "E7.init-boundary",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc\rfetch(new URL('/doc?n=bound-cr-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-cr-{tag}\n",
+            "worldName": "slicc-bound-cr-{tag}"
+          },
+          "as": "boundCr",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
+            "worldName": "slicc-bound-ls-{tag}"
+          },
+          "as": "boundLs",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
+            "worldName": "slicc-bound-ps-{tag}"
+          },
+          "as": "boundPs",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "// slicc\u0000fetch(new URL('/doc?n=bound-nul-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-nul-{tag}\n",
+            "worldName": "slicc-bound-nul-{tag}"
+          },
+          "as": "boundNul",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "/* slicc */\nfetch(new URL('/doc?n=bound-block-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-block-{tag}\n",
+            "worldName": "slicc-bound-block-{tag}"
+          },
+          "as": "boundBlock",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "﻿fetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
+            "worldName": "slicc-bound-bom-{tag}"
+          },
+          "as": "boundBom",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "<!-- slicc -->\nfetch(new URL('/doc?n=bound-html-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-html-{tag}\n",
+            "worldName": "slicc-bound-html-{tag}"
+          },
+          "as": "boundHtml",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "dependsOn": [
+              "boundCr",
+              "boundLs",
+              "boundPs",
+              "boundNul",
+              "boundBlock",
+              "boundBom",
+              "boundHtml"
+            ],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "settle": {
+            "ms": 1500
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "ranCr": {
+          "means": "the boundary script for cr ran and fetched {target}/doc?n=bound-cr-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-cr-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "ranLs": {
+          "means": "the boundary script for ls ran and fetched {target}/doc?n=bound-ls-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-ls-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "ranPs": {
+          "means": "the boundary script for ps ran and fetched {target}/doc?n=bound-ps-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-ps-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "installedNul": {
+          "means": "the unguarded observer saw no NUL-boundary world on the protected document",
+          "dependsOn": [],
+          "check": {
+            "world": "slicc-bound-nul-{tag}",
+            "observer": "unguarded",
+            "origin": "{target}"
+          }
+        },
+        "ranNul": {
+          "means": "the boundary script for nul ran and fetched {target}/doc?n=bound-nul-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-nul-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "ranBlock": {
+          "means": "the boundary script for block ran and fetched {target}/doc?n=bound-block-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-block-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "ranBom": {
+          "means": "the boundary script for bom ran and fetched {target}/doc?n=bound-bom-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-bom-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "ranHtml": {
+          "means": "the boundary script for html ran and fetched {target}/doc?n=bound-html-{tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n=bound-html-{tag}",
+            "observer": "fixture"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          },
+          "dependsOn": []
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused a refusable step",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "ranCr": true,
+          "ranLs": true,
+          "ranPs": true,
+          "installedNul": true,
+          "ranNul": false,
+          "ranBlock": true,
+          "ranBom": true,
+          "ranHtml": true,
+          "beacon": false,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "ranCr": false,
+        "ranLs": false,
+        "ranPs": false,
+        "installedNul": false,
+        "ranNul": false,
+        "ranBlock": false,
+        "ranBom": false,
+        "ranHtml": false,
+        "beacon": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "E7.init-world-carry",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-carry-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "settle": {
+            "ms": 500
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "worldOnProtected": {
+          "means": "the unguarded observer saw the named world created on {target}",
+          "check": {
+            "world": "slicc-carry-{tag}",
+            "origin": "{target}",
+            "observer": "unguarded"
+          }
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "worldOnProtected": true,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "worldOnProtected": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "E7.init-world-bfcache",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/bfcache?n={tag}-start"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-bf-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/bfcache?n={tag}-p"
+        },
+        {
+          "settle": {
+            "ms": 5000,
+            "or": {
+              "served": "{target}/bfcache?n={tag}-p",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/bfcache?n={tag}-b"
+        },
+        {
+          "settle": {
+            "ms": 5000,
+            "or": {
+              "served": "{ordinary}/bfcache?n={tag}-b",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "history.back()",
+            "returnByValue": true
+          },
+          "as": "back"
+        },
+        {
+          "settle": {
+            "ms": 3000
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "worldOnProtected": {
+          "means": "after bfcache restore the unguarded observer saw the named no-code world on the protected document",
+          "check": {
+            "world": "slicc-bf-{tag}",
+            "origin": "{target}",
+            "afterClear": true,
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "loaded": {
+          "means": "the stand-in served the protected bfcache document",
+          "check": {
+            "served": "{target}/bfcache?n={tag}-p",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served the protected bfcache document, or the guard refused that navigation (pre + blocked), or refused a refusable setup step",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/bfcache?n={tag}-p",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/bfcache?n={tag}-p",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "worldOnProtected": true,
+          "beacon": false,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "worldOnProtected": false,
+        "beacon": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "E7.init-world-error",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "observer": "fail",
+          "url": "{target}/doc*"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-error-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "ms": 5000
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "worldOnError": {
+          "means": "the unguarded observer saw the admitted no-code world on Chrome's error page for the failed {target} navigation",
+          "check": {
+            "world": "slicc-error-{tag}",
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "pre": {
+          "means": "the stand-in saw a pre-request for {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "pre": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the runner saw a pre-request for the protected URL, or the guard refused the world",
+      "liveCheck": {
+        "any": [
+          {
+            "pre": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "worldOnError": true,
+          "beacon": false,
+          "pre": true
+        }
+      },
+      "expected": {
+        "worldOnError": true,
+        "beacon": false,
+        "pre": "either"
+      },
+      "designDependent": ["pre"]
+    },
+    {
+      "id": "E7.emulation-carry",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setFocusEmulationEnabled",
+          "params": {
+            "enabled": true
+          },
+          "as": "focus",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setEmulatedMedia",
+          "params": {
+            "media": "",
+            "features": [
+              {
+                "name": "prefers-color-scheme",
+                "value": "light"
+              },
+              {
+                "name": "prefers-reduced-motion",
+                "value": "reduce"
+              },
+              {
+                "name": "forced-colors",
+                "value": "none"
+              },
+              {
+                "name": "prefers-contrast",
+                "value": "no-preference"
+              }
+            ]
+          },
+          "as": "media",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setDeviceMetricsOverride",
+          "params": {
+            "width": 1001,
+            "height": 601,
+            "deviceScaleFactor": 1,
+            "mobile": false,
+            "screenWidth": 1001,
+            "screenHeight": 601
+          },
+          "as": "metrics",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setTouchEmulationEnabled",
+          "params": {
+            "enabled": true,
+            "maxTouchPoints": 2
+          },
+          "as": "touch",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "focused": {
+          "means": "the unguarded observer still reads focus emulation on the document after the protected navigation attempt",
+          "check": {
+            "expression": "document.hasFocus()",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "media": {
+          "means": "the unguarded observer matches prefers-reduced-motion: reduce on {target}",
+          "check": {
+            "expression": "matchMedia('(prefers-reduced-motion: reduce)').matches",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "viewport": {
+          "means": "the unguarded observer still reads the admitted viewport override after the protected navigation attempt",
+          "check": {
+            "expression": "innerWidth + 'x' + innerHeight",
+            "equals": "1001x601",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "touch": {
+          "means": "the unguarded observer reads navigator.maxTouchPoints as 2 on {target}",
+          "check": {
+            "expression": "navigator.maxTouchPoints",
+            "equals": 2,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        },
+        "exposed": {
+          "means": "the unguarded observer finds the admitted display overrides (focus, media, viewport, touch) on a document at {target}",
+          "check": {
+            "expression": "location.href.includes('/doc?n={tag}') && location.href.includes(location.origin) && document.hasFocus() && matchMedia('(prefers-reduced-motion: reduce)').matches && innerWidth === 1001 && navigator.maxTouchPoints === 2",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "focused": true,
+          "media": true,
+          "viewport": true,
+          "touch": true,
+          "exposed": true,
+          "beacon": false,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "exposed": false,
+        "beacon": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "E7.isolated-foreign",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "tree"
+        },
+        {
+          "cdp": "Page.createIsolatedWorld",
+          "params": {
+            "frameId": {
+              "$result": "tree",
+              "path": "result.frameTree.frame.id"
+            },
+            "worldName": "slicc-foreign-{tag}",
+            "grantUniveralAccess": true,
+            "contentSecurityPolicy": "default-src 'none'"
+          },
+          "as": "foreign",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["stockSetup"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "noContext": {
+          "means": "createIsolatedWorld on a protected document returned no executionContextId",
+          "dependsOn": ["foreign"],
+          "check": {
+            "any": [
+              {
+                "refused": ["foreign"],
+                "observer": "client"
+              },
+              {
+                "result": "foreign",
+                "path": "result.executionContextId",
+                "equals": {
+                  "$absentOr": 0
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "world": {
+          "means": "the unguarded observer saw world slicc-foreign-{tag} on the document",
+          "check": {
+            "world": "slicc-foreign-{tag}",
+            "observer": "unguarded"
+          },
+          "dependsOn": []
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "noContext": false,
+          "world": true
+        }
+      },
+      "expected": {
+        "noContext": true,
+        "world": false
+      }
+    },
+    {
+      "id": "E7.ua-empty",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setUserAgentOverride",
+          "params": {
+            "userAgent": ""
+          },
+          "as": "ua",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "settle": {
+            "ms": 200
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup", "forwardAudit"],
+      "observe": {
+        "emptyForwarded": {
+          "means": "the forward ledger shows Emulation.setUserAgentOverride with an empty userAgent",
+          "requires": ["forwardAudit"],
+          "dependsOn": [],
+          "check": {
+            "forwarded": {
+              "method": "Emulation.setUserAgentOverride",
+              "where": {
+                "params": {
+                  "userAgent": ""
+                }
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the guard answered or refused the empty user-agent override",
+      "liveCheck": {
+        "any": [
+          {
+            "result": "ua",
+            "path": "ok",
+            "equals": true,
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "emptyForwarded": true
+        }
+      },
+      "expected": {
+        "emptyForwarded": false
+      }
+    },
+    {
+      "id": "E7.binding-main",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "sliccMainNone"
+          },
+          "as": "none",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "sliccMainEmpty",
+            "executionContextName": ""
+          },
+          "as": "empty",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "page": "navigate",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "dependsOn": ["none", "empty"],
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "refused": {
+          "means": "both main-world addBinding calls were refused",
+          "check": {
+            "refused": ["none", "empty"],
+            "observer": "client"
+          },
+          "dependsOn": ["none", "empty"]
+        },
+        "mainHidden": {
+          "means": "the unguarded observer finds neither binding in the main world",
+          "check": {
+            "expression": "typeof sliccMainNone + ' ' + typeof sliccMainEmpty",
+            "equals": "undefined undefined",
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": []
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "refused": false,
+          "mainHidden": false
+        }
+      },
+      "expected": {
+        "refused": true,
+        "mainHidden": true
+      }
+    },
+    {
+      "id": "E7.binding-main-ctx",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/doc?n=mid-{tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Runtime.addBinding",
+          "params": {
+            "name": "sliccMainCtx",
+            "executionContextId": {
+              "$event": "Runtime.executionContextCreated",
+              "where": {
+                "params": {
+                  "context": {
+                    "auxData": {
+                      "isDefault": true
+                    }
+                  }
+                }
+              },
+              "path": "params.context.id"
+            }
+          },
+          "as": "mainCtx",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "mainRefused": {
+          "means": "addBinding for a main-world executionContextId was refused",
+          "check": {
+            "refused": ["mainCtx"],
+            "observer": "client"
+          },
+          "dependsOn": ["mainCtx"]
+        },
+        "mainExposed": {
+          "means": "the unguarded observer finds the main-world binding",
+          "dependsOn": [],
+          "check": {
+            "expression": "typeof sliccMainCtx",
+            "equals": "function",
+            "via": "unguarded",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the mid document",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=mid-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "mainRefused": false,
+          "mainExposed": true
+        }
+      },
+      "expected": {
+        "mainRefused": true,
+        "mainExposed": false
+      }
+    },
+    {
+      "id": "C3.tab-protected",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{target}/doc?n={tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 2000
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "pageAttached": {
+          "means": "the client kept a page session for the protected tab child",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "page",
+                  "url": {
+                    "$contains": "{target}/doc"
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the created page on {target}",
+          "check": {
+            "expression": "location.href",
+            "equals": {
+              "$contains": "{target}/doc"
+            },
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "pre": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "tab": true,
+          "pageAttached": true,
+          "driven": true,
+          "beacon": false
+        }
+      },
+      "expected": {
+        "tab": true,
+        "pageAttached": false,
+        "driven": false,
+        "beacon": false
+      }
+    },
+    {
+      "id": "C3.tab-blank",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "about:blank",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{ordinary}/doc?n=blank-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["autoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{ordinary}/doc?n=blank-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "pageAttached": {
+          "means": "the client got Target.attachedToTarget for a page under the tab",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "page"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the blank tab child at the URL the client navigated through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{ordinary}/doc?n=blank-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the document the client navigated the blank page to",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=blank-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "tab": true,
+          "pageAttached": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "tab": true,
+        "pageAttached": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "C3.tab-protected.synthetic",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["syntheticAutoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{target}/doc?n={tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 2000
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "pageAttached": {
+          "means": "the client kept a page session for the protected tab child",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "page",
+                  "url": {
+                    "$contains": "{target}/doc"
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the created page on {target}",
+          "check": {
+            "expression": "location.href",
+            "equals": {
+              "$contains": "{target}/doc"
+            },
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "pre": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "tab": true,
+          "pageAttached": true,
+          "driven": true,
+          "beacon": false
+        }
+      },
+      "expected": {
+        "tab": true,
+        "pageAttached": false,
+        "driven": false,
+        "beacon": false
+      }
+    },
+    {
+      "id": "C3.tab-blank.synthetic",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["syntheticAutoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "about:blank",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{ordinary}/doc?n=blank-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": ["syntheticAutoAttach"]
+        },
+        {
+          "settle": {
+            "served": "{ordinary}/doc?n=blank-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        }
+      ],
+      "targets": ["ordinary"],
+      "requires": ["syntheticAutoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "tab": {
+          "means": "the client got Target.attachedToTarget for a tab target",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "tab"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "pageAttached": {
+          "means": "the client got Target.attachedToTarget for a page under the tab",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "page"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the blank tab child at the URL the client navigated through its auto-attached page session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{ordinary}/doc?n=blank-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the document the client navigated the blank page to",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=blank-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "tab": true,
+          "pageAttached": true,
+          "driven": true
+        }
+      },
+      "expected": {
+        "tab": true,
+        "pageAttached": true,
+        "driven": true
+      }
+    },
+    {
+      "id": "C3.tab-worker-leak",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{ordinary}/doc?n=host-{tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "(() => { const src = 'onmessage=e=>postMessage(e.data);'; const u = URL.createObjectURL(new Blob([src], {type: 'text/javascript'})); window.__sliccW = new Worker(u); return 'spawned'; })()",
+            "awaitPromise": true,
+            "returnByValue": true
+          },
+          "session": "child",
+          "as": "spawned",
+          "requires": ["autoAttach"]
+        },
+        {
+          "wait": 1500
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, created and spawned without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "created",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "spawned",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "workerAttached": {
+          "means": "the client got Target.attachedToTarget for a worker through the broad filter",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "worker"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "workerExists": {
+          "means": "the unguarded observer finds the page still holds the spawned Worker",
+          "check": {
+            "expression": "typeof window.__sliccW",
+            "equals": "object",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        }
+      },
+      "live": "the stand-in served the host document under the tab",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=host-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "workerAttached": true,
+          "workerExists": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "workerAttached": false,
+        "workerExists": true
+      }
+    },
+    {
+      "id": "C3.tab-iframe-leak",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{ordinary}/doc?n=host-{tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "(() => { const f = document.createElement('iframe'); f.src = '{seven}/doc?n=frame-{tag}'; document.body.appendChild(f); return 'framed'; })()",
+            "returnByValue": true
+          },
+          "session": "child",
+          "as": "framed",
+          "requires": ["autoAttach"]
+        },
+        {
+          "wait": 2000
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession", "stockSetup"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, created and framed without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "created",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "framed",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "iframeExists": {
+          "means": "the unguarded observer finds the iframe element in the host document",
+          "check": {
+            "expression": "!!document.querySelector('iframe[src*=\"frame-{tag}\"]')",
+            "equals": true,
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        },
+        "iframeAttached": {
+          "means": "the client got Target.attachedToTarget for an iframe through the broad filter",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "iframe"
+                }
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served the host document under the tab",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=host-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "iframeExists": true,
+          "iframeAttached": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "iframeExists": true,
+        "iframeAttached": false
+      }
+    },
+    {
+      "id": "C3.tab-service-worker-leak",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=opener-{tag}"
+        },
+        {
+          "cdp": "Target.setAutoAttach",
+          "params": {
+            "autoAttach": true,
+            "waitForDebuggerOnStart": true,
+            "flatten": true,
+            "filter": [
+              {
+                "type": "page",
+                "exclude": true
+              },
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "tabs",
+          "requires": ["autoAttach", "browserSession", "stockSetup"]
+        },
+        {
+          "children": [
+            {
+              "cdp": "Target.setAutoAttach",
+              "params": {
+                "autoAttach": true,
+                "waitForDebuggerOnStart": true,
+                "flatten": true,
+                "filter": [{}]
+              }
+            }
+          ],
+          "requires": ["autoAttach"],
+          "where": {
+            "type": "page"
+          }
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{ordinary}/doc?n=host-{tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "as": "created",
+          "requires": ["browserSession"]
+        },
+        {
+          "wait": 1500
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "(async()=>{ try { await navigator.serviceWorker.register('/sw.js?n={tag}',{scope:'/'}); return 'registered'; } catch(e){ return 'err:'+e.message; } })()",
+            "awaitPromise": true,
+            "returnByValue": true
+          },
+          "session": "child",
+          "as": "registered",
+          "requires": ["autoAttach", "secureOrigin"]
+        },
+        {
+          "wait": 2500
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["autoAttach", "browserSession", "stockSetup", "secureOrigin"],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered tabs, created and registered without an error",
+          "check": {
+            "all": [
+              {
+                "result": "tabs",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "created",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "registered",
+                "path": "result.result.value",
+                "equals": "registered",
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "workerExists": {
+          "means": "the unguarded observer finds a service worker registration for the host",
+          "check": {
+            "expression": "(async()=>{ try { const r=await navigator.serviceWorker.getRegistration(); return !!(r&&String(r.scope||'').length); } catch { return false; } })()",
+            "equals": true,
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        },
+        "workerAttached": {
+          "means": "the client got Target.attachedToTarget for a service_worker through the broad filter",
+          "check": {
+            "event": "Target.attachedToTarget",
+            "where": {
+              "params": {
+                "targetInfo": {
+                  "type": "service_worker",
+                  "url": {
+                    "$contains": "/sw.js"
+                  }
+                }
+              }
+            },
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served the host document under the tab",
+      "liveCheck": {
+        "loaded": "{ordinary}/doc?n=host-{tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "workerExists": true,
+          "workerAttached": true
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "workerExists": true,
+        "workerAttached": false
       }
     }
   ]

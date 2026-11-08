@@ -329,11 +329,13 @@ export function emulatedGuard(browser, options = {}) {
       await pause(5);
     }
   })();
+  const forwarded = [];
   return {
     client: {
       ...client,
       events,
       messages,
+      forwarded,
       waitEvent: (pred, ms) =>
         new Promise((resolve, reject) => {
           const found = events.find(pred);
@@ -733,7 +735,25 @@ export function emulatedGuard(browser, options = {}) {
       throw refusal('cookies in a context slicc did not create');
     options.trace?.push({ at: Date.now(), method, params, sessionId });
     if (options.swallow?.(method, params ?? {}, children.has(sessionId))) return {};
-    const result = await client.send(method, params, sessionId);
+    let forward = params;
+    if (options.stripUniversalAccess && method === 'Page.createIsolatedWorld' && params) {
+      forward = { ...params };
+      delete forward.grantUniveralAccess;
+      delete forward.contentSecurityPolicy;
+    }
+    if (
+      options.narrowAutoAttach &&
+      method === 'Target.setAutoAttach' &&
+      params?.autoAttach &&
+      Array.isArray(params.filter)
+    ) {
+      forward = {
+        ...params,
+        filter: [{ type: 'tab' }, { type: 'page' }],
+      };
+    }
+    forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });
+    const result = await client.send(method, forward, sessionId);
     if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
     if (method === 'Page.stopScreencast' && sessionId) {
       casting.delete(sessionId);

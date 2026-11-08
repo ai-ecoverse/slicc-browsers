@@ -303,7 +303,9 @@ for (const v of guard.vectors ?? []) {
       st.errorPage ||
       st.redirectSecret ||
       st.frameRead ||
-      st.bfcacheRestore
+      st.bfcacheRestore ||
+      st.isolatedWorld ||
+      st.observer
   );
   if (v.kind === 'cdp' && !runnable) gv(`${v.id} is kind cdp with no cdp or page step`);
   if (v.kind === 'text' && runnable) gv(`${v.id} is kind text with a cdp or page step`);
@@ -350,6 +352,7 @@ for (const v of guard.vectors ?? []) {
     if (st.client === 'exit') needs.add('clientExit');
     if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
+      if (c === 'autoAttach' && (st.requires ?? []).includes('syntheticAutoAttach')) continue;
       if (!(st.requires ?? []).includes(c))
         gv(`${v.id}: a ${st.cdp ?? st.page ?? 'children'} step doesn't require ${c}`);
     }
@@ -363,6 +366,57 @@ for (const v of guard.vectors ?? []) {
     gv(
       `${v.id} requires ${[...requires].join(', ') || 'nothing'}, not ${[...needs].join(', ') || 'nothing'}`
     );
+  const named = new Set();
+  const references = (value) =>
+    Array.isArray(value)
+      ? value.flatMap(references)
+      : value && typeof value === 'object'
+        ? Object.hasOwn(value, '$result') || Object.hasOwn(value, '$event')
+          ? [value]
+          : Object.values(value).flatMap(references)
+        : [];
+  for (const st of steps) {
+    for (const ref of references(st.params)) {
+      if (typeof ref.path !== 'string' || ref.path === '')
+        gv(`${v.id}: a reference in ${st.cdp ?? 'a step'} has no path`);
+      if (Object.hasOwn(ref, '$result') && !named.has(ref.$result))
+        gv(`${v.id}: ${st.cdp ?? 'a step'} references ${ref.$result}, which no earlier step names`);
+      if (Object.hasOwn(ref, '$event') && !/^[A-Z][A-Za-z]*\.[a-z][A-Za-z]*$/.test(ref.$event))
+        gv(`${v.id}: ${st.cdp ?? 'a step'} references ${ref.$event}, which isn't a CDP event`);
+    }
+    if (st.as) named.add(st.as);
+  }
+  const worlds = new Set(steps.filter((st) => st.isolatedWorld).map((st) => st.as));
+  const watching = steps.some((st) => st.observer);
+  const leaves = (check) =>
+    check && typeof check === 'object'
+      ? [
+          check,
+          ...[
+            ...(check.all ?? []),
+            ...(check.any ?? []),
+            ...(check.not ? [check.not] : []),
+          ].flatMap(leaves),
+        ]
+      : [];
+  for (const [name, o] of Object.entries(v.observe ?? {})) {
+    for (const leaf of leaves(o.check)) {
+      if ((leaf.world !== undefined || leaf.script !== undefined) && !watching)
+        gv(`${v.id}: ${name} reads the observer's watch without an observer step`);
+      if (leaf.result !== undefined && leaf.observer === 'unguarded' && !worlds.has(leaf.result))
+        gv(
+          `${v.id}: ${name} credits ${leaf.result} to the observer, but no isolatedWorld step names it`
+        );
+    }
+  }
+  if (requires.has('stockSetup') && v.control?.via !== 'unguarded')
+    gv(`${v.id}: a stockSetup row needs an unguarded control`);
+  if (
+    requires.has('stockSetup') &&
+    JSON.stringify(v.expected) === JSON.stringify(v.control?.expected) &&
+    v.targets.some((t) => t !== 'ordinary')
+  )
+    gv(`${v.id}: a stockSetup admit row targets ordinary only`);
   const exits = (check) =>
     Boolean(check?.exit) ||
     [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(exits);

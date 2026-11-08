@@ -60,6 +60,7 @@ const matches = (value, predicate) => {
     if (key === '$some') return Array.isArray(value) && value.some((item) => matches(item, want));
     if (key === '$every')
       return Array.isArray(value) && value.length > 0 && value.every((item) => matches(item, want));
+    if (key === '$absentOr') return value === undefined || value === want;
     return matches(value?.[key], want);
   });
 };
@@ -153,6 +154,7 @@ class Execution {
     this.answers = [];
     this.internalSessions = new Set();
     this.attachSettings = new Map();
+    this.tabSessions = new Set();
     this.childSteps = [];
     this.deferred = [];
     this.expectWhere = [...(vector.setup ?? []), ...(vector.trigger ?? [])].some(
@@ -346,28 +348,61 @@ class Execution {
     });
   }
 
+  clientBlocked(spec, urls) {
+    const session = spec.session === 'child' ? this.sessions.child : this.sessions.page;
+    if (!session) return false;
+    const events = this.client.events.slice(this.eventStart);
+    const requests = new Map();
+    const mainFrames = new Set();
+    const mainLoaders = new Set();
+    for (const event of events) {
+      if (event.sessionId !== session) continue;
+      if (event.method === 'Network.requestWillBeSent')
+        requests.set(event.params.requestId, {
+          url: event.params.request.url,
+          type: event.params.type,
+          frameId: event.params.frameId,
+          loaderId: event.params.loaderId,
+        });
+      if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
+        mainFrames.add(event.params.frame.id);
+        if (event.params.frame.loaderId) mainLoaders.add(event.params.frame.loaderId);
+      }
+    }
+    const navigated = (event) => {
+      const child = event.params.frame.parentId || event.sessionId === this.sessions.child;
+      const frameOk = spec.frame ? child : !event.params.frame.parentId;
+      return (
+        frameOk &&
+        urls.includes(event.params.frame.unreachableUrl) &&
+        event.params.frame.url.startsWith('chrome-error://')
+      );
+    };
+    const failed = (event) => {
+      const request = requests.get(event.params.requestId);
+      if (
+        request?.type !== 'Document' ||
+        !urls.includes(request.url) ||
+        !(event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT')
+      )
+        return false;
+      if (spec.frame) return Boolean(request.frameId && !mainFrames.has(request.frameId));
+      return (
+        (request.frameId && mainFrames.has(request.frameId)) ||
+        (request.loaderId && mainLoaders.has(request.loaderId))
+      );
+    };
+    return events.some(
+      (event) =>
+        event.sessionId === session &&
+        ((event.method === 'Page.frameNavigated' && navigated(event)) ||
+          (event.method === 'Network.loadingFailed' && failed(event)))
+    );
+  }
+
   async blocked(spec, observer) {
     const urls = (spec.anyOf ?? [spec.url]).map(address);
-    const events = this.client.events.slice(this.eventStart);
-    if (observer === 'client') {
-      const requests = new Map(
-        events
-          .filter((event) => event.method === 'Network.requestWillBeSent')
-          .map((event) => [event.params.requestId, event.params.request.url])
-      );
-      return events.some(
-        (event) =>
-          (event.method === 'Page.frameNavigated' &&
-            (!spec.frame ||
-              event.params.frame.parentId ||
-              event.sessionId === this.sessions.child) &&
-            urls.includes(event.params.frame.unreachableUrl) &&
-            event.params.frame.url.startsWith('chrome-error://')) ||
-          (event.method === 'Network.loadingFailed' &&
-            urls.includes(requests.get(event.params.requestId)) &&
-            (event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT'))
-      );
-    }
+    if (observer === 'client') return this.clientBlocked(spec, urls);
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
     const attached = await outcome(
@@ -378,21 +413,18 @@ class Execution {
       const read = await outcome(
         this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
       );
-      const visit = (tree) =>
+      const blockedFrame = (frame) =>
         Boolean(
-          tree &&
-            ((urls.includes(tree.frame.unreachableUrl) &&
-              tree.frame.url.startsWith('chrome-error://')) ||
-              (tree.childFrames ?? []).some(visit))
+          frame && urls.includes(frame.unreachableUrl) && frame.url.startsWith('chrome-error://')
         );
-      if (
-        read.ok &&
-        (spec.frame
-          ? (read.result.frameTree.childFrames ?? []).some(visit)
-          : visit(read.result.frameTree))
-      )
-        return true;
-      return spec.frame ? Boolean(await this.blockedFrameTarget(urls, targetId)) : false;
+      const visit = (tree) =>
+        Boolean(tree && (blockedFrame(tree.frame) || (tree.childFrames ?? []).some(visit)));
+      if (!read.ok) return false;
+      if (spec.frame) {
+        if ((read.result.frameTree.childFrames ?? []).some(visit)) return true;
+        return Boolean(await this.blockedFrameTarget(urls, targetId));
+      }
+      return blockedFrame(read.result.frameTree.frame);
     } finally {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
@@ -530,6 +562,7 @@ class Execution {
 
   async pump() {
     while (!this.stopped && !this.clients.flight?.abandoned) {
+      this.failWatched();
       for (const event of this.client.events.slice(this.eventStart)) {
         if (this.processed.has(event)) continue;
         this.processed.add(event);
@@ -557,27 +590,35 @@ class Execution {
     const info = event.params.targetInfo;
     const child = event.params.sessionId;
     if (info?.type === 'browser_ui') return;
+    const paused = event.params.waitingForDebugger || this.tabSessions.has(event.sessionId);
     if (this.expectWhere && !this.childWhere) {
       this.deferred.push(event);
       return;
     }
     if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
       return;
-    if (this.childWhere && !this.childMatches(info)) {
-      if (event.params.waitingForDebugger)
+    const matched = !this.childWhere || this.childMatches(info);
+    const isTab = info?.type === 'tab';
+    if (!matched && !isTab) {
+      if (paused)
         this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
       return;
     }
-    this.sessions.child = child;
-    if (info?.targetId) this.targets.push(info.targetId);
+    if (isTab) this.tabSessions.add(child);
+    if (matched) {
+      this.sessions.child = child;
+      if (info?.targetId) this.targets.push(info.targetId);
+    }
+    const nested = matched
+      ? this.childSteps
+      : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
     const started = (async () => {
-      const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
-      if (reload < 0) await this.execute(this.childSteps, child);
+      const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
+      if (reload < 0) await this.execute(nested, child);
       else {
-        await this.execute(this.childSteps.slice(0, reload), child);
+        await this.execute(nested.slice(0, reload), child);
         const start = this.client.events.length;
-        if (event.params.waitingForDebugger)
-          await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+        if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
         await this.poll(
           () =>
             this.client.events
@@ -585,12 +626,11 @@ class Execution {
               .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === child),
           1500
         );
-        await this.execute(this.childSteps.slice(reload), child);
+        await this.execute(nested.slice(reload), child);
       }
       const resumed = this.client.events.length;
-      if (event.params.waitingForDebugger)
-        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
-      if (this.childSteps.some((step) => step.cdp === 'Page.enable'))
+      if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+      if (nested.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
     })().catch((error) => this.errors.push(String(error.message ?? error)));
     this.childRuns.set(child, started);
@@ -657,8 +697,11 @@ class Execution {
   }
 
   childMatches(info) {
+    if (this.childWhere.type && info?.type !== this.childWhere.type) return false;
     if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
-    return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
+    if (this.childWhere.urlPrefix !== undefined)
+      return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
+    return true;
   }
 
   async childrenSettled() {
@@ -740,6 +783,10 @@ class Execution {
         phase,
         Boolean(childSession) && !out.ok && this.detached(childSession)
       );
+      if ((step.isolatedWorld || step.observer) && !out.ok)
+        this.notes.push(
+          `${step.isolatedWorld ? `isolatedWorld ${step.isolatedWorld}` : `observer ${step.observer}`}: ${out.error?.message ?? 'failed'}`
+        );
       this.options.debug?.({ step, out, side: this.side });
     }
   }
@@ -921,9 +968,134 @@ class Execution {
         })
       );
     if (step.guess) return this.guess(step.guess, session);
+    if (step.isolatedWorld) return outcome(this.isolatedWorld(step));
+    if (step.observer) return outcome(this.watchPage(step));
     if (step.cdp) return this.cdp(step, session, phase);
     if (step.page) return this.page(step, session, phase);
     throw new Error('Unknown step kind');
+  }
+
+  referenced(value, session) {
+    if (Array.isArray(value)) return value.map((item) => this.referenced(item, session));
+    if (!value || typeof value !== 'object') return value;
+    if (Object.hasOwn(value, '$result') || Object.hasOwn(value, '$event')) {
+      const source = Object.hasOwn(value, '$result')
+        ? this.calls[value.$result]
+        : this.actor()
+            .events.slice(this.eventStart)
+            .filter(
+              (event) =>
+                event.method === value.$event &&
+                (session === undefined || event.sessionId === session) &&
+                matches(event, value.where ?? {})
+            )
+            .at(-1);
+      const found = at(source, value.path);
+      if (found === undefined)
+        throw new Error(`unresolved reference ${value.$result ?? value.$event} ${value.path}`);
+      return found;
+    }
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, this.referenced(item, session)])
+    );
+  }
+
+  async isolatedWorld(step) {
+    const targetId = step.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    const { sessionId } = await this.reader.send('Target.attachToTarget', {
+      targetId,
+      flatten: true,
+    });
+    try {
+      const { frameTree } = await this.reader.send('Page.getFrameTree', {}, sessionId);
+      const { executionContextId } = await this.reader.send(
+        'Page.createIsolatedWorld',
+        { frameId: frameTree.frame.id, worldName: step.isolatedWorld },
+        sessionId
+      );
+      const read = await this.reader.send(
+        'Runtime.evaluate',
+        {
+          expression: step.expression,
+          contextId: executionContextId,
+          awaitPromise: true,
+          returnByValue: true,
+        },
+        sessionId
+      );
+      return {
+        contextId: executionContextId,
+        value: read.result?.value,
+        url: frameTree.frame.url,
+        ...(read.exceptionDetails ? { exception: true } : {}),
+      };
+    } finally {
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
+    }
+  }
+
+  async watchPage(step) {
+    if (!this.watch) {
+      const start = this.reader.events.length;
+      const { sessionId } = await this.reader.send('Target.attachToTarget', {
+        targetId: this.pageTarget,
+        flatten: true,
+      });
+      this.watch = { sessionId, start, failed: new Set() };
+      await this.reader.send('Page.enable', {}, sessionId);
+      await this.reader.send('Runtime.enable', {}, sessionId);
+      await this.reader.send('Debugger.enable', {}, sessionId);
+    } else if (step.observer === 'watch') {
+      this.watch.cleared = this.reader.events.length;
+    }
+    if (step.observer === 'fail') {
+      await this.reader.send(
+        'Fetch.enable',
+        { patterns: [{ urlPattern: step.url, requestStage: 'Request' }] },
+        this.watch.sessionId
+      );
+      this.watch.failing = true;
+    }
+    return { watching: true };
+  }
+
+  failWatched() {
+    if (!this.watch?.failing) return;
+    for (const event of this.reader.events.slice(this.watch.start)) {
+      if (
+        event.method !== 'Fetch.requestPaused' ||
+        event.sessionId !== this.watch.sessionId ||
+        this.watch.failed.has(event.params.requestId)
+      )
+        continue;
+      this.watch.failed.add(event.params.requestId);
+      this.pending.push(
+        outcome(
+          this.reader.send(
+            'Fetch.failRequest',
+            { requestId: event.params.requestId, errorReason: 'BlockedByClient' },
+            this.watch.sessionId
+          )
+        )
+      );
+    }
+  }
+
+  watched(c) {
+    if (!this.watch) return 'unwatched';
+    const from = c.afterClear ? (this.watch.cleared ?? this.watch.start) : this.watch.start;
+    const until = c.afterClear ? undefined : this.watch.cleared;
+    return this.reader.events
+      .slice(from, until)
+      .some(
+        (event) =>
+          event.sessionId === this.watch.sessionId &&
+          (c.world !== undefined
+            ? event.method === 'Runtime.executionContextCreated' &&
+              event.params.context.name === c.world &&
+              (c.origin === undefined || event.params.context.origin === c.origin)
+            : event.method === 'Debugger.scriptParsed' && event.params.url === c.script)
+      );
   }
 
   async settle(settle) {
@@ -1000,7 +1172,12 @@ class Execution {
     if (step.cdp === 'Target.detachFromTarget') await sleep(this.delay);
     if (step.cdp === 'Target.setAutoAttach' && step.params?.autoAttach === false)
       this.cleanupEventStart = this.client.events.length;
-    const params = { ...step.params };
+    let params;
+    try {
+      params = this.referenced({ ...step.params }, sessionId);
+    } catch (error) {
+      return { ok: false, error: { message: error.message } };
+    }
     const session =
       step.session === 'page-or-browser' &&
       supported(['browserSession'], this.options.capabilities) &&
@@ -1136,10 +1313,36 @@ class Execution {
     return false;
   }
 
+  forwardedCheck(name, check, want) {
+    const ledger = this.actor().forwarded;
+    if (!Array.isArray(ledger)) {
+      if (want === undefined) return false;
+      this.incomplete.push(`${name}: forwarding audit unavailable`);
+      return 'incomplete';
+    }
+    const c = expand(check, this.vars);
+    const call = [...ledger]
+      .reverse()
+      .find(
+        (entry) => entry.method === c.forwarded.method && matches(entry, c.forwarded.where ?? {})
+      );
+    if (!call) return false;
+    return matches(call.params ?? {}, c.forwarded.params ?? {});
+  }
+
+  async absenceCheck(check) {
+    const first = await this.check(check);
+    if (first === 'unwatched' || first === 'incomplete') return first;
+    if (first === true) return true;
+    const late = await this.poll(async () => (await this.check(check)) === true, observeMs, false);
+    return !!late;
+  }
+
   async observe(name, check) {
     const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
       name
     ];
+    if (check?.forwarded) return this.forwardedCheck(name, check, want);
     if (
       check?.result &&
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
@@ -1157,13 +1360,17 @@ class Execution {
               supported(step.requires, this.options.capabilities)
           )
         : [];
-    if (want !== true || (check?.observer !== 'fixture' && !snapshots.length))
-      return this.check(check);
+    const polled =
+      check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
+    if (want === false && (check?.world !== undefined || check?.script !== undefined))
+      return this.absenceCheck(check);
+    if (want !== true || (!polled && !snapshots.length)) return this.check(check);
     let seen = false;
     const met = await this.poll(
       async () => {
         if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
+        if (seen === 'unwatched' || seen === 'incomplete') return true;
         if (seen !== true && snapshots.length) {
           await this.execute(snapshots, undefined, 'observation');
           if (this.clients.flight?.abandoned) return true;
@@ -1175,6 +1382,7 @@ class Execution {
       false,
       snapshots.length > 0
     );
+    if (seen === 'unwatched' || seen === 'incomplete') return seen;
     if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
@@ -1189,6 +1397,24 @@ class Execution {
     return Boolean(out?.result?.incomplete) && at(out, check.path) === undefined;
   }
 
+  async compoundCheck(c) {
+    if (c.all) {
+      const parts = await Promise.all(c.all.map((item) => this.check(item)));
+      if (parts.includes('unwatched')) return 'unwatched';
+      if (parts.includes('incomplete')) return 'incomplete';
+      return parts.every(Boolean);
+    }
+    if (c.any) {
+      const parts = await Promise.all(c.any.map((item) => this.check(item)));
+      if (parts.includes('unwatched') && !parts.some((part) => part === true)) return 'unwatched';
+      if (parts.includes('incomplete') && !parts.some((part) => part === true)) return 'incomplete';
+      return parts.some((part) => part === true);
+    }
+    const inner = await this.check(c.not);
+    if (inner === 'unwatched' || inner === 'incomplete') return inner;
+    return !inner;
+  }
+
   async check(check) {
     const c = expand(check, this.vars);
     if (!(await this.ready(c))) return false;
@@ -1200,9 +1426,7 @@ class Execution {
       return this.trace.some(
         (entry) => entry.phase === c.executed && (entry.out.ok || entry.refused)
       );
-    if (c.all) return (await Promise.all(c.all.map((item) => this.check(item)))).every(Boolean);
-    if (c.any) return (await Promise.all(c.any.map((item) => this.check(item)))).some(Boolean);
-    if (c.not) return !(await this.check(c.not));
+    if (c.all || c.any || c.not) return this.compoundCheck(c);
     if (c.event) return events.some((e) => e.method === c.event && matches(e, c.where ?? {}));
     if (c.hops || c.beacon || c.served || c.header) return this.requestCheck(c);
     if (c.title !== undefined || c.expression !== undefined) return this.readCheck(c);
@@ -1279,6 +1503,11 @@ class Execution {
     if (c.history) return this.history(c.history);
     if (c.frameBlocked) return this.frameBlocked(c.frameBlocked);
     if (c.pre || c.loaded) return this.attemptCheck(c);
+    if (c.world !== undefined || c.script !== undefined) {
+      const seen = this.watched(c);
+      if (seen === 'unwatched') return 'unwatched';
+      return seen;
+    }
   }
 
   callCheck(c) {
@@ -1398,6 +1627,10 @@ class Execution {
       }
       if (dependencies.some((dep) => this.refused[dep] === true)) continue;
       observed[name] = await this.observe(name, observation.check);
+      if (observed[name] === 'unwatched') {
+        observed[name] = 'incomplete';
+        this.incomplete.push(`${name}: absence watch not installed`);
+      }
       if (exitsClient(this.vector) && dependencies.length && observed[name] === false) {
         observed[name] = 'incomplete';
         this.incomplete.push(`${name}: pre-exit evidence not observed`);
@@ -1476,6 +1709,10 @@ class Execution {
     } finally {
       this.stopped = true;
       await pumping;
+      if (this.watch)
+        await outcome(
+          this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
+        );
       for (const session of this.attachSettings.keys())
         await outcome(
           this.client.send(
@@ -1519,6 +1756,9 @@ const observerRequired = (check) => {
 };
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
+  allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
+    (step) => step.isolatedWorld || step.observer
+  ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(
     (observation) => observerRequired(observation.check) || observerRequired(observation.eitherWhen)

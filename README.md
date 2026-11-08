@@ -183,17 +183,21 @@ It also offers `storageKey(key)` and `unparseable(text)`. A Go or Rust implement
 
 ## Guard vectors
 
-A guard sits between a CDP client, such as an agent's browser tool, and the browser, and keeps the client away from protected origins. `guard-vectors.json` holds more than a hundred attacks on that promise, and every guard must pass them all. They include navigation, redirect chains, popups and frames, request interception, cookie and storage access, privileged pages, error pages, foreign extension worlds, debugger and instrumentation tricks, and session overrides that would leak into a protected page.
+A guard sits between a CDP client, such as an agent's browser tool, and the browser, and keeps the client away from protected origins. `guard-vectors.json` holds more than a hundred attacks on that promise, and every guard must pass them all. They cover navigation, redirect chains, popups, frames, request interception, cookies, storage, privileged and error pages, foreign extension worlds, debugger tricks and session overrides that would leak into a protected page.
 
 Each vector runs twice. The **control** runs it against an ordinary origin, where it must work. The **guarded** leg runs it through the guard against a protected target, where it must be refused or have no effect. A **liveness** check, made outside the guard, proves the protected target was really there. A row passes only when all three do, so a guard can't pass by breaking everything, and a test can't pass by never reaching the target.
 
-When a vector compares ordinary and protected fixture markers, those markers do not contain one another. Protected-marker checks still examine complete probe replies, including errors, and the vector's client events and messages, including encoded values.
-
 A guard may refuse every client navigation to an `about:` URL that inherits an origin, such as `about:blank`. Refusing an ordinary navigation away from a protected page still fails.
 
-Client-exit controls use the unguarded observer; persistent-capability refusals are valid evidence, granted instruments must leave no effects after exit, and missing answers remain incomplete.
+### What a guard must let through
 
-Forwarding audits retain early snapshots as evidence. A complete final ledger supersedes an incomplete early snapshot, but any forwarding reported in either audit remains a failure. An incomplete final audit remains missing evidence.
+For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stockSetup` admits on ordinary pages:
+- `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` on the whole string without the multiline flag (no code), with any `worldName` or `runImmediately`, and its removal;
+- exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
+- `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
+- `Target.setAutoAttach`: accept the call but narrow the filter to tab targets, hold pages under the tab like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
+
+The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Admitted display overrides and no-code init scripts must not remain in effect on a protected document — refuse that navigation, or clear them before it runs. Undeclared, they skip, never pass.
 
 ### Running them
 
@@ -225,20 +229,20 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
-| `browserSession` | send commands to the browser session, not only to a page |
+| `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
-| `discovery` | report target creation and changes without a session |
-| `chromeUrlsAttach` | attach to `chrome://` pages (CDP over a DevTools port can; `chrome.debugger` can't) |
-| `extensionWorld` | host a foreign extension's content script on the test page |
-| `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
-| `clientExit` | close the guarded client in the middle of a row |
-| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
-
-`forwardAudit` permits observer restore after a client history timeout only with terminal `historyTrigger: { id: "history-trigger", complete: true, forwarded: false }` proof from `audit({ historyTrigger: command, probes: [], final: false })`, keeping the probe ledger open; missing proof, forwarding or a late successful reply never qualifies as refusal.
+| `discovery` | report target create/change without a session |
+| `chromeUrlsAttach` | attach to `chrome://` pages (DevTools-port CDP; not `chrome.debugger`) |
+| `extensionWorld` | host a foreign extension content script on the test page |
+| `extensionFrame` | host the harness extension frame an ordinary test page embeds |
+| `clientExit` | close the guarded client mid-row |
+| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
+| `secureOrigin` | HTTPS origins (service workers) |
+| `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 
 ### Reading the result
 
-Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `incomplete` (the test couldn't gather its own evidence) or `not-run` (vectors described only in words). `summary()` turns the rows into one line:
+Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `incomplete` (evidence missing) or `not-run` (words only). `summary()` makes one line:
 
 ```text
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
@@ -266,7 +270,7 @@ A new discovery behaviour gets a corpus case, and a new guard behaviour gets a g
 
 CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, then `npm test` split over shards by timing, then a Claude and a Codex review; the merge queue runs lint and the tests again. Tests run on Linux only.
 
-Every merge to `main` that warrants it is released by semantic-release in the same workflow, as one version for all three packages. The `vX.Y.Z` tag is the Go release, and npm gets the package with provenance through trusted publishing. Then `ci.yml` publishes the crate to crates.io, also with trusted publishing, and asks the Go module proxy and pkg.go.dev for the new tag. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
+Every merge to `main` that warrants it is released by semantic-release as one version for all three packages. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
 
 ## License
 

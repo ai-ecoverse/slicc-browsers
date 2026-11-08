@@ -37,6 +37,9 @@ export const capabilities = {
   discovery: true,
   clientExit: true,
   siteIsolationOff: true,
+  stockSetup: true,
+  syntheticAutoAttach: true,
+  forwardAudit: true,
 };
 
 export const drivable = new Set([
@@ -45,6 +48,16 @@ export const drivable = new Set([
   'C8.iframe-error',
   'C9.page-drivable',
   'X1.after-exit',
+  'E7.init-script',
+  'E7.init-world-error',
+  'E7.emulation',
+  'E7.binding',
+  'C3.tab-attach',
+  'C3.tab-create',
+  'C3.tab-attach.synthetic',
+  'C3.tab-create.synthetic',
+  'C3.tab-blank',
+  'C3.tab-blank.synthetic',
 ]);
 
 const every = ['seven', 'vault', 'vault-x', 'apex'];
@@ -158,16 +171,28 @@ export function verdictProblems(set, targets, results) {
   return problems;
 }
 
+function record(client) {
+  const forwarded = client.forwarded ?? [];
+  if (!client.forwarded) client.forwarded = forwarded;
+  const send = client.send.bind(client);
+  client.send = (method, params = {}, sessionId) => {
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return send(method, params, sessionId);
+  };
+  return client;
+}
+
 async function factory(fixture, browsers, timeouts) {
   let shared;
   const clientFactory = async ({ slot, vector }) => {
     const browser = vector.requires?.includes('siteIsolationOff')
       ? await (shared ??= launch(fixture, { isolation: false }))
       : browsers[slot];
-    const raw = await connect(browser.ws);
+    const raw = record(await connect(browser.ws));
     const client = /^E[46]\b/.test(vector.id)
       ? {
           ...raw,
+          forwarded: raw.forwarded,
           send: (method, params, sessionId) =>
             raw.send(method, params, sessionId).catch((error) => {
               if (/timed out/i.test(error.message)) timeouts.push(`${vector.id}: ${method}`);
@@ -175,9 +200,7 @@ async function factory(fixture, browsers, timeouts) {
             }),
         }
       : raw;
-    if (!vector.requires?.includes('clientExit'))
-      return { client, unguarded: client, close: () => client.close() };
-    const unguarded = await connect(browser.ws);
+    const unguarded = record(await connect(browser.ws));
     return {
       client,
       unguarded,

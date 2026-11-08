@@ -91,7 +91,8 @@
         "discovery",
         "clientExit",
         "siteIsolationOff",
-        "inboundDelay"
+        "inboundDelay",
+        "secureOrigin"
       ],
       "properties": {
         "autoAttach": {
@@ -106,17 +107,50 @@
           "type": "string",
           "minLength": 1
         },
-        "extensionWorld": { "type": "string", "minLength": 1 },
-        "extensionFrame": { "type": "string", "minLength": 1 },
-        "discovery": { "type": "string", "minLength": 1 },
+        "extensionWorld": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extensionFrame": {
+          "type": "string",
+          "minLength": 1
+        },
+        "discovery": {
+          "type": "string",
+          "minLength": 1
+        },
         "chromeUrlsAttach": {
           "type": "string",
           "minLength": 1
         },
-        "clientExit": { "type": "string", "minLength": 1 },
-        "siteIsolationOff": { "type": "string", "minLength": 1 },
-        "inboundDelay": { "type": "string", "minLength": 1 },
-        "forwardAudit": { "type": "string", "minLength": 1 }
+        "clientExit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "siteIsolationOff": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inboundDelay": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secureOrigin": {
+          "type": "string",
+          "minLength": 1
+        },
+        "forwardAudit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stockSetup": {
+          "type": "string",
+          "minLength": 1
+        },
+        "syntheticAutoAttach": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "placeholders": {
@@ -150,7 +184,10 @@
         "clientExit",
         "siteIsolationOff",
         "inboundDelay",
-        "forwardAudit"
+        "secureOrigin",
+        "forwardAudit",
+        "stockSetup",
+        "syntheticAutoAttach"
       ]
     },
     "requires": {
@@ -449,13 +486,22 @@
           "additionalProperties": false,
           "required": ["bfcacheRestore", "origin", "as", "requires"],
           "properties": {
-            "bfcacheRestore": { "enum": ["observer", "history"] },
-            "origin": { "type": "string", "minLength": 1 },
-            "as": { "$ref": "#/$defs/name" },
+            "bfcacheRestore": {
+              "enum": ["observer", "history"]
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
             "requires": {
               "$ref": "#/$defs/requires",
               "type": "array",
-              "contains": { "const": "inboundDelay" }
+              "contains": {
+                "const": "inboundDelay"
+              }
             }
           }
         },
@@ -464,8 +510,12 @@
           "additionalProperties": false,
           "required": ["redirectSecret", "as"],
           "properties": {
-            "redirectSecret": { "enum": ["headers", "mix", "body"] },
-            "as": { "$ref": "#/$defs/name" }
+            "redirectSecret": {
+              "enum": ["headers", "mix", "body"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            }
           }
         },
         {
@@ -473,10 +523,18 @@
           "additionalProperties": false,
           "required": ["errorPage", "as"],
           "properties": {
-            "errorPage": { "enum": ["recover", "restore", "sticky"] },
-            "secret": { "enum": ["all", "query", "fragment"] },
-            "requires": { "$ref": "#/$defs/requires" },
-            "as": { "$ref": "#/$defs/name" }
+            "errorPage": {
+              "enum": ["recover", "restore", "sticky"]
+            },
+            "secret": {
+              "enum": ["all", "query", "fragment"]
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            }
           }
         },
         {
@@ -484,11 +542,22 @@
           "additionalProperties": false,
           "required": ["frameRead", "from", "as"],
           "properties": {
-            "frameRead": { "enum": ["blank", "srcdoc"] },
-            "from": { "type": "string", "minLength": 1 },
-            "on": { "$ref": "#/$defs/on" },
-            "requires": { "$ref": "#/$defs/requires" },
-            "as": { "$ref": "#/$defs/name" }
+            "frameRead": {
+              "enum": ["blank", "srcdoc"]
+            },
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            }
           }
         },
         {
@@ -554,7 +623,9 @@
           "additionalProperties": false,
           "required": ["client"],
           "properties": {
-            "client": { "const": "exit" }
+            "client": {
+              "const": "exit"
+            }
           }
         },
         {
@@ -724,13 +795,33 @@
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["openerId"],
-                  "properties": { "openerId": { "const": "page" } }
+                  "properties": {
+                    "openerId": {
+                      "const": "page"
+                    }
+                  }
                 },
                 {
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["urlPrefix"],
-                  "properties": { "urlPrefix": { "type": "string", "minLength": 1 } }
+                  "properties": {
+                    "urlPrefix": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
                 }
               ]
             },
@@ -866,6 +957,68 @@
               "$ref": "#/$defs/on"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["isolatedWorld", "expression", "as"],
+          "properties": {
+            "isolatedWorld": {
+              "type": "string",
+              "minLength": 1
+            },
+            "expression": {
+              "type": "string",
+              "minLength": 1
+            },
+            "session": {
+              "enum": ["page", "child"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["observer"],
+          "properties": {
+            "observer": {
+              "enum": ["watch", "fail"]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "on": {
+              "$ref": "#/$defs/on"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          },
+          "if": {
+            "properties": {
+              "observer": {
+                "const": "fail"
+              }
+            }
+          },
+          "then": {
+            "required": ["url"]
+          },
+          "else": {
+            "not": {
+              "required": ["url"]
+            }
+          }
         }
       ]
     },
@@ -950,6 +1103,33 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["forwarded", "observer"],
+          "properties": {
+            "forwarded": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "where": {
+                  "$ref": "#/$defs/predicate"
+                },
+                "params": {
+                  "$ref": "#/$defs/predicate"
+                }
+              }
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["result", "equals", "observer"],
           "properties": {
             "result": {
@@ -962,7 +1142,7 @@
               "$ref": "#/$defs/predicate"
             },
             "observer": {
-              "const": "client"
+              "enum": ["client", "unguarded"]
             }
           }
         },
@@ -1352,6 +1532,44 @@
               "const": "unguarded"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["world", "observer"],
+          "properties": {
+            "world": {
+              "type": "string",
+              "minLength": 1
+            },
+            "origin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "afterClear": {
+              "const": true
+            },
+            "observer": {
+              "const": "unguarded"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["script", "observer"],
+          "properties": {
+            "script": {
+              "type": "string",
+              "minLength": 1
+            },
+            "afterClear": {
+              "const": true
+            },
+            "observer": {
+              "const": "unguarded"
+            }
+          }
         }
       ]
     },
@@ -1409,6 +1627,9 @@
                   "type": "string"
                 }
               }
+            },
+            "$absentOr": {
+              "type": ["string", "boolean", "number", "null"]
             }
           },
           "additionalProperties": {

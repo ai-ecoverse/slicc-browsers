@@ -29641,7 +29641,8 @@
               }
             ],
             "observer": "client"
-          }
+          },
+          "absencePoll": true
         },
         "workerDiscovered": {
           "means": "a discovery event carries the protected worker script URL to the client",
@@ -30064,7 +30065,8 @@
               }
             ],
             "observer": "client"
-          }
+          },
+          "absencePoll": true
         },
         "workerDiscovered": {
           "means": "a discovery event carries the protected worker script URL to the client",
@@ -30487,7 +30489,8 @@
               }
             ],
             "observer": "client"
-          }
+          },
+          "absencePoll": true
         },
         "workerDiscovered": {
           "means": "a discovery event carries the protected worker script URL to the client",
@@ -30911,7 +30914,8 @@
               }
             ],
             "observer": "client"
-          }
+          },
+          "absencePoll": true
         },
         "workerDiscovered": {
           "means": "a discovery event carries the protected worker script URL to the client",

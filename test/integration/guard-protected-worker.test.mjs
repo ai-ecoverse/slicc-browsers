@@ -156,6 +156,7 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     identityAny(vector.observe.workerDiscovered.check, kind.type, kind.path);
     assert.equal(vector.observe.workerReachable.check.result, 'probe', id);
     assert.equal(vector.observe.workerReachable.check.path, 'result.reachable', id);
+    assert.equal(vector.observe.workerListed.absencePoll, true, id);
   }
 });
 
@@ -299,37 +300,63 @@ test('a lying attach reply that still returns a session id fails attachSession',
   }
 });
 
-test('probeWorkerSessions fails closed when any session evaluate errors', async () => {
+test('probeWorkerSessions treats tab refusal plus page false as not reachable', async () => {
   const client = {
     async send(_method, _params, sessionId) {
-      if (sessionId === 'decoy') throw new Error('slicc: refused: protected target');
+      if (sessionId === 'tab') throw new Error('slicc: refused: protected target');
       return { result: { value: false } };
     },
   };
   const out = await probeWorkerSessions({
     client,
-    sessions: ['decoy', 'page'],
+    sessions: ['tab', 'page'],
     path: '/worker.js',
     tag: 't',
   });
   assert.equal(out.reachable, false);
-  assert.match(out.incomplete ?? '', /evaluate failed/);
+  assert.equal(out.incomplete, undefined);
+  assert.deepEqual(out.probedIds, ['tab', 'page']);
 });
 
-test('probeWorkerSessions reports reachable when a later session evaluates true', async () => {
+test('probeWorkerSessions keeps a true after an earlier rejection', async () => {
   const client = {
     async send(_method, _params, sessionId) {
+      if (sessionId === 'tab') throw new Error('Runtime.evaluate: not allowed');
       return { result: { value: sessionId === 'worker' } };
+    },
+  };
+  const first = await probeWorkerSessions({
+    client,
+    sessions: ['tab', 'worker'],
+    path: '/worker.js',
+    tag: 't',
+  });
+  assert.equal(first.reachable, true);
+  assert.equal(first.incomplete, undefined);
+  const second = await probeWorkerSessions({
+    client,
+    sessions: ['worker', 'tab'],
+    path: '/worker.js',
+    tag: 't',
+  });
+  assert.equal(second.reachable, true);
+  assert.equal(second.incomplete, undefined);
+});
+
+test('probeWorkerSessions is incomplete only when every probe is a harness error', async () => {
+  const client = {
+    async send() {
+      throw new Error('waitEvent timed out');
     },
   };
   const out = await probeWorkerSessions({
     client,
-    sessions: ['page', 'worker'],
+    sessions: ['a', 'b'],
     path: '/worker.js',
     tag: 't',
   });
-  assert.equal(out.reachable, true);
-  assert.equal(out.incomplete, undefined);
+  assert.equal(out.reachable, false);
+  assert.match(out.incomplete ?? '', /harness error/);
 });
 
 test('stockSetup and README admit either narrowing or per-target hiding for workers', () => {

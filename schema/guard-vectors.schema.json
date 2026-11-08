@@ -223,6 +223,9 @@
         },
         "eitherWhen": {
           "$ref": "#/$defs/check"
+        },
+        "absencePoll": {
+          "type": "boolean"
         }
       }
     },

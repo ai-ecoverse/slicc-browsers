@@ -88,31 +88,64 @@ export function workerProbeExpression(path, tag) {
   return `(() => { try { const href = String(self.location && self.location.href || ''); const tagged = new RegExp(${JSON.stringify(tagged)}).test(href); return (typeof WorkerGlobalScope === 'function' || tagged) && href.includes(${JSON.stringify(path)}); } catch { return false; } })()`;
 }
 
+const harnessProbeError = (error) => {
+  const message = String(error?.message ?? error ?? '');
+  if (
+    /refused|not allowed|cannot find context|no target with given id|session closed|detached/i.test(
+      message
+    )
+  )
+    return false;
+  return /timed out|timeout|ECONN|ENOTFOUND|EPIPE|socket hang up|fetch failed|not implemented/i.test(
+    message
+  );
+};
+
 export async function probeWorkerSessions({ client, sessions, path, tag, detached = () => false }) {
   const ids = [...new Set(sessions.filter(Boolean))];
-  if (!ids.length) return { reachable: false, probed: 0, sessions: [] };
+  if (!ids.length) return { reachable: false, probed: 0, sessions: [], probedIds: [] };
   let reachable = false;
   let probed = 0;
+  let attempted = 0;
+  let harnessFailures = 0;
+  const probedIds = [];
   for (const sessionId of ids) {
-    if (detached(sessionId)) continue;
+    if (detached(sessionId)) {
+      probedIds.push(sessionId);
+      continue;
+    }
+    attempted++;
     probed++;
-    const out = await outcome(
-      client.send(
-        'Runtime.evaluate',
-        { expression: workerProbeExpression(path, tag), returnByValue: true },
-        sessionId
-      )
-    );
-    if (!out.ok)
-      return {
-        reachable: false,
-        probed,
-        sessions: ids,
-        incomplete: `probeSessions evaluate failed: ${out.error?.message ?? 'error'}`,
-      };
+    let out;
+    try {
+      out = await outcome(
+        client.send(
+          'Runtime.evaluate',
+          { expression: workerProbeExpression(path, tag), returnByValue: true },
+          sessionId
+        )
+      );
+    } catch {
+      harnessFailures++;
+      probedIds.push(sessionId);
+      continue;
+    }
+    probedIds.push(sessionId);
+    if (!out.ok) {
+      if (harnessProbeError(out.error)) harnessFailures++;
+      continue;
+    }
     if (out.result?.result?.value === true) reachable = true;
   }
-  return { reachable, probed, sessions: ids };
+  if (attempted > 0 && harnessFailures === attempted && !reachable)
+    return {
+      reachable: false,
+      probed,
+      sessions: ids,
+      probedIds,
+      incomplete: 'probeSessions harness error on every session',
+    };
+  return { reachable, probed, sessions: ids, probedIds };
 }
 
 export async function protectedWorker({

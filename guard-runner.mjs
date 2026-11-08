@@ -1103,7 +1103,7 @@ class Execution {
       })
     );
     this.probedSessionIds ??= new Set();
-    for (const sessionId of out.result?.sessions ?? []) this.probedSessionIds.add(sessionId);
+    for (const sessionId of out.result?.probedIds ?? []) this.probedSessionIds.add(sessionId);
     return out;
   }
 
@@ -1129,8 +1129,10 @@ class Execution {
       tag: this.vars.tag,
       detached: (sessionId) => this.detached(sessionId),
     });
-    for (const sessionId of fresh) this.probedSessionIds.add(sessionId);
-    const sessions = [...new Set([...(this.calls.probe?.result?.sessions ?? []), ...fresh])];
+    for (const sessionId of out.probedIds ?? []) this.probedSessionIds.add(sessionId);
+    const sessions = [
+      ...new Set([...(this.calls.probe?.result?.sessions ?? []), ...(out.probedIds ?? fresh)]),
+    ];
     if (out.incomplete) {
       this.calls.probe = {
         ok: true,
@@ -1501,17 +1503,10 @@ class Execution {
     if (early !== undefined) return early;
     const plan = steps(this.vector, this.side, this.vars);
     const names = resultNames(check);
-    const hasGetTargets = (node) =>
-      (node?.result &&
-        [...plan.setup, ...plan.trigger].some(
-          (step) => step.as === node.result && step.cdp === 'Target.getTargets'
-        )) ||
-      [...(node?.all ?? []), ...(node?.any ?? []), ...(node?.not ? [node.not] : [])].some(
-        hasGetTargets
-      );
+    const absencePoll = this.vector.observe?.[name]?.absencePoll === true;
     const snapshots =
       !this.clients.flight?.abandoned &&
-      ((this.side === 'control' && want === true) || (want === false && hasGetTargets(check)))
+      ((this.side === 'control' && want === true) || (want === false && absencePoll))
         ? [...plan.setup, ...plan.trigger].filter(
             (step) =>
               names.includes(step.as) &&
@@ -1527,7 +1522,7 @@ class Execution {
       check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
     const shouldPoll =
       (want === true && (polled || snapshots.length > 0)) ||
-      (want === false && snapshots.length > 0);
+      (want === false && absencePoll && snapshots.length > 0);
     if (
       want === false &&
       !shouldPoll &&

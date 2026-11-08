@@ -1288,7 +1288,7 @@ async function runProtectedWorkers(mode) {
     guard = emulatedGuard(browser, {
       ...catalogOpts,
       rewriteProtectedWorkers: true,
-      delayProtectedWorkerMs: 2500,
+      delayProtectedWorkerMs: 7000,
     });
   } else if (mode === 'empty-info') {
     guard = emulatedGuard(browser, {
@@ -1433,7 +1433,7 @@ test('a rewritten protected-worker attach fails each protected worker row', {
   for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
-test('a rewritten attach delivered 2.5s after spawn fails each protected worker row', {
+test('a rewritten attach delivered after the trigger probe fails each protected worker row', {
   timeout: 900000,
 }, async () => {
   const execution = await runProtectedWorkers('late-rewrite');

@@ -60,6 +60,7 @@ const matches = (value, predicate) => {
     if (key === '$some') return Array.isArray(value) && value.some((item) => matches(item, want));
     if (key === '$every')
       return Array.isArray(value) && value.length > 0 && value.every((item) => matches(item, want));
+    if (key === '$absentOr') return value === undefined || value === want;
     return matches(value?.[key], want);
   });
 };
@@ -566,19 +567,26 @@ class Execution {
     }
     if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
       return;
-    if (this.childWhere && !this.childMatches(info)) {
+    const matched = !this.childWhere || this.childMatches(info);
+    const isTab = info?.type === 'tab';
+    if (!matched && !isTab) {
       if (paused)
         this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
       return;
     }
-    if (info?.type === 'tab') this.tabSessions.add(child);
-    this.sessions.child = child;
-    if (info?.targetId) this.targets.push(info.targetId);
+    if (isTab) this.tabSessions.add(child);
+    if (matched) {
+      this.sessions.child = child;
+      if (info?.targetId) this.targets.push(info.targetId);
+    }
+    const nested = matched
+      ? this.childSteps
+      : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
     const started = (async () => {
-      const reload = this.childSteps.findIndex((step) => step.cdp === 'Page.reload');
-      if (reload < 0) await this.execute(this.childSteps, child);
+      const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
+      if (reload < 0) await this.execute(nested, child);
       else {
-        await this.execute(this.childSteps.slice(0, reload), child);
+        await this.execute(nested.slice(0, reload), child);
         const start = this.client.events.length;
         if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
         await this.poll(
@@ -588,11 +596,11 @@ class Execution {
               .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === child),
           1500
         );
-        await this.execute(this.childSteps.slice(reload), child);
+        await this.execute(nested.slice(reload), child);
       }
       const resumed = this.client.events.length;
       if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
-      if (this.childSteps.some((step) => step.cdp === 'Page.enable'))
+      if (nested.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
     })().catch((error) => this.errors.push(String(error.message ?? error)));
     this.childRuns.set(child, started);
@@ -659,8 +667,11 @@ class Execution {
   }
 
   childMatches(info) {
+    if (this.childWhere.type && info?.type !== this.childWhere.type) return false;
     if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
-    return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
+    if (this.childWhere.urlPrefix !== undefined)
+      return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
+    return true;
   }
 
   async childrenSettled() {
@@ -1004,6 +1015,8 @@ class Execution {
       await this.reader.send('Page.enable', {}, sessionId);
       await this.reader.send('Runtime.enable', {}, sessionId);
       await this.reader.send('Debugger.enable', {}, sessionId);
+    } else if (step.observer === 'watch') {
+      this.watch.cleared = this.reader.events.length;
     }
     if (step.observer === 'fail') {
       await this.reader.send(
@@ -1039,9 +1052,11 @@ class Execution {
   }
 
   watched(c) {
-    if (!this.watch) return false;
+    if (!this.watch) return 'unwatched';
+    const from = c.afterClear ? (this.watch.cleared ?? this.watch.start) : this.watch.start;
+    const until = c.afterClear ? undefined : this.watch.cleared;
     return this.reader.events
-      .slice(this.watch.start)
+      .slice(from, until)
       .some(
         (event) =>
           event.sessionId === this.watch.sessionId &&
@@ -1268,10 +1283,36 @@ class Execution {
     return false;
   }
 
+  forwardedCheck(name, check, want) {
+    const ledger = this.actor().forwarded;
+    if (!Array.isArray(ledger)) {
+      if (want === undefined) return false;
+      this.incomplete.push(`${name}: forwarding audit unavailable`);
+      return 'incomplete';
+    }
+    const c = expand(check, this.vars);
+    const call = [...ledger]
+      .reverse()
+      .find(
+        (entry) => entry.method === c.forwarded.method && matches(entry, c.forwarded.where ?? {})
+      );
+    if (!call) return false;
+    return matches(call.params ?? {}, c.forwarded.params ?? {});
+  }
+
+  async absenceCheck(check) {
+    const first = await this.check(check);
+    if (first === 'unwatched' || first === 'incomplete') return first;
+    if (first === true) return true;
+    const late = await this.poll(async () => (await this.check(check)) === true, observeMs, false);
+    return !!late;
+  }
+
   async observe(name, check) {
     const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
       name
     ];
+    if (check?.forwarded) return this.forwardedCheck(name, check, want);
     if (
       check?.result &&
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
@@ -1289,13 +1330,17 @@ class Execution {
               supported(step.requires, this.options.capabilities)
           )
         : [];
-    const polled = check?.observer === 'fixture' || check?.world !== undefined || check?.script;
+    const polled =
+      check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
+    if (want === false && (check?.world !== undefined || check?.script !== undefined))
+      return this.absenceCheck(check);
     if (want !== true || (!polled && !snapshots.length)) return this.check(check);
     let seen = false;
     const met = await this.poll(
       async () => {
         if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
+        if (seen === 'unwatched' || seen === 'incomplete') return true;
         if (seen !== true && snapshots.length) {
           await this.execute(snapshots, undefined, 'observation');
           if (this.clients.flight?.abandoned) return true;
@@ -1307,6 +1352,7 @@ class Execution {
       false,
       snapshots.length > 0
     );
+    if (seen === 'unwatched' || seen === 'incomplete') return seen;
     if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
@@ -1321,6 +1367,24 @@ class Execution {
     return Boolean(out?.result?.incomplete) && at(out, check.path) === undefined;
   }
 
+  async compoundCheck(c) {
+    if (c.all) {
+      const parts = await Promise.all(c.all.map((item) => this.check(item)));
+      if (parts.includes('unwatched')) return 'unwatched';
+      if (parts.includes('incomplete')) return 'incomplete';
+      return parts.every(Boolean);
+    }
+    if (c.any) {
+      const parts = await Promise.all(c.any.map((item) => this.check(item)));
+      if (parts.includes('unwatched') && !parts.some((part) => part === true)) return 'unwatched';
+      if (parts.includes('incomplete') && !parts.some((part) => part === true)) return 'incomplete';
+      return parts.some((part) => part === true);
+    }
+    const inner = await this.check(c.not);
+    if (inner === 'unwatched' || inner === 'incomplete') return inner;
+    return !inner;
+  }
+
   async check(check) {
     const c = expand(check, this.vars);
     if (!(await this.ready(c))) return false;
@@ -1332,9 +1396,7 @@ class Execution {
       return this.trace.some(
         (entry) => entry.phase === c.executed && (entry.out.ok || entry.refused)
       );
-    if (c.all) return (await Promise.all(c.all.map((item) => this.check(item)))).every(Boolean);
-    if (c.any) return (await Promise.all(c.any.map((item) => this.check(item)))).some(Boolean);
-    if (c.not) return !(await this.check(c.not));
+    if (c.all || c.any || c.not) return this.compoundCheck(c);
     if (c.event) return events.some((e) => e.method === c.event && matches(e, c.where ?? {}));
     if (c.hops || c.beacon || c.served || c.header) return this.requestCheck(c);
     if (c.title !== undefined || c.expression !== undefined) return this.readCheck(c);
@@ -1411,7 +1473,11 @@ class Execution {
     if (c.history) return this.history(c.history);
     if (c.frameBlocked) return this.frameBlocked(c.frameBlocked);
     if (c.pre || c.loaded) return this.attemptCheck(c);
-    if (c.world !== undefined || c.script !== undefined) return this.watched(c);
+    if (c.world !== undefined || c.script !== undefined) {
+      const seen = this.watched(c);
+      if (seen === 'unwatched') return 'unwatched';
+      return seen;
+    }
   }
 
   callCheck(c) {
@@ -1531,6 +1597,10 @@ class Execution {
       }
       if (dependencies.some((dep) => this.refused[dep] === true)) continue;
       observed[name] = await this.observe(name, observation.check);
+      if (observed[name] === 'unwatched') {
+        observed[name] = 'incomplete';
+        this.incomplete.push(`${name}: absence watch not installed`);
+      }
       if (exitsClient(this.vector) && dependencies.length && observed[name] === false) {
         observed[name] = 'incomplete';
         this.incomplete.push(`${name}: pre-exit evidence not observed`);

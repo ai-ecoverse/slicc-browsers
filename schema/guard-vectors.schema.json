@@ -805,6 +805,17 @@
                       "minLength": 1
                     }
                   }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["type"],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
                 }
               ]
             },
@@ -1077,6 +1088,33 @@
             },
             "where": {
               "$ref": "#/$defs/predicate"
+            },
+            "observer": {
+              "const": "client"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["forwarded", "observer"],
+          "properties": {
+            "forwarded": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method"],
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "where": {
+                  "$ref": "#/$defs/predicate"
+                },
+                "params": {
+                  "$ref": "#/$defs/predicate"
+                }
+              }
             },
             "observer": {
               "const": "client"
@@ -1502,6 +1540,9 @@
               "type": "string",
               "minLength": 1
             },
+            "afterClear": {
+              "const": true
+            },
             "observer": {
               "const": "unguarded"
             }
@@ -1515,6 +1556,9 @@
             "script": {
               "type": "string",
               "minLength": 1
+            },
+            "afterClear": {
+              "const": true
             },
             "observer": {
               "const": "unguarded"
@@ -1577,6 +1621,9 @@
                   "type": "string"
                 }
               }
+            },
+            "$absentOr": {
+              "type": ["string", "boolean", "number", "null"]
             }
           },
           "additionalProperties": {

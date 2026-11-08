@@ -75,17 +75,17 @@ const broken = {
     },
     /E7\.binding: namedExposed credits named to the observer, but no isolatedWorld step names it/,
   ],
-  'a stockSetup row on a protected target': [
+  'a stockSetup admit row on a protected target': [
     (find) => {
       row(find, 'E7.emulation').targets = ['seven'];
     },
-    /E7\.emulation: a stockSetup row targets ordinary only, with an unguarded control/,
+    /E7\.emulation: a stockSetup admit row targets ordinary only/,
   ],
   'a stockSetup row with a guarded control': [
     (find) => {
       row(find, 'E7.emulation').control.via = 'guard';
     },
-    /E7\.emulation: a stockSetup row targets ordinary only, with an unguarded control/,
+    /E7\.emulation: a stockSetup row needs an unguarded control/,
   ],
   'a synthetic auto-attach step that requires neither attach capability': [
     (find) => {

@@ -409,11 +409,14 @@ for (const v of guard.vectors ?? []) {
         );
     }
   }
+  if (requires.has('stockSetup') && v.control?.via !== 'unguarded')
+    gv(`${v.id}: a stockSetup row needs an unguarded control`);
   if (
     requires.has('stockSetup') &&
-    (v.targets.some((t) => t !== 'ordinary') || v.control?.via !== 'unguarded')
+    JSON.stringify(v.expected) === JSON.stringify(v.control?.expected) &&
+    v.targets.some((t) => t !== 'ordinary')
   )
-    gv(`${v.id}: a stockSetup row targets ordinary only, with an unguarded control`);
+    gv(`${v.id}: a stockSetup admit row targets ordinary only`);
   const exits = (check) =>
     Boolean(check?.exit) ||
     [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])].some(exits);

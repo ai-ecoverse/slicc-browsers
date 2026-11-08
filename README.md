@@ -192,12 +192,12 @@ A guard may refuse every client navigation to an `about:` URL that inherits an o
 ### What a guard must let through
 
 For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stockSetup` admits on ordinary pages:
-- `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` (no code), with any `worldName` or `runImmediately`, and its removal;
+- `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` on the whole string without the multiline flag (no code), with any `worldName` or `runImmediately`, and its removal;
 - exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
-- `Page.createIsolatedWorld`, and `Runtime.addBinding` scoped to an isolated world it placed as ordinary, by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from such worlds;
-- tab targets in `Target.setAutoAttach`, placed and held like pages; a transport that synthesizes it declares `syntheticAutoAttach`.
+- `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
+- `Target.setAutoAttach`: accept the call but narrow the filter to tab targets, hold pages under the tab like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
 
-Code init scripts, main-world bindings and other overrides stay refused or harmless; the unguarded observer reads every effect, so refusing or faking a call fails. Undeclared, these rows skip, never pass.
+The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Undeclared, they skip, never pass.
 
 ### Running them
 
@@ -236,7 +236,7 @@ You supply:
 | `extensionWorld` | host a foreign extension's content script on the test page |
 | `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
 | `clientExit` | close the guarded client in the middle of a row |
-| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | run without site isolation, hold the browser's messages to the guard, and audit what the guard forwarded |
+| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound messages; audit forwarded commands and params |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 
 ### Reading the result
@@ -269,7 +269,7 @@ A new discovery behaviour gets a corpus case, and a new guard behaviour gets a g
 
 CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, then `npm test` split over shards by timing, then a Claude and a Codex review; the merge queue runs lint and the tests again. Tests run on Linux only.
 
-Every merge to `main` that warrants it is released by semantic-release in the same workflow, as one version for all three packages. The `vX.Y.Z` tag is the Go release, and npm gets the package with provenance through trusted publishing. Then `ci.yml` publishes the crate to crates.io, also with trusted publishing, and asks the Go module proxy and pkg.go.dev for the new tag. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
+Every merge to `main` that warrants it is released by semantic-release as one version for all three packages. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
 
 ## License
 

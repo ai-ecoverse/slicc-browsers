@@ -352,23 +352,46 @@ class Execution {
     const urls = (spec.anyOf ?? [spec.url]).map(address);
     const events = this.client.events.slice(this.eventStart);
     if (observer === 'client') {
-      const requests = new Map(
-        events
-          .filter((event) => event.method === 'Network.requestWillBeSent')
-          .map((event) => [event.params.requestId, event.params.request.url])
-      );
-      return events.some(
-        (event) =>
-          (event.method === 'Page.frameNavigated' &&
-            (!spec.frame ||
-              event.params.frame.parentId ||
-              event.sessionId === this.sessions.child) &&
+      const requests = new Map();
+      const mainFrames = new Set();
+      const mainLoaders = new Set();
+      for (const event of events) {
+        if (event.method === 'Network.requestWillBeSent')
+          requests.set(event.params.requestId, {
+            url: event.params.request.url,
+            type: event.params.type,
+            frameId: event.params.frameId,
+            loaderId: event.params.loaderId,
+          });
+        if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
+          mainFrames.add(event.params.frame.id);
+          if (event.params.frame.loaderId) mainLoaders.add(event.params.frame.loaderId);
+        }
+      }
+      return events.some((event) => {
+        if (event.method === 'Page.frameNavigated') {
+          const child = event.params.frame.parentId || event.sessionId === this.sessions.child;
+          const frameOk = spec.frame ? child : !event.params.frame.parentId;
+          return (
+            frameOk &&
             urls.includes(event.params.frame.unreachableUrl) &&
-            event.params.frame.url.startsWith('chrome-error://')) ||
-          (event.method === 'Network.loadingFailed' &&
-            urls.includes(requests.get(event.params.requestId)) &&
-            (event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT'))
-      );
+            event.params.frame.url.startsWith('chrome-error://')
+          );
+        }
+        if (event.method !== 'Network.loadingFailed') return false;
+        const request = requests.get(event.params.requestId);
+        if (
+          request?.type !== 'Document' ||
+          !urls.includes(request.url) ||
+          !(event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT')
+        )
+          return false;
+        if (spec.frame) return Boolean(request.frameId && !mainFrames.has(request.frameId));
+        return (
+          (request.frameId && mainFrames.has(request.frameId)) ||
+          (request.loaderId && mainLoaders.has(request.loaderId))
+        );
+      });
     }
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
@@ -380,21 +403,18 @@ class Execution {
       const read = await outcome(
         this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
       );
-      const visit = (tree) =>
+      const blockedFrame = (frame) =>
         Boolean(
-          tree &&
-            ((urls.includes(tree.frame.unreachableUrl) &&
-              tree.frame.url.startsWith('chrome-error://')) ||
-              (tree.childFrames ?? []).some(visit))
+          frame && urls.includes(frame.unreachableUrl) && frame.url.startsWith('chrome-error://')
         );
-      if (
-        read.ok &&
-        (spec.frame
-          ? (read.result.frameTree.childFrames ?? []).some(visit)
-          : visit(read.result.frameTree))
-      )
-        return true;
-      return spec.frame ? Boolean(await this.blockedFrameTarget(urls, targetId)) : false;
+      const visit = (tree) =>
+        Boolean(tree && (blockedFrame(tree.frame) || (tree.childFrames ?? []).some(visit)));
+      if (!read.ok) return false;
+      if (spec.frame) {
+        if ((read.result.frameTree.childFrames ?? []).some(visit)) return true;
+        return Boolean(await this.blockedFrameTarget(urls, targetId));
+      }
+      return blockedFrame(read.result.frameTree.frame);
     } finally {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })

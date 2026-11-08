@@ -88,20 +88,24 @@ export function workerProbeExpression(path, tag) {
   return `(() => { try { const href = String(self.location && self.location.href || ''); const tagged = new RegExp(${JSON.stringify(tagged)}).test(href); return (typeof WorkerGlobalScope === 'function' || tagged) && href.includes(${JSON.stringify(path)}); } catch { return false; } })()`;
 }
 
-export async function probeWorkerSessions({
-  client,
-  sessions,
-  path,
-  tag,
-  detached = () => false,
-  ownSession = () => false,
-}) {
+const harnessProbeError = (error) => {
+  const message = String(error?.message ?? error ?? '');
+  if (
+    /wasn't found|not allowed|refused|cannot find context|no target with given id|session closed|detached/i.test(
+      message
+    )
+  )
+    return false;
+  return /timed out|timeout|ECONN|ENOTFOUND|EPIPE|socket hang up|fetch failed/i.test(message);
+};
+
+export async function probeWorkerSessions({ client, sessions, path, tag, detached = () => false }) {
   const ids = [...new Set(sessions.filter(Boolean))];
   if (!ids.length) return { reachable: false, probed: 0, sessions: [], probedIds: [] };
   let reachable = false;
   let probed = 0;
+  let harnessErrors = 0;
   const probedIds = [];
-  const foreignFailures = [];
   for (const sessionId of ids) {
     if (detached(sessionId)) {
       probedIds.push(sessionId);
@@ -119,26 +123,24 @@ export async function probeWorkerSessions({
       );
     } catch (error) {
       probedIds.push(sessionId);
-      if (ownSession(sessionId)) continue;
-      foreignFailures.push(String(error?.message ?? error));
+      if (harnessProbeError(error)) harnessErrors++;
       continue;
     }
     probedIds.push(sessionId);
     if (!out.ok) {
-      if (ownSession(sessionId)) continue;
-      foreignFailures.push(String(out.error?.message ?? 'error'));
+      if (harnessProbeError(out.error)) harnessErrors++;
       continue;
     }
     if (out.result?.result?.value === true) reachable = true;
   }
   if (reachable) return { reachable: true, probed, sessions: ids, probedIds };
-  if (foreignFailures.length)
+  if (harnessErrors > 0)
     return {
       reachable: false,
       probed,
       sessions: ids,
       probedIds,
-      incomplete: `probeSessions foreign session failed: ${foreignFailures[0]}`,
+      incomplete: 'probeSessions harness error without a reachable worker',
     };
   return { reachable: false, probed, sessions: ids, probedIds };
 }

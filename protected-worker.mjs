@@ -80,10 +80,10 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
     return (
       listed.result.targetInfos?.find(
         (info) =>
-          (info.type === 'iframe' || info.type === 'page') &&
+          info.type === 'iframe' &&
           typeof info.url === 'string' &&
           info.url.startsWith(prefix) &&
-          info.targetId !== undefined
+          info.targetId
       ) ?? null
     );
   }, budget);

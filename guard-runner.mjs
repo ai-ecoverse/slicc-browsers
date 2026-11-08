@@ -38,6 +38,18 @@ import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
+
+function autoAttachSession(events, start, targetId) {
+  return events
+    .slice(start)
+    .filter(
+      (event) =>
+        event.method === 'Target.attachedToTarget' &&
+        event.params?.targetInfo?.targetId === targetId &&
+        event.params?.sessionId
+    )
+    .at(-1)?.params?.sessionId;
+}
 const browserUiAttempts = 3;
 const browserUiMs = 5000;
 const q = JSON.stringify;
@@ -1362,28 +1374,21 @@ class Execution {
       this.contexts.push(this.vars.context);
       await this.seedContext(this.vars.context);
     }
-    return this.attachSessionResult(step, params, out);
+    const reused =
+      step.cdp === 'Target.attachToTarget' &&
+      !(out.ok && out.result?.sessionId) &&
+      params?.targetId &&
+      autoAttachSession(this.client.events, this.eventStart, params.targetId);
+    if (!reused) return out;
+    this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
+    return { ok: true, result: { sessionId: reused, reused: true } };
   }
 
-  attachSessionResult(step, params, out) {
-    if (
-      step.cdp !== 'Target.attachToTarget' ||
-      (out.ok && out.result?.sessionId) ||
-      !params?.targetId
-    )
-      return out;
-    const existing = this.client.events
-      .slice(this.eventStart)
-      .filter(
-        (event) =>
-          event.method === 'Target.attachedToTarget' &&
-          event.params?.targetInfo?.targetId === params.targetId &&
-          event.params?.sessionId
-      )
-      .at(-1);
-    if (!existing) return out;
-    this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
-    return { ok: true, result: { sessionId: existing.params.sessionId, reused: true } };
+  async seedContext(context) {
+    await this.reader.send('Storage.setCookies', {
+      cookies: [{ name: this.vars.cookie, value: this.vars.tag, url: this.vars.target }],
+      browserContextId: context,
+    });
   }
 
   namedCallSummaries() {
@@ -1405,13 +1410,6 @@ class Execution {
           ];
         })
     );
-  }
-
-  async seedContext(context) {
-    await this.reader.send('Storage.setCookies', {
-      cookies: [{ name: this.vars.cookie, value: this.vars.tag, url: this.vars.target }],
-      browserContextId: context,
-    });
   }
 
   async page(step, session, phase) {

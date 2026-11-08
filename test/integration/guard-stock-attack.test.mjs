@@ -297,16 +297,39 @@ function clearingStockClient(browser, targets) {
   return { ...raw, send, forwarded };
 }
 
-async function runCarry(mode) {
+function pageEvidenceOnly(client, { rewrite } = {}) {
+  const send = client.send.bind(client);
+  client.send = async (method, params = {}, sessionId) => {
+    if (method === 'Network.enable') return {};
+    return send(method, params, sessionId);
+  };
+  const events = client.events;
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    const kept = [];
+    for (const event of items) {
+      if (event?.method?.startsWith('Network.')) continue;
+      const frame = event?.params?.frame;
+      if (rewrite && event?.method === 'Page.frameNavigated' && frame?.unreachableUrl)
+        frame.unreachableUrl = rewrite(frame.unreachableUrl) ?? frame.unreachableUrl;
+      kept.push(event);
+    }
+    return kept.length ? push(...kept) : events.length;
+  };
+  return client;
+}
+
+async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
   record(browser.unguarded);
   const targets = origins(fixture);
   let guard;
-  if (mode === 'refuse-nav') {
+  if (mode === 'refuse-nav' || mode === 'wrong-url') {
     guard = emulatedGuard(browser, {
       failDocumentOrigins: [targets.seven, targets.vault],
     });
+    pageEvidenceOnly(guard.client, mode === 'wrong-url' ? { rewrite } : undefined);
   } else if (mode === 'clear') {
     guard = { client: clearingStockClient(browser, targets), stop: async () => {} };
   } else {
@@ -314,8 +337,8 @@ async function runCarry(mode) {
   }
   record(guard.client);
   try {
-    return await run(
-      { ...set, vectors: carryVectors, variants: { prompt: 0 } },
+    const execution = await run(
+      { ...set, vectors, variants: { prompt: 0 } },
       {
         client: guard.client,
         unguarded: browser.unguarded,
@@ -325,6 +348,7 @@ async function runCarry(mode) {
         rowTimeoutMs: 90000,
       }
     );
+    return { execution, client: guard.client, targets };
   } finally {
     await guard.stop();
     await browser.close();
@@ -332,22 +356,46 @@ async function runCarry(mode) {
   }
 }
 
-test('a guard that refuses the protected navigation passes the three carry rows live', {
+function mainFrameBlocked(client, match) {
+  return client.events.some(
+    (event) =>
+      event.method === 'Page.frameNavigated' &&
+      !event.params?.frame?.parentId &&
+      event.params?.frame?.url?.startsWith('chrome-error://') &&
+      match(event.params.frame.unreachableUrl ?? '')
+  );
+}
+
+test('a guard that refuses the main-frame protected navigation passes the three carry rows live', {
   timeout: 600000,
 }, async () => {
-  const execution = await runCarry('refuse-nav');
+  const { execution, client, targets } = await runCarry('refuse-nav');
   assert.equal(execution.results.length, carryIds.length * 2);
+  assert.equal(
+    client.events.some((event) => event.method?.startsWith('Network.')),
+    false
+  );
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    const origin = targets[row.target];
+    const match =
+      row.id === 'E7.init-world-bfcache'
+        ? (url) => url.startsWith(`${origin}/bfcache?`) && /[?&]n=[^&]*-p(?:&|$)/.test(url)
+        : (url) => url.startsWith(`${origin}/doc?`);
+    assert.equal(
+      mainFrameBlocked(client, match),
+      true,
+      JSON.stringify({ id: row.id, target: row.target })
+    );
   }
 });
 
 test('a guard that loads the protected document and keeps admitted state fails the three carry rows', {
   timeout: 600000,
 }, async () => {
-  const execution = await runCarry('keep');
+  const { execution } = await runCarry('keep');
   for (const row of execution.results.filter((item) => item.target !== 'ordinary')) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
@@ -357,11 +405,45 @@ test('a guard that loads the protected document and keeps admitted state fails t
 test('a guard that clears admitted state before the protected document runs passes the three carry rows', {
   timeout: 600000,
 }, async () => {
-  const execution = await runCarry('clear');
+  const { execution } = await runCarry('clear');
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a blocked event for the wrong URL does not satisfy carry live', {
+  timeout: 600000,
+}, async () => {
+  const source = carryVectors.find((vector) => vector.id === 'E7.init-world-bfcache');
+  const url = '{target}/bfcache?n={tag}-p';
+  const only = [
+    {
+      ...structuredClone(source),
+      liveCheck: {
+        all: [
+          { pre: url, observer: 'fixture' },
+          {
+            blocked: { url, session: 'page', frame: false },
+            observer: 'client',
+          },
+        ],
+        observer: 'client',
+      },
+    },
+  ];
+  const { execution } = await runCarry('wrong-url', {
+    vectors: only,
+    rewrite: (value) =>
+      value.includes('/bfcache?')
+        ? value.replace(/-p(?=$|[&#])/, '-b')
+        : value.replace(/\/doc\?/, '/other?'),
+  });
+  assert.ok(execution.results.length >= 2);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'fail', JSON.stringify(row));
   }
 });
 

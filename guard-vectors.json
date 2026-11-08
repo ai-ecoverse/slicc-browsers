@@ -26585,7 +26585,7 @@
                     "blocked": {
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
-                      "frame": true
+                      "frame": false
                     },
                     "observer": "client"
                   },
@@ -26593,7 +26593,14 @@
                     "blocked": {
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
-                      "frame": true
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -26743,7 +26750,7 @@
                     "blocked": {
                       "url": "{target}/bfcache?n={tag}-p",
                       "session": "page",
-                      "frame": true
+                      "frame": false
                     },
                     "observer": "client"
                   },
@@ -26751,7 +26758,14 @@
                     "blocked": {
                       "url": "{target}/bfcache?n={tag}-p",
                       "session": "page",
-                      "frame": true
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }
@@ -27053,7 +27067,7 @@
                     "blocked": {
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
-                      "frame": true
+                      "frame": false
                     },
                     "observer": "client"
                   },
@@ -27061,7 +27075,14 @@
                     "blocked": {
                       "url": "{target}/doc?n={tag}",
                       "session": "page",
-                      "frame": true
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
                     },
                     "observer": "unguarded"
                   }

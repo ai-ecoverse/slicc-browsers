@@ -31,9 +31,18 @@ import {
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
-import { probeWorkerSessions, protectedWorker } from './protected-worker.mjs';
+import {
+  leftoverPersistentWorker,
+  persistentWorkerTypes,
+  probeWorkerSessions,
+  protectedWorker,
+  releasePersistentWorkerSessions,
+  workerTypeForKind,
+} from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
+
+export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
@@ -1099,10 +1108,32 @@ class Execution {
     );
   }
 
+  spawnWorkerKind() {
+    return allSteps([...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])]).find(
+      (step) => step.spawnWorker
+    )?.spawnWorker;
+  }
+
+  async ensurePriorWorkersGone(kind) {
+    if (this.side !== 'guarded') return;
+    const type = workerTypeForKind(kind);
+    if (!persistentWorkerTypes.has(type)) return;
+    const prior = this.clients.priorWorker;
+    const leftover = await leftoverPersistentWorker(this.reader ?? this.client, {
+      type,
+      ...(prior?.url || prior?.targetId ? { url: prior?.url, targetId: prior?.targetId } : {}),
+    });
+    if (leftover)
+      throw new Error(
+        `leftover ${type} still present before guarded spawn: ${leftover.url ?? leftover.targetId}`
+      );
+  }
+
   async spawnWorker(step) {
     if (step.as) this.eventMarks.set(step.as, this.client.events.length);
     const pageUrl = expand(step.url ?? '{target}/doc?n=host-{tag}', this.vars);
     const hostUrl = step.frame ? expand(step.frame, this.vars) : undefined;
+    await this.ensurePriorWorkersGone(step.spawnWorker);
     const out = await outcome(
       protectedWorker({
         reader: this.reader,
@@ -1120,6 +1151,12 @@ class Execution {
       this.vars.workerTarget = out.result.workerTargetId;
       this.targets.push(out.result.workerTargetId);
     }
+    if (out.ok && out.result?.workerUrl && this.side === 'control')
+      this.clients.priorWorker = {
+        type: out.result.type,
+        url: out.result.workerUrl,
+        targetId: out.result.workerTargetId,
+      };
     return out;
   }
 
@@ -1950,50 +1987,85 @@ class Execution {
     } finally {
       this.stopped = true;
       await pumping;
-      if (this.watch)
-        await outcome(
-          this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
-        );
-      for (const session of this.attachSettings.keys())
-        await outcome(
-          this.client.send(
-            'Target.setAutoAttach',
-            { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
-            session
-          )
-        );
-      await Promise.allSettled(this.pending);
-      await this.resumeWaiting();
-      const listed = await outcome((this.reader ?? this.client).send('Target.getTargets', {}));
-      const byId = new Map((listed.result?.targetInfos ?? []).map((info) => [info.targetId, info]));
-      for (const targetId of new Set(this.targets)) {
-        if (byId.get(targetId)?.type === 'iframe') continue;
-        await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
-      }
-      for (const info of listed.result?.targetInfos ?? []) {
-        if (
-          (info.type === 'shared_worker' || info.type === 'service_worker') &&
-          typeof info.url === 'string' &&
-          info.url.includes(this.vars.tag)
+      await this.cleanupLeg();
+    }
+  }
+
+  async cleanupLeg() {
+    if (this.watch)
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
+      );
+    await Promise.allSettled(this.pending);
+    const workerKind = this.spawnWorkerKind();
+    if (workerKind === 'shared' || workerKind === 'service') await this.cleanupPersistentWorkers();
+    else await this.cleanupTargets();
+    for (const browserContextId of new Set(this.contexts))
+      await outcome(
+        (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
+      );
+    if (
+      this.side === 'guarded' &&
+      this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
+    ) {
+      const violation = discoveryViolation(
+        this.client.events.slice(this.eventStart),
+        supported(['discovery'], this.options.capabilities)
+      );
+      if (violation) this.errors.push(violation);
+    }
+  }
+
+  async cleanupPersistentWorkers() {
+    await this.resumeWaiting();
+    await releasePersistentWorkerSessions({
+      client: this.client,
+      reader: this.reader,
+      events: this.client.events,
+      from: this.eventStart,
+      tag: this.vars.tag,
+      targets: this.targets,
+      attachSessions: [...this.attachSettings.keys()],
+    });
+    if (this.reader && this.reader !== this.client)
+      await releasePersistentWorkerSessions({
+        client: this.reader,
+        reader: this.reader,
+        events: this.reader.events,
+        from: 0,
+        tag: this.vars.tag,
+        targets: this.targets,
+        attachSessions: [],
+      });
+    this.targets = [];
+    this.attachSettings.clear();
+  }
+
+  async cleanupTargets() {
+    for (const session of this.attachSettings.keys())
+      await outcome(
+        this.client.send(
+          'Target.setAutoAttach',
+          { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+          session
         )
-          await outcome(
-            (this.reader ?? this.client).send('Target.closeTarget', { targetId: info.targetId })
-          );
-      }
-      for (const browserContextId of new Set(this.contexts))
-        await outcome(
-          (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
-        );
+      );
+    await this.resumeWaiting();
+    const listed = await outcome((this.reader ?? this.client).send('Target.getTargets', {}));
+    const byId = new Map((listed.result?.targetInfos ?? []).map((info) => [info.targetId, info]));
+    for (const targetId of new Set(this.targets)) {
+      if (byId.get(targetId)?.type === 'iframe') continue;
+      await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
+    }
+    for (const info of listed.result?.targetInfos ?? []) {
       if (
-        this.side === 'guarded' &&
-        this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
-      ) {
-        const violation = discoveryViolation(
-          this.client.events.slice(this.eventStart),
-          supported(['discovery'], this.options.capabilities)
+        (info.type === 'shared_worker' || info.type === 'service_worker') &&
+        typeof info.url === 'string' &&
+        info.url.includes(this.vars.tag)
+      )
+        await outcome(
+          (this.reader ?? this.client).send('Target.closeTarget', { targetId: info.targetId })
         );
-        if (violation) this.errors.push(violation);
-      }
     }
   }
 }

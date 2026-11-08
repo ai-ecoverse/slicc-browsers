@@ -11,8 +11,13 @@ import {
   refusalError,
   trustedClientOnly,
 } from '../../guard-driver.mjs';
-import { reusableAttachSession } from '../../guard-runner.mjs';
+import {
+  leftoverPersistentWorker,
+  releasePersistentWorkerSessions,
+  reusableAttachSession,
+} from '../../guard-runner.mjs';
 import { probeWorkerSessions } from '../../protected-worker.mjs';
+import { withPausedSharedWorkerStall } from './guard-emulator.mjs';
 import { drivable } from './guard-sweep.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
@@ -518,6 +523,89 @@ test('adopt resumes a paused worker even when its browser context does not match
   assert.ok(resume > foreign && resume < matched);
   assert.ok(source.includes('async resumeWaiting('));
   assert.ok(source.includes("byId.get(targetId)?.type === 'iframe'"));
+  assert.ok(source.includes('releasePersistentWorkerSessions'));
+  assert.ok(source.includes('ensurePriorWorkersGone'));
+});
+
+test('shared and service browser auto-attach do not wait for debugger on start', () => {
+  for (const id of ['C3.protected-worker-shared', 'C3.protected-service-worker']) {
+    const browserAttach = byId[id].setup.find(
+      (step) => step.cdp === 'Target.setAutoAttach' && step.session === 'browser'
+    );
+    assert.equal(browserAttach.params.waitForDebuggerOnStart, false, id);
+  }
+  const dedicated = byId['C3.protected-worker-dedicated'].setup.find(
+    (step) => step.cdp === 'Target.setAutoAttach' && step.session === 'browser'
+  );
+  assert.equal(dedicated.params.waitForDebuggerOnStart, true);
+});
+
+test('emulator stall: leftover paused shared worker blocks the next createTarget until released', async () => {
+  const workers = [
+    {
+      targetId: 'w1',
+      type: 'shared_worker',
+      url: 'http://ordinary.example.test/shared-worker.js?n=host-control-1',
+    },
+  ];
+  const pages = [{ targetId: 'page-1', type: 'page', url: 'http://ordinary.example.test/doc' }];
+  const base = {
+    events: [
+      {
+        method: 'Target.attachedToTarget',
+        params: {
+          waitingForDebugger: true,
+          sessionId: 'ws',
+          targetInfo: workers[0],
+        },
+      },
+    ],
+    send: async (method, params = {}) => {
+      if (method === 'Target.getTargets') return { targetInfos: [...workers, ...pages] };
+      if (method === 'Target.closeTarget') {
+        const drop = (list) => {
+          const i = list.findIndex((info) => info.targetId === params.targetId);
+          if (i >= 0) list.splice(i, 1);
+        };
+        drop(workers);
+        drop(pages);
+        return { success: true };
+      }
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Target.createTarget') {
+        const targetId = `p${pages.length + 2}`;
+        pages.push({ targetId, type: 'page', url: params.url ?? 'about:blank' });
+        return { targetId };
+      }
+      return {};
+    },
+  };
+  const client = withPausedSharedWorkerStall(base);
+  await assert.rejects(
+    () => client.send('Target.createTarget', { url: 'about:blank' }),
+    /CDP timed out: Target.createTarget/
+  );
+  assert.equal(
+    (await leftoverPersistentWorker(client, { type: 'shared_worker', url: workers[0].url }))
+      ?.targetId,
+    'w1'
+  );
+  await releasePersistentWorkerSessions({
+    client,
+    reader: client,
+    events: client.events,
+    from: 0,
+    tag: 'host-control-1',
+    targets: ['page-1', 'w1'],
+    attachSessions: [undefined],
+  });
+  assert.equal(client.pausedSharedSessions.size, 0);
+  assert.equal(
+    await leftoverPersistentWorker(client, { type: 'shared_worker', url: workers[0]?.url }),
+    undefined
+  );
+  const created = await client.send('Target.createTarget', { url: 'about:blank' });
+  assert.ok(created.targetId);
 });
 
 test('C8 attach rows do not opt into session reuse', () => {

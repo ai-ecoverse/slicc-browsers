@@ -933,3 +933,36 @@ export function emulatedGuard(browser, options = {}) {
     return options.redirectSecrets && catalog ? redactProtectedURLs(result, catalog) : result;
   }
 }
+
+export function withPausedSharedWorkerStall(client) {
+  const paused = new Set();
+  const note = (event) => {
+    if (
+      event?.method === 'Target.attachedToTarget' &&
+      event.params?.targetInfo?.type === 'shared_worker' &&
+      event.params?.waitingForDebugger &&
+      event.params?.sessionId
+    )
+      paused.add(event.params.sessionId);
+  };
+  for (const event of client.events ?? []) note(event);
+  const events = client.events ?? [];
+  const push = events.push.bind(events);
+  events.push = (...items) => {
+    for (const event of items) note(event);
+    return push(...items);
+  };
+  return {
+    ...client,
+    events,
+    pausedSharedSessions: paused,
+    send: async (method, params, sessionId) => {
+      if (method === 'Runtime.runIfWaitingForDebugger' && sessionId) paused.delete(sessionId);
+      if (method === 'Target.detachFromTarget' && params?.sessionId)
+        paused.delete(params.sessionId);
+      if (method === 'Target.createTarget' && paused.size > 0)
+        throw new Error('CDP timed out: Target.createTarget');
+      return client.send(method, params, sessionId);
+    },
+  };
+}

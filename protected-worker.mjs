@@ -156,6 +156,73 @@ const harnessProbeError = (error) => {
   return /timed out|timeout|ECONN|ENOTFOUND|EPIPE|socket hang up|fetch failed/i.test(message);
 };
 
+export const persistentWorkerTypes = new Set(['shared_worker', 'service_worker']);
+
+export function workerTypeForKind(kind) {
+  return kinds[kind]?.type;
+}
+
+export async function releasePersistentWorkerSessions({
+  client,
+  reader,
+  events,
+  from = 0,
+  tag,
+  targets = [],
+  attachSessions = [],
+}) {
+  const closer = reader ?? client;
+  const seen = new Map();
+  for (const event of events.slice(from)) {
+    if (event.method !== 'Target.attachedToTarget') continue;
+    const info = event.params?.targetInfo;
+    if (!persistentWorkerTypes.has(info?.type)) continue;
+    const sessionId = event.params?.sessionId;
+    if (!sessionId || seen.has(sessionId)) continue;
+    seen.set(sessionId, info?.targetId);
+  }
+  for (const [sessionId] of seen) {
+    await outcome(client.send('Runtime.runIfWaitingForDebugger', {}, sessionId));
+    await outcome(client.send('Target.detachFromTarget', { sessionId }));
+  }
+  const listed = await outcome(closer.send('Target.getTargets', {}));
+  const byId = new Map((listed.result?.targetInfos ?? []).map((info) => [info.targetId, info]));
+  for (const targetId of new Set(targets)) {
+    if (byId.get(targetId)?.type === 'iframe') continue;
+    await outcome(closer.send('Target.closeTarget', { targetId }));
+  }
+  for (const info of listed.result?.targetInfos ?? []) {
+    if (
+      persistentWorkerTypes.has(info.type) &&
+      typeof info.url === 'string' &&
+      tag &&
+      info.url.includes(tag)
+    )
+      await outcome(closer.send('Target.closeTarget', { targetId: info.targetId }));
+  }
+  for (const session of attachSessions)
+    await outcome(
+      client.send(
+        'Target.setAutoAttach',
+        { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+        session
+      )
+    );
+}
+
+export async function leftoverPersistentWorker(reader, { type, url, targetId } = {}) {
+  if (!type && !url && !targetId) return undefined;
+  const listed = await outcome(reader.send('Target.getTargets', {}));
+  if (!listed.ok) return undefined;
+  return (listed.result?.targetInfos ?? []).find((info) => {
+    if (type && info.type !== type) return false;
+    if (!url && !targetId) return true;
+    if (targetId && info.targetId === targetId) return true;
+    if (url && info.url === url) return true;
+    return false;
+  });
+}
+
 export async function probeWorkerSessions({ client, sessions, path, tag, detached = () => false }) {
   const ids = [...new Set(sessions.filter(Boolean))];
   if (!ids.length) return { reachable: false, probed: 0, sessions: [], probedIds: [] };

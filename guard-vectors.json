@@ -29840,7 +29840,7 @@
           "cdp": "Target.setAutoAttach",
           "params": {
             "autoAttach": true,
-            "waitForDebuggerOnStart": true,
+            "waitForDebuggerOnStart": false,
             "flatten": true,
             "filter": [
               {
@@ -30265,7 +30265,7 @@
           "cdp": "Target.setAutoAttach",
           "params": {
             "autoAttach": true,
-            "waitForDebuggerOnStart": true,
+            "waitForDebuggerOnStart": false,
             "flatten": true,
             "filter": [
               {

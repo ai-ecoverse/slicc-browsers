@@ -134,6 +134,29 @@ export function expectedSkip(vector, target) {
   return null;
 }
 
+function callDetail(row) {
+  const parts = [];
+  for (const side of ['control', 'guarded']) {
+    const calls = row.calls?.[side];
+    if (!calls) continue;
+    for (const name of ['attach', 'spawn', 'targets']) {
+      const out = calls[name];
+      if (!out) continue;
+      const detail = out.error
+        ? `${name} error ${out.error}`
+        : out.ok === false
+          ? `${name} not ok`
+          : out.sessionId
+            ? `${name} session`
+            : out.exists !== undefined
+              ? `${name} exists=${out.exists}`
+              : null;
+      if (detail) parts.push(`${side} ${detail}`);
+    }
+  }
+  return parts;
+}
+
 function rowProblem(vector, row) {
   const legs = [row.control, row.guarded, row.live];
   const shown = `${legs.join('/')}${row.reason ? ` (${row.reason})` : ''}`;
@@ -150,7 +173,13 @@ function rowProblem(vector, row) {
   const guarded = drivable.has(vector.id) ? 'pass' : 'fail';
   const live = expectedLive(vector, row.target);
   if (row.control === 'pass' && row.guarded === guarded && row.live === live) return null;
-  return `must be pass/${guarded}/${live} without a guard but is ${shown}${row.why ? `: ${row.why}` : ''}`;
+  const extra = [
+    row.why,
+    row.errors?.length ? `errors ${row.errors.join('; ')}` : null,
+    row.notes?.length ? `notes ${row.notes.join('; ')}` : null,
+    ...callDetail(row),
+  ].filter(Boolean);
+  return `must be pass/${guarded}/${live} without a guard but is ${shown}${extra.length ? `: ${extra.join('; ')}` : ''}`;
 }
 
 export function verdictProblems(set, targets, results) {

@@ -300,6 +300,120 @@ test('a lying attach reply that still returns a session id fails attachSession',
   }
 });
 
+test('protectedWorker records the worker target id from getTargets', async () => {
+  const page = 'http://vault.example.test/doc?n=host-t';
+  const workerUrl = 'http://vault.example.test/worker.js?n=t';
+  const reader = {
+    events: [],
+    async send(method, params = {}, sessionId) {
+      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
+      if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Page.enable' || method === 'Runtime.enable') return {};
+      if (method === 'Page.navigate') return {};
+      if (method === 'Target.getTargets')
+        return {
+          targetInfos: [
+            { targetId: 'page-1', type: 'page', url: page },
+            { targetId: 'worker-1', type: 'worker', url: workerUrl },
+          ],
+        };
+      if (method === 'Runtime.evaluate') {
+        if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+        if (String(params.expression).includes('new Worker'))
+          return { result: { value: 'spawned' } };
+        if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
+        throw new Error(`unexpected evaluate ${params.expression}`);
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const { protectedWorker } = await import('../../protected-worker.mjs');
+  const out = await protectedWorker({
+    reader,
+    kind: 'dedicated',
+    pageUrl: page,
+    tag: 't',
+    notes: [],
+    budget: 200,
+  });
+  assert.equal(out.workerTargetId, 'worker-1');
+  assert.equal(out.exists, true);
+});
+
+test('framed protectedWorker evaluates inside an iframe target session', async () => {
+  const host = 'http://ordinary.example.test/doc?n=host-t';
+  const page = 'http://vault.example.test/doc?n=host-t';
+  const workerUrl = 'http://vault.example.test/worker.js?n=t';
+  const events = [];
+  let iframeAttached = false;
+  const reader = {
+    events,
+    async send(method, params = {}, sessionId) {
+      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
+      if (method === 'Target.attachToTarget') {
+        if (params.targetId === 'page-1') return { sessionId: 'page-session' };
+        if (params.targetId === 'iframe-1') {
+          iframeAttached = true;
+          return { sessionId: 'iframe-session' };
+        }
+        throw new Error(`unexpected attach ${params.targetId}`);
+      }
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Page.enable' || method === 'Runtime.enable') return {};
+      if (method === 'Page.navigate') return {};
+      if (method === 'Target.getTargets') {
+        return {
+          targetInfos: iframeAttached
+            ? [
+                { targetId: 'page-1', type: 'page', url: host },
+                { targetId: 'iframe-1', type: 'iframe', url: page },
+                { targetId: 'worker-1', type: 'worker', url: workerUrl },
+              ]
+            : [
+                { targetId: 'page-1', type: 'page', url: host },
+                { targetId: 'iframe-1', type: 'iframe', url: page },
+              ],
+        };
+      }
+      if (method === 'Runtime.evaluate') {
+        if (sessionId === 'page-session') {
+          if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+          if (String(params.expression).includes('iframe')) return { result: { value: true } };
+          throw new Error(`unexpected page evaluate ${params.expression}`);
+        }
+        if (sessionId === 'iframe-session') {
+          if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+          if (String(params.expression).includes('new Worker'))
+            return { result: { value: 'spawned' } };
+          if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
+          throw new Error(`unexpected iframe evaluate ${params.expression}`);
+        }
+        throw new Error(`unexpected session ${sessionId}`);
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const { protectedWorker } = await import('../../protected-worker.mjs');
+  const out = await protectedWorker({
+    reader,
+    kind: 'dedicated',
+    pageUrl: page,
+    hostUrl: host,
+    tag: 't',
+    notes: [],
+    budget: 200,
+  });
+  assert.equal(out.exists, true);
+  assert.equal(out.workerTargetId, 'worker-1');
+  assert.equal(out.framed, true);
+  assert.equal(iframeAttached, true);
+});
+
 test('probeWorkerSessions treats rejections as neutral', async () => {
   const out = await probeWorkerSessions({
     client: {

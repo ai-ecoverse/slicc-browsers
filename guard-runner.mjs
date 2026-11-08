@@ -1362,7 +1362,49 @@ class Execution {
       this.contexts.push(this.vars.context);
       await this.seedContext(this.vars.context);
     }
-    return out;
+    return this.attachSessionResult(step, params, out);
+  }
+
+  attachSessionResult(step, params, out) {
+    if (
+      step.cdp !== 'Target.attachToTarget' ||
+      (out.ok && out.result?.sessionId) ||
+      !params?.targetId
+    )
+      return out;
+    const existing = this.client.events
+      .slice(this.eventStart)
+      .filter(
+        (event) =>
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.targetInfo?.targetId === params.targetId &&
+          event.params?.sessionId
+      )
+      .at(-1);
+    if (!existing) return out;
+    this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
+    return { ok: true, result: { sessionId: existing.params.sessionId, reused: true } };
+  }
+
+  namedCallSummaries() {
+    return Object.fromEntries(
+      ['attach', 'spawn', 'targets', 'probe', 'tabs']
+        .filter((name) => this.calls[name])
+        .map((name) => {
+          const out = this.calls[name];
+          return [
+            name,
+            {
+              ok: out.ok,
+              ...(out.result?.sessionId ? { sessionId: true } : {}),
+              ...(out.result?.exists !== undefined ? { exists: out.result.exists } : {}),
+              ...(out.result?.reachable !== undefined ? { reachable: out.result.reachable } : {}),
+              ...(out.result?.incomplete ? { incomplete: out.result.incomplete } : {}),
+              ...(out.error ? { error: String(out.error?.message ?? out.error) } : {}),
+            },
+          ];
+        })
+    );
   }
 
   async seedContext(context) {
@@ -1864,6 +1906,7 @@ class Execution {
         notes: this.notes,
         incomplete: this.incomplete,
         unsupported: this.unsupported,
+        calls: this.namedCallSummaries(),
         evidence: Object.fromEntries(
           Object.entries(this.calls)
             .filter(
@@ -2184,12 +2227,27 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   }
   if (legs.control.unsupported === 'trustedEmulation')
     return skipRow(base, 'not-supported:trustedEmulation');
+  const row = finishRow(vector, base, legs, opts);
+  opts.log?.(row);
+  return row;
+}
+
+function finishRow(vector, base, legs, opts) {
+  const caps = Array.isArray(opts.capabilities)
+    ? opts.capabilities
+    : Object.keys(opts.capabilities).filter((k) => opts.capabilities[k] === true);
+  const calls = {
+    ...(legs.control.calls && Object.keys(legs.control.calls).length
+      ? { control: legs.control.calls }
+      : {}),
+    ...(legs.guarded.calls && Object.keys(legs.guarded.calls).length
+      ? { guarded: legs.guarded.calls }
+      : {}),
+  };
   const row = {
     ...result(vector, {
       ...base,
-      capabilities: Array.isArray(opts.capabilities)
-        ? opts.capabilities
-        : Object.keys(opts.capabilities).filter((k) => opts.capabilities[k] === true),
+      capabilities: caps,
       control: legs.control.observed,
       guarded: legs.guarded.observed,
       live: legs.control.live && legs.guarded.live,
@@ -2199,6 +2257,7 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     observations: { control: legs.control.observed, guarded: legs.guarded.observed },
     errors: [...legs.control.errors, ...legs.guarded.errors],
     designDependent: vector.designDependent ?? [],
+    ...(Object.keys(calls).length ? { calls } : {}),
     ...probeEvidence(legs),
   };
   const notes = [
@@ -2211,7 +2270,6 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     row.control = 'fail';
     row.guarded = 'fail';
   }
-  opts.log?.(row);
   return row;
 }
 

@@ -1,6 +1,16 @@
 import { outcome, waitFor } from './guard-driver.mjs';
 import { createObserverTarget } from './observer-target.mjs';
 
+async function until(check, ms, step = 25) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, step));
+  }
+}
+
 const kinds = {
   dedicated: {
     type: 'worker',
@@ -26,7 +36,7 @@ const kinds = {
 };
 
 async function frameContext(reader, sessionId, frameId, budget) {
-  const found = await waitFor(
+  const found = await until(
     () => {
       for (const event of reader.events) {
         if (event.sessionId !== sessionId) continue;
@@ -50,7 +60,8 @@ async function frameContext(reader, sessionId, frameId, budget) {
   return worlds.result?.executionContextId ?? null;
 }
 
-async function framedEvaluate(reader, sessionId, pageUrl, budget) {
+async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
+  const prefix = pageUrl.split('?')[0];
   const framed = await outcome(
     reader.send(
       'Runtime.evaluate',
@@ -63,12 +74,58 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget) {
   );
   if (!framed.ok || framed.result?.result?.value !== true)
     throw new Error(`protected worker iframe insert failed: ${framed.error?.message ?? 'unknown'}`);
-  const child = await waitFor(async () => {
+  const iframeTarget = await until(async () => {
+    const listed = await outcome(reader.send('Target.getTargets', {}));
+    if (!listed.ok) return null;
+    return (
+      listed.result.targetInfos?.find(
+        (info) =>
+          (info.type === 'iframe' || info.type === 'page') &&
+          typeof info.url === 'string' &&
+          info.url.startsWith(prefix) &&
+          info.targetId !== undefined
+      ) ?? null
+    );
+  }, budget);
+  if (iframeTarget) {
+    const attached = await outcome(
+      reader.send('Target.attachToTarget', {
+        targetId: iframeTarget.targetId,
+        flatten: true,
+      })
+    );
+    if (!attached.ok || !attached.result?.sessionId)
+      throw new Error(
+        `protected worker iframe attach failed: ${attached.error?.message ?? 'no session'}`
+      );
+    const iframeSession = attached.result.sessionId;
+    sessions.push(iframeSession);
+    await outcome(reader.send('Page.enable', {}, iframeSession));
+    await outcome(reader.send('Runtime.enable', {}, iframeSession));
+    const ready = await waitFor(async () => {
+      const read = await outcome(
+        reader.send(
+          'Runtime.evaluate',
+          { expression: 'document.readyState', returnByValue: true },
+          iframeSession
+        )
+      );
+      return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
+    }, budget);
+    if (!ready) throw new Error('protected worker iframe document did not become ready');
+    return (expression) =>
+      reader.send(
+        'Runtime.evaluate',
+        { expression, awaitPromise: true, returnByValue: true },
+        iframeSession
+      );
+  }
+  const child = await until(async () => {
     const tree = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
     if (!tree.ok) return null;
     return (
       (tree.result.frameTree.childFrames ?? []).find((node) =>
-        String(node.frame?.url ?? '').startsWith(pageUrl.split('?')[0])
+        String(node.frame?.url ?? '').startsWith(prefix)
       ) ?? null
     );
   }, budget);
@@ -172,6 +229,7 @@ export async function protectedWorker({
     targetId: pageTargetId,
     flatten: true,
   });
+  const sessions = [];
   try {
     await reader.send('Page.enable', {}, sessionId);
     await reader.send('Runtime.enable', {}, sessionId);
@@ -192,7 +250,7 @@ export async function protectedWorker({
     }, budget);
     if (!loaded) throw new Error('protected worker page did not become ready');
     const evaluate = hostUrl
-      ? await framedEvaluate(reader, sessionId, pageUrl, budget)
+      ? await framedEvaluate(reader, sessionId, pageUrl, budget, sessions)
       : (expression) =>
           reader.send(
             'Runtime.evaluate',
@@ -207,7 +265,7 @@ export async function protectedWorker({
       throw new Error(
         `protected worker spawn failed: ${spawn.error?.message ?? value ?? 'unknown'}`
       );
-    const found = await waitFor(async () => {
+    const found = await until(async () => {
       const listed = await outcome(reader.send('Target.getTargets', {}));
       if (!listed.ok) return null;
       return (
@@ -236,6 +294,8 @@ export async function protectedWorker({
       framed: Boolean(hostUrl),
     };
   } finally {
+    for (const sid of sessions)
+      await outcome(reader.send('Target.detachFromTarget', { sessionId: sid }));
     await outcome(reader.send('Target.detachFromTarget', { sessionId }));
   }
 }

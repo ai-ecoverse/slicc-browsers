@@ -28018,8 +28018,7 @@
             "world": "slicc-foreign-{tag}",
             "observer": "unguarded",
             "origin": "{target}"
-          },
-          "dependsOn": ["foreign"]
+          }
         }
       },
       "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the isolated world, or refused the protected document load (pre + blocked)",

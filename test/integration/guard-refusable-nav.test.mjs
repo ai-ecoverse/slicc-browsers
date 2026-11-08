@@ -116,6 +116,7 @@ const effectOnRefusal = {
   'E7.init-world-bfcache': ['worldOnProtected', 'beacon'],
   'E7.emulation-carry': ['exposed', 'beacon'],
   'E7.isolated-foreign': ['world'],
+  'E7.isolated-foreign.script': ['world'],
   'C3.tab-protected': ['pageAttached', 'beacon'],
   'C3.tab-protected.synthetic': ['pageAttached', 'beacon'],
 };
@@ -125,6 +126,7 @@ const keptDependsOn = {
   'C3.tab-protected': ['tab', 'driven'],
   'C3.tab-protected.synthetic': ['tab', 'driven'],
   'E7.isolated-foreign': ['noContext'],
+  'E7.isolated-foreign.script': ['noContext'],
 };
 
 test('false-by-construction effect checks run on a refused navigation, not only when it loads', () => {
@@ -149,4 +151,5 @@ test('false-by-construction effect checks run on a refused navigation, not only 
     }
   }
   assert.equal(byId['E7.isolated-foreign'].observe.world.check.origin, '{target}');
+  assert.equal(byId['E7.isolated-foreign.script'].observe.world.check.origin, '{target}');
 });

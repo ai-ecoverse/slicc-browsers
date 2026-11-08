@@ -297,6 +297,21 @@ function lyingRefuseClient(browser, targets) {
   return { ...raw, send, forwarded, events: raw.events };
 }
 
+function lyingRefuseWorldClient(browser) {
+  const raw = browser.client;
+  const forwarded = [];
+  const send = async (method, params = {}, sessionId) => {
+    if (method === 'Page.createIsolatedWorld') {
+      forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+      await raw.send(method, params, sessionId);
+      throw new Error('slicc: refused: browser-wide call');
+    }
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    return raw.send(method, params, sessionId);
+  };
+  return { ...raw, send, forwarded, events: raw.events };
+}
+
 function clearingStockClient(browser, targets) {
   const protectedOrigins = new Set(
     [targets.seven, targets.vault, targets.apex, targets['vault-x']]
@@ -439,6 +454,12 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
     });
   } else if (mode === 'lying-refuse') {
     guard = { client: lyingRefuseClient(browser, targets), stop: async () => {} };
+  } else if (mode === 'lying-refuse-world') {
+    guard = { client: lyingRefuseWorldClient(browser), stop: async () => {} };
+  } else if (mode === 'refuse-world') {
+    guard = emulatedGuard(browser, {
+      refuse: (method) => method === 'Page.createIsolatedWorld',
+    });
   } else if (mode === 'refuse-command-and-block-script') {
     guard = emulatedGuard(browser, {
       refuse: (method, params) => protectedCommand(method, params, targets),
@@ -574,6 +595,32 @@ test('a guard that replies with a refusal but still forwards the protected comma
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+const isolatedForeignScript = set.vectors.filter(
+  (vector) => vector.id === 'E7.isolated-foreign.script'
+);
+
+test('a correct refusal of createIsolatedWorld passes E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that forwards createIsolatedWorld but replies refused fails E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('lying-refuse-world', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.guarded.world, true, JSON.stringify(row));
   }
 });
 

@@ -511,15 +511,13 @@ const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.br
 test('adopt resumes a paused worker even when its browser context does not match', async () => {
   const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
   const adopt = source.indexOf('  adopt(event) {');
-  const foreign = source.indexOf(
-    'info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context',
-    adopt
-  );
+  const foreign = source.indexOf('browserContextId !== this.vars.context', adopt);
   const resume = source.indexOf('Runtime.runIfWaitingForDebugger', foreign);
   const matched = source.indexOf('const matched =', foreign);
   assert.ok(adopt >= 0 && foreign > adopt);
   assert.ok(resume > foreign && resume < matched);
   assert.ok(source.includes('async resumeWaiting('));
+  assert.equal(source.includes('if (info?.targetId) this.targets.push(info.targetId)'), false);
 });
 
 test('C8 attach rows do not opt into session reuse', () => {

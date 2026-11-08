@@ -652,10 +652,7 @@ class Execution {
       return;
     }
     if (isTab) this.tabSessions.add(child);
-    if (matched) {
-      this.sessions.child = child;
-      if (info?.targetId) this.targets.push(info.targetId);
-    }
+    if (matched) this.sessions.child = child;
     const nested = matched
       ? this.childSteps
       : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
@@ -1962,6 +1959,7 @@ class Execution {
             session
           )
         );
+      await Promise.allSettled(this.pending);
       await this.resumeWaiting();
       for (const targetId of new Set(this.targets))
         await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
@@ -1980,7 +1978,6 @@ class Execution {
         await outcome(
           (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
         );
-      await Promise.allSettled(this.pending);
       if (
         this.side === 'guarded' &&
         this.vector.observe?.eventsRedacted?.requires?.includes('discovery')

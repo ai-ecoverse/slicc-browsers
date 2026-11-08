@@ -81,7 +81,9 @@ export function emulatedGuard(browser, options = {}) {
     : 0;
   let listHoldStart = 0;
   const decision = async (targetId) => {
-    const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
+    const got = await unguarded.send('Target.getTargetInfo', { targetId }).catch(() => null);
+    if (!got?.targetInfo) return false;
+    const { targetInfo } = got;
     learnFrames();
     const f = frames.get(targetId);
     const documentURL = f?.url;

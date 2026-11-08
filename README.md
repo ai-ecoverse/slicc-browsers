@@ -7,7 +7,7 @@ The browser knowledge that SLICC's tools share. SLICC drives a real Chromium bro
 - which origins browser control must **never** touch, starting with seven's own origin and the vault;
 - how to prove that a CDP guard really keeps a client away from them.
 
-These programs can't share code, so they share data: one catalog, four sets of test vectors and their JSON schemas, published as a Go module, a Rust crate and an npm package at the same version.
+These programs can't share code, so they share data: one catalog, four vector sets and schemas, as a Go module, Rust crate and npm package at one version.
 
 | who | uses it for |
 | --- | --- |

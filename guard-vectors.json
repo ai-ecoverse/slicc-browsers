@@ -26267,7 +26267,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
+            "source": "// slicc\u2028fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
             "worldName": "slicc-bound-ls-{tag}"
           },
           "as": "boundLs",
@@ -26279,7 +26279,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
+            "source": "// slicc\u2029fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
             "worldName": "slicc-bound-ps-{tag}"
           },
           "as": "boundPs",
@@ -26315,7 +26315,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "﻿fetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
+            "source": "\ufefffetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
             "worldName": "slicc-bound-bom-{tag}"
           },
           "as": "boundBom",
@@ -26528,7 +26528,12 @@
       "trigger": [
         {
           "page": "navigate",
-          "url": "{target}/doc?n={tag}"
+          "url": "{target}/doc?n={tag}",
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "settle": {
@@ -26555,7 +26560,8 @@
             "world": "slicc-carry-{tag}",
             "origin": "{target}",
             "observer": "unguarded"
-          }
+          },
+          "dependsOn": ["nav"]
         },
         "loaded": {
           "means": "the stand-in served {target}/doc?n={tag}",
@@ -26569,6 +26575,10 @@
       "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
       "liveCheck": {
         "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
           {
             "loaded": "{target}/doc?n={tag}",
             "observer": "fixture"
@@ -26632,6 +26642,137 @@
       "designDependent": ["loaded"]
     },
     {
+      "id": "E7.init-world-carry.script",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-carry-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/doc?n={tag}"
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "settle": {
+            "ms": 500
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "worldOnProtected": {
+          "means": "the unguarded observer saw the named world created on {target}",
+          "check": {
+            "world": "slicc-carry-{tag}",
+            "origin": "{target}",
+            "observer": "unguarded"
+          }
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        }
+      },
+      "live": "the stand-in served the protected document, or the guard refused that load (pre + blocked)",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "worldOnProtected": true,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "worldOnProtected": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
       "id": "E7.init-world-bfcache",
       "family": "E",
       "kind": "cdp",
@@ -26663,7 +26804,12 @@
       "trigger": [
         {
           "page": "navigate",
-          "url": "{target}/bfcache?n={tag}-p"
+          "url": "{target}/bfcache?n={tag}-p",
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "settle": {
@@ -26714,26 +26860,33 @@
             "origin": "{target}",
             "afterClear": true,
             "observer": "unguarded"
-          }
+          },
+          "dependsOn": ["nav"]
         },
         "beacon": {
           "means": "a beacon from {target}",
           "check": {
             "beacon": "{target}",
             "observer": "fixture"
-          }
+          },
+          "dependsOn": ["nav"]
         },
         "loaded": {
           "means": "the stand-in served the protected bfcache document",
           "check": {
             "served": "{target}/bfcache?n={tag}-p",
             "observer": "fixture"
-          }
+          },
+          "dependsOn": []
         }
       },
       "live": "the stand-in served the protected bfcache document, or the guard refused that navigation (pre + blocked), or refused a refusable setup step",
       "liveCheck": {
         "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
           {
             "loaded": "{target}/bfcache?n={tag}-p",
             "observer": "fixture"
@@ -26799,6 +26952,170 @@
       "designDependent": ["loaded"]
     },
     {
+      "id": "E7.init-world-bfcache.script",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/bfcache?n={tag}-start"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Runtime.enable"
+        },
+        {
+          "cdp": "Page.addScriptToEvaluateOnNewDocument",
+          "params": {
+            "source": "",
+            "worldName": "slicc-bf-{tag}"
+          },
+          "as": "world",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
+          "url": "{target}/bfcache?n={tag}-p"
+        },
+        {
+          "settle": {
+            "ms": 5000,
+            "or": {
+              "served": "{target}/bfcache?n={tag}-p",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "page": "navigate",
+          "url": "{ordinary}/bfcache?n={tag}-b"
+        },
+        {
+          "settle": {
+            "ms": 5000,
+            "or": {
+              "served": "{ordinary}/bfcache?n={tag}-b",
+              "observer": "fixture"
+            }
+          }
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "history.back()",
+            "returnByValue": true
+          },
+          "as": "back"
+        },
+        {
+          "settle": {
+            "ms": 3000
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "worldOnProtected": {
+          "means": "after bfcache restore the unguarded observer saw the named no-code world on the protected document",
+          "check": {
+            "world": "slicc-bf-{tag}",
+            "origin": "{target}",
+            "afterClear": true,
+            "observer": "unguarded"
+          }
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          }
+        },
+        "loaded": {
+          "means": "the stand-in served the protected bfcache document",
+          "check": {
+            "served": "{target}/bfcache?n={tag}-p",
+            "observer": "fixture"
+          },
+          "dependsOn": []
+        }
+      },
+      "live": "the stand-in served the protected document, or the guard refused that load (pre + blocked)",
+      "liveCheck": {
+        "any": [
+          {
+            "loaded": "{target}/bfcache?n={tag}-p",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/bfcache?n={tag}-p",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/bfcache?n={tag}-p",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "worldOnProtected": true,
+          "beacon": false,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "worldOnProtected": false,
+        "beacon": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
       "id": "E7.init-world-error",
       "family": "E",
       "kind": "cdp",
@@ -26834,7 +27151,12 @@
       "trigger": [
         {
           "page": "navigate",
-          "url": "{target}/doc?n={tag}"
+          "url": "{target}/doc?n={tag}",
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "settle": {
@@ -26850,14 +27172,16 @@
           "check": {
             "world": "slicc-error-{tag}",
             "observer": "unguarded"
-          }
+          },
+          "dependsOn": ["nav"]
         },
         "beacon": {
           "means": "a beacon from {target}",
           "check": {
             "beacon": "{target}",
             "observer": "fixture"
-          }
+          },
+          "dependsOn": ["nav"]
         },
         "pre": {
           "means": "the stand-in saw a pre-request for {target}/doc?n={tag}",
@@ -26868,9 +27192,13 @@
           }
         }
       },
-      "live": "the runner saw a pre-request for the protected URL, or the guard refused the world",
+      "live": "the runner saw a pre-request for the protected URL, or the guard refused the world, or the guard refused the protected navigation command",
       "liveCheck": {
         "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
           {
             "pre": "{target}/doc?n={tag}",
             "observer": "fixture"
@@ -26971,6 +27299,242 @@
       "trigger": [
         {
           "page": "navigate",
+          "url": "{target}/doc?n={tag}",
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "or": {
+              "served": "{target}/doc?n={tag}",
+              "observer": "fixture"
+            }
+          }
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "focused": {
+          "means": "the unguarded observer still reads focus emulation on the document after the protected navigation attempt",
+          "check": {
+            "expression": "document.hasFocus()",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        },
+        "media": {
+          "means": "the unguarded observer matches prefers-reduced-motion: reduce on {target}",
+          "check": {
+            "expression": "matchMedia('(prefers-reduced-motion: reduce)').matches",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        },
+        "viewport": {
+          "means": "the unguarded observer still reads the admitted viewport override after the protected navigation attempt",
+          "check": {
+            "expression": "innerWidth + 'x' + innerHeight",
+            "equals": "1001x601",
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        },
+        "touch": {
+          "means": "the unguarded observer reads navigator.maxTouchPoints as 2 on {target}",
+          "check": {
+            "expression": "navigator.maxTouchPoints",
+            "equals": 2,
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        },
+        "beacon": {
+          "means": "a beacon from {target}",
+          "check": {
+            "beacon": "{target}",
+            "observer": "fixture"
+          },
+          "dependsOn": ["nav"]
+        },
+        "loaded": {
+          "means": "the stand-in served {target}/doc?n={tag}",
+          "dependsOn": [],
+          "check": {
+            "served": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        },
+        "exposed": {
+          "means": "the unguarded observer finds the admitted display overrides (focus, media, viewport, touch) on a document at {target}",
+          "check": {
+            "expression": "location.href.includes('/doc?n={tag}') && location.href.includes(location.origin) && document.hasFocus() && matchMedia('(prefers-reduced-motion: reduce)').matches && innerWidth === 1001 && navigator.maxTouchPoints === 2",
+            "equals": true,
+            "via": "unguarded",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          {
+            "registration": "any",
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "focused": true,
+          "media": true,
+          "viewport": true,
+          "touch": true,
+          "exposed": true,
+          "beacon": false,
+          "loaded": true
+        }
+      },
+      "expected": {
+        "exposed": false,
+        "beacon": false,
+        "loaded": "either"
+      },
+      "designDependent": ["loaded"]
+    },
+    {
+      "id": "E7.emulation-carry.script",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "cdp": "Page.enable"
+        },
+        {
+          "cdp": "Emulation.setFocusEmulationEnabled",
+          "params": {
+            "enabled": true
+          },
+          "as": "focus",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setEmulatedMedia",
+          "params": {
+            "media": "",
+            "features": [
+              {
+                "name": "prefers-color-scheme",
+                "value": "light"
+              },
+              {
+                "name": "prefers-reduced-motion",
+                "value": "reduce"
+              },
+              {
+                "name": "forced-colors",
+                "value": "none"
+              },
+              {
+                "name": "prefers-contrast",
+                "value": "no-preference"
+              }
+            ]
+          },
+          "as": "media",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setDeviceMetricsOverride",
+          "params": {
+            "width": 1001,
+            "height": 601,
+            "deviceScaleFactor": 1,
+            "mobile": false,
+            "screenWidth": 1001,
+            "screenHeight": 601
+          },
+          "as": "metrics",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Emulation.setTouchEmulationEnabled",
+          "params": {
+            "enabled": true,
+            "maxTouchPoints": 2
+          },
+          "as": "touch",
+          "requires": ["stockSetup"]
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
           "url": "{target}/doc?n={tag}"
         },
         {
@@ -27048,7 +27612,7 @@
           }
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation (pre + blocked), or refused a refusable setup step",
+      "live": "the stand-in served the protected document, or the guard refused that load (pre + blocked)",
       "liveCheck": {
         "any": [
           {
@@ -27090,10 +27654,6 @@
                 "observer": "client"
               }
             ],
-            "observer": "client"
-          },
-          {
-            "registration": "any",
             "observer": "client"
           }
         ],
@@ -27143,6 +27703,132 @@
       "trigger": [
         {
           "page": "navigate",
+          "url": "{target}/doc?n={tag}",
+          "as": "nav",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
+        },
+        {
+          "settle": {
+            "title": "doc",
+            "ms": 5000,
+            "required": true,
+            "dependsOn": ["nav"]
+          }
+        },
+        {
+          "cdp": "Page.getFrameTree",
+          "as": "tree"
+        },
+        {
+          "cdp": "Page.createIsolatedWorld",
+          "params": {
+            "frameId": {
+              "$result": "tree",
+              "path": "result.frameTree.frame.id"
+            },
+            "worldName": "slicc-foreign-{tag}",
+            "grantUniveralAccess": true,
+            "contentSecurityPolicy": "default-src 'none'"
+          },
+          "as": "foreign",
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          },
+          "requires": ["stockSetup"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["stockSetup"],
+      "observe": {
+        "noContext": {
+          "means": "createIsolatedWorld on a protected document returned no executionContextId",
+          "dependsOn": ["nav", "foreign"],
+          "check": {
+            "any": [
+              {
+                "refused": ["foreign"],
+                "observer": "client"
+              },
+              {
+                "result": "foreign",
+                "path": "result.executionContextId",
+                "equals": {
+                  "$absentOr": 0
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "world": {
+          "means": "the unguarded observer saw world slicc-foreign-{tag} on the document",
+          "check": {
+            "world": "slicc-foreign-{tag}",
+            "observer": "unguarded"
+          },
+          "dependsOn": ["nav"]
+        }
+      },
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the protected navigation or the isolated world",
+      "liveCheck": {
+        "any": [
+          {
+            "refused": ["nav"],
+            "observer": "client"
+          },
+          {
+            "refused": ["foreign"],
+            "observer": "client"
+          },
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "noContext": false,
+          "world": true
+        }
+      },
+      "expected": {
+        "noContext": true,
+        "world": false
+      }
+    },
+    {
+      "id": "E7.isolated-foreign.script",
+      "family": "E",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        },
+        {
+          "observer": "watch"
+        },
+        {
+          "cdp": "Page.enable",
+          "requires": ["stockSetup"]
+        },
+        {
+          "cdp": "Runtime.enable"
+        }
+      ],
+      "trigger": [
+        {
+          "page": "href",
           "url": "{target}/doc?n={tag}"
         },
         {
@@ -27205,13 +27891,59 @@
             "world": "slicc-foreign-{tag}",
             "observer": "unguarded"
           },
-          "dependsOn": []
+          "dependsOn": ["foreign"]
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}",
+      "live": "the stand-in served {target}/doc?n={tag}, or the guard refused the isolated world, or refused the protected document load (pre + blocked)",
       "liveCheck": {
-        "loaded": "{target}/doc?n={tag}",
-        "observer": "fixture"
+        "any": [
+          {
+            "refused": ["foreign"],
+            "observer": "client"
+          },
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          },
+          {
+            "all": [
+              {
+                "pre": "{target}/doc?n={tag}",
+                "observer": "fixture"
+              },
+              {
+                "any": [
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "client"
+                  },
+                  {
+                    "blocked": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page",
+                      "frame": false
+                    },
+                    "observer": "unguarded"
+                  },
+                  {
+                    "history": {
+                      "url": "{target}/doc?n={tag}",
+                      "session": "page"
+                    },
+                    "observer": "unguarded"
+                  }
+                ],
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        ],
+        "observer": "client"
       },
       "control": {
         "origin": "ordinary",
@@ -27554,7 +28286,11 @@
           },
           "session": "browser",
           "as": "created",
-          "requires": ["browserSession"]
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "wait": 2000
@@ -27575,7 +28311,8 @@
               }
             },
             "observer": "client"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "pageAttached": {
           "means": "the client kept a page session for the protected tab child",
@@ -27592,7 +28329,8 @@
               }
             },
             "observer": "client"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "driven": {
           "means": "the unguarded observer finds the created page on {target}",
@@ -27604,19 +28342,25 @@
             "via": "unguarded",
             "session": "child",
             "observer": "unguarded"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "beacon": {
           "means": "a beacon from {target}",
           "check": {
             "beacon": "{target}",
             "observer": "fixture"
-          }
+          },
+          "dependsOn": ["created"]
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session",
+      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session, or the guard refused creating the protected target",
       "liveCheck": {
         "any": [
+          {
+            "refused": ["created"],
+            "observer": "client"
+          },
           {
             "loaded": "{target}/doc?n={tag}",
             "observer": "fixture"
@@ -27839,7 +28583,11 @@
           },
           "session": "browser",
           "as": "created",
-          "requires": ["browserSession"]
+          "requires": ["browserSession"],
+          "refusable": true,
+          "refusal": {
+            "match": "refused"
+          }
         },
         {
           "wait": 2000
@@ -27860,7 +28608,8 @@
               }
             },
             "observer": "client"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "pageAttached": {
           "means": "the client kept a page session for the protected tab child",
@@ -27877,7 +28626,8 @@
               }
             },
             "observer": "client"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "driven": {
           "means": "the unguarded observer finds the created page on {target}",
@@ -27889,19 +28639,25 @@
             "via": "unguarded",
             "session": "child",
             "observer": "unguarded"
-          }
+          },
+          "dependsOn": ["created"]
         },
         "beacon": {
           "means": "a beacon from {target}",
           "check": {
             "beacon": "{target}",
             "observer": "fixture"
-          }
+          },
+          "dependsOn": ["created"]
         }
       },
-      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session",
+      "live": "the stand-in served {target}/doc?n={tag}, or the tab was held without a client page session, or the guard refused creating the protected target",
       "liveCheck": {
         "any": [
+          {
+            "refused": ["created"],
+            "observer": "client"
+          },
           {
             "loaded": "{target}/doc?n={tag}",
             "observer": "fixture"

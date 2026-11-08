@@ -13,9 +13,13 @@ const stripVectors = set.vectors.filter((vector) => vector.id === stripId);
 const attackIds = [
   'E7.init-boundary',
   'E7.init-world-carry',
+  'E7.init-world-carry.script',
   'E7.init-world-bfcache',
+  'E7.init-world-bfcache.script',
   'E7.emulation-carry',
+  'E7.emulation-carry.script',
   'E7.isolated-foreign',
+  'E7.isolated-foreign.script',
   'E7.ua-empty',
   'E7.binding-main',
   'E7.binding-main-ctx',
@@ -250,7 +254,28 @@ test('C3.tab-service-worker-leak control passes on a secure origin', {
 });
 
 const carryIds = ['E7.emulation-carry', 'E7.init-world-carry', 'E7.init-world-bfcache'];
+const carryScriptIds = carryIds.map((id) => `${id}.script`);
 const carryVectors = set.vectors.filter((vector) => carryIds.includes(vector.id));
+const carryScriptVectors = set.vectors.filter((vector) => carryScriptIds.includes(vector.id));
+const commandNavIds = [
+  ...carryIds,
+  'E7.init-world-error',
+  'E7.isolated-foreign',
+  'C3.tab-protected',
+  'C3.tab-protected.synthetic',
+];
+const commandNavVectors = set.vectors.filter((vector) => commandNavIds.includes(vector.id));
+const scriptAttackVectors = set.vectors.filter((vector) =>
+  [...carryScriptIds, 'E7.isolated-foreign.script'].includes(vector.id)
+);
+
+function protectedCommand(method, params, targets) {
+  const origins = new Set([targets.seven, targets.vault].map((origin) => new URL(origin).origin));
+  if (method === 'Page.navigate' && params?.url) return origins.has(new URL(params.url).origin);
+  if (method === 'Target.createTarget' && params?.url)
+    return origins.has(new URL(params.url).origin);
+  return false;
+}
 
 function clearingStockClient(browser, targets) {
   const protectedOrigins = new Set(
@@ -330,6 +355,25 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
       failDocumentOrigins: [targets.seven, targets.vault],
     });
     pageEvidenceOnly(guard.client, mode === 'wrong-url' ? { rewrite } : undefined);
+  } else if (mode === 'refuse-command') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+    });
+  } else if (mode === 'refuse-command-and-block-script') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+      failDocumentOrigins: [targets.seven, targets.vault],
+    });
+    pageEvidenceOnly(guard.client);
+  } else if (mode === 'refuse-command-keep-script') {
+    guard = emulatedGuard(browser, {
+      refuse: (method, params) => protectedCommand(method, params, targets),
+    });
+  } else if (mode === 'unrelated-error') {
+    guard = emulatedGuard(browser, {
+      fail: (method, params) =>
+        protectedCommand(method, params, targets) ? 'Internal error' : undefined,
+    });
   } else if (mode === 'clear') {
     guard = { client: clearingStockClient(browser, targets), stop: async () => {} };
   } else {
@@ -406,6 +450,74 @@ test('a guard that clears admitted state before the protected document runs pass
   timeout: 600000,
 }, async () => {
   const { execution } = await runCarry('clear');
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that refuses the protected navigate or createTarget command passes those rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command', { vectors: commandNavVectors });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that refuses the command and blocks script navigation passes command and script carry rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command-and-block-script', {
+    vectors: [
+      ...commandNavVectors.filter((vector) => carryIds.includes(vector.id)),
+      ...carryScriptVectors,
+    ],
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that refuses the command but keeps admitted state on a script load fails the script variants', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('refuse-command-keep-script', {
+    vectors: scriptAttackVectors,
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('a guard that fails the protected navigate without a matched refusal fails the command rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('unrelated-error', {
+    vectors: carryVectors,
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.ok(
+      row.errors.some((error) => /failed without a refusal/.test(error)),
+      JSON.stringify(row)
+    );
+  }
+});
+
+test('clear-then-load still passes command and script carry rows', {
+  timeout: 900000,
+}, async () => {
+  const { execution } = await runCarry('clear', {
+    vectors: [...carryVectors, ...carryScriptVectors],
+  });
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));

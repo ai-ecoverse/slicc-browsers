@@ -49,6 +49,7 @@ export const drivable = new Set([
   'C9.page-drivable',
   'X1.after-exit',
   'E7.init-script',
+  'E7.init-world-error',
   'E7.emulation',
   'E7.binding',
   'C3.tab-attach',

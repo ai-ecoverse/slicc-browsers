@@ -32,6 +32,7 @@ jobs:
         rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-wasip1
         rustup default stable
         npm run lint
+      chrome: '156'
       test-glob: test/integration/*.test.mjs
       shards: 4
       timeout-minutes: 30

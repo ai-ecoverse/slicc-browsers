@@ -1093,7 +1093,7 @@ class Execution {
   }
 
   async probeSessions(step) {
-    return outcome(
+    const out = await outcome(
       probeWorkerSessions({
         client: this.client,
         sessions: this.probeSessionIds(step),
@@ -1102,58 +1102,79 @@ class Execution {
         detached: (sessionId) => this.detached(sessionId),
       })
     );
+    this.probedSessionIds ??= new Set();
+    for (const sessionId of out.result?.sessions ?? []) this.probedSessionIds.add(sessionId);
+    return out;
   }
 
-  async reprobeSessions(observed) {
-    const step = [...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])].find(
+  probeStep() {
+    return [...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])].find(
       (entry) => entry.probeSessions
     );
-    if (!step?.probeSessions || !this.calls.probe) return;
+  }
+
+  async probeFreshSessions() {
+    const step = this.probeStep();
+    if (!step?.probeSessions) return false;
     const expanded = expand(step, this.vars);
-    const seen = new Set(this.calls.probe.result?.sessions ?? []);
-    const late = this.probeSessionIds(expanded).filter(
-      (sessionId) => sessionId && !seen.has(sessionId)
+    this.probedSessionIds ??= new Set();
+    const fresh = this.probeSessionIds(expanded).filter(
+      (sessionId) => sessionId && !this.probedSessionIds.has(sessionId)
     );
-    if (!late.length) return;
+    if (!fresh.length) return this.calls.probe?.result?.reachable === true;
     const out = await probeWorkerSessions({
       client: this.client,
-      sessions: late,
+      sessions: fresh,
       path: expand(expanded.probeSessions.path, this.vars),
       tag: this.vars.tag,
       detached: (sessionId) => this.detached(sessionId),
     });
-    const sessions = [...seen, ...late];
+    for (const sessionId of fresh) this.probedSessionIds.add(sessionId);
+    const sessions = [...new Set([...(this.calls.probe?.result?.sessions ?? []), ...fresh])];
     if (out.incomplete) {
       this.calls.probe = {
         ok: true,
-        result: { ...(this.calls.probe.result ?? {}), ...out, sessions },
+        result: { ...(this.calls.probe?.result ?? {}), ...out, sessions },
       };
       this.incomplete.push(`probeSessions: ${out.incomplete}`);
-      if (Object.hasOwn(observed, 'workerReachable')) observed.workerReachable = 'incomplete';
-      return;
+      return 'incomplete';
     }
-    if (!out.reachable) {
-      this.calls.probe = {
-        ok: true,
-        result: {
-          ...(this.calls.probe.result ?? {}),
-          reachable: this.calls.probe.result?.reachable === true,
-          probed: (this.calls.probe.result?.probed ?? 0) + out.probed,
-          sessions,
-        },
-      };
-      return;
-    }
+    const reachable = out.reachable || this.calls.probe?.result?.reachable === true;
     this.calls.probe = {
       ok: true,
       result: {
-        ...(this.calls.probe.result ?? {}),
-        reachable: true,
-        probed: (this.calls.probe.result?.probed ?? 0) + out.probed,
+        ...(this.calls.probe?.result ?? {}),
+        reachable,
+        probed: (this.calls.probe?.result?.probed ?? 0) + out.probed,
         sessions,
       },
     };
-    if (Object.hasOwn(observed, 'workerReachable')) observed.workerReachable = true;
+    return reachable;
+  }
+
+  async observeProbeReachable(want, check) {
+    if (want !== true && want !== false) return this.check(check);
+    let seen = await this.probeFreshSessions();
+    if (seen === 'incomplete') return 'incomplete';
+    if (seen === true) return true;
+    const met = await this.poll(
+      async () => {
+        if (this.clients.flight?.abandoned) return true;
+        seen = await this.probeFreshSessions();
+        if (seen === 'incomplete') return true;
+        return seen === true;
+      },
+      observeMs,
+      false
+    );
+    if (seen === 'incomplete') return 'incomplete';
+    if (want === true && !met && !this.clients.flight?.abandoned) {
+      this.incomplete.push(
+        `workerReachable: probe evidence not observed within ${this.bound(observeMs)}ms`
+      );
+      return 'incomplete';
+    }
+    return seen === true;
   }
 
   async watchPage(step) {
@@ -1460,16 +1481,24 @@ class Execution {
     return !!late;
   }
 
-  async observe(name, check) {
-    const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
-      name
-    ];
+  observeEarly(name, check, want) {
+    if (name === 'workerReachable' && this.probeStep())
+      return this.observeProbeReachable(want, check);
     if (check?.forwarded) return this.forwardedCheck(name, check, want);
     if (
       check?.result &&
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
     )
       return 'incomplete';
+    return undefined;
+  }
+
+  async observe(name, check) {
+    const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
+      name
+    ];
+    const early = this.observeEarly(name, check, want);
+    if (early !== undefined) return early;
     const plan = steps(this.vector, this.side, this.vars);
     const names = resultNames(check);
     const hasGetTargets = (node) =>
@@ -1825,7 +1854,6 @@ class Execution {
       await sleep(100);
       const unseen = await this.awaitPre();
       const { observed, incomplete } = await this.observeAll(unseen);
-      await this.reprobeSessions(observed);
       this.options.debug?.({
         events: this.client.events.slice(this.eventStart),
         calls: this.calls,

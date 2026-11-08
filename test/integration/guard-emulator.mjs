@@ -79,9 +79,7 @@ export function emulatedGuard(browser, options = {}) {
   const workerHeldUntil = options.delayProtectedWorkerMs
     ? Date.now() + options.delayProtectedWorkerMs
     : 0;
-  const listHeldUntil = options.delayProtectedListMs
-    ? Date.now() + options.delayProtectedListMs
-    : 0;
+  let listHoldStart = 0;
   const decision = async (targetId) => {
     const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
     learnFrames();
@@ -898,7 +896,8 @@ export function emulatedGuard(browser, options = {}) {
           continue;
         }
         if (blocked && worker && options.delayProtectedListMs) {
-          if (Date.now() < listHeldUntil) continue;
+          if (!listHoldStart) listHoldStart = Date.now();
+          if (Date.now() < listHoldStart + options.delayProtectedListMs) continue;
           visible.push(redactInfo(info));
           continue;
         }

@@ -652,7 +652,10 @@ class Execution {
       return;
     }
     if (isTab) this.tabSessions.add(child);
-    if (matched) this.sessions.child = child;
+    if (matched) {
+      this.sessions.child = child;
+      if (info?.targetId) this.targets.push(info.targetId);
+    }
     const nested = matched
       ? this.childSteps
       : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
@@ -1961,9 +1964,12 @@ class Execution {
         );
       await Promise.allSettled(this.pending);
       await this.resumeWaiting();
-      for (const targetId of new Set(this.targets))
-        await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
       const listed = await outcome((this.reader ?? this.client).send('Target.getTargets', {}));
+      const byId = new Map((listed.result?.targetInfos ?? []).map((info) => [info.targetId, info]));
+      for (const targetId of new Set(this.targets)) {
+        if (byId.get(targetId)?.type === 'iframe') continue;
+        await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
+      }
       for (const info of listed.result?.targetInfos ?? []) {
         if (
           (info.type === 'shared_worker' || info.type === 'service_worker') &&

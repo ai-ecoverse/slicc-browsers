@@ -517,7 +517,7 @@ test('adopt resumes a paused worker even when its browser context does not match
   assert.ok(adopt >= 0 && foreign > adopt);
   assert.ok(resume > foreign && resume < matched);
   assert.ok(source.includes('async resumeWaiting('));
-  assert.equal(source.includes('if (info?.targetId) this.targets.push(info.targetId)'), false);
+  assert.ok(source.includes("byId.get(targetId)?.type === 'iframe'"));
 });
 
 test('C8 attach rows do not opt into session reuse', () => {

@@ -31,7 +31,7 @@ import {
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
-import { protectedWorker } from './protected-worker.mjs';
+import { probeWorkerSessions, protectedWorker } from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
@@ -165,6 +165,7 @@ class Execution {
     this.refusalScale = options.refusalScale ?? 1;
     this.childRuns = new Map();
     this.named = new Map();
+    this.eventMarks = new Map();
     this.processed = new Set();
     this.eventStart = this.client.events.length;
     this.actionEventStart = this.eventStart;
@@ -698,7 +699,12 @@ class Execution {
   }
 
   childMatches(info) {
-    if (this.childWhere.type && info?.type !== this.childWhere.type) return false;
+    if (this.childWhere.type !== undefined) {
+      const types = Array.isArray(this.childWhere.type)
+        ? this.childWhere.type
+        : [this.childWhere.type];
+      if (!types.includes(info?.type)) return false;
+    }
     if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
     if (this.childWhere.urlPrefix !== undefined)
       return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
@@ -746,6 +752,7 @@ class Execution {
       'unparseable',
       'errorPage',
       'spawnWorker',
+      'probeSessions',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -761,6 +768,7 @@ class Execution {
         'frameRead',
         'bfcacheRestore',
         'spawnWorker',
+        'probeSessions',
       ].includes(probe) &&
       out.ok &&
       out.result?.incomplete
@@ -857,49 +865,9 @@ class Execution {
       return;
     }
     if (step.client) return outcome(this.exit());
-    if (step.redirectSecret) {
-      this.internalSessions.add(session);
-      try {
-        return await outcome(
-          redirectSecret({
-            client: this.client,
-            reader: this.reader,
-            session,
-            targetId: this.pageTarget,
-            ordinary: this.vars.ordinary,
-            tag: this.vars.tag,
-            fixture: this.options.fixture,
-            mode: step.redirectSecret,
-            side: this.side,
-            settleScale: this.scale,
-            controls: (this.clients.redirectSecretControls ??= {}),
-            internalSessions: this.internalSessions,
-          })
-        );
-      } finally {
-        this.internalSessions.delete(session);
-      }
-    }
-    if (step.errorPage)
-      return outcome(
-        protectedErrorPage({
-          client: this.client,
-          reader: this.reader,
-          session,
-          targetId: this.pageTarget,
-          ordinary: this.vars.ordinary,
-          protectedOrigin: this.vars.seven,
-          tag: this.vars.tag,
-          internalSessions: this.internalSessions,
-          mode: step.errorPage,
-          side: this.side,
-          secret: step.secret,
-          discovery: supported(['discovery'], this.options.capabilities),
-          notes: this.notes,
-          budget: this.bound(5000),
-        })
-      );
+    if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
     if (step.spawnWorker) return this.spawnWorker(step);
+    if (step.probeSessions) return this.probeSessions(step);
     if (step.bfcacheRestore)
       return outcome(
         bfcacheRestore({
@@ -1042,7 +1010,52 @@ class Execution {
     }
   }
 
+  async originProbe(step, session) {
+    if (step.redirectSecret) {
+      this.internalSessions.add(session);
+      try {
+        return await outcome(
+          redirectSecret({
+            client: this.client,
+            reader: this.reader,
+            session,
+            targetId: this.pageTarget,
+            ordinary: this.vars.ordinary,
+            tag: this.vars.tag,
+            fixture: this.options.fixture,
+            mode: step.redirectSecret,
+            side: this.side,
+            settleScale: this.scale,
+            controls: (this.clients.redirectSecretControls ??= {}),
+            internalSessions: this.internalSessions,
+          })
+        );
+      } finally {
+        this.internalSessions.delete(session);
+      }
+    }
+    return outcome(
+      protectedErrorPage({
+        client: this.client,
+        reader: this.reader,
+        session,
+        targetId: this.pageTarget,
+        ordinary: this.vars.ordinary,
+        protectedOrigin: this.vars.seven,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        mode: step.errorPage,
+        side: this.side,
+        secret: step.secret,
+        discovery: supported(['discovery'], this.options.capabilities),
+        notes: this.notes,
+        budget: this.bound(5000),
+      })
+    );
+  }
+
   async spawnWorker(step) {
+    if (step.as) this.eventMarks.set(step.as, this.client.events.length);
     const pageUrl = expand(step.url ?? '{target}/doc?n=host-{tag}', this.vars);
     const hostUrl = step.frame ? expand(step.frame, this.vars) : undefined;
     const out = await outcome(
@@ -1063,6 +1076,28 @@ class Execution {
       this.targets.push(out.result.workerTargetId);
     }
     return out;
+  }
+
+  async probeSessions(step) {
+    const mark = this.eventMarks.get(step.probeSessions.since) ?? this.eventStart;
+    const sessions = [];
+    for (const event of this.client.events.slice(mark)) {
+      if (event.method === 'Target.attachedToTarget' && event.params?.sessionId)
+        sessions.push(event.params.sessionId);
+    }
+    for (const name of step.probeSessions.attach ?? ['attach']) {
+      const sessionId = this.calls[name]?.result?.sessionId;
+      if (sessionId) sessions.push(sessionId);
+    }
+    return outcome(
+      probeWorkerSessions({
+        client: this.client,
+        sessions,
+        path: expand(step.probeSessions.path, this.vars),
+        tag: this.vars.tag,
+        detached: (sessionId) => this.detached(sessionId),
+      })
+    );
   }
 
   async watchPage(step) {
@@ -1381,8 +1416,17 @@ class Execution {
       return 'incomplete';
     const plan = steps(this.vector, this.side, this.vars);
     const names = resultNames(check);
+    const hasGetTargets = (node) =>
+      (node?.result &&
+        [...plan.setup, ...plan.trigger].some(
+          (step) => step.as === node.result && step.cdp === 'Target.getTargets'
+        )) ||
+      [...(node?.all ?? []), ...(node?.any ?? []), ...(node?.not ? [node.not] : [])].some(
+        hasGetTargets
+      );
     const snapshots =
-      this.side === 'control' && want === true && !this.clients.flight?.abandoned
+      !this.clients.flight?.abandoned &&
+      ((this.side === 'control' && want === true) || (want === false && hasGetTargets(check)))
         ? [...plan.setup, ...plan.trigger].filter(
             (step) =>
               names.includes(step.as) &&
@@ -1396,18 +1440,23 @@ class Execution {
       [...(node?.all ?? []), ...(node?.any ?? []), ...(node?.not ? [node.not] : [])].some(hasEvent);
     const polled =
       check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
+    const shouldPoll =
+      (want === true && (polled || snapshots.length > 0)) ||
+      (want === false && snapshots.length > 0);
     if (
       want === false &&
+      !shouldPoll &&
       (check?.world !== undefined || check?.script !== undefined || hasEvent(check))
     )
       return this.absenceCheck(check);
-    if (want !== true || (!polled && !snapshots.length)) return this.check(check);
+    if (!shouldPoll) return this.check(check);
     let seen = false;
     const met = await this.poll(
       async () => {
         if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
         if (seen === 'unwatched' || seen === 'incomplete') return true;
+        if (want === false && seen === true) return true;
         if (seen !== true && snapshots.length) {
           await this.execute(snapshots, undefined, 'observation');
           if (this.clients.flight?.abandoned) return true;
@@ -1420,7 +1469,7 @@ class Execution {
       snapshots.length > 0
     );
     if (seen === 'unwatched' || seen === 'incomplete') return seen;
-    if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
+    if (want === true && (!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
       );

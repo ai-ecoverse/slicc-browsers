@@ -185,7 +185,7 @@ pub struct Where {
     #[serde(default, rename = "urlPrefix", skip_serializing_if = "Option::is_none")]
     pub url_prefix: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<String>,
+    pub r#type: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -203,6 +203,12 @@ pub struct Step {
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame: Option<String>,
+    #[serde(
+        default,
+        rename = "probeSessions",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub probe_sessions: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<String>,
     #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]

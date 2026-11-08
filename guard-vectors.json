@@ -29463,12 +29463,6 @@
           }
         },
         {
-          "cdp": "Target.getTargets",
-          "session": "browser",
-          "as": "targets",
-          "requires": ["browserSession"]
-        },
-        {
           "cdp": "Target.attachToTarget",
           "params": {
             "targetId": "{workerTarget}",
@@ -29484,6 +29478,21 @@
         },
         {
           "wait": 1500
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"]
+        },
+        {
+          "probeSessions": {
+            "since": "spawn",
+            "path": "/worker.js",
+            "attach": ["attach"]
+          },
+          "as": "probe",
+          "requires": ["autoAttach"]
         }
       ],
       "targets": ["seven", "vault"],
@@ -29763,6 +29772,16 @@
             "refused": ["attach"],
             "observer": "client"
           }
+        },
+        "workerReachable": {
+          "means": "a client session can evaluate in the protected worker global scope",
+          "dependsOn": [],
+          "check": {
+            "result": "probe",
+            "path": "result.reachable",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -29790,7 +29809,8 @@
           "workerAttached": "either",
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false
+          "attachRefused": false,
+          "workerReachable": "either"
         }
       },
       "expected": {
@@ -29800,7 +29820,8 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either"
+        "attachRefused": "either",
+        "workerReachable": false
       },
       "designDependent": ["attachRefused", "workerAttached"]
     },
@@ -29865,12 +29886,6 @@
           }
         },
         {
-          "cdp": "Target.getTargets",
-          "session": "browser",
-          "as": "targets",
-          "requires": ["browserSession"]
-        },
-        {
           "cdp": "Target.attachToTarget",
           "params": {
             "targetId": "{workerTarget}",
@@ -29886,6 +29901,21 @@
         },
         {
           "wait": 1500
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"]
+        },
+        {
+          "probeSessions": {
+            "since": "spawn",
+            "path": "/shared-worker.js",
+            "attach": ["attach"]
+          },
+          "as": "probe",
+          "requires": ["autoAttach"]
         }
       ],
       "targets": ["seven", "vault"],
@@ -30165,6 +30195,16 @@
             "refused": ["attach"],
             "observer": "client"
           }
+        },
+        "workerReachable": {
+          "means": "a client session can evaluate in the protected worker global scope",
+          "dependsOn": [],
+          "check": {
+            "result": "probe",
+            "path": "result.reachable",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -30192,7 +30232,8 @@
           "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false
+          "attachRefused": false,
+          "workerReachable": true
         }
       },
       "expected": {
@@ -30202,7 +30243,8 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either"
+        "attachRefused": "either",
+        "workerReachable": false
       },
       "designDependent": ["attachRefused"]
     },
@@ -30267,12 +30309,6 @@
           }
         },
         {
-          "cdp": "Target.getTargets",
-          "session": "browser",
-          "as": "targets",
-          "requires": ["browserSession"]
-        },
-        {
           "cdp": "Target.attachToTarget",
           "params": {
             "targetId": "{workerTarget}",
@@ -30288,6 +30324,21 @@
         },
         {
           "wait": 1500
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"]
+        },
+        {
+          "probeSessions": {
+            "since": "spawn",
+            "path": "/sw.js",
+            "attach": ["attach"]
+          },
+          "as": "probe",
+          "requires": ["autoAttach"]
         }
       ],
       "targets": ["seven", "vault"],
@@ -30567,6 +30618,16 @@
             "refused": ["attach"],
             "observer": "client"
           }
+        },
+        "workerReachable": {
+          "means": "a client session can evaluate in the protected worker global scope",
+          "dependsOn": [],
+          "check": {
+            "result": "probe",
+            "path": "result.reachable",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the stand-in served the protected host document and the unguarded worker still exists",
@@ -30594,7 +30655,8 @@
           "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false
+          "attachRefused": false,
+          "workerReachable": true
         }
       },
       "expected": {
@@ -30604,7 +30666,8 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either"
+        "attachRefused": "either",
+        "workerReachable": false
       },
       "designDependent": ["attachRefused"]
     },
@@ -30650,7 +30713,7 @@
           ],
           "requires": ["autoAttach"],
           "where": {
-            "type": "page"
+            "type": ["page", "iframe"]
           }
         }
       ],
@@ -30670,12 +30733,6 @@
           }
         },
         {
-          "cdp": "Target.getTargets",
-          "session": "browser",
-          "as": "targets",
-          "requires": ["browserSession"]
-        },
-        {
           "cdp": "Target.attachToTarget",
           "params": {
             "targetId": "{workerTarget}",
@@ -30691,6 +30748,21 @@
         },
         {
           "wait": 1500
+        },
+        {
+          "cdp": "Target.getTargets",
+          "session": "browser",
+          "as": "targets",
+          "requires": ["browserSession"]
+        },
+        {
+          "probeSessions": {
+            "since": "spawn",
+            "path": "/worker.js",
+            "attach": ["attach"]
+          },
+          "as": "probe",
+          "requires": ["autoAttach"]
         }
       ],
       "targets": ["seven", "vault"],
@@ -30970,6 +31042,16 @@
             "refused": ["attach"],
             "observer": "client"
           }
+        },
+        "workerReachable": {
+          "means": "a client session can evaluate in the protected worker global scope",
+          "dependsOn": [],
+          "check": {
+            "result": "probe",
+            "path": "result.reachable",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
       "live": "the stand-in served the protected iframe document and the unguarded framed worker still exists",
@@ -31001,7 +31083,8 @@
           "workerAttached": "either",
           "workerListed": true,
           "attachSession": true,
-          "attachRefused": false
+          "attachRefused": false,
+          "workerReachable": "either"
         }
       },
       "expected": {
@@ -31011,7 +31094,8 @@
         "workerListed": false,
         "workerDiscovered": false,
         "attachSession": false,
-        "attachRefused": "either"
+        "attachRefused": "either",
+        "workerReachable": false
       },
       "designDependent": ["attachRefused", "workerAttached"]
     }

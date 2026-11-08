@@ -1274,6 +1274,21 @@ async function runProtectedWorkers(mode) {
       exposeProtectedWorkers: true,
       delayProtectedWorkerMs: 800,
     });
+  } else if (mode === 'late-listed') {
+    guard = emulatedGuard(browser, {
+      ...catalogOpts,
+      delayProtectedListMs: 800,
+    });
+  } else if (mode === 'rewrite') {
+    guard = emulatedGuard(browser, {
+      ...catalogOpts,
+      rewriteProtectedWorkers: true,
+    });
+  } else if (mode === 'empty-info') {
+    guard = emulatedGuard(browser, {
+      ...catalogOpts,
+      emptyWorkerTargetInfo: true,
+    });
   } else if (mode === 'lying-attach') {
     guard = emulatedGuard(browser, { ...catalogOpts, allowProtectedAttach: true });
   } else {
@@ -1395,6 +1410,27 @@ test('a late protected-worker delivery fails each protected worker row', {
   timeout: 900000,
 }, async () => {
   const execution = await runProtectedWorkers('late-worker');
+  for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('a late getTargets listing of a protected worker fails each row', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('late-listed');
+  for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('a rewritten protected-worker attach fails each protected worker row', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('rewrite');
+  for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('an attachedToTarget with empty targetInfo fails each protected worker row', {
+  timeout: 900000,
+}, async () => {
+  const execution = await runProtectedWorkers('empty-info');
   for (const row of execution.results) assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 

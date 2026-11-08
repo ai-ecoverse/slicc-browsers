@@ -15,23 +15,31 @@ const protectedRows = [
   'C3.protected-worker-framed',
 ];
 const kinds = {
-  'C3.protected-worker-dedicated': { spawn: 'dedicated', type: 'worker', path: '/worker.js' },
+  'C3.protected-worker-dedicated': {
+    spawn: 'dedicated',
+    type: 'worker',
+    path: '/worker.js',
+    reachable: 'either',
+  },
   'C3.protected-worker-shared': {
     spawn: 'shared',
     type: 'shared_worker',
     path: '/shared-worker.js',
+    reachable: true,
   },
   'C3.protected-service-worker': {
     spawn: 'service',
     type: 'service_worker',
     path: '/sw.js',
     secure: true,
+    reachable: true,
   },
   'C3.protected-worker-framed': {
     spawn: 'dedicated',
     type: 'worker',
     path: '/worker.js',
     frame: '{ordinary}/doc?n=host-{tag}',
+    reachable: 'either',
   },
 };
 
@@ -124,33 +132,29 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     assert.equal(vector.expected.workerDiscovered, false, id);
     assert.equal(vector.expected.attachSession, false, id);
     assert.equal(vector.expected.attachRefused, 'either', id);
+    assert.equal(vector.expected.workerReachable, false, id);
     assert.equal(Object.hasOwn(vector.expected, 'attachForwarded'), false, id);
     assert.equal(Object.hasOwn(vector.control.expected, 'attachForwarded'), false, id);
     assert.equal(vector.requires.includes('forwardAudit'), false, id);
     assert.equal(vector.control.expected.workerExists, true, id);
     assert.equal(vector.control.expected.attachSession, true, id);
     assert.equal(vector.control.expected.attachRefused, false, id);
-    assert.ok(
-      Object.hasOwn(vector.observe.workerExists, 'dependsOn') &&
-        Object.hasOwn(vector.observe.workerAttached, 'dependsOn') &&
-        Object.hasOwn(vector.observe.workerListed, 'dependsOn') &&
-        Object.hasOwn(vector.observe.attachSession, 'dependsOn'),
-      id
-    );
-    assert.deepEqual(vector.observe.workerExists.dependsOn, [], id);
-    assert.deepEqual(vector.observe.workerAttached.dependsOn, [], id);
-    assert.deepEqual(vector.observe.workerListed.dependsOn, [], id);
-    assert.ok(JSON.stringify(vector.liveCheck).includes('loaded'), id);
-    assert.equal(JSON.stringify(vector.liveCheck).includes('"title"'), false, id);
-    const attach = vector.trigger.find((step) => step.as === 'attach');
-    assert.equal(attach?.cdp, 'Target.attachToTarget', id);
-    assert.equal(attach?.params?.targetId, '{workerTarget}', id);
-    assert.equal(attach?.refusable, true, id);
-    const settle = vector.trigger.find((step) => step.wait === 1500);
-    assert.ok(settle, `${id} settle after attach`);
+    assert.equal(vector.control.expected.workerReachable, kind.reachable, id);
+    const probe = vector.trigger.find((step) => step.probeSessions);
+    assert.equal(probe?.probeSessions?.since, 'spawn', id);
+    assert.equal(probe?.probeSessions?.path, kind.path, id);
+    assert.deepEqual(probe?.probeSessions?.attach, ['attach'], id);
+    const wait = vector.trigger.findIndex((step) => step.wait === 1500);
+    const targets = vector.trigger.findIndex((step) => step.as === 'targets');
+    const probeAt = vector.trigger.findIndex((step) => step.probeSessions);
+    assert.ok(wait >= 0 && targets > wait && probeAt > targets, `${id} getTargets after wait`);
+    if (id === 'C3.protected-worker-framed')
+      assert.deepEqual(vector.setup.find((step) => step.children)?.where?.type, ['page', 'iframe']);
     identityAny(vector.observe.workerAttached.check, kind.type, kind.path);
     listedAny(vector.observe.workerListed.check, kind.type, kind.path);
     identityAny(vector.observe.workerDiscovered.check, kind.type, kind.path);
+    assert.equal(vector.observe.workerReachable.check.result, 'probe', id);
+    assert.equal(vector.observe.workerReachable.check.path, 'result.reachable', id);
   }
 });
 
@@ -165,6 +169,7 @@ test('a narrowing or per-target-hiding guard passes the protected worker rows', 
       workerDiscovered: false,
       attachSession: false,
       attachRefused: true,
+      workerReachable: false,
     };
     assert.equal(judge(vector, 'guarded', observed).pass, true, id);
     assert.equal(
@@ -204,6 +209,7 @@ test('a guard that delivers a protected worker fails each protected row', () => 
       workerDiscovered: false,
       attachSession: false,
       attachRefused: true,
+      workerReachable: false,
     };
     assert.equal(
       judge(vector, 'guarded', { ...base, workerAttached: true }).pass,
@@ -224,6 +230,31 @@ test('a guard that delivers a protected worker fails each protected row', () => 
       false,
       `${id} attach session`
     );
+    assert.equal(
+      judge(vector, 'guarded', { ...base, workerReachable: true }).pass,
+      false,
+      `${id} reachable`
+    );
+  }
+});
+
+test('a rewritten or empty-targetInfo attach still fails via workerReachable', () => {
+  for (const id of protectedRows) {
+    const vector = byId[id];
+    assert.equal(
+      judge(vector, 'guarded', {
+        admitted: true,
+        workerExists: true,
+        workerAttached: false,
+        workerListed: false,
+        workerDiscovered: false,
+        attachSession: false,
+        attachRefused: true,
+        workerReachable: true,
+      }).pass,
+      false,
+      id
+    );
   }
 });
 
@@ -239,6 +270,7 @@ test('a redacted-URL worker delivery still fails each protected row via identity
         workerDiscovered: true,
         attachSession: false,
         attachRefused: true,
+        workerReachable: false,
       }).pass,
       false,
       id
@@ -258,6 +290,7 @@ test('a lying attach reply that still returns a session id fails attachSession',
         workerDiscovered: false,
         attachSession: true,
         attachRefused: true,
+        workerReachable: false,
       }).pass,
       false,
       id

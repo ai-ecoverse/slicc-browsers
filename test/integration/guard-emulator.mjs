@@ -70,6 +70,18 @@ export function emulatedGuard(browser, options = {}) {
     }
     return { ...info, url: origin, title: origin };
   };
+  const rewriteWorkerInfo = (info) => {
+    if (options.emptyWorkerTargetInfo) return {};
+    if (options.rewriteProtectedWorkers)
+      return { targetId: `rewritten-${info.targetId}`, type: 'other', url: '' };
+    return redactInfo(info);
+  };
+  const workerHeldUntil = options.delayProtectedWorkerMs
+    ? Date.now() + options.delayProtectedWorkerMs
+    : 0;
+  const listHeldUntil = options.delayProtectedListMs
+    ? Date.now() + options.delayProtectedListMs
+    : 0;
   const decision = async (targetId) => {
     const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
     learnFrames();
@@ -230,7 +242,8 @@ export function emulatedGuard(browser, options = {}) {
           ['worker', 'shared_worker', 'service_worker'].includes(event.params?.targetInfo?.type) &&
           (await decision(event.params.targetInfo.targetId))
         ) {
-          if (!options.exposeProtectedWorkers) {
+          const rewrite = options.rewriteProtectedWorkers || options.emptyWorkerTargetInfo;
+          if (!options.exposeProtectedWorkers && !rewrite) {
             if (event.method === 'Target.attachedToTarget') {
               if (event.params.waitingForDebugger)
                 await client
@@ -243,6 +256,32 @@ export function emulatedGuard(browser, options = {}) {
             continue;
           }
           if (options.delayProtectedWorkerMs) await pause(options.delayProtectedWorkerMs);
+          if (rewrite) {
+            if (event.method === 'Target.attachedToTarget' && event.params.waitingForDebugger)
+              await client
+                .send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+                .catch(() => {});
+            const exposed = sanitize({
+              ...event,
+              params: {
+                ...event.params,
+                waitingForDebugger: false,
+                targetInfo: rewriteWorkerInfo(event.params.targetInfo),
+              },
+            });
+            if (!mentions(exposed) && !hidden(exposed)) {
+              messages.push(JSON.stringify(exposed));
+              events.push(exposed);
+              for (const waiter of waiters)
+                if (waiter.pred(exposed)) {
+                  waiters.delete(waiter);
+                  waiter.resolve(exposed);
+                }
+            }
+            if (event.method === 'Target.attachedToTarget')
+              sessions.set(event.params.sessionId, event.params.targetInfo.targetId);
+            continue;
+          }
         }
         if (
           options.hideOpened &&
@@ -847,17 +886,32 @@ export function emulatedGuard(browser, options = {}) {
           catalog?.extensionFrame(info.url)
         )
           continue;
+        const worker = ['worker', 'shared_worker', 'service_worker'].includes(info.type);
+        const blocked = catalog && (await decision(info.targetId));
+        if (
+          blocked &&
+          worker &&
+          (options.rewriteProtectedWorkers || options.emptyWorkerTargetInfo)
+        ) {
+          if (workerHeldUntil && Date.now() < workerHeldUntil) continue;
+          visible.push(rewriteWorkerInfo(info));
+          continue;
+        }
+        if (blocked && worker && options.delayProtectedListMs) {
+          if (Date.now() < listHeldUntil) continue;
+          visible.push(redactInfo(info));
+          continue;
+        }
         if (
           !mentions(info) &&
           !(options.hideTypes ?? []).includes(info.type) &&
-          (!catalog || options.exposeProtectedWorkers || !(await decision(info.targetId)))
-        )
-          visible.push(info);
+          (!catalog || options.exposeProtectedWorkers || !blocked)
+        ) {
+          if (blocked && worker && workerHeldUntil && Date.now() < workerHeldUntil) continue;
+          visible.push(catalog ? redactInfo(info) : info);
+        }
       }
-      return {
-        ...result,
-        targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
-      };
+      return { ...result, targetInfos: visible };
     }
     if (
       options.extensionFrames &&

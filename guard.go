@@ -180,6 +180,7 @@ type GuardStep struct {
 	ErrorPage      string          `json:"errorPage,omitempty"`
 	SpawnWorker    string          `json:"spawnWorker,omitempty"`
 	Frame          string          `json:"frame,omitempty"`
+	ProbeSessions  json.RawMessage `json:"probeSessions,omitempty"`
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
@@ -217,9 +218,9 @@ type GuardStep struct {
 }
 
 type GuardWhere struct {
-	OpenerID  string `json:"openerId,omitempty"`
-	URLPrefix string `json:"urlPrefix,omitempty"`
-	Type      string `json:"type,omitempty"`
+	OpenerID  string          `json:"openerId,omitempty"`
+	URLPrefix string          `json:"urlPrefix,omitempty"`
+	Type      json.RawMessage `json:"type,omitempty"`
 }
 
 type GuardRefusal struct {

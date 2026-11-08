@@ -83,6 +83,44 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget) {
     );
 }
 
+export function workerProbeExpression(path, tag) {
+  const tagged = `[?&]n=${String(tag).replace(/[.*+?^$${}()|[\]\\]/g, '\\$&')}`;
+  return `(() => { try { const href = String(self.location && self.location.href || ''); const tagged = new RegExp(${JSON.stringify(tagged)}).test(href); return (typeof WorkerGlobalScope === 'function' || tagged) && href.includes(${JSON.stringify(path)}); } catch { return false; } })()`;
+}
+
+export async function probeWorkerSessions({ client, sessions, path, tag, detached = () => false }) {
+  const ids = [...new Set(sessions.filter(Boolean))];
+  if (!ids.length) return { reachable: false, probed: 0, sessions: [] };
+  let reachable = false;
+  let probed = 0;
+  let ran = 0;
+  for (const sessionId of ids) {
+    if (detached(sessionId)) continue;
+    probed++;
+    const out = await outcome(
+      client.send(
+        'Runtime.evaluate',
+        { expression: workerProbeExpression(path, tag), returnByValue: true },
+        sessionId
+      )
+    );
+    if (!out.ok) continue;
+    ran++;
+    if (out.result?.result?.value === true) {
+      reachable = true;
+      break;
+    }
+  }
+  if (probed > 0 && ran === 0 && !reachable)
+    return {
+      reachable: false,
+      probed,
+      sessions: ids,
+      incomplete: 'probeSessions could not evaluate any session',
+    };
+  return { reachable, probed, sessions: ids };
+}
+
 export async function protectedWorker({
   reader,
   kind,

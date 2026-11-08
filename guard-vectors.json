@@ -27964,8 +27964,7 @@
             "or": {
               "served": "{target}/doc?n={tag}",
               "observer": "fixture"
-            },
-            "required": true
+            }
           }
         },
         {

@@ -622,6 +622,158 @@ test('a fetch-only block of the protected URL does not satisfy carry live', {
   }
 });
 
+function secondTabGuard(browser, targets) {
+  const protectedOrigins = new Set(
+    [targets.seven, targets.vault].map((origin) => new URL(origin).origin)
+  );
+  const raw = browser.client;
+  const events = [];
+  const messages = [];
+  const forwarded = [];
+  const otherSessions = new Set();
+  let cursor = 0;
+  let stopped = false;
+  const decide = async (event) => {
+    if (!otherSessions.has(event.sessionId)) {
+      await raw
+        .send('Fetch.continueRequest', { requestId: event.params.requestId }, event.sessionId)
+        .catch(() => {});
+      return;
+    }
+    const url = event.params.request?.url ?? '';
+    let origin;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      origin = undefined;
+    }
+    if (origin && protectedOrigins.has(origin) && event.params.resourceType === 'Document')
+      await raw
+        .send(
+          'Fetch.failRequest',
+          { requestId: event.params.requestId, errorReason: 'BlockedByClient' },
+          event.sessionId
+        )
+        .catch(() => {});
+    else
+      await raw
+        .send('Fetch.continueRequest', { requestId: event.params.requestId }, event.sessionId)
+        .catch(() => {});
+  };
+  const watch = (async () => {
+    while (!stopped) {
+      for (const event of raw.events.slice(cursor)) {
+        cursor++;
+        if (event.method === 'Fetch.requestPaused' || event.method === 'Fetch.authRequired') {
+          await decide(event);
+          continue;
+        }
+        events.push(event);
+        messages.push(JSON.stringify(event));
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  })();
+  const send = async (method, params = {}, sessionId) => {
+    forwarded.push({ method, params, sessionId, sentAt: Date.now() });
+    if (
+      method === 'Page.navigate' &&
+      params?.url &&
+      protectedOrigins.has(new URL(params.url).origin)
+    ) {
+      const { targetId } = await raw.send('Target.createTarget', {
+        url: 'about:blank',
+        background: true,
+      });
+      const { sessionId: other } = await raw.send('Target.attachToTarget', {
+        targetId,
+        flatten: true,
+      });
+      otherSessions.add(other);
+      await raw.send('Page.enable', {}, other);
+      await raw.send(
+        'Fetch.enable',
+        {
+          patterns: [{ urlPattern: '*', resourceType: 'Document', requestStage: 'Request' }],
+        },
+        other
+      );
+      await raw.send('Page.navigate', { url: params.url }, other).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const tree = await raw.send('Page.getFrameTree', {}, sessionId);
+      return { frameId: tree.frameTree.frame.id, loaderId: 'second-tab' };
+    }
+    const reply = await raw.send(method, params, sessionId);
+    messages.push(JSON.stringify({ id: messages.length + 1, result: reply, sessionId }));
+    return reply;
+  };
+  return {
+    client: { ...raw, events, messages, forwarded, send },
+    stop: async () => {
+      stopped = true;
+      await watch;
+    },
+  };
+}
+
+test('a block on a second tab does not satisfy carry live', {
+  timeout: 600000,
+}, async () => {
+  const fixture = await fixtureServer();
+  const browser = await launch(fixture);
+  record(browser.unguarded);
+  const targets = origins(fixture);
+  const only = carryVectors.filter((vector) => vector.id === 'E7.init-world-carry');
+  const stripped = only.map((vector) => {
+    const copy = structuredClone(vector);
+    const url = '{target}/doc?n={tag}';
+    copy.liveCheck = {
+      all: [
+        { pre: url, observer: 'fixture' },
+        {
+          any: [
+            {
+              blocked: { url, session: 'page', frame: false },
+              observer: 'client',
+            },
+            {
+              blocked: { url, session: 'page', frame: false },
+              observer: 'unguarded',
+            },
+          ],
+          observer: 'client',
+        },
+      ],
+      observer: 'client',
+    };
+    return copy;
+  });
+  const guard = secondTabGuard(browser, targets);
+  record(guard.client);
+  try {
+    const execution = await run(
+      { ...set, vectors: stripped, variants: { prompt: 0 } },
+      {
+        client: guard.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets,
+        capabilities: stockCaps,
+        rowTimeoutMs: 90000,
+      }
+    );
+    assert.ok(execution.results.length >= 2);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', JSON.stringify(row));
+      assert.notEqual(row.live, 'pass', JSON.stringify(row));
+    }
+  } finally {
+    await guard.stop();
+    await browser.close();
+    await fixture.close();
+  }
+});
+
 test('a refuse-all reference passes every E7 stock-setup attack row', {
   timeout: 900000,
 }, async () => {

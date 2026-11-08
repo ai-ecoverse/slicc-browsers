@@ -348,51 +348,61 @@ class Execution {
     });
   }
 
+  clientBlocked(spec, urls) {
+    const session = spec.session === 'child' ? this.sessions.child : this.sessions.page;
+    if (!session) return false;
+    const events = this.client.events.slice(this.eventStart);
+    const requests = new Map();
+    const mainFrames = new Set();
+    const mainLoaders = new Set();
+    for (const event of events) {
+      if (event.sessionId !== session) continue;
+      if (event.method === 'Network.requestWillBeSent')
+        requests.set(event.params.requestId, {
+          url: event.params.request.url,
+          type: event.params.type,
+          frameId: event.params.frameId,
+          loaderId: event.params.loaderId,
+        });
+      if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
+        mainFrames.add(event.params.frame.id);
+        if (event.params.frame.loaderId) mainLoaders.add(event.params.frame.loaderId);
+      }
+    }
+    const navigated = (event) => {
+      const child = event.params.frame.parentId || event.sessionId === this.sessions.child;
+      const frameOk = spec.frame ? child : !event.params.frame.parentId;
+      return (
+        frameOk &&
+        urls.includes(event.params.frame.unreachableUrl) &&
+        event.params.frame.url.startsWith('chrome-error://')
+      );
+    };
+    const failed = (event) => {
+      const request = requests.get(event.params.requestId);
+      if (
+        request?.type !== 'Document' ||
+        !urls.includes(request.url) ||
+        !(event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT')
+      )
+        return false;
+      if (spec.frame) return Boolean(request.frameId && !mainFrames.has(request.frameId));
+      return (
+        (request.frameId && mainFrames.has(request.frameId)) ||
+        (request.loaderId && mainLoaders.has(request.loaderId))
+      );
+    };
+    return events.some(
+      (event) =>
+        event.sessionId === session &&
+        ((event.method === 'Page.frameNavigated' && navigated(event)) ||
+          (event.method === 'Network.loadingFailed' && failed(event)))
+    );
+  }
+
   async blocked(spec, observer) {
     const urls = (spec.anyOf ?? [spec.url]).map(address);
-    const events = this.client.events.slice(this.eventStart);
-    if (observer === 'client') {
-      const requests = new Map();
-      const mainFrames = new Set();
-      const mainLoaders = new Set();
-      for (const event of events) {
-        if (event.method === 'Network.requestWillBeSent')
-          requests.set(event.params.requestId, {
-            url: event.params.request.url,
-            type: event.params.type,
-            frameId: event.params.frameId,
-            loaderId: event.params.loaderId,
-          });
-        if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
-          mainFrames.add(event.params.frame.id);
-          if (event.params.frame.loaderId) mainLoaders.add(event.params.frame.loaderId);
-        }
-      }
-      return events.some((event) => {
-        if (event.method === 'Page.frameNavigated') {
-          const child = event.params.frame.parentId || event.sessionId === this.sessions.child;
-          const frameOk = spec.frame ? child : !event.params.frame.parentId;
-          return (
-            frameOk &&
-            urls.includes(event.params.frame.unreachableUrl) &&
-            event.params.frame.url.startsWith('chrome-error://')
-          );
-        }
-        if (event.method !== 'Network.loadingFailed') return false;
-        const request = requests.get(event.params.requestId);
-        if (
-          request?.type !== 'Document' ||
-          !urls.includes(request.url) ||
-          !(event.params.blockedReason || event.params.errorText === 'net::ERR_BLOCKED_BY_CLIENT')
-        )
-          return false;
-        if (spec.frame) return Boolean(request.frameId && !mainFrames.has(request.frameId));
-        return (
-          (request.frameId && mainFrames.has(request.frameId)) ||
-          (request.loaderId && mainLoaders.has(request.loaderId))
-        );
-      });
-    }
+    if (observer === 'client') return this.clientBlocked(spec, urls);
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
     const attached = await outcome(

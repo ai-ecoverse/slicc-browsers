@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash, X509Certificate } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
@@ -12,9 +13,10 @@ const stripVectors = set.vectors.filter((vector) => vector.id === stripId);
 const attackIds = [
   'E7.init-boundary',
   'E7.init-world-carry',
-  'E7.init-world-error',
+  'E7.init-world-bfcache',
   'E7.emulation-carry',
   'E7.isolated-foreign',
+  'E7.ua-empty',
   'E7.binding-main',
   'E7.binding-main-ctx',
   'C3.tab-protected',
@@ -22,7 +24,9 @@ const attackIds = [
   'C3.tab-protected.synthetic',
   'C3.tab-blank.synthetic',
   'C3.tab-worker-leak',
+  'C3.tab-iframe-leak',
 ];
+const admitEffectIds = new Set(['E7.init-boundary']);
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const stockCaps = { ...base, stockSetup: true, syntheticAutoAttach: true, forwardAudit: true };
@@ -76,6 +80,21 @@ test('the published attack and strip rows are present', () => {
   assert.deepEqual(stripVectors[0].targets, ['ordinary']);
   assert.equal(stripVectors[0].control.via, 'unguarded');
   assert.ok(stripVectors[0].requires.includes('forwardAudit'));
+});
+
+test('E7.init-boundary sources hold real CR, LS, PS, NUL and BOM characters', () => {
+  const vector = set.vectors.find((item) => item.id === 'E7.init-boundary');
+  const source = (as) => vector.setup.find((step) => step.as === as).params.source;
+  assert.ok(source('boundCr').includes('\r'));
+  assert.ok(source('boundLs').includes('\u2028'));
+  assert.ok(source('boundPs').includes('\u2029'));
+  assert.ok(source('boundNul').includes('\0'));
+  assert.ok(source('boundBom').includes('\ufeff'));
+  assert.equal(source('boundCr').includes('\\r'), false);
+  assert.equal(source('boundNul').includes('\\0'), false);
+  assert.equal(vector.expected.installedNul, true);
+  assert.deepEqual(vector.observe.ranCr.dependsOn, []);
+  assert.deepEqual(vector.observe.installedNul.dependsOn, []);
 });
 
 test('a guard that strips grantUniveralAccess passes E7.isolated-world', {
@@ -156,6 +175,7 @@ const attackStock = new Set([
   'Emulation.setEmulatedMedia',
   'Emulation.setDeviceMetricsOverride',
   'Emulation.setTouchEmulationEnabled',
+  'Emulation.setUserAgentOverride',
   'Runtime.addBinding',
   'Page.createIsolatedWorld',
   'Target.setAutoAttach',
@@ -180,7 +200,9 @@ test('an admit-all reference fails every protected-target stock-setup attack row
         rowTimeoutMs: 90000,
       }
     );
-    const leaking = execution.results.filter((row) => row.target !== 'ordinary');
+    const leaking = execution.results.filter(
+      (row) => row.target !== 'ordinary' || row.id === 'E7.ua-empty'
+    );
     assert.ok(leaking.length > 0);
     for (const row of leaking) assert.equal(row.guarded, 'fail', JSON.stringify(row));
     assert.equal(execution.summary({ guard: 'admit-all' }).pass, false);
@@ -190,7 +212,41 @@ test('an admit-all reference fails every protected-target stock-setup attack row
   }
 });
 
-test('a refuse-all reference passes every E7 stock-setup attack row', {
+test('C3.tab-service-worker-leak control passes on a secure origin', {
+  timeout: 180000,
+}, async () => {
+  const tls = {
+    key: await readFile(new URL('./fixtures/tls-key.pem', import.meta.url)),
+    cert: await readFile(new URL('./fixtures/tls-cert.pem', import.meta.url)),
+  };
+  const spki = createHash('sha256')
+    .update(new X509Certificate(tls.cert).publicKey.export({ type: 'spki', format: 'der' }))
+    .digest('base64');
+  const fixture = await fixtureServer({ tls });
+  const browser = await launch(fixture, { spki });
+  record(browser.client);
+  record(browser.unguarded);
+  const only = set.vectors.filter((vector) => vector.id === 'C3.tab-service-worker-leak');
+  try {
+    const execution = await run(
+      { ...set, vectors: only, variants: { prompt: 0 } },
+      {
+        client: browser.client,
+        unguarded: browser.unguarded,
+        fixture,
+        targets: origins(fixture),
+        capabilities: { ...stockCaps, secureOrigin: true },
+        rowTimeoutMs: 90000,
+      }
+    );
+    for (const row of execution.results) assert.equal(row.control, 'pass', JSON.stringify(row));
+  } finally {
+    await browser.close();
+    await fixture.close();
+  }
+});
+
+test('a refuse-all reference passes E7 attack rows that do not require an admitted effect', {
   timeout: 900000,
 }, async () => {
   const fixture = await fixtureServer();
@@ -213,12 +269,18 @@ test('a refuse-all reference passes every E7 stock-setup attack row', {
         rowTimeoutMs: 90000,
       }
     );
-    for (const row of execution.results)
+    for (const row of execution.results) {
+      if (admitEffectIds.has(row.id)) {
+        assert.equal(row.control, 'pass', JSON.stringify(row));
+        assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+        continue;
+      }
       assert.deepEqual(
         [row.control, row.guarded, row.live],
         ['pass', 'pass', 'pass'],
         JSON.stringify(row)
       );
+    }
   } finally {
     await guard.stop();
     await browser.close();

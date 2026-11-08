@@ -237,6 +237,7 @@ You supply:
 | `extensionFrame` | host the harness extension, whose frame an ordinary test page embeds |
 | `clientExit` | close the guarded client in the middle of a row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound messages; audit forwarded commands and params |
+| `secureOrigin` | HTTPS fixture origins (service worker registration) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 
 ### Reading the result

@@ -47,6 +47,7 @@ const (
 	GuardCapClientExit       = "clientExit"
 	GuardCapSiteIsolationOff = "siteIsolationOff"
 	GuardCapInboundDelay     = "inboundDelay"
+	GuardCapSecureOrigin     = "secureOrigin"
 	GuardCapForwardAudit     = "forwardAudit"
 	GuardCapStockSetup       = "stockSetup"
 	GuardCapSyntheticAttach  = "syntheticAutoAttach"

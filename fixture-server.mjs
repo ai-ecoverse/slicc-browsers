@@ -103,6 +103,8 @@ function route(req, url, send, html, redirects) {
     },
     '/doc': () => document(url, html),
     '/csp': () => document(url, html),
+    '/sw.js': () =>
+      send(200, "self.addEventListener('install',()=>self.skipWaiting())", 'text/javascript'),
   };
   if (req.method === 'OPTIONS') return send(204, '');
   if (url.pathname.startsWith('/auth')) {

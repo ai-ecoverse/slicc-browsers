@@ -91,7 +91,8 @@
         "discovery",
         "clientExit",
         "siteIsolationOff",
-        "inboundDelay"
+        "inboundDelay",
+        "secureOrigin"
       ],
       "properties": {
         "autoAttach": {
@@ -131,6 +132,10 @@
           "minLength": 1
         },
         "inboundDelay": {
+          "type": "string",
+          "minLength": 1
+        },
+        "secureOrigin": {
           "type": "string",
           "minLength": 1
         },
@@ -179,6 +184,7 @@
         "clientExit",
         "siteIsolationOff",
         "inboundDelay",
+        "secureOrigin",
         "forwardAudit",
         "stockSetup",
         "syntheticAutoAttach"

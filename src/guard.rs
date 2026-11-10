@@ -37,6 +37,7 @@ pub const CAP_SECURE_ORIGIN: &str = "secureOrigin";
 pub const CAP_FORWARD_AUDIT: &str = "forwardAudit";
 pub const CAP_STOCK_SETUP: &str = "stockSetup";
 pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
+pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";
@@ -127,6 +128,8 @@ pub struct Observation {
     pub depends_on: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unless: Vec<String>,
     #[serde(
         default,
         rename = "eitherWhen",

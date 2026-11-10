@@ -212,6 +212,8 @@ export function quarantining(
     discovery,
     evaluate = false,
     block = true,
+    closeProtected = false,
+    refuseClose = false,
   } = {}
 ) {
   const locked = new Map();
@@ -252,6 +254,12 @@ export function quarantining(
     if (method === 'Target.attachToTarget' && tab && refuseAttach(tab, quarantined))
       refuse('attach to a quarantined tab');
     if (method === 'Target.attachToTarget' && locked.get(tab?.targetId)) refuse('protected target');
+    if (
+      method === 'Target.closeTarget' &&
+      locked.get(tab?.targetId) &&
+      (!closeProtected || refuseClose)
+    )
+      refuse('protected target');
     const result = await conn.raw(method, params, sessionId);
     if (method === 'Target.getTargetInfo') return { targetInfo: redact(result.targetInfo) };
     if (method === 'Target.getTargets') return { targetInfos: result.targetInfos.map(redact) };

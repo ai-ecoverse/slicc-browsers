@@ -49,6 +49,7 @@ async function lockChecks({ client, reader, session, targetId, result, until }) 
     await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }))
   );
   const close = await outcome(client.send('Target.closeTarget', { targetId }));
+  result.closeRefused = refused(close);
   result.closed =
     close.result?.success === true &&
     (await until(

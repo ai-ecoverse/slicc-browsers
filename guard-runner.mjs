@@ -50,6 +50,13 @@ const supported = (requires, capabilities) =>
   (requires ?? []).every((c) =>
     Array.isArray(capabilities) ? capabilities.includes(c) : capabilities[c] === true
   );
+const declared = (capability, capabilities) =>
+  Array.isArray(capabilities)
+    ? capabilities.includes(capability)
+    : capabilities[capability] === true;
+const gatedOut = (observation, capabilities) =>
+  !supported(observation?.requires, capabilities) ||
+  (observation?.unless ?? []).some((capability) => declared(capability, capabilities));
 const matches = (value, predicate) => {
   if (predicate === null || typeof predicate !== 'object') return value === predicate;
   return Object.entries(predicate).every(([key, want]) => {
@@ -1616,7 +1623,7 @@ class Execution {
     const observed = { ...this.refused };
     const incomplete = [];
     for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
-      if (!supported(observation.requires, this.options.capabilities)) {
+      if (gatedOut(observation, this.options.capabilities)) {
         observed[name] = 'not-supported';
         continue;
       }

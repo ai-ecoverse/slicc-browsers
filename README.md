@@ -223,7 +223,7 @@ await fixture.close();
 You supply:
 - **a guarded client** per row: your guard's CDP connection, with `send(method, params, sessionId)`, `waitEvent(predicate, ms)` and an `events` array;
 - **an unguarded observer**: a direct CDP connection to the same browser, which runs the controls and checks liveness;
-- **origins**: the fixture server reachable as seven, the vault and an ordinary site. Point the protected hostnames at it with Chrome's `--host-resolver-rules`, so no test ever touches the real seven;
+- **origins**: the fixture server reachable as seven, the vault and an ordinary site. Point the protected hostnames at it with Chrome's `--host-resolver-rules`, so tests never touch the real seven;
 - **capabilities**: what your transport can do. A row that needs something you don't declare is skipped as `not-supported:<capability>`.
 
 | capability | means the transport can |
@@ -239,6 +239,7 @@ You supply:
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
+| `closeProtected` | close a protected tab |
 
 ### Reading the result
 
@@ -248,13 +249,13 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes and none is missing. A skip with a reason the runner would never give, such as a made-up capability, is reported as forged, and skipped and incomplete rows are counted on the line, so the line can't overstate what was tested.
+The run passes only when every row passes and none is missing. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it can't overstate what was tested.
 
 To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 
 ## Development
 
-You need Go 1.26, Rust stable with the `wasm32-wasip1` target, Node 24 or later, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or the Chrome for Testing that `npx slicc-cdp install-browser` installs, and run it headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
+You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or Chrome for Testing from `npx slicc-cdp install-browser`, and run headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
 
 | command | what it does |
 | --- | --- |

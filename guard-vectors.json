@@ -1704,11 +1704,11 @@
             "observer": "client"
           }
         },
-        "closeRefused": {
-          "means": "protected error-page restore: closeRefused",
+        "closed": {
+          "means": "protected error-page restore: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "errorPage",
-            "path": "result.closeRefused",
+            "path": "result.closed",
             "equals": true,
             "observer": "client"
           }
@@ -1753,7 +1753,7 @@
           "restored": true,
           "evaluateRefused": false,
           "attachRefused": false,
-          "closeRefused": false,
+          "closed": true,
           "attachRedacted": false,
           "fullURL": true
         }
@@ -1769,7 +1769,7 @@
         "restored": true,
         "evaluateRefused": true,
         "attachRefused": true,
-        "closeRefused": true,
+        "closed": true,
         "attachRedacted": true,
         "fullURL": false
       }
@@ -1885,11 +1885,11 @@
             "observer": "client"
           }
         },
-        "closeRefused": {
-          "means": "protected error-page sticky: closeRefused",
+        "closed": {
+          "means": "protected error-page sticky: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "errorPage",
-            "path": "result.closeRefused",
+            "path": "result.closed",
             "equals": true,
             "observer": "client"
           }
@@ -1943,7 +1943,7 @@
           "restored": true,
           "evaluateRefused": false,
           "attachRefused": false,
-          "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -1960,7 +1960,7 @@
         "restored": true,
         "evaluateRefused": true,
         "attachRefused": true,
-        "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false
@@ -2078,11 +2078,11 @@
             "observer": "client"
           }
         },
-        "closeRefused": {
-          "means": "protected error-page sticky (query): closeRefused",
+        "closed": {
+          "means": "protected error-page sticky (query): Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "errorPage",
-            "path": "result.closeRefused",
+            "path": "result.closed",
             "equals": true,
             "observer": "client"
           }
@@ -2136,7 +2136,7 @@
           "restored": true,
           "evaluateRefused": false,
           "attachRefused": false,
-          "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -2153,7 +2153,7 @@
         "restored": true,
         "evaluateRefused": true,
         "attachRefused": true,
-        "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false
@@ -2271,11 +2271,11 @@
             "observer": "client"
           }
         },
-        "closeRefused": {
-          "means": "protected error-page sticky (fragment): closeRefused",
+        "closed": {
+          "means": "protected error-page sticky (fragment): Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "errorPage",
-            "path": "result.closeRefused",
+            "path": "result.closed",
             "equals": true,
             "observer": "client"
           }
@@ -2329,7 +2329,7 @@
           "restored": true,
           "evaluateRefused": false,
           "attachRefused": false,
-          "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -2346,7 +2346,7 @@
         "restored": true,
         "evaluateRefused": true,
         "attachRefused": true,
-        "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false

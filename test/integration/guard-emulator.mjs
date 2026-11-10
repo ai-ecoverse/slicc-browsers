@@ -537,7 +537,9 @@ export function emulatedGuard(browser, options = {}) {
       !options.catalogAttachOnly &&
       targetId &&
       !(options.forwardFrameReads ?? []).includes(method) &&
-      (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
+      (sessionId ||
+        method === 'Target.attachToTarget' ||
+        (options.refuseClose && method === 'Target.closeTarget')) &&
       (await decision(targetId))
     )
       throw refusal('protected target');

@@ -251,11 +251,7 @@ export function quarantining(
       refuse('navigation in a quarantined tab');
     if (method === 'Target.attachToTarget' && tab && refuseAttach(tab, quarantined))
       refuse('attach to a quarantined tab');
-    if (
-      ['Target.attachToTarget', 'Target.closeTarget'].includes(method) &&
-      locked.get(tab?.targetId)
-    )
-      refuse('protected target');
+    if (method === 'Target.attachToTarget' && locked.get(tab?.targetId)) refuse('protected target');
     const result = await conn.raw(method, params, sessionId);
     if (method === 'Target.getTargetInfo') return { targetInfo: redact(result.targetInfo) };
     if (method === 'Target.getTargets') return { targetInfos: result.targetInfos.map(redact) };

@@ -1140,11 +1140,15 @@ class Execution {
         pageUrl,
         hostUrl,
         tag: this.vars.tag,
+        context: this.vars.context,
         notes: this.notes,
         budget: this.bound(5000),
       })
     );
-    if (out.ok && out.result?.browserContextId) this.contexts.push(out.result.browserContextId);
+    if (out.ok && out.result?.browserContextId) {
+      this.contexts.push(out.result.browserContextId);
+      this.vars.context = out.result.browserContextId;
+    }
     if (out.ok && out.result?.pageTargetId) this.targets.push(out.result.pageTargetId);
     if (out.ok && out.result?.workerTargetId) {
       this.vars.workerTarget = out.result.workerTargetId;

@@ -266,24 +266,75 @@ export async function probeWorkerSessions({ client, sessions, path, tag, detache
   return { reachable: false, probed, sessions: ids, probedIds };
 }
 
+async function spawnContext(reader, kind, context) {
+  if (!(kind === 'shared' || kind === 'service'))
+    return { browserContextId: context, ownsContext: false };
+  const opened = await outcome(reader.send('Target.createBrowserContext', {}));
+  if (!opened.ok || !opened.result?.browserContextId)
+    throw new Error(
+      `protected worker context failed: ${opened.error?.message ?? 'no browserContextId'}`
+    );
+  return { browserContextId: opened.result.browserContextId, ownsContext: true };
+}
+
+async function readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessions) {
+  await reader.send('Page.enable', {}, sessionId);
+  await reader.send('Runtime.enable', {}, sessionId);
+  const nav = await outcome(reader.send('Page.navigate', { url: hostUrl ?? pageUrl }, sessionId));
+  if (!nav.ok || nav.result?.errorText)
+    throw new Error(
+      `protected worker page navigate failed: ${nav.error?.message ?? nav.result?.errorText ?? 'unknown'}`
+    );
+  const loaded = await waitFor(async () => {
+    const read = await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        { expression: 'document.readyState', returnByValue: true },
+        sessionId
+      )
+    );
+    return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
+  }, budget);
+  if (!loaded) throw new Error('protected worker page did not become ready');
+  if (hostUrl) return framedEvaluate(reader, sessionId, pageUrl, budget, sessions);
+  return (expression) =>
+    reader.send(
+      'Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true },
+      sessionId
+    );
+}
+
+async function findWorker(reader, spec, tag, budget) {
+  return until(async () => {
+    const listed = await outcome(reader.send('Target.getTargets', {}));
+    if (!listed.ok) return null;
+    return (
+      listed.result.targetInfos?.find(
+        (info) =>
+          info.type === spec.type &&
+          typeof info.url === 'string' &&
+          info.url.includes(spec.path) &&
+          info.url.includes(tag)
+      ) ?? null
+    );
+  }, budget);
+}
+
 export async function protectedWorker({
   reader,
   kind,
   pageUrl,
   hostUrl,
   tag,
+  context,
   notes = [],
   budget = 5000,
 }) {
   const spec = kinds[kind];
   if (!spec) throw new Error(`unknown protected worker kind ${kind}`);
   if (!reader) throw new Error('protected worker needs an unguarded observer');
-  const opened = await outcome(reader.send('Target.createBrowserContext', {}));
-  if (!opened.ok || !opened.result?.browserContextId)
-    throw new Error(
-      `protected worker context failed: ${opened.error?.message ?? 'no browserContextId'}`
-    );
-  const browserContextId = opened.result.browserContextId;
+  const { browserContextId, ownsContext } = await spawnContext(reader, kind, context);
   let pageTargetId;
   let sessionId;
   const sessions = [];
@@ -293,7 +344,7 @@ export async function protectedWorker({
       {
         url: 'about:blank',
         background: true,
-        browserContextId,
+        ...(browserContextId ? { browserContextId } : {}),
       },
       notes
     );
@@ -302,32 +353,7 @@ export async function protectedWorker({
       targetId: pageTargetId,
       flatten: true,
     }));
-    await reader.send('Page.enable', {}, sessionId);
-    await reader.send('Runtime.enable', {}, sessionId);
-    const nav = await outcome(reader.send('Page.navigate', { url: hostUrl ?? pageUrl }, sessionId));
-    if (!nav.ok || nav.result?.errorText)
-      throw new Error(
-        `protected worker page navigate failed: ${nav.error?.message ?? nav.result?.errorText ?? 'unknown'}`
-      );
-    const loaded = await waitFor(async () => {
-      const read = await outcome(
-        reader.send(
-          'Runtime.evaluate',
-          { expression: 'document.readyState', returnByValue: true },
-          sessionId
-        )
-      );
-      return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
-    }, budget);
-    if (!loaded) throw new Error('protected worker page did not become ready');
-    const evaluate = hostUrl
-      ? await framedEvaluate(reader, sessionId, pageUrl, budget, sessions)
-      : (expression) =>
-          reader.send(
-            'Runtime.evaluate',
-            { expression, awaitPromise: true, returnByValue: true },
-            sessionId
-          );
+    const evaluate = await readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessions);
     const script = new URL(spec.path, pageUrl);
     script.searchParams.set('n', tag);
     const spawn = await outcome(evaluate(spec.expression(script.href)));
@@ -336,19 +362,7 @@ export async function protectedWorker({
       throw new Error(
         `protected worker spawn failed: ${spawn.error?.message ?? value ?? 'unknown'}`
       );
-    const found = await until(async () => {
-      const listed = await outcome(reader.send('Target.getTargets', {}));
-      if (!listed.ok) return null;
-      return (
-        listed.result.targetInfos?.find(
-          (info) =>
-            info.type === spec.type &&
-            typeof info.url === 'string' &&
-            info.url.includes(spec.path) &&
-            info.url.includes(tag)
-        ) ?? null
-      );
-    }, budget);
+    const found = await findWorker(reader, spec, tag, budget);
     if (!found) throw new Error(`protected ${kind} worker target did not appear`);
     const exists = await outcome(evaluate(spec.exists));
     if (!exists.ok || exists.result?.result?.value !== true)
@@ -363,10 +377,11 @@ export async function protectedWorker({
       workerUrl: found.url,
       type: spec.type,
       framed: Boolean(hostUrl),
-      browserContextId,
+      ...(ownsContext ? { browserContextId } : {}),
     };
   } catch (error) {
-    await outcome(reader.send('Target.disposeBrowserContext', { browserContextId }));
+    if (ownsContext)
+      await outcome(reader.send('Target.disposeBrowserContext', { browserContextId }));
     throw error;
   } finally {
     for (const sid of sessions)

@@ -327,9 +327,10 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   const reader = {
     events: [],
     async send(method, params = {}, sessionId) {
-      if (method === 'Target.createBrowserContext') return { browserContextId: 'ctx-1' };
+      if (method === 'Target.createBrowserContext')
+        throw new Error('dedicated spawn must not create a browser context');
       if (method === 'Target.createTarget') {
-        assert.equal(params.browserContextId, 'ctx-1');
+        assert.equal(params.browserContextId, undefined);
         return { targetId: 'page-1' };
       }
       if (method === 'Target.getTargetInfo')
@@ -366,7 +367,54 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   });
   assert.equal(out.workerTargetId, 'worker-1');
   assert.equal(out.exists, true);
-  assert.equal(out.browserContextId, 'ctx-1');
+  assert.equal(out.browserContextId, undefined);
+});
+
+test('shared protectedWorker isolates the spawn in its own browser context', async () => {
+  const page = 'http://vault.example.test/doc?n=host-t';
+  const workerUrl = 'http://vault.example.test/shared-worker.js?n=t';
+  const reader = {
+    events: [],
+    async send(method, params = {}) {
+      if (method === 'Target.createBrowserContext') return { browserContextId: 'ctx-shared' };
+      if (method === 'Target.createTarget') {
+        assert.equal(params.browserContextId, 'ctx-shared');
+        return { targetId: 'page-1' };
+      }
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
+      if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Page.enable' || method === 'Runtime.enable') return {};
+      if (method === 'Page.navigate') return {};
+      if (method === 'Target.getTargets')
+        return {
+          targetInfos: [
+            { targetId: 'page-1', type: 'page', url: page },
+            { targetId: 'worker-1', type: 'shared_worker', url: workerUrl },
+          ],
+        };
+      if (method === 'Runtime.evaluate') {
+        if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+        if (String(params.expression).includes('SharedWorker'))
+          return { result: { value: 'spawned' } };
+        if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
+        throw new Error(`unexpected evaluate ${params.expression}`);
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const { protectedWorker } = await import('../../protected-worker.mjs');
+  const out = await protectedWorker({
+    reader,
+    kind: 'shared',
+    pageUrl: page,
+    tag: 't',
+    notes: [],
+    budget: 200,
+  });
+  assert.equal(out.workerTargetId, 'worker-1');
+  assert.equal(out.browserContextId, 'ctx-shared');
 });
 
 test('framed protectedWorker evaluates inside an iframe target session', async () => {
@@ -378,9 +426,10 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
   const reader = {
     events,
     async send(method, params = {}, sessionId) {
-      if (method === 'Target.createBrowserContext') return { browserContextId: 'ctx-1' };
+      if (method === 'Target.createBrowserContext')
+        throw new Error('framed dedicated spawn must not create a browser context');
       if (method === 'Target.createTarget') {
-        assert.equal(params.browserContextId, 'ctx-1');
+        assert.equal(params.browserContextId, undefined);
         return { targetId: 'page-1' };
       }
       if (method === 'Target.getTargetInfo')
@@ -543,6 +592,7 @@ test('adopt resumes a paused worker even when its browser context does not match
     new URL('../../protected-worker.mjs', import.meta.url),
     'utf8'
   );
+  assert.ok(workerSource.includes("kind === 'shared' || kind === 'service'"));
   assert.ok(workerSource.includes('Target.createBrowserContext'));
   assert.ok(workerSource.includes('Target.disposeBrowserContext'));
 });

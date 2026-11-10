@@ -30,7 +30,6 @@ const attackIds = [
   'C3.tab-iframe-leak',
   'C3.protected-worker-dedicated',
   'C3.protected-worker-shared',
-  'C3.protected-service-worker',
   'C3.protected-worker-framed',
 ];
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));

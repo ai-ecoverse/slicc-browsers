@@ -1,3 +1,4 @@
+import { unclosableShape } from '../../close-protected-shape.mjs';
 import { parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 import { redactProtectedURLs } from '../../redirect-redaction.mjs';
@@ -21,6 +22,7 @@ export function emulatedGuard(browser, options = {}) {
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
+  const navigationURLs = new Map();
   let frameCursor = 0;
   const learnFrames = () => {
     for (const event of unguarded.events.slice(frameCursor)) {
@@ -31,6 +33,7 @@ export function emulatedGuard(browser, options = {}) {
         const f = event.params.frame;
         frames.set(owner.targetId, f);
         navigating.delete(owner.targetId);
+        navigationURLs.delete(owner.targetId);
         const previous = decisions.get(owner.targetId) ?? false;
         decisions.set(
           owner.targetId,
@@ -45,13 +48,17 @@ export function emulatedGuard(browser, options = {}) {
         event.method === 'Page.frameStartedNavigating' &&
         event.params.frameId === frames.get(owner.targetId)?.id &&
         !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
-      )
+      ) {
         navigating.add(owner.targetId);
+        navigationURLs.set(owner.targetId, event.params.url ?? '');
+      }
       if (
         event.method === 'Page.frameStoppedLoading' &&
         event.params.frameId === frames.get(owner.targetId)?.id
-      )
+      ) {
         navigating.delete(owner.targetId);
+        navigationURLs.delete(owner.targetId);
+      }
     }
   };
   const redactInfo = (info) => {
@@ -87,6 +94,19 @@ export function emulatedGuard(browser, options = {}) {
           previous: options.unlockErrorPage ? false : previous,
         });
     return blocked;
+  };
+  const keepClosed = async (targetId) => {
+    if (options.allowKeptClose) return false;
+    const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
+    learnFrames();
+    const f = frames.get(targetId);
+    return unclosableShape({
+      url: targetInfo.url,
+      documentURL: f?.url ?? targetInfo.url,
+      securityOrigin: f?.securityOrigin,
+      navigating: navigating.has(targetId),
+      navigationURL: navigationURLs.get(targetId),
+    });
   };
   const contexts = new Set();
   const extensionContexts = new Map();
@@ -532,6 +552,16 @@ export function emulatedGuard(browser, options = {}) {
         throw refusal('protected redirect destination');
     }
     const targetId = params?.targetId ?? sessions.get(sessionId);
+    if (
+      catalog &&
+      !options.catalogAttachOnly &&
+      targetId &&
+      method === 'Target.closeTarget' &&
+      options.closeProtected &&
+      !options.refuseClose &&
+      (await keepClosed(targetId))
+    )
+      throw refusal('protected target');
     if (
       catalog &&
       !options.catalogAttachOnly &&

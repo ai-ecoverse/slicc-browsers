@@ -3,6 +3,7 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
+import { closeProtectedShape } from './close-protected-shape.mjs';
 import { extensionFrame } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
@@ -751,6 +752,7 @@ class Execution {
       'redirectSecret',
       'unparseable',
       'errorPage',
+      'closeProtectedShape',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -759,9 +761,14 @@ class Execution {
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
-        probe
-      ) &&
+      [
+        'errorPage',
+        'closeProtectedShape',
+        'redirectSecret',
+        'extensionFrame',
+        'frameRead',
+        'bfcacheRestore',
+      ].includes(probe) &&
       out.ok &&
       out.result?.incomplete
     )
@@ -895,6 +902,20 @@ class Execution {
           side: this.side,
           secret: step.secret,
           discovery: supported(['discovery'], this.options.capabilities),
+          notes: this.notes,
+          budget: this.bound(5000),
+        })
+      );
+    if (step.closeProtectedShape)
+      return outcome(
+        closeProtectedShape({
+          client: this.client,
+          reader: this.reader,
+          ordinary: this.vars.ordinary,
+          protectedOrigin: this.vars.target,
+          shape: step.closeProtectedShape,
+          tag: this.vars.tag,
+          internalSessions: this.internalSessions,
           notes: this.notes,
           budget: this.bound(5000),
         })

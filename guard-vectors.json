@@ -2406,6 +2406,476 @@
       }
     },
     {
+      "id": "C8.close-protected.view-source",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["closeProtected"],
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "closeProtectedShape": "view-source",
+          "as": "shape",
+          "requires": ["closeProtected"]
+        }
+      ],
+      "targets": ["vault"],
+      "observe": {
+        "shaped": {
+          "means": "closeProtected view-source vault: the unguarded observer opened the shaped tab",
+          "check": {
+            "result": "shape",
+            "path": "result.shaped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "closeProtected view-source vault: Runtime.evaluate through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "closeProtected view-source vault: Target.attachToTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "closeProtected view-source vault: Target.closeTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closed": {
+          "means": "closeProtected view-source vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "check": {
+            "result": "shape",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the shaped tab",
+      "liveCheck": {
+        "result": "shape",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "shaped": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "closed": true
+        }
+      },
+      "expected": {
+        "shaped": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "closed": false
+      }
+    },
+    {
+      "id": "C8.close-protected.blob",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["closeProtected"],
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "closeProtectedShape": "blob",
+          "as": "shape",
+          "requires": ["closeProtected"]
+        }
+      ],
+      "targets": ["vault"],
+      "observe": {
+        "shaped": {
+          "means": "closeProtected blob vault: the unguarded observer opened the shaped tab",
+          "check": {
+            "result": "shape",
+            "path": "result.shaped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "closeProtected blob vault: Runtime.evaluate through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "closeProtected blob vault: Target.attachToTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "closeProtected blob vault: Target.closeTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closed": {
+          "means": "closeProtected blob vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "check": {
+            "result": "shape",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the shaped tab",
+      "liveCheck": {
+        "result": "shape",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "shaped": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "closed": true
+        }
+      },
+      "expected": {
+        "shaped": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "closed": false
+      }
+    },
+    {
+      "id": "C8.close-protected.userinfo",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["closeProtected"],
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "closeProtectedShape": "userinfo",
+          "as": "shape",
+          "requires": ["closeProtected"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "shaped": {
+          "means": "closeProtected userinfo seven UI: the unguarded observer opened the shaped tab",
+          "check": {
+            "result": "shape",
+            "path": "result.shaped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "closeProtected userinfo seven UI: Runtime.evaluate through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "closeProtected userinfo seven UI: Target.attachToTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "closeProtected userinfo seven UI: Target.closeTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closed": {
+          "means": "closeProtected userinfo seven UI: the unguarded reader still lists the tab after Target.closeTarget",
+          "check": {
+            "result": "shape",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the shaped tab",
+      "liveCheck": {
+        "result": "shape",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "shaped": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "closed": true
+        }
+      },
+      "expected": {
+        "shaped": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "closed": false
+      }
+    },
+    {
+      "id": "C8.close-protected.navigating",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["closeProtected"],
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "closeProtectedShape": "navigating",
+          "as": "shape",
+          "requires": ["closeProtected"]
+        }
+      ],
+      "targets": ["vault"],
+      "observe": {
+        "shaped": {
+          "means": "closeProtected navigating vault: the unguarded observer opened the shaped tab",
+          "check": {
+            "result": "shape",
+            "path": "result.shaped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "closeProtected navigating vault: Runtime.evaluate through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "closeProtected navigating vault: Target.attachToTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "closeProtected navigating vault: Target.closeTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closed": {
+          "means": "closeProtected navigating vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "check": {
+            "result": "shape",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the shaped tab",
+      "liveCheck": {
+        "result": "shape",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "shaped": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "closed": true
+        }
+      },
+      "expected": {
+        "shaped": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "closed": false
+      }
+    },
+    {
+      "id": "C8.close-protected.blank-inherited",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["closeProtected"],
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "closeProtectedShape": "blank-inherited",
+          "as": "shape",
+          "requires": ["closeProtected"]
+        }
+      ],
+      "targets": ["vault"],
+      "observe": {
+        "shaped": {
+          "means": "closeProtected blank-inherited vault: the unguarded observer opened the shaped tab",
+          "check": {
+            "result": "shape",
+            "path": "result.shaped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateRefused": {
+          "means": "closeProtected blank-inherited vault: Runtime.evaluate through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.evaluateRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "closeProtected blank-inherited vault: Target.attachToTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closeRefused": {
+          "means": "closeProtected blank-inherited vault: Target.closeTarget through the client is refused",
+          "check": {
+            "result": "shape",
+            "path": "result.closeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "closed": {
+          "means": "closeProtected blank-inherited vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "check": {
+            "result": "shape",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the shaped tab",
+      "liveCheck": {
+        "result": "shape",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "shaped": true,
+          "evaluateRefused": false,
+          "attachRefused": false,
+          "closeRefused": false,
+          "closed": true
+        }
+      },
+      "expected": {
+        "shaped": true,
+        "evaluateRefused": true,
+        "attachRefused": true,
+        "closeRefused": true,
+        "closed": false
+      }
+    },
+    {
       "id": "C8.unparseable",
       "family": "C",
       "kind": "cdp",

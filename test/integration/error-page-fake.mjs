@@ -1,6 +1,13 @@
+import { keptDocument } from '../../close-protected-shape.mjs';
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 const originOf = (url) => URL.parse(url)?.origin;
 const seven = (url) => URL.parse(url)?.hostname === 'seven.sliccy.ai';
+const vault = (url) => {
+  const host = URL.parse(url)?.hostname?.replace(/\.$/, '');
+  return host === 'vault.sliccy.ai' || (host?.startsWith('vault-') && host.endsWith('.sliccy.ai'));
+};
+const protectedHost = (url) => seven(url) || vault(url) || keptDocument(url);
 
 export function chrome() {
   const tabs = new Map();
@@ -17,6 +24,7 @@ export function chrome() {
     title: tab.title,
     attached: [...sessions.values()].some((s) => s.targetId === tab.targetId),
     browserContextId: 'B1',
+    ...(tab.openerId ? { openerId: tab.openerId } : {}),
   });
   const emit = (conn, method, params, sessionId) => {
     const shown = params.targetInfo ? [conn.redact(params.targetInfo, method)].flat() : [null];
@@ -41,10 +49,10 @@ export function chrome() {
     onTab(tab, 'Page.frameNavigated', { frame: entry.frame, type });
     discovered('Target.targetInfoChanged', tab);
   };
-  const intercept = (conn, sessionId, url) =>
+  const intercept = (conn, sessionId, url, targetId) =>
     new Promise((resolve) => {
       const requestId = `R${++next}`;
-      paused.set(requestId, resolve);
+      paused.set(requestId, { resolve, targetId });
       emit(
         conn,
         'Fetch.requestPaused',
@@ -52,8 +60,13 @@ export function chrome() {
         sessionId
       );
     });
-  const commit = (tab, url, failed, replace) => {
+  const commit = (tab, url, failed, replace, origin) => {
     const loaderId = `L${++next}`;
+    const securityOrigin =
+      origin ??
+      (url === 'about:blank' || url.startsWith('blob:')
+        ? (tab.frame?.securityOrigin ?? originOf(url) ?? '://')
+        : (originOf(url) ?? '://'));
     const frame = failed
       ? {
           id: tab.targetId,
@@ -62,7 +75,7 @@ export function chrome() {
           securityOrigin: '://',
           unreachableUrl: url,
         }
-      : { id: tab.targetId, loaderId, url, securityOrigin: originOf(url) ?? '://' };
+      : { id: tab.targetId, loaderId, url, securityOrigin };
     const entry = { id: ++next, url, title: url, frame, cached: !failed };
     if (replace) tab.entries[tab.index] = entry;
     else {
@@ -77,6 +90,8 @@ export function chrome() {
         () => navigate(tab, page.searchParams.get('to'), true),
         Number(page.searchParams.get('defer'))
       );
+    if (!failed && page?.pathname === '/blob-nav')
+      setTimeout(() => navigate(tab, `blob:${originOf(url)}/${++next}`, true), 0);
     return {
       frameId: tab.targetId,
       loaderId,
@@ -86,13 +101,26 @@ export function chrome() {
   async function navigate(tab, url, replace = false) {
     if (!tabs.has(tab.targetId)) return {};
     let failed = false;
-    if (!url.startsWith('about:')) {
+    const httpish = /^(https?:|view-source:)/.test(url);
+    if (httpish) {
+      tab.navigating = true;
+      tab.navigationURL = url;
+      onTab(tab, 'Page.frameStartedNavigating', {
+        frameId: tab.targetId,
+        url,
+        navigationType: 'differentDocument',
+      });
       for (const [sessionId, s] of [...sessions])
         if (!failed && s.targetId === tab.targetId && s.fetch)
-          failed = (await intercept(s.conn, sessionId, url)) === 'fail';
+          failed = (await intercept(s.conn, sessionId, url, tab.targetId)) === 'fail';
       failed ||= interceptors.some((fails) => fails(tab, url));
     }
-    return commit(tab, url, failed, replace);
+    try {
+      return commit(tab, url, failed, replace);
+    } finally {
+      tab.navigating = false;
+      tab.navigationURL = undefined;
+    }
   }
   const traverse = (tab, delta) => {
     const entry = tab.entries[tab.index + delta];
@@ -100,11 +128,35 @@ export function chrome() {
     tab.index += delta;
     show(tab, entry, 'BackForwardCacheRestore');
   };
+  const openBlank = (parent) => {
+    const created = {
+      targetId: `T${++next}`,
+      entries: [],
+      index: -1,
+      openerId: parent.targetId,
+      url: 'about:blank',
+      title: 'about:blank',
+    };
+    tabs.set(created.targetId, created);
+    discovered('Target.targetCreated', created);
+    commit(
+      created,
+      'about:blank',
+      false,
+      false,
+      parent.frame?.securityOrigin ?? originOf(parent.url)
+    );
+    return created;
+  };
   const evaluate = (tab, expression) => {
     if (expression === 'document.readyState')
       return { result: { type: 'string', value: 'complete' } };
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
     if (expression === 'location.href') return { result: { type: 'string', value: tab.frame.url } };
+    if (expression === "window.open('')") {
+      openBlank(tab);
+      return { result: { type: 'undefined' } };
+    }
     return { result: { type: 'undefined' } };
   };
   const tabOf = (sessionId, targetId) =>
@@ -152,6 +204,11 @@ export function chrome() {
       return { sessionId: id };
     }
     if (method === 'Target.closeTarget') {
+      for (const [requestId, entry] of [...paused]) {
+        if (entry.targetId !== tab.targetId) continue;
+        paused.delete(requestId);
+        entry.resolve('fail');
+      }
       tabs.delete(tab.targetId);
       for (const [id, s] of [...sessions]) if (s.targetId === tab.targetId) detach(id);
       for (const c of connections)
@@ -174,10 +231,10 @@ export function chrome() {
       return {};
     }
     if (method === 'Fetch.continueRequest' || method === 'Fetch.failRequest') {
-      const resolve = paused.get(params.requestId);
-      if (!resolve) throw new Error('Invalid InterceptionId.');
+      const entry = paused.get(params.requestId);
+      if (!entry) throw new Error('Invalid InterceptionId.');
       paused.delete(params.requestId);
-      resolve(method === 'Fetch.failRequest' ? 'fail' : 'continue');
+      entry.resolve(method === 'Fetch.failRequest' ? 'fail' : 'continue');
       return {};
     }
     if (method === 'Page.navigateToHistoryEntry') {
@@ -214,34 +271,55 @@ export function quarantining(
     block = true,
     closeProtected = false,
     refuseClose = false,
+    allowKeptClose = false,
   } = {}
 ) {
   const locked = new Map();
   const redact = (targetInfo, method) => {
     if (discovery && ['Target.targetCreated', 'Target.targetInfoChanged'].includes(method))
       return discovery(targetInfo);
-    if (exposeURL || !seven(targetInfo.url)) return targetInfo;
+    if (exposeURL || !protectedHost(targetInfo.url)) return targetInfo;
     return { ...targetInfo, url: originOf(targetInfo.url), title: originOf(targetInfo.url) };
   };
   const conn = browser.connect(redact);
-  const quarantined = (tab) => tab.entries.some((entry) => seven(entry.url));
+  const quarantined = (tab) =>
+    tab.entries.some((entry) => protectedHost(entry.url)) ||
+    keptDocument(tab.frame?.securityOrigin ?? '');
   browser.commits.push((tab) =>
     locked.set(
       tab.targetId,
-      tab.frame.unreachableUrl ? (locked.get(tab.targetId) ?? false) : seven(tab.frame.url)
+      tab.frame.unreachableUrl
+        ? (locked.get(tab.targetId) ?? false)
+        : protectedHost(tab.frame.url) ||
+            keptDocument(tab.url) ||
+            (tab.frame.url === 'about:blank' && keptDocument(tab.frame.securityOrigin))
     )
   );
   browser.interceptors.push(
-    (tab, url) => block && seven(url) && browser.attached(conn, tab.targetId)
+    (tab, url) => block && protectedHost(url) && browser.attached(conn, tab.targetId)
   );
   const refuse = (why) => {
     throw new Error(`slicc: refused: ${why}`);
   };
+  const keepClosed = (tab) => {
+    if (!tab || allowKeptClose) return false;
+    return (
+      keptDocument(tab.url) ||
+      keptDocument(tab.frame?.url) ||
+      (tab.frame?.url === 'about:blank' && keptDocument(tab.frame.securityOrigin)) ||
+      (tab.navigating && keptDocument(tab.navigationURL))
+    );
+  };
   conn.send = async (method, params = {}, sessionId) => {
     const tab = browser.tabOf(sessionId, params.targetId);
-    if (method === 'Runtime.evaluate' && tab && !evaluate && quarantined(tab))
+    if (
+      method === 'Runtime.evaluate' &&
+      tab &&
+      !evaluate &&
+      (quarantined(tab) || (closeProtected && keepClosed(tab)))
+    )
       refuse("this tab's history holds a protected page");
-    if (method === 'Page.navigate' && seven(params.url)) refuse('protected URL');
+    if (method === 'Page.navigate' && protectedHost(params.url)) refuse('protected URL');
     if (method === 'Page.navigate' && refuseURL(params.url)) refuse('inherited origin');
     if (method === 'Page.navigate' && tab && unanswered(params.url))
       return { frameId: tab.targetId, loaderId: 'L0' };
@@ -253,14 +331,26 @@ export function quarantining(
       refuse('navigation in a quarantined tab');
     if (method === 'Target.attachToTarget' && tab && refuseAttach(tab, quarantined))
       refuse('attach to a quarantined tab');
-    if (method === 'Target.attachToTarget' && locked.get(tab?.targetId)) refuse('protected target');
     if (
-      method === 'Target.closeTarget' &&
-      locked.get(tab?.targetId) &&
-      (!closeProtected || refuseClose)
+      method === 'Target.attachToTarget' &&
+      (locked.get(tab?.targetId) || (closeProtected && keepClosed(tab)))
     )
       refuse('protected target');
+    if (
+      method === 'Target.closeTarget' &&
+      ((locked.get(tab?.targetId) && (!closeProtected || refuseClose)) ||
+        (closeProtected && !refuseClose && keepClosed(tab)))
+    )
+      refuse('protected target');
+    if (method === 'Page.navigate' && tab && params.url) {
+      tab.navigating = true;
+      tab.navigationURL = params.url;
+    }
     const result = await conn.raw(method, params, sessionId);
+    if (method === 'Page.navigate' && tab) {
+      tab.navigating = false;
+      tab.navigationURL = undefined;
+    }
     if (method === 'Target.getTargetInfo') return { targetInfo: redact(result.targetInfo) };
     if (method === 'Target.getTargets') return { targetInfos: result.targetInfos.map(redact) };
     return result;

@@ -76,6 +76,16 @@ function route(req, url, send, html, redirects) {
         { sourcemap: '/listener.js.map' }
       ),
     '/page': () => html('trigger', trigger(p)),
+    '/blob-nav': () =>
+      html(
+        'blob-nav',
+        `<p>blob-nav ${escape(p.get('n') ?? '')}</p><script>const b=URL.createObjectURL(new Blob(['<!doctype html><title>blob</title><p>blob ${escape(p.get('n') ?? '')}</p>'],{type:'text/html'}));location.replace(b);</script>`
+      ),
+    '/blank': () => html('blank', `<p>blank ${escape(p.get('n') ?? '')}</p>`),
+    '/blank-open': () => html('blank-open', `<p>blank-open ${escape(p.get('n') ?? '')}</p>`),
+    '/os/': () => html('os', `<p>os ${escape(p.get('n') ?? '')}</p>`),
+    '/os/index.html': () => html('os', `<p>os ${escape(p.get('n') ?? '')}</p>`),
+    '/os/callback.html': () => html('os-callback', `<p>callback ${escape(p.get('n') ?? '')}</p>`),
     '/api/cookies': () => send(200, req.headers.cookie ?? 'none', 'text/plain'),
     '/plant': () =>
       html('plant', '<script>localStorage.setItem("canary","planted")</script>', {

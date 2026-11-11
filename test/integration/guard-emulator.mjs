@@ -612,7 +612,9 @@ export function emulatedGuard(browser, options = {}) {
       !options.catalogAttachOnly &&
       targetId &&
       !(options.forwardFrameReads ?? []).includes(method) &&
-      (sessionId || ['Target.attachToTarget', 'Target.closeTarget'].includes(method)) &&
+      (sessionId ||
+        method === 'Target.attachToTarget' ||
+        ((!options.closeProtected || options.refuseClose) && method === 'Target.closeTarget')) &&
       !(method === 'Target.attachToTarget' && options.allowProtectedAttach) &&
       (await decision(targetId))
     ) {

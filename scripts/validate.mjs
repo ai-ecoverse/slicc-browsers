@@ -340,7 +340,14 @@ for (const v of guard.vectors ?? []) {
         gv(`${v.id}: ${name} depends on ${d}, which isn't a refusable step`);
     }
   }
-  const optional = new Set(Object.values(v.observe ?? {}).flatMap((o) => o.requires ?? []));
+  const optional = new Set(
+    Object.values(v.observe ?? {}).flatMap((o) => [...(o.requires ?? []), ...(o.unless ?? [])])
+  );
+  for (const [name, o] of Object.entries(v.observe ?? {})) {
+    const both = new Set([...(o.requires ?? []), ...(o.unless ?? [])]);
+    if ((o.requires?.length ?? 0) + (o.unless?.length ?? 0) !== both.size)
+      gv(`${v.id}: ${name} lists the same capability in requires and unless`);
+  }
   const needs = new Set();
   const top = [...(v.setup ?? []), ...(v.trigger ?? [])];
   for (const st of flat(top)) {

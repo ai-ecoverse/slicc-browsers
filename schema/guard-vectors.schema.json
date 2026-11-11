@@ -150,6 +150,10 @@
         "syntheticAutoAttach": {
           "type": "string",
           "minLength": 1
+        },
+        "closeProtected": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -187,7 +191,8 @@
         "secureOrigin",
         "forwardAudit",
         "stockSetup",
-        "syntheticAutoAttach"
+        "syntheticAutoAttach",
+        "closeProtected"
       ]
     },
     "requires": {
@@ -216,6 +221,9 @@
           }
         },
         "requires": {
+          "$ref": "#/$defs/requires"
+        },
+        "unless": {
           "$ref": "#/$defs/requires"
         },
         "check": {

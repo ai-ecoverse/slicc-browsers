@@ -105,7 +105,8 @@
     "forwardAudit": "a complete browser-side forwarding ledger for history-restore probes and for checks of a command's forwarded params (client.forwarded)",
     "stockSetup": "the guard admits stock clients' setup calls: init scripts with no code (the no-code regex is matched on the whole string without the multiline flag), the four display emulation calls, bindings scoped to an isolated world, Page.createIsolatedWorld on an ordinary frame with grantUniveralAccess and contentSecurityPolicy stripped and no executionContextId for any other frame, and Target.setAutoAttach that either narrows to tab targets or hides per target so no protected-origin page, iframe or worker reaches the client (pages under the tab held like pages, with the same URL redaction in targetInfo)",
     "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
-    "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available"
+    "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
+    "closeProtected": "the guard lets Target.closeTarget close a protected tab"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -1707,12 +1708,23 @@
         },
         "closeRefused": {
           "means": "protected error-page restore: closeRefused",
+          "unless": ["closeProtected"],
           "check": {
             "result": "errorPage",
             "path": "result.closeRefused",
             "equals": true,
             "observer": "client"
           }
+        },
+        "closed": {
+          "means": "protected error-page restore: Target.closeTarget on the locked tab is answered with success and the tab is gone",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["closeProtected"]
         },
         "attachRedacted": {
           "means": "protected error-page restore: attachRedacted",
@@ -1755,6 +1767,7 @@
           "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
+          "closed": true,
           "attachRedacted": false,
           "fullURL": true
         }
@@ -1771,6 +1784,7 @@
         "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
+        "closed": true,
         "attachRedacted": true,
         "fullURL": false
       }
@@ -1888,12 +1902,23 @@
         },
         "closeRefused": {
           "means": "protected error-page sticky: closeRefused",
+          "unless": ["closeProtected"],
           "check": {
             "result": "errorPage",
             "path": "result.closeRefused",
             "equals": true,
             "observer": "client"
           }
+        },
+        "closed": {
+          "means": "protected error-page sticky: Target.closeTarget on the locked tab is answered with success and the tab is gone",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["closeProtected"]
         },
         "stickyError": {
           "means": "protected error-page sticky: stickyError",
@@ -1945,6 +1970,7 @@
           "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -1962,6 +1988,7 @@
         "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false
@@ -2081,12 +2108,23 @@
         },
         "closeRefused": {
           "means": "protected error-page sticky (query): closeRefused",
+          "unless": ["closeProtected"],
           "check": {
             "result": "errorPage",
             "path": "result.closeRefused",
             "equals": true,
             "observer": "client"
           }
+        },
+        "closed": {
+          "means": "protected error-page sticky (query): Target.closeTarget on the locked tab is answered with success and the tab is gone",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["closeProtected"]
         },
         "stickyError": {
           "means": "protected error-page sticky (query): stickyError",
@@ -2138,6 +2176,7 @@
           "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -2155,6 +2194,7 @@
         "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false
@@ -2274,12 +2314,23 @@
         },
         "closeRefused": {
           "means": "protected error-page sticky (fragment): closeRefused",
+          "unless": ["closeProtected"],
           "check": {
             "result": "errorPage",
             "path": "result.closeRefused",
             "equals": true,
             "observer": "client"
           }
+        },
+        "closed": {
+          "means": "protected error-page sticky (fragment): Target.closeTarget on the locked tab is answered with success and the tab is gone",
+          "check": {
+            "result": "errorPage",
+            "path": "result.closed",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["closeProtected"]
         },
         "stickyError": {
           "means": "protected error-page sticky (fragment): stickyError",
@@ -2331,6 +2382,7 @@
           "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
+          "closed": true,
           "stickyError": true,
           "attachRedacted": false,
           "fullURL": true
@@ -2348,6 +2400,7 @@
         "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
+        "closed": true,
         "stickyError": true,
         "attachRedacted": true,
         "fullURL": false

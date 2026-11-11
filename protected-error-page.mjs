@@ -35,7 +35,7 @@ async function loadedDocument(reader, observer, url, until) {
   });
 }
 
-async function lockChecks({ client, session, targetId, result }) {
+async function lockChecks({ client, reader, session, targetId, result, until }) {
   result.evaluateRefused = refused(
     await outcome(
       client.send(
@@ -48,7 +48,14 @@ async function lockChecks({ client, session, targetId, result }) {
   result.attachRefused = refused(
     await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }))
   );
-  result.closeRefused = refused(await outcome(client.send('Target.closeTarget', { targetId })));
+  const close = await outcome(client.send('Target.closeTarget', { targetId }));
+  result.closeRefused = refused(close);
+  result.closed =
+    close.result?.success === true &&
+    (await until(
+      async () =>
+        !(await reader.send('Target.getTargets')).targetInfos.some((i) => i.targetId === targetId)
+    ));
 }
 
 const discoveryMethods = ['Target.targetCreated', 'Target.targetInfoChanged'];
@@ -463,7 +470,7 @@ export async function protectedErrorPage({
       result.stickyError = true;
       await pause(100);
     }
-    await lockChecks({ client, session, targetId, result });
+    await lockChecks({ client, reader, session, targetId, result, until });
     return result;
   } finally {
     stopped = true;

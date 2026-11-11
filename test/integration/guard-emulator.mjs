@@ -293,8 +293,7 @@ function emulatedGuardPlain(browser, options = {}) {
           sessions.get(event.sessionId) ?? shields.get(event.sessionId)?.targetId;
         if (
           failedDocumentTargets.has(failedDocumentTarget) &&
-          (event.method === 'Page.loadEventFired' ||
-            (event.method === 'Page.frameNavigated' && !event.params?.frame?.parentId))
+          event.method === 'Page.loadEventFired'
         )
           continue;
         const exposed = sanitize(
@@ -1268,8 +1267,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
           sessions.get(event.sessionId) ?? shields.get(event.sessionId)?.targetId;
         if (
           failedDocumentTargets.has(failedDocumentTarget) &&
-          (event.method === 'Page.loadEventFired' ||
-            (event.method === 'Page.frameNavigated' && !event.params?.frame?.parentId))
+          event.method === 'Page.loadEventFired'
         )
           continue;
         const exposed = sanitize(

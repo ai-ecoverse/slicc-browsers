@@ -102,8 +102,8 @@ export function emulatedGuard(browser, options = {}) {
     ? Date.now() + options.delayProtectedWorkerMs
     : 0;
   let listHoldStart = 0;
+  const workerType = (info) => ['worker', 'shared_worker', 'service_worker'].includes(info.type);
   const ownerOpener = async (info) => {
-    if (!['worker', 'shared_worker', 'service_worker'].includes(info.type)) return undefined;
     const ownerIds = [
       ...new Set([info.openerId, info.parentId, info.openerFrameId].filter(Boolean)),
     ];
@@ -140,15 +140,25 @@ export function emulatedGuard(browser, options = {}) {
     const documentURL = f?.url;
     const unreachableURL = f?.unreachableUrl;
     const previous = decisions.get(targetId) ?? false;
-    if (options.targetURLOnly) return catalog.target(targetInfo);
+    const blocked = options.targetURLOnly
+      ? catalog.target(targetInfo)
+      : catalog.target({
+          ...targetInfo,
+          documentURL,
+          unreachableURL,
+          navigating: navigating.has(targetId),
+          previous: options.unlockErrorPage ? false : previous,
+        });
+    if (blocked || options.targetURLOnly || !workerType(targetInfo)) return blocked;
     const opener = await ownerOpener(targetInfo);
+    if (opener === undefined) return blocked;
     return catalog.target({
       ...targetInfo,
       documentURL,
       unreachableURL,
       navigating: navigating.has(targetId),
       previous: options.unlockErrorPage ? false : previous,
-      ...(opener !== undefined ? { opener } : {}),
+      opener,
     });
   };
   const contexts = new Set();
@@ -776,9 +786,15 @@ export function emulatedGuard(browser, options = {}) {
       const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
         targetId: params.targetId,
       });
+      const worker = workerType(targetInfo);
       const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type);
       const blocked = await decision(params.targetId);
-      if (blocked && !options.allowProtectedAttach) {
+      const emptyWorker =
+        worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
+      if (
+        (blocked || (emptyWorker && !options.exposeProtectedWorkers)) &&
+        !options.allowProtectedAttach
+      ) {
         if (options.cutProtectedAttach) {
           const cut = await unguarded.send('Target.attachToTarget', {
             targetId: params.targetId,

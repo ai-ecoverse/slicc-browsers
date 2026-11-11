@@ -785,12 +785,30 @@ test('emulator skips Page.getFrameTree on worker attach and probes only page-lik
 
 test('emulator decision treats empty-url workers as protected via opener/parent', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('const decision = async (targetId) =>');
+  const end = source.indexOf('const contexts = new Set()', start);
+  const block = source.slice(start, end);
   assert.ok(source.includes('const ownerOpener = async (info) =>'));
   assert.ok(source.includes('info.openerId'));
   assert.ok(source.includes('info.parentId'));
   assert.ok(source.includes('info.openerFrameId'));
   assert.ok(source.includes("return info.url ? undefined : 'unknown'"));
-  assert.ok(source.includes('...(opener !== undefined ? { opener } : {})'));
+  assert.ok(
+    block.includes(
+      'if (blocked || options.targetURLOnly || !workerType(targetInfo)) return blocked'
+    )
+  );
+  assert.ok(block.includes('const opener = await ownerOpener(targetInfo)'));
+  assert.ok(block.includes('opener,'));
+});
+
+test('emulator attach still refuses empty-url workers when hiding', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf("if (catalog && method === 'Target.attachToTarget')");
+  const end = source.indexOf('const frameRules =', start);
+  const block = source.slice(start, end);
+  assert.ok(block.includes('emptyWorker'));
+  assert.ok(block.includes('(blocked || (emptyWorker && !options.exposeProtectedWorkers))'));
 });
 
 test('emulator hides empty-url workers whose opener page is protected', async () => {

@@ -266,9 +266,9 @@ export async function probeWorkerSessions({ client, sessions, path, tag, detache
   return { reachable: false, probed, sessions: ids, probedIds };
 }
 
-async function spawnContext(reader, kind, context) {
+async function spawnContext(reader, kind) {
   if (!(kind === 'shared' || kind === 'service'))
-    return { browserContextId: context, ownsContext: false };
+    return { browserContextId: undefined, ownsContext: false };
   const opened = await outcome(reader.send('Target.createBrowserContext', {}));
   if (!opened.ok || !opened.result?.browserContextId)
     throw new Error(
@@ -305,17 +305,31 @@ async function readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessio
     );
 }
 
-async function findWorker(reader, spec, tag, budget) {
+function workerSnapshot(infos) {
+  return (infos ?? [])
+    .map((info) => `${info.type}:${String(info.url ?? '').slice(0, 160)}`)
+    .join(' | ');
+}
+
+async function findWorker(reader, spec, tag, budget, pageTargetId) {
   return until(async () => {
     const listed = await outcome(reader.send('Target.getTargets', {}));
     if (!listed.ok) return null;
+    const infos = listed.result.targetInfos ?? [];
+    const byUrl = infos.find(
+      (info) =>
+        info.type === spec.type &&
+        typeof info.url === 'string' &&
+        info.url.includes(spec.path) &&
+        info.url.includes(tag)
+    );
+    if (byUrl) return byUrl;
+    if (!pageTargetId) return null;
     return (
-      listed.result.targetInfos?.find(
+      infos.find(
         (info) =>
           info.type === spec.type &&
-          typeof info.url === 'string' &&
-          info.url.includes(spec.path) &&
-          info.url.includes(tag)
+          (info.openerId === pageTargetId || info.parentId === pageTargetId)
       ) ?? null
     );
   }, budget);
@@ -327,14 +341,13 @@ export async function protectedWorker({
   pageUrl,
   hostUrl,
   tag,
-  context,
   notes = [],
   budget = 5000,
 }) {
   const spec = kinds[kind];
   if (!spec) throw new Error(`unknown protected worker kind ${kind}`);
   if (!reader) throw new Error('protected worker needs an unguarded observer');
-  const { browserContextId, ownsContext } = await spawnContext(reader, kind, context);
+  const { browserContextId, ownsContext } = await spawnContext(reader, kind);
   let pageTargetId;
   let sessionId;
   const sessions = [];
@@ -353,6 +366,13 @@ export async function protectedWorker({
       targetId: pageTargetId,
       flatten: true,
     }));
+    await outcome(
+      reader.send(
+        'Target.setAutoAttach',
+        { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+        sessionId
+      )
+    );
     const evaluate = await readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessions);
     const script = new URL(spec.path, pageUrl);
     script.searchParams.set('n', tag);
@@ -362,8 +382,14 @@ export async function protectedWorker({
       throw new Error(
         `protected worker spawn failed: ${spawn.error?.message ?? value ?? 'unknown'}`
       );
-    const found = await findWorker(reader, spec, tag, budget);
-    if (!found) throw new Error(`protected ${kind} worker target did not appear`);
+    const found = await findWorker(reader, spec, tag, budget, pageTargetId);
+    if (!found) {
+      const listed = await outcome(reader.send('Target.getTargets', {}));
+      notes.push(
+        `protected worker ${kind} getTargets: ${workerSnapshot(listed.result?.targetInfos) || '(none)'}`
+      );
+      throw new Error(`protected ${kind} worker target did not appear`);
+    }
     const exists = await outcome(evaluate(spec.exists));
     if (!exists.ok || exists.result?.result?.value !== true)
       throw new Error(`protected ${kind} worker existence check failed`);

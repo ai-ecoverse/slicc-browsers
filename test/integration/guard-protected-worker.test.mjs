@@ -324,9 +324,11 @@ test('a lying attach reply that still returns a session id fails attachSession',
 test('protectedWorker records the worker target id from getTargets', async () => {
   const page = 'http://vault.example.test/doc?n=host-t';
   const workerUrl = 'http://vault.example.test/worker.js?n=t';
+  const calls = [];
   const reader = {
     events: [],
     async send(method, params = {}, sessionId) {
+      calls.push({ method, params, sessionId });
       if (method === 'Target.createBrowserContext')
         throw new Error('dedicated spawn must not create a browser context');
       if (method === 'Target.createTarget') {
@@ -336,6 +338,11 @@ test('protectedWorker records the worker target id from getTargets', async () =>
       if (method === 'Target.getTargetInfo')
         return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
       if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.setAutoAttach') {
+        assert.equal(sessionId, 'page-session');
+        assert.equal(params.waitForDebuggerOnStart, false);
+        return {};
+      }
       if (method === 'Target.detachFromTarget') return {};
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
@@ -362,12 +369,116 @@ test('protectedWorker records the worker target id from getTargets', async () =>
     kind: 'dedicated',
     pageUrl: page,
     tag: 't',
+    context: 'stale-context',
     notes: [],
     budget: 200,
   });
   assert.equal(out.workerTargetId, 'worker-1');
   assert.equal(out.exists, true);
   assert.equal(out.browserContextId, undefined);
+  assert.ok(calls.some((call) => call.method === 'Target.setAutoAttach'));
+});
+
+test('protectedWorker matches a dedicated worker by opener before the URL settles', async () => {
+  let polls = 0;
+  const page = 'https://seven.sliccy.ai:443/doc?n=host-t';
+  const reader = {
+    events: [],
+    async send(method, params = {}, sessionId) {
+      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
+      if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Page.enable' || method === 'Runtime.enable') return {};
+      if (method === 'Page.navigate') return {};
+      if (method === 'Target.getTargets') {
+        polls++;
+        return {
+          targetInfos: [
+            { targetId: 'page-1', type: 'page', url: page },
+            {
+              targetId: 'worker-1',
+              type: 'worker',
+              url: polls > 2 ? 'https://seven.sliccy.ai:443/worker.js?n=t' : '',
+              openerId: 'page-1',
+            },
+          ],
+        };
+      }
+      if (method === 'Runtime.evaluate') {
+        if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+        if (String(params.expression).includes('new Worker'))
+          return { result: { value: 'spawned' } };
+        if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
+        throw new Error(`unexpected evaluate ${params.expression}`);
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const { protectedWorker } = await import('../../protected-worker.mjs');
+  const out = await protectedWorker({
+    reader,
+    kind: 'dedicated',
+    pageUrl: page,
+    tag: 't',
+    notes: [],
+    budget: 500,
+  });
+  assert.equal(out.workerTargetId, 'worker-1');
+});
+
+test('protectedWorker notes getTargets when the worker never appears', async () => {
+  const notes = [];
+  const reader = {
+    events: [],
+    async send(method, params = {}) {
+      if (method === 'Target.createTarget') return { targetId: 'page-1' };
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
+      if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Page.enable' || method === 'Runtime.enable') return {};
+      if (method === 'Page.navigate') return {};
+      if (method === 'Target.getTargets')
+        return {
+          targetInfos: [
+            { targetId: 'page-1', type: 'page', url: 'https://seven.sliccy.ai/doc' },
+            { targetId: 'other', type: 'shared_worker', url: 'https://ordinary.example.test/sw' },
+          ],
+        };
+      if (method === 'Runtime.evaluate') {
+        if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
+        if (String(params.expression).includes('new Worker'))
+          return { result: { value: 'spawned' } };
+        throw new Error(`unexpected evaluate ${params.expression}`);
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const { protectedWorker } = await import('../../protected-worker.mjs');
+  await assert.rejects(
+    () =>
+      protectedWorker({
+        reader,
+        kind: 'dedicated',
+        pageUrl: 'https://seven.sliccy.ai/doc?n=host-t',
+        tag: 't',
+        notes,
+        budget: 80,
+      }),
+    /did not appear/
+  );
+  assert.ok(
+    notes.some(
+      (note) =>
+        note.includes('protected worker dedicated getTargets:') &&
+        note.includes('page:https://seven.sliccy.ai/doc') &&
+        note.includes('shared_worker:')
+    )
+  );
 });
 
 test('shared protectedWorker isolates the spawn in its own browser context', async () => {
@@ -384,6 +495,7 @@ test('shared protectedWorker isolates the spawn in its own browser context', asy
       if (method === 'Target.getTargetInfo')
         return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
       if (method === 'Target.attachToTarget') return { sessionId: 'page-session' };
+      if (method === 'Target.setAutoAttach') return {};
       if (method === 'Target.detachFromTarget') return {};
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
@@ -442,6 +554,7 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
         }
         throw new Error(`unexpected attach ${params.targetId}`);
       }
+      if (method === 'Target.setAutoAttach') return {};
       if (method === 'Target.detachFromTarget') return {};
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
@@ -580,6 +693,18 @@ test('emulator narrowAutoAttach rewrites only the browser session to tab targets
   assert.ok(block.includes('!sessionId'));
   assert.ok(block.includes("filter: [{ type: 'tab' }]"));
   assert.equal(block.includes("{ type: 'page' }"), false);
+});
+
+test('emulator does not Fetch-shield foreign observer pages under resumeUnexposed', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf("if (event.method !== 'Target.attachedToTarget') continue;");
+  const end = source.indexOf('learnFrames();', start);
+  const block = source.slice(start, end);
+  assert.ok(block.includes('const owned = pages.has(info.targetId) || pages.has(info.openerId)'));
+  assert.ok(block.includes('if (!owned)'));
+  assert.ok(block.includes('foreign.add(event.params.sessionId)'));
+  assert.match(block, /if \(!owned\) \{\s*foreign\.add\(event\.params\.sessionId\);\s*continue;/);
+  assert.ok(source.includes('foreignPage'));
 });
 
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];

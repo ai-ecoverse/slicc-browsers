@@ -363,8 +363,15 @@ export function emulatedGuard(browser, options = {}) {
             }
         }
         if (options.resumeUnexposed && event.method === 'Target.attachedToTarget') {
-          const type = event.params.targetInfo?.type;
-          if (event.params.waitingForDebugger && type && type !== 'page' && type !== 'iframe')
+          const info = event.params.targetInfo;
+          const type = info?.type;
+          const foreignPage =
+            type === 'page' && !pages.has(info.targetId) && !pages.has(info.openerId);
+          if (
+            event.params.waitingForDebugger &&
+            type &&
+            (foreignPage || (type !== 'page' && type !== 'iframe'))
+          )
             await client
               .send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
               .catch(() => {});
@@ -375,14 +382,14 @@ export function emulatedGuard(browser, options = {}) {
         const info = event.params.targetInfo;
         sessions.set(event.params.sessionId, info.targetId);
         if (event.params.waitingForDebugger) children.add(event.params.sessionId);
-        if (!pages.has(info.targetId) && !pages.has(info.openerId))
+        const owned = pages.has(info.targetId) || pages.has(info.openerId);
+        if (!owned) {
           foreign.add(event.params.sessionId);
+          continue;
+        }
         if (info.type !== 'page' || shielded.has(info.targetId)) continue;
         shielded.add(info.targetId);
         pages.add(info.targetId);
-        if (event.params.waitingForDebugger) children.add(event.params.sessionId);
-        if (!pages.has(info.targetId) && !pages.has(info.openerId))
-          foreign.add(event.params.sessionId);
         const ready = shield(
           info.targetId,
           event.params.waitingForDebugger ? event.params.sessionId : undefined,

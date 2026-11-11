@@ -128,7 +128,7 @@ function emulatedGuardPlain(browser, options = {}) {
   const events = [];
   const messages = [];
   const protectedBodies = new Set();
-  let bodyCursor = 0;
+  let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
     if (!catalog || !options.redirectSecrets) return event;
     const response = event.params?.redirectResponse ?? event.params;
@@ -164,8 +164,8 @@ function emulatedGuardPlain(browser, options = {}) {
   const waiters = new Set();
   const mentions = (value) => hosts.some((host) => JSON.stringify(value).includes(host));
   const refusal = (what) => new Error(`slicc: refused: ${what}`);
-  let cursor = 0;
-  let guardCursor = 0;
+  let cursor = options.extensionFrames ? client.events.length : 0;
+  let guardCursor = options.extensionFrames ? unguarded.events.length : 0;
   let stopped = false;
   const shield = async (targetId, child, waiting) => {
     const { sessionId } = await unguarded.send('Target.attachToTarget', {
@@ -1042,7 +1042,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const events = [];
   const messages = [];
   const protectedBodies = new Set();
-  let bodyCursor = 0;
+  let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
     if (!catalog || !options.redirectSecrets) return event;
     const response = event.params?.redirectResponse ?? event.params;
@@ -1078,8 +1078,8 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const waiters = new Set();
   const mentions = (value) => hosts.some((host) => JSON.stringify(value).includes(host));
   const refusal = (what) => new Error(`slicc: refused: ${what}`);
-  let cursor = 0;
-  let guardCursor = 0;
+  let cursor = options.extensionFrames ? client.events.length : 0;
+  let guardCursor = options.extensionFrames ? unguarded.events.length : 0;
   let stopped = false;
   const shield = async (targetId, child, waiting) => {
     const { sessionId } = await unguarded.send('Target.attachToTarget', {

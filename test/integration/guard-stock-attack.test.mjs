@@ -723,6 +723,10 @@ test('a correct refusal of createIsolatedWorld passes E7.isolated-foreign.script
 test('a guard that fails the protected document without a load passes E7.isolated-foreign.script', {
   timeout: 600000,
 }, async () => {
+  const settle = isolatedForeignScript[0].trigger.find((step) => step.settle)?.settle;
+  assert.ok(settle);
+  assert.equal(settle.required, undefined);
+  assert.ok(settle.or?.served || settle.ms !== undefined);
   const { execution } = await runCarry('fail-document-refuse-world', {
     vectors: isolatedForeignScript,
   });
@@ -730,6 +734,27 @@ test('a guard that fails the protected document without a load passes E7.isolate
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(
+      row.errors.filter((error) => String(error).includes('settle:')).length,
+      0,
+      JSON.stringify(row)
+    );
+  }
+  const required = isolatedForeignScript.map((vector) => ({
+    ...vector,
+    trigger: vector.trigger.map((step) =>
+      step.settle ? { settle: { ...step.settle, required: true } } : step
+    ),
+  }));
+  const { execution: requiredExecution } = await runCarry('fail-document-refuse-world', {
+    vectors: required,
+  });
+  for (const row of requiredExecution.results) {
+    assert.ok(
+      row.errors.some((error) => /settle: no load within /.test(String(error))),
+      JSON.stringify(row)
+    );
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
   }
 });
 

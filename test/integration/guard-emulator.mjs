@@ -94,6 +94,7 @@ function emulatedGuardPlain(browser, options = {}) {
   const cutFrameSessions = new Set();
   const casting = new Set();
   const castStopped = new Set();
+  const failedDocumentTargets = new Set();
   const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
   const learnWorlds = () => {
     for (const event of client.events) {
@@ -195,15 +196,19 @@ function emulatedGuardPlain(browser, options = {}) {
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
+    const failDocument = (options.failDocumentOrigins ?? []).some((origin) =>
+      request.url.startsWith(`${origin}/`)
+    );
     const blocked =
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
-      (options.failDocumentOrigins ?? []).some((origin) => request.url.startsWith(`${origin}/`));
+      failDocument;
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
       return;
     }
+    if (failDocument) failedDocumentTargets.add(owner.targetId);
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});
@@ -284,6 +289,14 @@ function emulatedGuardPlain(browser, options = {}) {
             }
           }
         }
+        const failedDocumentTarget =
+          sessions.get(event.sessionId) ?? shields.get(event.sessionId)?.targetId;
+        if (
+          failedDocumentTargets.has(failedDocumentTarget) &&
+          (event.method === 'Page.loadEventFired' ||
+            (event.method === 'Page.frameNavigated' && !event.params?.frame?.parentId))
+        )
+          continue;
         const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {
@@ -747,11 +760,12 @@ function emulatedGuardPlain(browser, options = {}) {
       options.narrowAutoAttach &&
       method === 'Target.setAutoAttach' &&
       params?.autoAttach &&
-      Array.isArray(params.filter)
+      Array.isArray(params.filter) &&
+      !sessionId
     ) {
       forward = {
         ...params,
-        filter: [{ type: 'tab' }, { type: 'page' }],
+        filter: [{ type: 'tab' }],
       };
     }
     forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });
@@ -1008,6 +1022,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const cutFrameSessions = new Set();
   const casting = new Set();
   const castStopped = new Set();
+  const failedDocumentTargets = new Set();
   const foreignWorld = (context) => catalog?.url(context.origin) && !context.auxData?.isDefault;
   const learnWorlds = () => {
     for (const event of client.events) {
@@ -1109,15 +1124,19 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
+    const failDocument = (options.failDocumentOrigins ?? []).some((origin) =>
+      request.url.startsWith(`${origin}/`)
+    );
     const blocked =
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
-      (options.failDocumentOrigins ?? []).some((origin) => request.url.startsWith(`${origin}/`));
+      failDocument;
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
       return;
     }
+    if (failDocument) failedDocumentTargets.add(owner.targetId);
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});
@@ -1245,6 +1264,14 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
             }
           }
         }
+        const failedDocumentTarget =
+          sessions.get(event.sessionId) ?? shields.get(event.sessionId)?.targetId;
+        if (
+          failedDocumentTargets.has(failedDocumentTarget) &&
+          (event.method === 'Page.loadEventFired' ||
+            (event.method === 'Page.frameNavigated' && !event.params?.frame?.parentId))
+        )
+          continue;
         const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {

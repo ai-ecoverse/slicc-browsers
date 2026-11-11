@@ -736,13 +736,16 @@ test('stockSetup and README admit either narrowing or per-target hiding for work
 
 test('emulator narrowAutoAttach rewrites only the browser session to tab targets', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const plain = source.indexOf('function emulatedGuardPlain');
   const worker = source.indexOf('function emulatedGuardWithWorkerRules');
-  const start = source.indexOf('options.narrowAutoAttach &&', worker);
-  const end = source.indexOf('forwarded.push', start);
-  const block = source.slice(start, end);
-  assert.ok(block.includes('!sessionId'));
-  assert.ok(block.includes("filter: [{ type: 'tab' }]"));
-  assert.equal(block.includes("{ type: 'page' }"), false);
+  for (const from of [plain, worker]) {
+    const start = source.indexOf('options.narrowAutoAttach &&', from);
+    const end = source.indexOf('forwarded.push', start);
+    const block = source.slice(start, end);
+    assert.ok(block.includes('!sessionId'));
+    assert.ok(block.includes("filter: [{ type: 'tab' }]"));
+    assert.equal(block.includes("{ type: 'page' }"), false);
+  }
 });
 
 test('emulator does not Fetch-shield foreign observer pages under resumeUnexposed', async () => {

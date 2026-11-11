@@ -140,6 +140,8 @@ export async function waitFor(check, ms, step = 25, bounded = false) {
   const limit = start + ms + Math.max(ms * 4, 30000);
   let deadline = start + ms;
   let last = start;
+  let steps = 0;
+  const maxSteps = Math.max(8, Math.ceil((limit - start) / Math.max(step, 1)) + 8);
   const beat = () => {
     const now = Date.now();
     const gap = now - last;
@@ -156,6 +158,7 @@ export async function waitFor(check, ms, step = 25, bounded = false) {
   timer = setTimeout(tick, step);
   try {
     for (;;) {
+      if (++steps > maxSteps) return false;
       const expired = bounded
         ? new Promise((resolve) => {
             expire = () => resolve(false);

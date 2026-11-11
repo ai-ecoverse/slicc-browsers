@@ -905,6 +905,8 @@ export function emulatedGuard(browser, options = {}) {
       };
     }
     forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });
+    if (forwarded.length > 200) forwarded.splice(0, forwarded.length - 200);
+    if (messages.length > 200) messages.splice(0, messages.length - 200);
     const result = await client.send(method, forward, sessionId);
     if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
     if (method === 'Page.stopScreencast' && sessionId) {

@@ -789,10 +789,57 @@ test('spawnWorker rows record client CDP traces on failure and bound Page.getFra
   assert.ok(source.includes('installClientTrace()'));
   assert.ok(source.includes('noteClientTrace()'));
   assert.ok(source.includes('client cdp:'));
-  assert.ok(source.includes('slice(-40)'));
-  assert.ok(source.includes("method === 'Page.getFrameTree'"));
+  assert.ok(source.includes('cdpTrace.length >= 40'));
+  assert.ok(source.includes('__sliccOnSend'));
+  assert.ok(source.includes('const rawSend = client.send.bind(client)'));
+  assert.ok(source.includes('__sliccBoundGetFrameTree'));
   assert.ok(source.includes('after 3000ms'));
-  assert.ok(/Page\.getFrameTree timed out on \$\{type/.test(source));
+});
+
+test('tracked-style proxy does not recurse when target.send is replaced later', async () => {
+  let hits = 0;
+  const target = {
+    events: [],
+    async send() {
+      hits += 1;
+      return { ok: true };
+    },
+  };
+  let boom = 0;
+  const lookupSend = (method, params, sessionId) =>
+    Promise.resolve().then(() => target.send(method, params, sessionId));
+  const lookupProxy = new Proxy(target, {
+    get(base, key) {
+      if (key === 'send') return lookupSend;
+      return Reflect.get(base, key);
+    },
+  });
+  target.send = async (method, params, sessionId) => {
+    boom += 1;
+    if (boom > 50) throw new Error('unbounded send recursion');
+    return lookupProxy.send(method, params, sessionId);
+  };
+  await assert.rejects(() => lookupProxy.send('Page.getFrameTree', {}, 's1'), /unbounded/);
+  hits = 0;
+  boom = 0;
+  const original = async () => {
+    hits += 1;
+    return { ok: true };
+  };
+  target.send = original;
+  const rawSend = target.send.bind(target);
+  const boundSend = (method, params, sessionId) =>
+    Promise.resolve().then(() => rawSend(method, params, sessionId));
+  const boundProxy = new Proxy(target, {
+    get(base, key) {
+      if (key === 'send') return boundSend;
+      return Reflect.get(base, key);
+    },
+  });
+  target.send = async (method, params, sessionId) => boundProxy.send(method, params, sessionId);
+  for (let i = 0; i < 1000; i++) await boundProxy.send('Runtime.evaluate', {}, undefined);
+  assert.equal(hits, 1000);
+  assert.equal(boom, 0);
 });
 
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];
@@ -1112,6 +1159,7 @@ test('a worker attach refusal stays refused when an attachedToTarget event alrea
       options: {},
       vars: {},
       notes,
+      note: (message) => notes.push(message),
       attachSettings: new Map(),
       targets: [],
       contexts: [],
@@ -1155,6 +1203,7 @@ test('a worker attach refusal stays refused when an attachedToTarget event alrea
       options: {},
       vars: {},
       notes,
+      note: (message) => notes.push(message),
       attachSettings: new Map(),
       targets: [],
       contexts: [],

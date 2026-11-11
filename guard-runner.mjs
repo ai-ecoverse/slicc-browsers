@@ -214,71 +214,57 @@ class Execution {
     this.trace = [];
     this.stopped = false;
     this.cdpTrace = [];
+    this.cdpSessionTypes = new Map();
+    this.cdpTraceInstalled = false;
+  }
+
+  note(message) {
+    if (this.notes.length >= 80) this.notes.shift();
+    Array.prototype.push.call(this.notes, message);
   }
 
   installClientTrace() {
-    if (!this.spawnWorkerKind() || this.client.__sliccCdpTraced) return;
-    const send = this.client.send.bind(this.client);
-    const typeOf = (sessionId) => {
-      if (!sessionId) return 'browser';
-      for (let i = this.client.events.length - 1; i >= 0; i--) {
-        const event = this.client.events[i];
-        if (event.method === 'Target.attachedToTarget' && event.params?.sessionId === sessionId)
-          return event.params.targetInfo?.type ?? '';
-      }
-      return '';
+    if (!this.spawnWorkerKind() || this.cdpTraceInstalled) return;
+    this.cdpTraceInstalled = true;
+    const prev = this.client.__sliccOnSend;
+    this.client.__sliccBoundGetFrameTree = true;
+    this.client.__sliccOnSend = (entry) => {
+      prev?.(entry);
+      this.recordCdpTrace(entry);
     };
-    this.client.send = async (method, params = {}, sessionId) => {
-      const started = Date.now();
-      let status = 'ok';
-      const type = typeOf(sessionId);
-      const bound =
-        method === 'Page.getFrameTree'
-          ? async () => {
-              let timer;
-              try {
-                return await Promise.race([
-                  send(method, params, sessionId),
-                  new Promise((_, reject) => {
-                    timer = setTimeout(
-                      () =>
-                        reject(
-                          new Error(
-                            `Page.getFrameTree timed out on ${type || 'unknown'} session ${sessionId ?? 'browser'} after 3000ms`
-                          )
-                        ),
-                      3000
-                    );
-                  }),
-                ]);
-              } finally {
-                clearTimeout(timer);
-              }
-            }
-          : () => send(method, params, sessionId);
-      try {
-        return await bound();
-      } catch (error) {
-        status = String(error?.message ?? error);
-        throw error;
-      } finally {
-        this.cdpTrace.push({
-          method,
-          sessionId: sessionId ?? '',
-          type,
-          ms: Date.now() - started,
-          status,
-        });
+  }
+
+  recordCdpTrace(entry) {
+    let type = entry.sessionId ? this.cdpSessionTypes.get(entry.sessionId) : 'browser';
+    if (entry.sessionId && type === undefined) {
+      type = '';
+      const events = this.client.events;
+      for (let i = events.length - 1; i >= 0; i--) {
+        const event = events[i];
+        if (
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.sessionId === entry.sessionId
+        ) {
+          type = event.params.targetInfo?.type ?? '';
+          break;
+        }
       }
-    };
-    this.client.__sliccCdpTraced = true;
+      this.cdpSessionTypes.set(entry.sessionId, type);
+    }
+    if (this.cdpTrace.length >= 40) this.cdpTrace.shift();
+    this.cdpTrace.push({
+      method: entry.method,
+      sessionId: entry.sessionId ?? '',
+      type: type || (entry.sessionId ? '?' : 'browser'),
+      ms: entry.ms,
+      status: String(entry.status).slice(0, 200),
+    });
   }
 
   noteClientTrace() {
     if (!this.cdpTrace.length) return;
-    const last = this.cdpTrace.slice(-40);
-    this.notes.push(
-      `client cdp: ${last
+    this.note(
+      `client cdp: ${this.cdpTrace
         .map(
           (call) =>
             `${call.method}@${call.sessionId || 'browser'}:${call.type || '?'} ${call.ms}ms ${call.status}`
@@ -307,8 +293,7 @@ class Execution {
       );
       return read.ok && read.result.targetInfo?.attached === false;
     }, 5000);
-    if (!released)
-      this.notes.push(`client exit: the page stayed attached for ${this.bound(5000)}ms`);
+    if (!released) this.note(`client exit: the page stayed attached for ${this.bound(5000)}ms`);
     const { sessionId } = await this.reader.send('Target.attachToTarget', {
       targetId: this.pageTarget,
       flatten: true,
@@ -636,7 +621,7 @@ class Execution {
     } catch (error) {
       const message = String(error?.message ?? error);
       if (!/timed? ?out/i.test(message)) throw error;
-      this.notes.push(`Target.createBrowserContext retried once after: ${message}`);
+      this.note(`Target.createBrowserContext retried once after: ${message}`);
       return (await client.send('Target.createBrowserContext', {})).browserContextId;
     }
   }
@@ -931,7 +916,7 @@ class Execution {
         Boolean(childSession) && !out.ok && this.detached(childSession)
       );
       if ((step.isolatedWorld || step.observer) && !out.ok)
-        this.notes.push(
+        this.note(
           `${step.isolatedWorld ? `isolatedWorld ${step.isolatedWorld}` : `observer ${step.observer}`}: ${out.error?.message ?? 'failed'}`
         );
       this.options.debug?.({ step, out, side: this.side });
@@ -966,7 +951,7 @@ class Execution {
       return Boolean(next);
     }, browserUiMs);
     if (!next) return undefined;
-    this.notes.push(
+    this.note(
       `{browserUi} ${vanished} was gone when ${step.cdp} reached it; retried with ${next.targetId}`
     );
     this.vars.browserUi = next.targetId;
@@ -1408,7 +1393,7 @@ class Execution {
   async settle(settle) {
     const refused = () => (settle.dependsOn ?? []).some((name) => this.refused[name]);
     const skipped = () => {
-      this.notes.push(
+      this.note(
         `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.served ? `request ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'}`
       );
     };
@@ -1528,7 +1513,7 @@ class Execution {
       const reused = reusableAttachSession(step, out, params, this.client.events, this.eventStart);
       if (reused) {
         await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, reused));
-        this.notes.push(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
+        this.note(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
         return { ok: true, result: { sessionId: reused, reused: true } };
       }
     }
@@ -2276,14 +2261,70 @@ function variables(targets, target, side, slot, index) {
   return vars;
 }
 
+function sessionTypeOf(client, sessionId) {
+  if (!sessionId) return 'browser';
+  const events = client.events ?? [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.method === 'Target.attachedToTarget' && event.params?.sessionId === sessionId)
+      return event.params.targetInfo?.type || 'unknown';
+  }
+  return 'unknown';
+}
+
+function boundFrameTree(rawSend, client, params, sessionId) {
+  let timer;
+  const type = sessionTypeOf(client, sessionId);
+  return Promise.race([
+    rawSend('Page.getFrameTree', params, sessionId),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Page.getFrameTree timed out on ${type} session ${sessionId ?? 'browser'} after 3000ms`
+            )
+          ),
+        3000
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 function tracked(client, calls, name) {
   if (!client || typeof client.send !== 'function') return client;
   let next = 0;
+  const rawSend = client.send.bind(client);
   const send = (method, params, sessionId) => {
     const id = ++next;
     calls.set(id, { name, method, session: sessionId, since: Date.now() });
+    const started = Date.now();
+    const run =
+      method === 'Page.getFrameTree' && client.__sliccBoundGetFrameTree
+        ? () => boundFrameTree(rawSend, client, params, sessionId)
+        : () => rawSend(method, params, sessionId);
     return Promise.resolve()
-      .then(() => client.send(method, params, sessionId))
+      .then(run)
+      .then(
+        (result) => {
+          client.__sliccOnSend?.({
+            method,
+            sessionId,
+            ms: Date.now() - started,
+            status: 'ok',
+          });
+          return result;
+        },
+        (error) => {
+          client.__sliccOnSend?.({
+            method,
+            sessionId,
+            ms: Date.now() - started,
+            status: String(error?.message ?? error).slice(0, 200),
+          });
+          throw error;
+        }
+      )
       .finally(() => calls.delete(id));
   };
   return new Proxy(client, {

@@ -113,12 +113,16 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
       return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
     }, budget);
     if (!ready) throw new Error('protected worker iframe document did not become ready');
-    return (expression) =>
-      reader.send(
-        'Runtime.evaluate',
-        { expression, awaitPromise: true, returnByValue: true },
-        iframeSession
-      );
+    return {
+      frameTargetId: iframeTarget.targetId,
+      frameId: iframeTarget.targetId,
+      evaluate: (expression) =>
+        reader.send(
+          'Runtime.evaluate',
+          { expression, awaitPromise: true, returnByValue: true },
+          iframeSession
+        ),
+    };
   }
   const child = await until(async () => {
     const tree = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
@@ -132,12 +136,16 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
   if (!child) throw new Error('protected worker iframe frame did not appear');
   const contextId = await frameContext(reader, sessionId, child.frame.id, budget);
   if (!contextId) throw new Error('protected worker iframe context missing');
-  return (expression) =>
-    reader.send(
-      'Runtime.evaluate',
-      { expression, awaitPromise: true, returnByValue: true, contextId },
-      sessionId
-    );
+  return {
+    frameTargetId: undefined,
+    frameId: child.frame.id,
+    evaluate: (expression) =>
+      reader.send(
+        'Runtime.evaluate',
+        { expression, awaitPromise: true, returnByValue: true, contextId },
+        sessionId
+      ),
+  };
 }
 
 export function workerProbeExpression(path, tag) {
@@ -297,42 +305,94 @@ async function readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessio
   }, budget);
   if (!loaded) throw new Error('protected worker page did not become ready');
   if (hostUrl) return framedEvaluate(reader, sessionId, pageUrl, budget, sessions);
-  return (expression) =>
-    reader.send(
-      'Runtime.evaluate',
-      { expression, awaitPromise: true, returnByValue: true },
-      sessionId
-    );
+  return {
+    frameTargetId: undefined,
+    frameId: undefined,
+    evaluate: (expression) =>
+      reader.send(
+        'Runtime.evaluate',
+        { expression, awaitPromise: true, returnByValue: true },
+        sessionId
+      ),
+  };
 }
 
-function workerSnapshot(infos) {
+function describeTargets(infos) {
   return (infos ?? [])
-    .map((info) => `${info.type}:${String(info.url ?? '').slice(0, 160)}`)
+    .map((info) => {
+      const parts = [
+        info.type,
+        `url=${String(info.url ?? '')}`,
+        info.openerId ? `openerId=${info.openerId}` : 'openerId=',
+        info.parentId ? `parentId=${info.parentId}` : 'parentId=',
+        info.openerFrameId ? `openerFrameId=${info.openerFrameId}` : null,
+      ].filter((part) => part !== null);
+      return parts.join(',');
+    })
     .join(' | ');
 }
 
-async function findWorker(reader, spec, tag, budget, pageTargetId) {
+function urlMatches(info, spec, tag) {
+  return (
+    typeof info.url === 'string' &&
+    info.url.length > 0 &&
+    info.url.includes(spec.path) &&
+    info.url.includes(tag)
+  );
+}
+
+function relatedTo(info, owners) {
+  if (!owners?.size) return false;
+  if (info.openerId && owners.has(info.openerId)) return true;
+  if (info.parentId && owners.has(info.parentId)) return true;
+  if (info.openerFrameId && owners.has(info.openerFrameId)) return true;
+  return false;
+}
+
+export function pickSpawnedWorker(infos, { type, path, tag, beforeIds, owners }) {
+  const newcomers = (infos ?? []).filter(
+    (info) => info.type === type && info.targetId && !beforeIds.has(info.targetId)
+  );
+  if (!newcomers.length) return null;
+  const related = newcomers.filter((info) => relatedTo(info, owners));
+  const pool = related.length ? related : newcomers;
+  return pool.find((info) => urlMatches(info, { path }, tag)) ?? pool[0];
+}
+
+async function findWorker(reader, spec, tag, budget, beforeIds, owners) {
   return until(async () => {
     const listed = await outcome(reader.send('Target.getTargets', {}));
     if (!listed.ok) return null;
-    const infos = listed.result.targetInfos ?? [];
-    const byUrl = infos.find(
-      (info) =>
-        info.type === spec.type &&
-        typeof info.url === 'string' &&
-        info.url.includes(spec.path) &&
-        info.url.includes(tag)
-    );
-    if (byUrl) return byUrl;
-    if (!pageTargetId) return null;
-    return (
-      infos.find(
-        (info) =>
-          info.type === spec.type &&
-          (info.openerId === pageTargetId || info.parentId === pageTargetId)
-      ) ?? null
-    );
+    return pickSpawnedWorker(listed.result.targetInfos ?? [], {
+      type: spec.type,
+      path: spec.path,
+      tag,
+      beforeIds,
+      owners,
+    });
   }, budget);
+}
+
+async function spawnAndFind(reader, spec, kind, pageUrl, tag, budget, notes, owners, evaluate) {
+  const beforeListed = await outcome(reader.send('Target.getTargets', {}));
+  const beforeInfos = beforeListed.ok ? (beforeListed.result?.targetInfos ?? []) : [];
+  const beforeIds = new Set(beforeInfos.map((info) => info.targetId).filter(Boolean));
+  const script = new URL(spec.path, pageUrl);
+  script.searchParams.set('n', tag);
+  const spawn = await outcome(evaluate(spec.expression(script.href)));
+  const value = spawn.result?.result?.value;
+  if (!spawn.ok || (kind === 'service' ? value !== 'registered' : value !== 'spawned'))
+    throw new Error(`protected worker spawn failed: ${spawn.error?.message ?? value ?? 'unknown'}`);
+  const found = await findWorker(reader, spec, tag, budget, beforeIds, owners);
+  if (found) return found;
+  const afterListed = await outcome(reader.send('Target.getTargets', {}));
+  notes.push(
+    `protected worker ${kind} getTargets before: ${describeTargets(beforeInfos) || '(none)'}`
+  );
+  notes.push(
+    `protected worker ${kind} getTargets after: ${describeTargets(afterListed.result?.targetInfos) || '(none)'}`
+  );
+  throw new Error(`protected ${kind} worker target did not appear`);
 }
 
 export async function protectedWorker({
@@ -373,28 +433,31 @@ export async function protectedWorker({
         sessionId
       )
     );
-    const evaluate = await readyEvaluate(reader, sessionId, pageUrl, hostUrl, budget, sessions);
-    const script = new URL(spec.path, pageUrl);
-    script.searchParams.set('n', tag);
-    const spawn = await outcome(evaluate(spec.expression(script.href)));
-    const value = spawn.result?.result?.value;
-    if (!spawn.ok || (kind === 'service' ? value !== 'registered' : value !== 'spawned'))
-      throw new Error(
-        `protected worker spawn failed: ${spawn.error?.message ?? value ?? 'unknown'}`
-      );
-    const found = await findWorker(reader, spec, tag, budget, pageTargetId);
-    if (!found) {
-      const listed = await outcome(reader.send('Target.getTargets', {}));
-      notes.push(
-        `protected worker ${kind} getTargets: ${workerSnapshot(listed.result?.targetInfos) || '(none)'}`
-      );
-      throw new Error(`protected ${kind} worker target did not appear`);
-    }
+    const { evaluate, frameTargetId, frameId } = await readyEvaluate(
+      reader,
+      sessionId,
+      pageUrl,
+      hostUrl,
+      budget,
+      sessions
+    );
+    const owners = new Set([pageTargetId, frameTargetId, frameId].filter(Boolean));
+    const found = await spawnAndFind(
+      reader,
+      spec,
+      kind,
+      pageUrl,
+      tag,
+      budget,
+      notes,
+      owners,
+      evaluate
+    );
     const exists = await outcome(evaluate(spec.exists));
     if (!exists.ok || exists.result?.result?.value !== true)
       throw new Error(`protected ${kind} worker existence check failed`);
     notes.push(
-      `protected worker ${kind}${hostUrl ? ' framed' : ''}: page ${pageTargetId}, worker ${found.targetId}, url ${found.url}`
+      `protected worker ${kind}${hostUrl ? ' framed' : ''}: page ${pageTargetId}, worker ${found.targetId}, url ${found.url ?? ''}`
     );
     return {
       exists: true,

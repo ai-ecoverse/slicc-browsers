@@ -325,6 +325,7 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   const page = 'http://vault.example.test/doc?n=host-t';
   const workerUrl = 'http://vault.example.test/worker.js?n=t';
   const calls = [];
+  let spawned = false;
   const reader = {
     events: [],
     async send(method, params = {}, sessionId) {
@@ -348,15 +349,19 @@ test('protectedWorker records the worker target id from getTargets', async () =>
       if (method === 'Page.navigate') return {};
       if (method === 'Target.getTargets')
         return {
-          targetInfos: [
-            { targetId: 'page-1', type: 'page', url: page },
-            { targetId: 'worker-1', type: 'worker', url: workerUrl },
-          ],
+          targetInfos: spawned
+            ? [
+                { targetId: 'page-1', type: 'page', url: page },
+                { targetId: 'worker-1', type: 'worker', url: workerUrl },
+              ]
+            : [{ targetId: 'page-1', type: 'page', url: page }],
         };
       if (method === 'Runtime.evaluate') {
         if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
-        if (String(params.expression).includes('new Worker'))
+        if (String(params.expression).includes('new Worker')) {
+          spawned = true;
           return { result: { value: 'spawned' } };
+        }
         if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
         throw new Error(`unexpected evaluate ${params.expression}`);
       }
@@ -379,12 +384,12 @@ test('protectedWorker records the worker target id from getTargets', async () =>
   assert.ok(calls.some((call) => call.method === 'Target.setAutoAttach'));
 });
 
-test('protectedWorker matches a dedicated worker by opener before the URL settles', async () => {
-  let polls = 0;
+test('protectedWorker matches a new empty-url dedicated worker after the before snapshot', async () => {
+  let spawned = false;
   const page = 'https://seven.sliccy.ai:443/doc?n=host-t';
   const reader = {
     events: [],
-    async send(method, params = {}, sessionId) {
+    async send(method, params = {}) {
       if (method === 'Target.createTarget') return { targetId: 'page-1' };
       if (method === 'Target.getTargetInfo')
         return { targetInfo: { targetId: params.targetId, type: 'page', url: 'about:blank' } };
@@ -393,31 +398,48 @@ test('protectedWorker matches a dedicated worker by opener before the URL settle
       if (method === 'Target.detachFromTarget') return {};
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
-      if (method === 'Target.getTargets') {
-        polls++;
+      if (method === 'Target.getTargets')
         return {
-          targetInfos: [
-            { targetId: 'page-1', type: 'page', url: page },
-            {
-              targetId: 'worker-1',
-              type: 'worker',
-              url: polls > 2 ? 'https://seven.sliccy.ai:443/worker.js?n=t' : '',
-              openerId: 'page-1',
-            },
-          ],
+          targetInfos: spawned
+            ? [
+                { targetId: 'page-1', type: 'page', url: page },
+                { targetId: 'stale', type: 'worker', url: '', openerId: 'other' },
+                { targetId: 'worker-1', type: 'worker', url: '' },
+              ]
+            : [
+                { targetId: 'page-1', type: 'page', url: page },
+                { targetId: 'stale', type: 'worker', url: '', openerId: 'other' },
+              ],
         };
-      }
       if (method === 'Runtime.evaluate') {
         if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
-        if (String(params.expression).includes('new Worker'))
+        if (String(params.expression).includes('new Worker')) {
+          spawned = true;
           return { result: { value: 'spawned' } };
+        }
         if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
         throw new Error(`unexpected evaluate ${params.expression}`);
       }
       throw new Error(`unexpected ${method}`);
     },
   };
-  const { protectedWorker } = await import('../../protected-worker.mjs');
+  const { protectedWorker, pickSpawnedWorker } = await import('../../protected-worker.mjs');
+  assert.equal(
+    pickSpawnedWorker(
+      [
+        { targetId: 'stale', type: 'worker', url: '' },
+        { targetId: 'worker-1', type: 'worker', url: '', openerId: 'page-1' },
+      ],
+      {
+        type: 'worker',
+        path: '/worker.js',
+        tag: 't',
+        beforeIds: new Set(['stale']),
+        owners: new Set(['page-1']),
+      }
+    )?.targetId,
+    'worker-1'
+  );
   const out = await protectedWorker({
     reader,
     kind: 'dedicated',
@@ -427,9 +449,10 @@ test('protectedWorker matches a dedicated worker by opener before the URL settle
     budget: 500,
   });
   assert.equal(out.workerTargetId, 'worker-1');
+  assert.equal(out.workerUrl, '');
 });
 
-test('protectedWorker notes getTargets when the worker never appears', async () => {
+test('protectedWorker notes before and after getTargets when the worker never appears', async () => {
   const notes = [];
   const reader = {
     events: [],
@@ -445,8 +468,18 @@ test('protectedWorker notes getTargets when the worker never appears', async () 
       if (method === 'Target.getTargets')
         return {
           targetInfos: [
-            { targetId: 'page-1', type: 'page', url: 'https://seven.sliccy.ai/doc' },
-            { targetId: 'other', type: 'shared_worker', url: 'https://ordinary.example.test/sw' },
+            {
+              targetId: 'page-1',
+              type: 'page',
+              url: 'https://seven.sliccy.ai/doc',
+              openerId: 'opener-1',
+            },
+            {
+              targetId: 'other',
+              type: 'shared_worker',
+              url: 'https://ordinary.example.test/sw',
+              parentId: 'page-9',
+            },
           ],
         };
       if (method === 'Runtime.evaluate') {
@@ -474,9 +507,16 @@ test('protectedWorker notes getTargets when the worker never appears', async () 
   assert.ok(
     notes.some(
       (note) =>
-        note.includes('protected worker dedicated getTargets:') &&
-        note.includes('page:https://seven.sliccy.ai/doc') &&
-        note.includes('shared_worker:')
+        note.includes('protected worker dedicated getTargets before:') &&
+        note.includes('openerId=opener-1') &&
+        note.includes('parentId=page-9')
+    )
+  );
+  assert.ok(
+    notes.some(
+      (note) =>
+        note.includes('protected worker dedicated getTargets after:') &&
+        note.includes('shared_worker,url=https://ordinary.example.test/sw')
     )
   );
 });
@@ -484,6 +524,7 @@ test('protectedWorker notes getTargets when the worker never appears', async () 
 test('shared protectedWorker isolates the spawn in its own browser context', async () => {
   const page = 'http://vault.example.test/doc?n=host-t';
   const workerUrl = 'http://vault.example.test/shared-worker.js?n=t';
+  let spawned = false;
   const reader = {
     events: [],
     async send(method, params = {}) {
@@ -501,15 +542,19 @@ test('shared protectedWorker isolates the spawn in its own browser context', asy
       if (method === 'Page.navigate') return {};
       if (method === 'Target.getTargets')
         return {
-          targetInfos: [
-            { targetId: 'page-1', type: 'page', url: page },
-            { targetId: 'worker-1', type: 'shared_worker', url: workerUrl },
-          ],
+          targetInfos: spawned
+            ? [
+                { targetId: 'page-1', type: 'page', url: page },
+                { targetId: 'worker-1', type: 'shared_worker', url: workerUrl },
+              ]
+            : [{ targetId: 'page-1', type: 'page', url: page }],
         };
       if (method === 'Runtime.evaluate') {
         if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
-        if (String(params.expression).includes('SharedWorker'))
+        if (String(params.expression).includes('SharedWorker')) {
+          spawned = true;
           return { result: { value: 'spawned' } };
+        }
         if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
         throw new Error(`unexpected evaluate ${params.expression}`);
       }
@@ -535,6 +580,7 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
   const workerUrl = 'http://vault.example.test/worker.js?n=t';
   const events = [];
   let iframeAttached = false;
+  let spawned = false;
   const reader = {
     events,
     async send(method, params = {}, sessionId) {
@@ -559,18 +605,18 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
       if (method === 'Target.getTargets') {
-        return {
-          targetInfos: iframeAttached
-            ? [
-                { targetId: 'page-1', type: 'page', url: host },
-                { targetId: 'iframe-1', type: 'iframe', url: page },
-                { targetId: 'worker-1', type: 'worker', url: workerUrl },
-              ]
-            : [
-                { targetId: 'page-1', type: 'page', url: host },
-                { targetId: 'iframe-1', type: 'iframe', url: page },
-              ],
-        };
+        const infos = [
+          { targetId: 'page-1', type: 'page', url: host },
+          { targetId: 'iframe-1', type: 'iframe', url: page },
+        ];
+        if (spawned)
+          infos.push({
+            targetId: 'worker-1',
+            type: 'worker',
+            url: workerUrl,
+            openerId: 'iframe-1',
+          });
+        return { targetInfos: infos };
       }
       if (method === 'Runtime.evaluate') {
         if (sessionId === 'page-session') {
@@ -580,8 +626,10 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
         }
         if (sessionId === 'iframe-session') {
           if (params.expression === 'document.readyState') return { result: { value: 'complete' } };
-          if (String(params.expression).includes('new Worker'))
+          if (String(params.expression).includes('new Worker')) {
+            spawned = true;
             return { result: { value: 'spawned' } };
+          }
           if (String(params.expression).includes('__sliccW')) return { result: { value: true } };
           throw new Error(`unexpected iframe evaluate ${params.expression}`);
         }

@@ -601,6 +601,7 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
         throw new Error(`unexpected attach ${params.targetId}`);
       }
       if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Runtime.runIfWaitingForDebugger') return {};
       if (method === 'Target.detachFromTarget') return {};
       if (method === 'Page.enable' || method === 'Runtime.enable') return {};
       if (method === 'Page.navigate') return {};
@@ -752,7 +753,21 @@ test('emulator does not Fetch-shield foreign observer pages under resumeUnexpose
   assert.ok(block.includes('if (!owned)'));
   assert.ok(block.includes('foreign.add(event.params.sessionId)'));
   assert.match(block, /if \(!owned\) \{\s*foreign\.add\(event\.params\.sessionId\);\s*continue;/);
-  assert.ok(source.includes('foreignPage'));
+  const resume = source.indexOf('options.resumeUnexposed && event.method ===');
+  const resumeBlock = source.slice(resume, source.indexOf('if (event.method !==', resume));
+  assert.ok(resumeBlock.includes('const foreign ='));
+  assert.ok(resumeBlock.includes("(foreign || (type !== 'page' && type !== 'iframe'))"));
+});
+
+test('adopt resumes a paused child before running nested steps', async () => {
+  const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
+  const adopt = source.indexOf('  adopt(event) {');
+  const started = source.indexOf('const started = (async () => {', adopt);
+  const execute = source.indexOf('await this.execute(nested', started);
+  const resume = source.indexOf('Runtime.runIfWaitingForDebugger', started);
+  assert.ok(adopt >= 0 && started > adopt);
+  assert.ok(resume > started && resume < execute);
+  assert.ok(source.includes("adopt ${info?.type ?? 'target'} ${child}:"));
 });
 
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];

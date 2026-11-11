@@ -100,6 +100,7 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
       );
     const iframeSession = attached.result.sessionId;
     sessions.push(iframeSession);
+    await outcome(reader.send('Runtime.runIfWaitingForDebugger', {}, iframeSession));
     await outcome(reader.send('Page.enable', {}, iframeSession));
     await outcome(reader.send('Runtime.enable', {}, iframeSession));
     const ready = await waitFor(async () => {
@@ -125,12 +126,11 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
     };
   }
   const child = await until(async () => {
-    const tree = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
-    if (!tree.ok) return null;
+    const tree = await pageFrameTree(reader, sessionId, 'host page');
+    if (!tree) return null;
     return (
-      (tree.result.frameTree.childFrames ?? []).find((node) =>
-        String(node.frame?.url ?? '').startsWith(prefix)
-      ) ?? null
+      (tree.childFrames ?? []).find((node) => String(node.frame?.url ?? '').startsWith(prefix)) ??
+      null
     );
   }, budget);
   if (!child) throw new Error('protected worker iframe frame did not appear');
@@ -146,6 +146,15 @@ async function framedEvaluate(reader, sessionId, pageUrl, budget, sessions) {
         sessionId
       ),
   };
+}
+
+async function pageFrameTree(reader, sessionId, label) {
+  const read = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
+  if (!read.ok)
+    throw new Error(
+      `Page.getFrameTree timed out on ${label} session ${sessionId}: ${read.error?.message ?? 'unknown'}`
+    );
+  return read.result?.frameTree;
 }
 
 export function workerProbeExpression(path, tag) {

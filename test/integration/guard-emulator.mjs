@@ -365,12 +365,11 @@ export function emulatedGuard(browser, options = {}) {
         if (options.resumeUnexposed && event.method === 'Target.attachedToTarget') {
           const info = event.params.targetInfo;
           const type = info?.type;
-          const foreignPage =
-            type === 'page' && !pages.has(info.targetId) && !pages.has(info.openerId);
+          const foreign = Boolean(type) && !pages.has(info.targetId) && !pages.has(info.openerId);
           if (
             event.params.waitingForDebugger &&
             type &&
-            (foreignPage || (type !== 'page' && type !== 'iframe'))
+            (foreign || (type !== 'page' && type !== 'iframe'))
           )
             await client
               .send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)

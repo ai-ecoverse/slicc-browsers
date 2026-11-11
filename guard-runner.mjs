@@ -443,53 +443,55 @@ class Execution {
     );
   }
 
+  async readerFrameTree(targetId, label) {
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return { ok: false, sessionId: undefined, frameTree: undefined };
+    const sessionId = attached.result.sessionId;
+    await outcome(this.reader.send('Runtime.runIfWaitingForDebugger', {}, sessionId));
+    const read = await outcome(this.reader.send('Page.getFrameTree', {}, sessionId));
+    if (!read.ok) {
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
+      throw new Error(
+        `Page.getFrameTree timed out on ${label} target ${targetId} session ${sessionId}: ${read.error?.message ?? 'unknown'}`
+      );
+    }
+    return { ok: true, sessionId, frameTree: read.result.frameTree };
+  }
+
   async blocked(spec, observer) {
     const urls = (spec.anyOf ?? [spec.url]).map(address);
     if (observer === 'client') return this.clientBlocked(spec, urls);
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
-    const attached = await outcome(
-      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
-    );
+    const attached = await this.readerFrameTree(targetId, 'blocked page');
     if (!attached.ok) return false;
     try {
-      const read = await outcome(
-        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-      );
       const blockedFrame = (frame) =>
         Boolean(
           frame && urls.includes(frame.unreachableUrl) && frame.url.startsWith('chrome-error://')
         );
       const visit = (tree) =>
         Boolean(tree && (blockedFrame(tree.frame) || (tree.childFrames ?? []).some(visit)));
-      if (!read.ok) return false;
       if (spec.frame) {
-        if ((read.result.frameTree.childFrames ?? []).some(visit)) return true;
+        if ((attached.frameTree.childFrames ?? []).some(visit)) return true;
         return Boolean(await this.blockedFrameTarget(urls, targetId));
       }
-      return blockedFrame(read.result.frameTree.frame);
+      return blockedFrame(attached.frameTree.frame);
     } finally {
-      await outcome(
-        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-      );
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId: attached.sessionId }));
     }
   }
 
   async frameIds(targetId) {
-    const attached = await outcome(
-      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
-    );
+    const attached = await this.readerFrameTree(targetId, 'frameIds page');
     if (!attached.ok) return [];
     try {
-      const read = await outcome(
-        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-      );
       const ids = (tree) => [tree.frame.id, ...(tree.childFrames ?? []).flatMap(ids)];
-      return read.ok ? ids(read.result.frameTree) : [];
+      return ids(attached.frameTree);
     } finally {
-      await outcome(
-        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-      );
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId: attached.sessionId }));
     }
   }
 
@@ -499,21 +501,16 @@ class Execution {
     if (!listed.ok) return undefined;
     for (const info of listed.result.targetInfos) {
       if (info.type !== 'iframe' || !parents.includes(info.parentFrameId)) continue;
-      const attached = await outcome(
-        this.reader.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
-      );
-      if (!attached.ok) continue;
+      let sessionId;
       try {
-        const read = await outcome(
-          this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-        );
-        const frame = read.result?.frameTree?.frame;
+        const attached = await this.readerFrameTree(info.targetId, `iframe ${info.type}`);
+        if (!attached.ok) continue;
+        sessionId = attached.sessionId;
+        const frame = attached.frameTree?.frame;
         if (frame?.url.startsWith('chrome-error://') && urls.includes(frame.unreachableUrl))
           return info.targetId;
       } finally {
-        await outcome(
-          this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-        );
+        if (sessionId) await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
       }
     }
     return undefined;
@@ -676,12 +673,12 @@ class Execution {
       ? this.childSteps
       : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
     const started = (async () => {
+      if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
       const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
       if (reload < 0) await this.execute(nested, child);
       else {
         await this.execute(nested.slice(0, reload), child);
         const start = this.client.events.length;
-        if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
         await this.poll(
           () =>
             this.client.events
@@ -692,10 +689,13 @@ class Execution {
         await this.execute(nested.slice(reload), child);
       }
       const resumed = this.client.events.length;
-      if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
       if (nested.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
-    })().catch((error) => this.errors.push(String(error.message ?? error)));
+    })().catch((error) =>
+      this.errors.push(
+        `adopt ${info?.type ?? 'target'} ${child}: ${String(error.message ?? error)}`
+      )
+    );
     this.childRuns.set(child, started);
     this.pending.push(started);
   }
@@ -1038,12 +1038,10 @@ class Execution {
 
   async isolatedWorld(step) {
     const targetId = step.session === 'child' ? this.targets.at(-1) : this.pageTarget;
-    const { sessionId } = await this.reader.send('Target.attachToTarget', {
-      targetId,
-      flatten: true,
-    });
+    const attached = await this.readerFrameTree(targetId, 'isolatedWorld page');
+    if (!attached.ok) throw new Error('isolatedWorld attach failed');
+    const { sessionId, frameTree } = attached;
     try {
-      const { frameTree } = await this.reader.send('Page.getFrameTree', {}, sessionId);
       const { executionContextId } = await this.reader.send(
         'Page.createIsolatedWorld',
         { frameId: frameTree.frame.id, worldName: step.isolatedWorld },

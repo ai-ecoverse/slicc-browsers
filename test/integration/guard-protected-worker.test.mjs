@@ -736,7 +736,8 @@ test('stockSetup and README admit either narrowing or per-target hiding for work
 
 test('emulator narrowAutoAttach rewrites only the browser session to tab targets', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('options.narrowAutoAttach &&');
+  const worker = source.indexOf('function emulatedGuardWithWorkerRules');
+  const start = source.indexOf('options.narrowAutoAttach &&', worker);
   const end = source.indexOf('forwarded.push', start);
   const block = source.slice(start, end);
   assert.ok(block.includes('!sessionId'));
@@ -746,33 +747,37 @@ test('emulator narrowAutoAttach rewrites only the browser session to tab targets
 
 test('emulator does not Fetch-shield foreign observer pages under resumeUnexposed', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf("if (event.method !== 'Target.attachedToTarget') continue;");
+  const worker = source.indexOf('function emulatedGuardWithWorkerRules');
+  const start = source.indexOf("if (event.method !== 'Target.attachedToTarget') continue;", worker);
   const end = source.indexOf('learnFrames();', start);
   const block = source.slice(start, end);
   assert.ok(block.includes('const owned = pages.has(info.targetId) || pages.has(info.openerId)'));
   assert.ok(block.includes('if (!owned)'));
   assert.ok(block.includes('foreign.add(event.params.sessionId)'));
   assert.match(block, /if \(!owned\) \{\s*foreign\.add\(event\.params\.sessionId\);\s*continue;/);
-  const resume = source.indexOf('options.resumeUnexposed && event.method ===');
+  const resume = source.indexOf('options.resumeUnexposed && event.method ===', worker);
   const resumeBlock = source.slice(resume, source.indexOf('if (event.method !==', resume));
   assert.ok(resumeBlock.includes('const foreign ='));
   assert.ok(resumeBlock.includes("(foreign || (type !== 'page' && type !== 'iframe'))"));
 });
 
-test('adopt resumes a paused child before running nested steps', async () => {
+test('adopt resumes a paused child before running nested steps on worker rows', async () => {
   const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
   const adopt = source.indexOf('  adopt(event) {');
-  const started = source.indexOf('const started = (async () => {', adopt);
-  const execute = source.indexOf('await this.execute(nested', started);
-  const resume = source.indexOf('Runtime.runIfWaitingForDebugger', started);
-  assert.ok(adopt >= 0 && started > adopt);
-  assert.ok(resume > started && resume < execute);
+  const worker = source.indexOf('if (workerRow) {', adopt);
+  const resume = source.indexOf('Runtime.runIfWaitingForDebugger', worker);
+  const execute = source.indexOf('await this.execute(nested', resume);
+  assert.ok(adopt >= 0 && worker > adopt);
+  assert.ok(resume > worker && resume < execute);
   assert.ok(source.includes("adopt ${info?.type ?? 'target'} ${child}:"));
 });
 
 test('emulator skips Page.getFrameTree on worker attach and probes only page-like targets', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf("if (catalog && method === 'Target.attachToTarget')");
+  const start = source.indexOf(
+    "if (catalog && method === 'Target.attachToTarget')",
+    source.indexOf('function emulatedGuardWithWorkerRules')
+  );
   const end = source.indexOf('const frameRules =', start);
   const block = source.slice(start, end);
   assert.ok(block.includes("const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type)"));
@@ -785,9 +790,12 @@ test('emulator skips Page.getFrameTree on worker attach and probes only page-lik
 
 test('emulator decision treats empty-url workers as protected via opener/parent', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const decision = async (targetId) =>');
-  const end = source.indexOf('const contexts = new Set()', start);
-  const block = source.slice(start, end);
+  const start = source.indexOf('function emulatedGuardWithWorkerRules');
+  const decision = source.indexOf('const decision = async (targetId) =>', start);
+  const end = source.indexOf('const contexts = new Set()', decision);
+  const block = source.slice(decision, end);
+  assert.ok(source.includes('options.workerRules'));
+  assert.ok(source.includes('emulatedGuardPlain'));
   assert.ok(source.includes('const ownerOpener = async (info) =>'));
   assert.ok(source.includes('info.openerId'));
   assert.ok(source.includes('info.parentId'));
@@ -802,9 +810,24 @@ test('emulator decision treats empty-url workers as protected via opener/parent'
   assert.ok(block.includes('opener,'));
 });
 
+test('emulator without workerRules keeps main attach probe and foreign shield paths', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const plain = source.slice(
+    source.indexOf('function emulatedGuardPlain'),
+    source.indexOf('async function timedSend')
+  );
+  assert.equal(plain.includes('ownerOpener'), false);
+  assert.equal(plain.includes('timedSend'), false);
+  assert.ok(plain.includes("unguarded.send('Page.getFrameTree'"));
+  assert.ok(plain.includes('if (!pages.has(info.targetId) && !pages.has(info.openerId))'));
+});
+
 test('emulator attach still refuses empty-url workers when hiding', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf("if (catalog && method === 'Target.attachToTarget')");
+  const start = source.indexOf(
+    "if (catalog && method === 'Target.attachToTarget')",
+    source.indexOf('function emulatedGuardWithWorkerRules')
+  );
   const end = source.indexOf('const frameRules =', start);
   const block = source.slice(start, end);
   assert.ok(block.includes('emptyWorker'));
@@ -859,6 +882,7 @@ test('emulator hides empty-url workers whose opener page is protected', async ()
     {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: ['https://seven.sliccy.ai'],
+      workerRules: true,
     }
   );
   try {
@@ -953,15 +977,16 @@ test('adopt resumes a paused worker even when its browser context does not match
   assert.ok(adopt >= 0 && foreign > adopt);
   assert.ok(resume > foreign && resume < matched);
   assert.ok(source.includes('async resumeWaiting('));
-  assert.ok(source.includes("byId.get(targetId)?.type === 'iframe'"));
   assert.ok(source.includes('releasePersistentWorkerSessions'));
   assert.ok(source.includes('ensurePriorWorkersGone'));
   assert.ok(source.includes('cleanupSpawnedWorkerLeg'));
   assert.ok(source.includes('browserContextId'));
+  assert.ok(source.includes('if (paused && workerRow)'));
   const workerSource = await readFile(
     new URL('../../protected-worker.mjs', import.meta.url),
     'utf8'
   );
+  assert.ok(workerSource.includes("byId.get(targetId)?.type === 'iframe'"));
   assert.ok(workerSource.includes("kind === 'shared' || kind === 'service'"));
   assert.ok(workerSource.includes('Target.createBrowserContext'));
   assert.ok(workerSource.includes('Target.disposeBrowserContext'));

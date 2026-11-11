@@ -81,6 +81,7 @@ export async function runWorkerRows(mode, vectors) {
       guard = emulatedGuard(browser, {
         protectedOrigins: catalog.protectedOrigins,
         extraOrigins: [targets.seven, targets.vault],
+        workerRules: true,
         resumeUnexposed: true,
         ...modes[mode],
       });
@@ -96,6 +97,7 @@ export async function runWorkerRows(mode, vectors) {
         targets,
         capabilities: { ...stockCaps, secureOrigin: true, discovery: true },
         rowTimeoutMs: 90000,
+        workerRules: true,
       }
     );
   } finally {

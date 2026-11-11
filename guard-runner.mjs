@@ -701,6 +701,7 @@ class Execution {
     const child = event.params.sessionId;
     if (info?.type === 'browser_ui') return;
     const paused = event.params.waitingForDebugger || this.tabSessions.has(event.sessionId);
+    const workerRow = Boolean(this.spawnWorkerKind());
     if (this.expectWhere && !this.childWhere) {
       this.deferred.push(event);
       return;
@@ -710,7 +711,7 @@ class Execution {
       this.vars.context &&
       info.browserContextId !== this.vars.context
     ) {
-      if (paused)
+      if (paused && workerRow)
         this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
       return;
     }
@@ -730,12 +731,33 @@ class Execution {
       ? this.childSteps
       : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
     const started = (async () => {
-      if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+      if (workerRow) {
+        if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+        const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
+        if (reload < 0) await this.execute(nested, child);
+        else {
+          await this.execute(nested.slice(0, reload), child);
+          const start = this.client.events.length;
+          await this.poll(
+            () =>
+              this.client.events
+                .slice(start)
+                .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === child),
+            1500
+          );
+          await this.execute(nested.slice(reload), child);
+        }
+        const resumed = this.client.events.length;
+        if (nested.some((step) => step.cdp === 'Page.enable'))
+          await this.poll(() => this.firstLoad(child, resumed), 5000);
+        return;
+      }
       const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
       if (reload < 0) await this.execute(nested, child);
       else {
         await this.execute(nested.slice(0, reload), child);
         const start = this.client.events.length;
+        if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
         await this.poll(
           () =>
             this.client.events
@@ -746,11 +768,14 @@ class Execution {
         await this.execute(nested.slice(reload), child);
       }
       const resumed = this.client.events.length;
+      if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
       if (nested.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
     })().catch((error) =>
       this.errors.push(
-        `adopt ${info?.type ?? 'target'} ${child}: ${String(error.message ?? error)}`
+        workerRow
+          ? `adopt ${info?.type ?? 'target'} ${child}: ${String(error.message ?? error)}`
+          : String(error.message ?? error)
       )
     );
     this.childRuns.set(child, started);
@@ -2066,14 +2091,27 @@ class Execution {
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
       );
-    await Promise.allSettled(this.pending);
-    if (this.spawnWorkerKind()) await this.cleanupSpawnedWorkerLeg();
-    else await this.cleanupTargets();
+    if (this.spawnWorkerKind()) {
+      await Promise.allSettled(this.pending);
+      await this.cleanupSpawnedWorkerLeg();
+    } else {
+      for (const session of this.attachSettings.keys())
+        await outcome(
+          this.client.send(
+            'Target.setAutoAttach',
+            { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+            session
+          )
+        );
+      for (const targetId of new Set(this.targets))
+        await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
+    }
     for (const browserContextId of new Set(this.contexts))
       await outcome(
         (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
       );
     this.contexts = [];
+    if (!this.spawnWorkerKind()) await Promise.allSettled(this.pending);
     if (
       this.side === 'guarded' &&
       this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
@@ -2109,34 +2147,6 @@ class Execution {
       });
     this.targets = [];
     this.attachSettings.clear();
-  }
-
-  async cleanupTargets() {
-    for (const session of this.attachSettings.keys())
-      await outcome(
-        this.client.send(
-          'Target.setAutoAttach',
-          { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
-          session
-        )
-      );
-    await this.resumeWaiting();
-    const listed = await outcome((this.reader ?? this.client).send('Target.getTargets', {}));
-    const byId = new Map((listed.result?.targetInfos ?? []).map((info) => [info.targetId, info]));
-    for (const targetId of new Set(this.targets)) {
-      if (byId.get(targetId)?.type === 'iframe') continue;
-      await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
-    }
-    for (const info of listed.result?.targetInfos ?? []) {
-      if (
-        (info.type === 'shared_worker' || info.type === 'service_worker') &&
-        typeof info.url === 'string' &&
-        info.url.includes(this.vars.tag)
-      )
-        await outcome(
-          (this.reader ?? this.client).send('Target.closeTarget', { targetId: info.targetId })
-        );
-    }
   }
 }
 
@@ -2298,6 +2308,11 @@ function tracked(client, calls, name) {
   const send = (method, params, sessionId) => {
     const id = ++next;
     calls.set(id, { name, method, session: sessionId, since: Date.now() });
+    if (!client.__sliccOnSend && !client.__sliccBoundGetFrameTree) {
+      return Promise.resolve()
+        .then(() => client.send(method, params, sessionId))
+        .finally(() => calls.delete(id));
+    }
     const started = Date.now();
     const run =
       method === 'Page.getFrameTree' && client.__sliccBoundGetFrameTree

@@ -103,6 +103,8 @@ export function emulatedGuard(browser, options = {}) {
   const contexts = new Set();
   const extensionContexts = new Map();
   const cutSessions = new Set();
+  const paused = new Set();
+  const tabSessions = new Set();
   const cutFrameSessions = new Set();
   const casting = new Set();
   const castStopped = new Set();
@@ -278,8 +280,6 @@ export function emulatedGuard(browser, options = {}) {
                   waiter.resolve(exposed);
                 }
             }
-            if (event.method === 'Target.attachedToTarget')
-              sessions.set(event.params.sessionId, event.params.targetInfo.targetId);
             continue;
           }
         }
@@ -361,6 +361,15 @@ export function emulatedGuard(browser, options = {}) {
               waiters.delete(waiter);
               waiter.resolve(exposed);
             }
+        }
+        if (options.resumeUnexposed && event.method === 'Target.attachedToTarget') {
+          const type = event.params.targetInfo?.type;
+          if (event.params.waitingForDebugger && type && type !== 'page' && type !== 'iframe')
+            await client
+              .send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+              .catch(() => {});
+          else if (event.params.waitingForDebugger) paused.add(event.params.sessionId);
+          if (type === 'tab') tabSessions.add(event.params.sessionId);
         }
         if (event.method !== 'Target.attachedToTarget') continue;
         const info = event.params.targetInfo;
@@ -593,8 +602,13 @@ export function emulatedGuard(browser, options = {}) {
         throw refusal('protected redirect destination');
     }
     const targetId = params?.targetId ?? sessions.get(sessionId);
+    const startup =
+      options.resumeUnexposed &&
+      ((method === 'Runtime.runIfWaitingForDebugger' && paused.has(sessionId)) ||
+        (method === 'Target.setAutoAttach' && tabSessions.has(sessionId)));
     if (
       catalog &&
+      !startup &&
       !options.catalogAttachOnly &&
       targetId &&
       !(options.forwardFrameReads ?? []).includes(method) &&
@@ -822,11 +836,12 @@ export function emulatedGuard(browser, options = {}) {
       options.narrowAutoAttach &&
       method === 'Target.setAutoAttach' &&
       params?.autoAttach &&
-      Array.isArray(params.filter)
+      Array.isArray(params.filter) &&
+      !sessionId
     ) {
       forward = {
         ...params,
-        filter: [{ type: 'tab' }, { type: 'page' }],
+        filter: [{ type: 'tab' }],
       };
     }
     forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });

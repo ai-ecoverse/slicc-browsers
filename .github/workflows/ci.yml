@@ -53,7 +53,13 @@ jobs:
         test/integration/protected-premise.test.mjs
         test/integration/guard-refusable-nav.test.mjs
         test/integration/guard-protected-worker.test.mjs
-        test/integration/guard-protected-worker-chrome.test.mjs
+        test/integration/guard-protected-worker-chrome-narrow.test.mjs
+        test/integration/guard-protected-worker-chrome-hide.test.mjs
+        test/integration/guard-protected-worker-chrome-hide-cut.test.mjs
+        test/integration/guard-protected-worker-chrome-admit.test.mjs
+        test/integration/guard-protected-worker-chrome-late.test.mjs
+        test/integration/guard-protected-worker-chrome-rewrite.test.mjs
+        test/integration/guard-protected-worker-chrome-rewrite-late.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

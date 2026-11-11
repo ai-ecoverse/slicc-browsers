@@ -572,6 +572,16 @@ test('stockSetup and README admit either narrowing or per-target hiding for work
   assert.equal(set.placeholders.workerTarget.includes('spawnWorker'), true);
 });
 
+test('emulator narrowAutoAttach rewrites only the browser session to tab targets', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('options.narrowAutoAttach &&');
+  const end = source.indexOf('forwarded.push', start);
+  const block = source.slice(start, end);
+  assert.ok(block.includes('!sessionId'));
+  assert.ok(block.includes("filter: [{ type: 'tab' }]"));
+  assert.equal(block.includes("{ type: 'page' }"), false);
+});
+
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];
 
 test('adopt resumes a paused worker even when its browser context does not match', async () => {

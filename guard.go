@@ -51,6 +51,7 @@ const (
 	GuardCapForwardAudit     = "forwardAudit"
 	GuardCapStockSetup       = "stockSetup"
 	GuardCapSyntheticAttach  = "syntheticAutoAttach"
+	GuardCapCloseProtected   = "closeProtected"
 	GuardObserverWatch       = "watch"
 	GuardObserverFail        = "fail"
 	GuardClientExit          = "exit"
@@ -110,6 +111,7 @@ type GuardObservation struct {
 	Check      json.RawMessage `json:"check"`
 	DependsOn  []string        `json:"dependsOn,omitzero"`
 	Requires   []string        `json:"requires,omitempty"`
+	Unless     []string        `json:"unless,omitempty"`
 	EitherWhen json.RawMessage `json:"eitherWhen,omitempty"`
 }
 

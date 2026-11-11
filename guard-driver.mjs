@@ -197,7 +197,9 @@ export function judge(vector, side, observed) {
   }
   const skipped = Object.keys(want).filter(
     (k) =>
-      (observed?.[k] === 'not-supported' && vector.observe?.[k]?.requires?.length > 0) ||
+      (observed?.[k] === 'not-supported' &&
+        ((vector.observe?.[k]?.requires?.length ?? 0) > 0 ||
+          (vector.observe?.[k]?.unless?.length ?? 0) > 0)) ||
       (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const incomplete = Object.keys(want).filter(
@@ -310,7 +312,9 @@ const capabilities = (value) =>
     ? value.flatMap(capabilities)
     : value && typeof value === 'object'
       ? Object.entries(value).flatMap(([key, item]) =>
-          key === 'requires' && Array.isArray(item) ? item : capabilities(item)
+          (key === 'requires' || key === 'unless') && Array.isArray(item)
+            ? item
+            : capabilities(item)
         )
       : [];
 
@@ -389,6 +393,17 @@ function skipWhy(vector, row, known, guard, declared) {
   return `skip with a reason the runner never gives: ${reason}`;
 }
 
+function observationWhy(vector, row, declared) {
+  return (row.notSupported ?? []).flatMap((name) => {
+    const observation = vector?.observe?.[name];
+    if (!observation) return [`not-supported observation ${name} the vector lacks`];
+    const missing = (observation.requires ?? []).some((cap) => !declared.includes(cap));
+    const unless = (observation.unless ?? []).some((cap) => declared.includes(cap));
+    if (missing || unless) return [];
+    return [`not-supported:${name} while the observation should run`];
+  });
+}
+
 function forgeries(set, results, guard, capabilitiesList) {
   const vectors = new Map(set.vectors.map((v) => [v.id, v]));
   const declared = declaredCapabilities(capabilitiesList);
@@ -405,6 +420,7 @@ function forgeries(set, results, guard, capabilitiesList) {
     if (legs.includes('not-run') && vector?.kind !== 'text')
       why.push('not-run on a vector that is not kind text');
     if (legs.includes('skip')) why.push(skipWhy(vector, row, known, guard, declared));
+    why.push(...observationWhy(vector, row, declared));
     const found = why.filter(Boolean);
     if (!found.length) return [];
     const { id, target, variant, transport } = row;

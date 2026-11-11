@@ -12,6 +12,27 @@ const rules = JSON.parse(
 ).protectedOrigins;
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const vectors = data.vectors.filter((v) => v.trigger.some((s) => s.errorPage));
+const sticky = (id) => id.startsWith('C8.protected-error-page-sticky');
+const lockedIds = new Set([
+  'C8.protected-document-restore',
+  'C8.protected-error-page-sticky',
+  'C8.protected-error-page-sticky.query',
+  'C8.protected-error-page-sticky.fragment',
+]);
+
+const locked = ({ observations: { guarded } }) => ({
+  closed: guarded.closed,
+  closeRefused: guarded.closeRefused,
+  evaluateRefused: guarded.evaluateRefused,
+  attachRefused: guarded.attachRefused,
+});
+
+const caps = (extra = {}) => ({
+  browserSession: true,
+  browserContexts: true,
+  discovery: true,
+  ...extra,
+});
 
 test('error-page exemption requires exact failed URL evidence and preserves the previous decision', () => {
   const matcher = protectedOrigins(rules);
@@ -37,8 +58,17 @@ test('protected error pages remain drivable and redacted; real and already-prote
 }, async () => {
   const fixture = await fixtureServer();
   try {
-    for (const mode of ['catalog', 'target-url-only', 'unlock-error', 'plain', 'unblocked']) {
+    for (const mode of [
+      'catalog',
+      'close-protected',
+      'refuse-close',
+      'target-url-only',
+      'unlock-error',
+      'plain',
+      'unblocked',
+    ]) {
       const browser = await launch(fixture);
+      const declaresClose = mode === 'close-protected' || mode === 'refuse-close';
       const guard =
         mode === 'unblocked'
           ? undefined
@@ -48,6 +78,8 @@ test('protected error pages remain drivable and redacted; real and already-prote
                 protectedOrigins: rules,
                 targetURLOnly: mode === 'target-url-only',
                 unlockErrorPage: mode === 'unlock-error',
+                closeProtected: declaresClose,
+                refuseClose: mode === 'refuse-close',
               });
       try {
         const execution = await run(
@@ -57,7 +89,7 @@ test('protected error pages remain drivable and redacted; real and already-prote
             unguarded: browser.unguarded,
             targets: origins(fixture),
             fixture,
-            capabilities: { browserSession: true, browserContexts: true, discovery: true },
+            capabilities: caps(declaresClose ? { closeProtected: true } : {}),
           }
         );
         for (const row of execution.results) {
@@ -67,15 +99,38 @@ test('protected error pages remain drivable and redacted; real and already-prote
           assert.equal(
             row.guarded,
             mode === 'catalog' ||
-              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
+              mode === 'close-protected' ||
+              (mode === 'unlock-error' && !sticky(row.id)) ||
+              (mode === 'refuse-close' && !lockedIds.has(row.id))
               ? 'pass'
               : 'fail',
             JSON.stringify(row)
           );
+          if (mode === 'refuse-close' && lockedIds.has(row.id))
+            assert.deepEqual(locked(row), {
+              closed: false,
+              closeRefused: 'not-supported',
+              evaluateRefused: true,
+              attachRefused: true,
+            });
           if (mode === 'target-url-only') assert.equal(row.observations.guarded.reload, false);
           if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
-          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
-            assert.equal(row.observations.guarded.closeRefused, false);
+          if (mode === 'unlock-error' && sticky(row.id))
+            assert.equal(row.observations.guarded.attachRefused, false);
+          if (mode === 'catalog' && lockedIds.has(row.id))
+            assert.deepEqual(locked(row), {
+              closed: 'not-supported',
+              closeRefused: true,
+              evaluateRefused: true,
+              attachRefused: true,
+            });
+          if (mode === 'close-protected' && lockedIds.has(row.id))
+            assert.deepEqual(locked(row), {
+              closed: true,
+              closeRefused: 'not-supported',
+              evaluateRefused: true,
+              attachRefused: true,
+            });
         }
       } finally {
         await guard?.stop();
@@ -92,14 +147,16 @@ test('page-session transports run every error-page field', {
 }, async () => {
   const fixture = await fixtureServer();
   try {
-    for (const mode of ['catalog', 'plain', 'unlock-error']) {
+    for (const mode of ['catalog', 'close-protected', 'plain', 'unlock-error']) {
       const browser = await launch(fixture);
+      const declaresClose = mode === 'close-protected';
       const guard =
         mode === 'plain'
           ? emulatedGuard(browser, { failDocumentOrigins: [origins(fixture).seven] })
           : emulatedGuard(browser, {
               protectedOrigins: rules,
               unlockErrorPage: mode === 'unlock-error',
+              closeProtected: declaresClose,
             });
       const pageless = [];
       const client = {
@@ -124,7 +181,10 @@ test('page-session transports run every error-page field', {
             unguarded: browser.unguarded,
             targets: origins(fixture),
             fixture,
-            capabilities: { discovery: true },
+            capabilities: {
+              discovery: true,
+              ...(declaresClose ? { closeProtected: true } : {}),
+            },
           }
         );
         assert.deepEqual(pageless, []);
@@ -133,18 +193,32 @@ test('page-session transports run every error-page field', {
           process.stdout.write(`page-session ${mode}: ${JSON.stringify(row)}\n`);
           assert.equal(row.control, 'pass', JSON.stringify(row));
           assert.equal(row.live, 'pass', JSON.stringify(row));
-          assert.equal(row.notSupported, undefined, JSON.stringify(row));
           assert.equal(
             row.guarded,
             mode === 'catalog' ||
-              (mode === 'unlock-error' && !row.id.startsWith('C8.protected-error-page-sticky'))
+              mode === 'close-protected' ||
+              (mode === 'unlock-error' && !sticky(row.id))
               ? 'pass'
               : 'fail',
             JSON.stringify(row)
           );
           if (mode === 'plain') assert.equal(row.observations.guarded.infoRedacted, false);
-          if (mode === 'unlock-error' && row.id.startsWith('C8.protected-error-page-sticky'))
-            assert.equal(row.observations.guarded.closeRefused, false);
+          if (mode === 'unlock-error' && sticky(row.id))
+            assert.equal(row.observations.guarded.attachRefused, false);
+          if (mode === 'catalog' && lockedIds.has(row.id))
+            assert.deepEqual(locked(row), {
+              closed: 'not-supported',
+              closeRefused: true,
+              evaluateRefused: true,
+              attachRefused: true,
+            });
+          if (mode === 'close-protected' && lockedIds.has(row.id))
+            assert.deepEqual(locked(row), {
+              closed: true,
+              closeRefused: 'not-supported',
+              evaluateRefused: true,
+              attachRefused: true,
+            });
         }
       } finally {
         await guard.stop();

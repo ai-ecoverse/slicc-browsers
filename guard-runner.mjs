@@ -49,28 +49,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
 
-function probeStepIncomplete(side, probe, incomplete) {
-  if (!incomplete) return undefined;
-  if (probe === 'probeSessions') return probeHarnessIncomplete(side, incomplete);
-  return incomplete;
-}
-
-const probeIncompleteKeys = [
-  'errorPage',
-  'redirectSecret',
-  'extensionFrame',
-  'frameRead',
-  'bfcacheRestore',
-  'spawnWorker',
-  'probeSessions',
-];
-
-function recordProbeIncomplete(side, probe, incomplete, sink) {
-  if (!probeIncompleteKeys.includes(probe) || !incomplete) return;
-  const reason = probeStepIncomplete(side, probe, incomplete);
-  if (reason) sink.push(`${probe}: ${reason}`);
-}
-
 function autoAttachSession(events, start, targetId) {
   return events
     .slice(start)
@@ -916,8 +894,6 @@ class Execution {
       'redirectSecret',
       'unparseable',
       'errorPage',
-      'spawnWorker',
-      'probeSessions',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -925,7 +901,14 @@ class Execution {
     ].find((key) => step[key]);
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
-    if (out.ok) recordProbeIncomplete(this.side, probe, out.result?.incomplete, this.incomplete);
+    if (
+      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
+        probe
+      ) &&
+      out.ok &&
+      out.result?.incomplete
+    )
+      this.incomplete.push(`${probe}: ${out.result.incomplete}`);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
   }
@@ -1257,6 +1240,9 @@ class Execution {
         url: out.result.workerUrl,
         targetId: out.result.workerTargetId,
       };
+    if (!out.ok) this.errors.push(`spawnWorker: ${out.error?.message ?? 'probe failed'}`);
+    if (out.ok && out.result?.incomplete)
+      this.incomplete.push(`spawnWorker: ${out.result.incomplete}`);
     return out;
   }
 
@@ -1286,6 +1272,16 @@ class Execution {
     );
     this.probedSessionIds ??= new Set();
     for (const sessionId of out.result?.probedIds ?? []) this.probedSessionIds.add(sessionId);
+    if (!out.ok) {
+      this.errors.push(`probeSessions: ${out.error?.message ?? 'probe failed'}`);
+      return out;
+    }
+    if (out.result?.incomplete) {
+      const reason = probeHarnessIncomplete(this.side, out.result.incomplete);
+      if (reason) this.incomplete.push(`probeSessions: ${reason}`);
+      const { incomplete: _drop, ...result } = out.result;
+      return { ...out, result };
+    }
     return out;
   }
 

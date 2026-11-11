@@ -303,11 +303,17 @@ export function quarantining(
   };
   const keepClosed = (tab) => {
     if (!tab || allowKeptClose) return false;
+    const blank = tab.url === 'about:blank' || tab.frame?.url === 'about:blank';
+    const opener = tab.openerId ? browser.tabOf(undefined, tab.openerId) : undefined;
+    const inherited =
+      tab.frame?.securityOrigin ||
+      opener?.frame?.securityOrigin ||
+      (opener ? originOf(opener.url) : undefined);
     return (
       keptDocument(tab.url) ||
       keptDocument(tab.frame?.url) ||
-      (tab.frame?.url === 'about:blank' && keptDocument(tab.frame.securityOrigin)) ||
-      (tab.navigating && keptDocument(tab.navigationURL))
+      (blank && keptDocument(inherited)) ||
+      (tab.navigating && (!tab.navigationURL || keptDocument(tab.navigationURL)))
     );
   };
   conn.send = async (method, params = {}, sessionId) => {
@@ -342,15 +348,7 @@ export function quarantining(
         (closeProtected && !refuseClose && keepClosed(tab)))
     )
       refuse('protected target');
-    if (method === 'Page.navigate' && tab && params.url) {
-      tab.navigating = true;
-      tab.navigationURL = params.url;
-    }
     const result = await conn.raw(method, params, sessionId);
-    if (method === 'Page.navigate' && tab) {
-      tab.navigating = false;
-      tab.navigationURL = undefined;
-    }
     if (method === 'Target.getTargetInfo') return { targetInfo: redact(result.targetInfo) };
     if (method === 'Target.getTargets') return { targetInfos: result.targetInfos.map(redact) };
     return result;

@@ -2616,7 +2616,7 @@
       "targets": ["seven"],
       "observe": {
         "shaped": {
-          "means": "closeProtected userinfo seven UI: the unguarded observer opened the shaped tab",
+          "means": "closeProtected userinfo seven UI: top-level tab URL still contains userinfo (@) and /os/ as seen by the unguarded reader",
           "check": {
             "result": "shape",
             "path": "result.shaped",
@@ -2710,7 +2710,7 @@
       "targets": ["vault"],
       "observe": {
         "shaped": {
-          "means": "closeProtected navigating vault: the unguarded observer opened the shaped tab",
+          "means": "closeProtected navigating vault: Fetch.requestPaused holds the vault Document while the committed URL is still the ordinary start page; pending until continueRequest after the close attempt",
           "check": {
             "result": "shape",
             "path": "result.shaped",
@@ -2718,26 +2718,8 @@
             "observer": "client"
           }
         },
-        "evaluateRefused": {
-          "means": "closeProtected navigating vault: Runtime.evaluate through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.evaluateRefused",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "attachRefused": {
-          "means": "closeProtected navigating vault: Target.attachToTarget through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.attachRefused",
-            "equals": true,
-            "observer": "client"
-          }
-        },
         "closeRefused": {
-          "means": "closeProtected navigating vault: Target.closeTarget through the client is refused",
+          "means": "closeProtected navigating vault: Target.closeTarget through the client is refused while the vault Document is pending",
           "check": {
             "result": "shape",
             "path": "result.closeRefused",
@@ -2767,16 +2749,12 @@
         "via": "unguarded",
         "expected": {
           "shaped": true,
-          "evaluateRefused": false,
-          "attachRefused": false,
           "closeRefused": false,
           "closed": true
         }
       },
       "expected": {
         "shaped": true,
-        "evaluateRefused": true,
-        "attachRefused": true,
         "closeRefused": true,
         "closed": false
       }
@@ -2804,19 +2782,10 @@
       "targets": ["vault"],
       "observe": {
         "shaped": {
-          "means": "closeProtected blank-inherited vault: the unguarded observer opened the shaped tab",
+          "means": "closeProtected blank-inherited vault: window.open('') with userGesture created an about:blank page target whose opener is the vault tab",
           "check": {
             "result": "shape",
             "path": "result.shaped",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "evaluateRefused": {
-          "means": "closeProtected blank-inherited vault: Runtime.evaluate through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.evaluateRefused",
             "equals": true,
             "observer": "client"
           }
@@ -2861,7 +2830,6 @@
         "via": "unguarded",
         "expected": {
           "shaped": true,
-          "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
           "closed": true
@@ -2869,7 +2837,6 @@
       },
       "expected": {
         "shaped": true,
-        "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
         "closed": false

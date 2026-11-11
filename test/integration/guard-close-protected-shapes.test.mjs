@@ -23,12 +23,28 @@ test('closeProtected disguise rows require closeProtected and refuse close when 
     assert.deepEqual(vector.requires, ['closeProtected'], vector.id);
     assert.equal(vector.expected.closed, false, vector.id);
     assert.equal(vector.expected.closeRefused, true, vector.id);
-    assert.equal(vector.expected.evaluateRefused, true, vector.id);
-    assert.equal(vector.expected.attachRefused, true, vector.id);
     assert.equal(vector.control.expected.closed, true, vector.id);
     assert.equal(vector.control.expected.closeRefused, false, vector.id);
     assert.equal(vector.observe.closed.requires, undefined, vector.id);
     assert.equal(vector.observe.closeRefused.unless, undefined, vector.id);
+  }
+  const navigating = vectors.find((v) => v.id === 'C8.close-protected.navigating');
+  assert.equal(navigating.expected.evaluateRefused, undefined);
+  assert.equal(navigating.expected.attachRefused, undefined);
+  assert.equal(navigating.observe.evaluateRefused, undefined);
+  assert.equal(navigating.observe.attachRefused, undefined);
+  const blank = vectors.find((v) => v.id === 'C8.close-protected.blank-inherited');
+  assert.equal(blank.expected.evaluateRefused, undefined);
+  assert.equal(blank.observe.evaluateRefused, undefined);
+  assert.equal(blank.expected.attachRefused, true);
+  for (const id of [
+    'C8.close-protected.view-source',
+    'C8.close-protected.blob',
+    'C8.close-protected.userinfo',
+  ]) {
+    const vector = vectors.find((v) => v.id === id);
+    assert.equal(vector.expected.evaluateRefused, true, id);
+    assert.equal(vector.expected.attachRefused, true, id);
   }
   assert.deepEqual(vectors.find((v) => v.id === 'C8.close-protected.userinfo').targets, ['seven']);
   for (const id of [

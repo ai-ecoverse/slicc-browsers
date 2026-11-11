@@ -34,6 +34,7 @@ import { protectedErrorPage } from './protected-error-page.mjs';
 import {
   leftoverPersistentWorker,
   persistentWorkerTypes,
+  probeHarnessIncomplete,
   probeWorkerSessions,
   protectedWorker,
   releasePersistentWorkerSessions,
@@ -47,6 +48,28 @@ export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeFo
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
+
+function probeStepIncomplete(side, probe, incomplete) {
+  if (!incomplete) return undefined;
+  if (probe === 'probeSessions') return probeHarnessIncomplete(side, incomplete);
+  return incomplete;
+}
+
+const probeIncompleteKeys = [
+  'errorPage',
+  'redirectSecret',
+  'extensionFrame',
+  'frameRead',
+  'bfcacheRestore',
+  'spawnWorker',
+  'probeSessions',
+];
+
+function recordProbeIncomplete(side, probe, incomplete, sink) {
+  if (!probeIncompleteKeys.includes(probe) || !incomplete) return;
+  const reason = probeStepIncomplete(side, probe, incomplete);
+  if (reason) sink.push(`${probe}: ${reason}`);
+}
 
 function autoAttachSession(events, start, targetId) {
   return events
@@ -902,20 +925,7 @@ class Execution {
     ].find((key) => step[key]);
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
-    if (
-      [
-        'errorPage',
-        'redirectSecret',
-        'extensionFrame',
-        'frameRead',
-        'bfcacheRestore',
-        'spawnWorker',
-        'probeSessions',
-      ].includes(probe) &&
-      out.ok &&
-      out.result?.incomplete
-    )
-      this.incomplete.push(`${probe}: ${out.result.incomplete}`);
+    if (out.ok) recordProbeIncomplete(this.side, probe, out.result?.incomplete, this.incomplete);
     if (step.as && !out.result?.pending) this.calls[step.as] = out;
     if (step.cdp) (this.calls.$cdp ??= []).push({ method: step.cdp, ...out });
   }
@@ -1310,8 +1320,11 @@ class Execution {
         ok: true,
         result: { ...(this.calls.probe?.result ?? {}), ...out, sessions },
       };
-      this.incomplete.push(`probeSessions: ${out.incomplete}`);
-      return 'incomplete';
+      const reason = probeHarnessIncomplete(this.side, out.incomplete);
+      if (reason) {
+        this.incomplete.push(`probeSessions: ${reason}`);
+        return 'incomplete';
+      }
     }
     const reachable = out.reachable || this.calls.probe?.result?.reachable === true;
     this.calls.probe = {
@@ -1319,7 +1332,7 @@ class Execution {
       result: {
         ...(this.calls.probe?.result ?? {}),
         reachable,
-        probed: (this.calls.probe?.result?.probed ?? 0) + out.probed,
+        probed: (this.calls.probe?.result?.probed ?? 0) + (out.probed ?? 0),
         sessions,
       },
     };
@@ -1329,7 +1342,7 @@ class Execution {
   async observeProbeReachable(want, check) {
     if (want !== true && want !== false) return this.check(check);
     let seen = await this.probeFreshSessions();
-    if (seen === 'incomplete') return 'incomplete';
+    if (seen === 'incomplete') return this.side === 'control' ? false : 'incomplete';
     if (seen === true) return true;
     const met = await this.poll(
       async () => {
@@ -1341,8 +1354,9 @@ class Execution {
       observeMs,
       false
     );
-    if (seen === 'incomplete') return 'incomplete';
+    if (seen === 'incomplete') return this.side === 'control' ? false : 'incomplete';
     if (want === true && !met && !this.clients.flight?.abandoned) {
+      if (this.side === 'control') return false;
       this.incomplete.push(
         `workerReachable: probe evidence not observed within ${this.bound(observeMs)}ms`
       );

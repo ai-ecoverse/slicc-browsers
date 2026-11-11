@@ -16,7 +16,7 @@ import {
   releasePersistentWorkerSessions,
   reusableAttachSession,
 } from '../../guard-runner.mjs';
-import { probeWorkerSessions } from '../../protected-worker.mjs';
+import { probeHarnessIncomplete, probeWorkerSessions } from '../../protected-worker.mjs';
 import { withPausedSharedWorkerStall } from './guard-emulator.mjs';
 import { drivable } from './guard-sweep.mjs';
 
@@ -658,7 +658,8 @@ test('framed protectedWorker evaluates inside an iframe target session', async (
 test('probeWorkerSessions treats rejections as neutral', async () => {
   const out = await probeWorkerSessions({
     client: {
-      async send(_method, _params, sessionId) {
+      async send(method, _params, sessionId) {
+        if (method === 'Runtime.runIfWaitingForDebugger') return {};
         if (sessionId === 'tab') throw new Error("slicc: 'Runtime.evaluate' wasn't found");
         return { result: { value: false } };
       },
@@ -674,7 +675,8 @@ test('probeWorkerSessions treats rejections as neutral', async () => {
 test('probeWorkerSessions is incomplete when a rejecting tab masks a worker timeout', async () => {
   const out = await probeWorkerSessions({
     client: {
-      async send(_method, _params, sessionId) {
+      async send(method, _params, sessionId) {
+        if (method === 'Runtime.runIfWaitingForDebugger') return {};
         if (sessionId === 'tab') throw new Error('slicc: refused: protected target');
         if (sessionId === 'worker') throw new Error('waitEvent timed out');
         return { result: { value: false } };
@@ -690,7 +692,8 @@ test('probeWorkerSessions is incomplete when a rejecting tab masks a worker time
 
 test('probeWorkerSessions keeps a true beside a rejecting tab', async () => {
   const client = {
-    async send(_method, _params, sessionId) {
+    async send(method, _params, sessionId) {
+      if (method === 'Runtime.runIfWaitingForDebugger') return {};
       if (sessionId === 'tab') throw new Error("slicc: 'Runtime.evaluate' wasn't found");
       return { result: { value: sessionId === 'worker' } };
     },
@@ -716,7 +719,8 @@ test('probeWorkerSessions keeps a true beside a rejecting tab', async () => {
 test('probeWorkerSessions is incomplete when a silent tab times out alone', async () => {
   const out = await probeWorkerSessions({
     client: {
-      async send() {
+      async send(method) {
+        if (method === 'Runtime.runIfWaitingForDebugger') return {};
         throw new Error('waitEvent timed out');
       },
     },
@@ -726,6 +730,42 @@ test('probeWorkerSessions is incomplete when a silent tab times out alone', asyn
   });
   assert.equal(out.reachable, false);
   assert.match(out.incomplete ?? '', /harness error/);
+});
+
+test('control probe stalls stay pass or fail closed; guarded stalls are incomplete', async () => {
+  let resumed = 0;
+  const out = await probeWorkerSessions({
+    client: {
+      async send(method) {
+        if (method === 'Runtime.runIfWaitingForDebugger') {
+          resumed++;
+          return {};
+        }
+        throw new Error('CDP timed out: Runtime.evaluate');
+      },
+    },
+    sessions: ['tab'],
+    path: '/worker.js',
+    tag: 't',
+  });
+  assert.equal(resumed, 1);
+  assert.equal(out.reachable, false);
+  assert.match(out.incomplete ?? '', /harness error/);
+  assert.equal(probeHarnessIncomplete('control', out.incomplete), undefined);
+  assert.match(probeHarnessIncomplete('guarded', out.incomplete) ?? '', /harness error/);
+  const control = {
+    admitted: true,
+    workerExists: true,
+    workerAttached: true,
+    workerListed: true,
+    attachSession: true,
+    attachRefused: false,
+    workerReachable: false,
+  };
+  assert.equal(judge(byId['C3.protected-worker-framed'], 'control', control).pass, true);
+  assert.equal(judge(byId['C3.protected-worker-dedicated'], 'control', control).pass, true);
+  assert.equal(judge(byId['C3.protected-worker-shared'], 'control', control).pass, false);
+  assert.equal(judge(byId['C3.protected-service-worker'], 'control', control).pass, false);
 });
 
 test('stockSetup and README admit either narrowing or per-target hiding for workers', () => {

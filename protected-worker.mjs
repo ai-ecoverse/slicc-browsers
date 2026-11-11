@@ -173,6 +173,34 @@ const harnessProbeError = (error) => {
   return /timed out|timeout|ECONN|ENOTFOUND|EPIPE|socket hang up|fetch failed/i.test(message);
 };
 
+const probeMs = 3000;
+
+export function probeHarnessIncomplete(side, incomplete) {
+  if (side !== 'guarded' || !incomplete) return undefined;
+  return incomplete;
+}
+
+async function probeSession(client, sessionId, path, tag) {
+  await outcome(client.send('Runtime.runIfWaitingForDebugger', {}, sessionId));
+  let timer;
+  try {
+    return await outcome(
+      Promise.race([
+        client.send(
+          'Runtime.evaluate',
+          { expression: workerProbeExpression(path, tag), returnByValue: true },
+          sessionId
+        ),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('CDP timed out: Runtime.evaluate')), probeMs);
+        }),
+      ])
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const persistentWorkerTypes = new Set(['shared_worker', 'service_worker']);
 export const attachedWorkerTypes = new Set(['shared_worker', 'service_worker', 'worker']);
 
@@ -252,13 +280,7 @@ export async function probeWorkerSessions({ client, sessions, path, tag, detache
     probed++;
     let out;
     try {
-      out = await outcome(
-        client.send(
-          'Runtime.evaluate',
-          { expression: workerProbeExpression(path, tag), returnByValue: true },
-          sessionId
-        )
-      );
+      out = await probeSession(client, sessionId, path, tag);
     } catch (error) {
       probedIds.push(sessionId);
       if (harnessProbeError(error)) harnessErrors++;

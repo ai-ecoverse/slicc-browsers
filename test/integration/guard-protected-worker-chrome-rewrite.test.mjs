@@ -1,25 +1,19 @@
 import test from 'node:test';
 import {
-  assertAllGuardedFail,
+  assertRewriteAttackOutcomes,
   protectedWorkerIds,
   rowsFor,
   runWorkerRows,
 } from './protected-worker-chrome.mjs';
 
-test('a rewritten protected-worker attach fails each protected worker row', {
+test('a rewritten protected-worker attach fails shared/service and passes dedicated/framed', {
   timeout: 900000,
 }, async () => {
-  assertAllGuardedFail(
-    await runWorkerRows('rewrite', rowsFor(protectedWorkerIds)),
-    protectedWorkerIds
-  );
+  assertRewriteAttackOutcomes(await runWorkerRows('rewrite', rowsFor(protectedWorkerIds)));
 });
 
-test('an attachedToTarget with empty targetInfo fails each protected worker row', {
+test('an attachedToTarget with empty targetInfo fails shared/service and passes dedicated/framed', {
   timeout: 900000,
 }, async () => {
-  assertAllGuardedFail(
-    await runWorkerRows('empty-info', rowsFor(protectedWorkerIds)),
-    protectedWorkerIds
-  );
+  assertRewriteAttackOutcomes(await runWorkerRows('empty-info', rowsFor(protectedWorkerIds)));
 });

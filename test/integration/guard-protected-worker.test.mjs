@@ -770,18 +770,100 @@ test('adopt resumes a paused child before running nested steps', async () => {
   assert.ok(source.includes("adopt ${info?.type ?? 'target'} ${child}:"));
 });
 
-test('emulator skips Page.getFrameTree on worker attach and refuses empty-url workers when hiding', async () => {
+test('emulator skips Page.getFrameTree on worker attach and probes only page-like targets', async () => {
   const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
   const start = source.indexOf("if (catalog && method === 'Target.attachToTarget')");
   const end = source.indexOf('const frameRules =', start);
   const block = source.slice(start, end);
   assert.ok(block.includes("const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type)"));
-  assert.ok(block.includes('emptyWorker'));
   assert.ok(block.includes('if (pageLike)'));
   assert.ok(block.includes('timedSend'));
   assert.ok(block.includes('3000'));
   assert.ok(block.includes('attach probe'));
   assert.equal(/unguarded\.send\(\s*'Page\.getFrameTree'/.test(block), false);
+});
+
+test('emulator decision treats empty-url workers as protected via opener/parent', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  assert.ok(source.includes('const ownerOpener = async (info) =>'));
+  assert.ok(source.includes('info.openerId'));
+  assert.ok(source.includes('info.parentId'));
+  assert.ok(source.includes('info.openerFrameId'));
+  assert.ok(source.includes("return info.url ? undefined : 'unknown'"));
+  assert.ok(source.includes('...(opener !== undefined ? { opener } : {})'));
+});
+
+test('emulator hides empty-url workers whose opener page is protected', async () => {
+  const { emulatedGuard } = await import('./guard-emulator.mjs');
+  const catalog = JSON.parse(
+    await readFile(new URL('../../catalog.json', import.meta.url), 'utf8')
+  );
+  const infos = {
+    'page-protected': {
+      targetId: 'page-protected',
+      type: 'page',
+      url: 'https://seven.sliccy.ai/doc?n=host',
+    },
+    'page-ordinary': {
+      targetId: 'page-ordinary',
+      type: 'page',
+      url: 'https://ordinary.example.test/doc',
+    },
+    'worker-protected': {
+      targetId: 'worker-protected',
+      type: 'worker',
+      url: '',
+      openerId: 'page-protected',
+    },
+    'worker-ordinary': {
+      targetId: 'worker-ordinary',
+      type: 'worker',
+      url: '',
+      openerId: 'page-ordinary',
+    },
+  };
+  const raw = {
+    events: [],
+    send: async (method, params = {}) => {
+      if (method === 'Target.getTargetInfo') return { targetInfo: infos[params.targetId] };
+      if (method === 'Target.getTargets') return { targetInfos: Object.values(infos) };
+      if (method === 'Target.attachToTarget') return { sessionId: `s-${params.targetId}` };
+      if (method === 'Target.detachFromTarget') return {};
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Page.getFrameTree')
+        return { frameTree: { frame: { url: infos[params.targetId]?.url ?? '', id: 'f' } } };
+      if (method === 'Runtime.runIfWaitingForDebugger') return {};
+      return {};
+    },
+  };
+  const guard = emulatedGuard(
+    { client: raw, unguarded: raw },
+    {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: ['https://seven.sliccy.ai'],
+    }
+  );
+  try {
+    const listed = await guard.client.send('Target.getTargets');
+    const ids = listed.targetInfos.map((info) => info.targetId);
+    assert.equal(ids.includes('worker-protected'), false);
+    assert.equal(ids.includes('worker-ordinary'), true);
+    assert.equal(ids.includes('page-ordinary'), true);
+  } finally {
+    await guard.stop();
+  }
+});
+
+test('rewrite attack helpers split browser-level vs page-session worker rows', async () => {
+  const source = await readFile(new URL('./protected-worker-chrome.mjs', import.meta.url), 'utf8');
+  assert.ok(source.includes('assertRewriteAttackOutcomes'));
+  assert.ok(source.includes('browserAutoAttachWorkerIds'));
+  assert.ok(source.includes('pageSessionWorkerIds'));
+  assert.ok(
+    source.includes(
+      'dedicated/framed workers are page-session auto-attach only; browser-level rewrite never delivers them so guarded passes'
+    )
+  );
 });
 
 test('spawnWorker rows record client CDP traces on failure and bound Page.getFrameTree', async () => {

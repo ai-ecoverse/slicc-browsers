@@ -16,6 +16,11 @@ export const protectedWorkerIds = [
   'C3.protected-worker-framed',
 ];
 export const ordinaryWorkerIds = ['C3.tab-worker-leak', 'C3.tab-service-worker-leak'];
+export const browserAutoAttachWorkerIds = [
+  'C3.protected-worker-shared',
+  'C3.protected-service-worker',
+];
+export const pageSessionWorkerIds = ['C3.protected-worker-dedicated', 'C3.protected-worker-framed'];
 
 const stockCaps = {
   autoAttach: true,
@@ -139,6 +144,35 @@ export function assertAllGuardedFail(execution, ids) {
       describe(row, 'control and live pass so the guarded fail is the guard')
     );
     assert.equal(row.guarded, 'fail', describe(row, 'guarded fails'));
+  }
+}
+
+export function assertRewriteAttackOutcomes(execution) {
+  assertCovered(execution, protectedWorkerIds);
+  for (const row of execution.results) {
+    assert.deepEqual(
+      [row.control, row.live],
+      ['pass', 'pass'],
+      describe(row, 'control and live pass')
+    );
+    if (browserAutoAttachWorkerIds.includes(row.id))
+      assert.equal(
+        row.guarded,
+        'fail',
+        describe(
+          row,
+          'browser-level rewrite/empty-info delivers shared/service workers so guarded fails'
+        )
+      );
+    else
+      assert.equal(
+        row.guarded,
+        'pass',
+        describe(
+          row,
+          'dedicated/framed workers are page-session auto-attach only; browser-level rewrite never delivers them so guarded passes'
+        )
+      );
   }
 }
 

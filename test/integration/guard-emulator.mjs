@@ -102,6 +102,35 @@ export function emulatedGuard(browser, options = {}) {
     ? Date.now() + options.delayProtectedWorkerMs
     : 0;
   let listHoldStart = 0;
+  const ownerOpener = async (info) => {
+    if (!['worker', 'shared_worker', 'service_worker'].includes(info.type)) return undefined;
+    const ownerIds = [
+      ...new Set([info.openerId, info.parentId, info.openerFrameId].filter(Boolean)),
+    ];
+    if (!ownerIds.length) return info.url ? undefined : 'unknown';
+    for (const ownerId of ownerIds) {
+      if (decisions.get(ownerId) === true) return 'protected';
+      const frame = frames.get(ownerId);
+      if (frame?.url && catalog.url(frame.url)) return 'protected';
+      if (frame?.unreachableUrl && catalog.url(frame.unreachableUrl)) return 'protected';
+      const got = await unguarded
+        .send('Target.getTargetInfo', { targetId: ownerId })
+        .catch(() => null);
+      const owner = got?.targetInfo;
+      if (!owner) continue;
+      if (catalog.url(owner.url)) return 'protected';
+      if (
+        catalog.target({
+          ...owner,
+          documentURL: frame?.url,
+          unreachableURL: frame?.unreachableUrl,
+          previous: decisions.get(ownerId) ?? false,
+        })
+      )
+        return 'protected';
+    }
+    return 'unprotected';
+  };
   const decision = async (targetId) => {
     const got = await unguarded.send('Target.getTargetInfo', { targetId }).catch(() => null);
     if (!got?.targetInfo) return false;
@@ -111,16 +140,16 @@ export function emulatedGuard(browser, options = {}) {
     const documentURL = f?.url;
     const unreachableURL = f?.unreachableUrl;
     const previous = decisions.get(targetId) ?? false;
-    const blocked = options.targetURLOnly
-      ? catalog.target(targetInfo)
-      : catalog.target({
-          ...targetInfo,
-          documentURL,
-          unreachableURL,
-          navigating: navigating.has(targetId),
-          previous: options.unlockErrorPage ? false : previous,
-        });
-    return blocked;
+    if (options.targetURLOnly) return catalog.target(targetInfo);
+    const opener = await ownerOpener(targetInfo);
+    return catalog.target({
+      ...targetInfo,
+      documentURL,
+      unreachableURL,
+      navigating: navigating.has(targetId),
+      previous: options.unlockErrorPage ? false : previous,
+      ...(opener !== undefined ? { opener } : {}),
+    });
   };
   const contexts = new Set();
   const extensionContexts = new Map();
@@ -747,15 +776,9 @@ export function emulatedGuard(browser, options = {}) {
       const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
         targetId: params.targetId,
       });
-      const worker = ['worker', 'shared_worker', 'service_worker'].includes(targetInfo.type);
       const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type);
       const blocked = await decision(params.targetId);
-      const emptyWorker =
-        worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
-      if (
-        (blocked || (emptyWorker && !options.exposeProtectedWorkers)) &&
-        !options.allowProtectedAttach
-      ) {
+      if (blocked && !options.allowProtectedAttach) {
         if (options.cutProtectedAttach) {
           const cut = await unguarded.send('Target.attachToTarget', {
             targetId: params.targetId,

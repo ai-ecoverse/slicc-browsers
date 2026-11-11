@@ -1,16 +1,13 @@
 import test from 'node:test';
 import {
-  assertAllGuardedFail,
+  assertRewriteAttackOutcomes,
   protectedWorkerIds,
   rowsFor,
   runWorkerRows,
 } from './protected-worker-chrome.mjs';
 
-test('a rewritten attach delivered after the trigger probe fails each protected worker row', {
+test('a rewritten attach delivered after the trigger probe fails shared/service and passes dedicated/framed', {
   timeout: 900000,
 }, async () => {
-  assertAllGuardedFail(
-    await runWorkerRows('late-rewrite', rowsFor(protectedWorkerIds)),
-    protectedWorkerIds
-  );
+  assertRewriteAttackOutcomes(await runWorkerRows('late-rewrite', rowsFor(protectedWorkerIds)));
 });

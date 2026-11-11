@@ -770,6 +770,31 @@ test('adopt resumes a paused child before running nested steps', async () => {
   assert.ok(source.includes("adopt ${info?.type ?? 'target'} ${child}:"));
 });
 
+test('emulator skips Page.getFrameTree on worker attach and refuses empty-url workers when hiding', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf("if (catalog && method === 'Target.attachToTarget')");
+  const end = source.indexOf('const frameRules =', start);
+  const block = source.slice(start, end);
+  assert.ok(block.includes("const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type)"));
+  assert.ok(block.includes('emptyWorker'));
+  assert.ok(block.includes('if (pageLike)'));
+  assert.ok(block.includes('timedSend'));
+  assert.ok(block.includes('3000'));
+  assert.ok(block.includes('attach probe'));
+  assert.equal(/unguarded\.send\(\s*'Page\.getFrameTree'/.test(block), false);
+});
+
+test('spawnWorker rows record client CDP traces on failure and bound Page.getFrameTree', async () => {
+  const source = await readFile(new URL('../../guard-runner.mjs', import.meta.url), 'utf8');
+  assert.ok(source.includes('installClientTrace()'));
+  assert.ok(source.includes('noteClientTrace()'));
+  assert.ok(source.includes('client cdp:'));
+  assert.ok(source.includes('slice(-40)'));
+  assert.ok(source.includes("method === 'Page.getFrameTree'"));
+  assert.ok(source.includes('after 3000ms'));
+  assert.ok(/Page\.getFrameTree timed out on \$\{type/.test(source));
+});
+
 const c8AttachRows = ['C8.newtab', 'C8.network-error', 'C8.iframe-error', 'C8.browser-ui-attach'];
 
 test('adopt resumes a paused worker even when its browser context does not match', async () => {

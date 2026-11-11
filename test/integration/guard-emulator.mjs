@@ -4,6 +4,28 @@ import { redactProtectedURLs } from '../../redirect-redaction.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function timedSend(client, method, params, sessionId, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      client.send(method, params, sessionId),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Page.getFrameTree timed out on ${label} session ${sessionId ?? 'browser'} after ${ms}ms`
+              )
+            ),
+          ms
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function emulatedGuard(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
@@ -725,58 +747,88 @@ export function emulatedGuard(browser, options = {}) {
       const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
         targetId: params.targetId,
       });
-      if ((await decision(params.targetId)) && !options.allowProtectedAttach)
+      const worker = ['worker', 'shared_worker', 'service_worker'].includes(targetInfo.type);
+      const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type);
+      const blocked = await decision(params.targetId);
+      const emptyWorker =
+        worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
+      if (
+        (blocked || (emptyWorker && !options.exposeProtectedWorkers)) &&
+        !options.allowProtectedAttach
+      ) {
+        if (options.cutProtectedAttach) {
+          const cut = await unguarded.send('Target.attachToTarget', {
+            targetId: params.targetId,
+            flatten: true,
+          });
+          await unguarded
+            .send('Target.detachFromTarget', { sessionId: cut.sessionId })
+            .catch(() => {});
+        }
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
           : refusal('protected target');
-      if ((await decision(params.targetId)) && options.allowProtectedAttach)
+      }
+      if (blocked && options.allowProtectedAttach)
         return unguarded.send('Target.attachToTarget', {
           targetId: params.targetId,
           flatten: true,
         });
-      const attached = await unguarded.send('Target.attachToTarget', {
-        targetId: params.targetId,
-        flatten: true,
-      });
-      try {
-        const { frameTree } = await unguarded.send('Page.getFrameTree', {}, attached.sessionId);
-        const allowExtension = (url) => options.extensionFrames && catalog.extensionFrame(url);
-        const protectedFrame = (tree) =>
-          (catalog.url(tree.frame.url) && !allowExtension(tree.frame.url)) ||
-          (tree.frame.securityOrigin &&
-            catalog.url(tree.frame.securityOrigin) &&
-            !allowExtension(tree.frame.securityOrigin)) ||
-          (tree.childFrames ?? []).some(protectedFrame);
-        if (protectedFrame(frameTree)) throw refusal('protected frame');
-        const start = unguarded.events.length;
-        await unguarded.send(
-          'Target.setAutoAttach',
-          { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-          attached.sessionId
-        );
-        const frames = unguarded.events
-          .slice(start)
-          .filter(
-            (event) =>
-              event.method === 'Target.attachedToTarget' &&
-              event.sessionId === attached.sessionId &&
-              event.params.targetInfo.type === 'iframe'
+      if (pageLike) {
+        const attached = await unguarded.send('Target.attachToTarget', {
+          targetId: params.targetId,
+          flatten: true,
+        });
+        try {
+          await unguarded
+            .send('Runtime.runIfWaitingForDebugger', {}, attached.sessionId)
+            .catch(() => {});
+          const { frameTree } = await timedSend(
+            unguarded,
+            'Page.getFrameTree',
+            {},
+            attached.sessionId,
+            3000,
+            `attach probe ${targetInfo.type} ${params.targetId}`
           );
-        if (
-          frames.some(
-            (event) =>
-              catalog.url(event.params.targetInfo.url) &&
-              !allowExtension(event.params.targetInfo.url)
+          const allowExtension = (url) => options.extensionFrames && catalog.extensionFrame(url);
+          const protectedFrame = (tree) =>
+            (catalog.url(tree.frame.url) && !allowExtension(tree.frame.url)) ||
+            (tree.frame.securityOrigin &&
+              catalog.url(tree.frame.securityOrigin) &&
+              !allowExtension(tree.frame.securityOrigin)) ||
+            (tree.childFrames ?? []).some(protectedFrame);
+          if (protectedFrame(frameTree)) throw refusal('protected frame');
+          const start = unguarded.events.length;
+          await unguarded.send(
+            'Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+            attached.sessionId
+          );
+          const childFrames = unguarded.events
+            .slice(start)
+            .filter(
+              (event) =>
+                event.method === 'Target.attachedToTarget' &&
+                event.sessionId === attached.sessionId &&
+                event.params.targetInfo.type === 'iframe'
+            );
+          if (
+            childFrames.some(
+              (event) =>
+                catalog.url(event.params.targetInfo.url) &&
+                !allowExtension(event.params.targetInfo.url)
+            )
           )
-        )
-          throw refusal('protected out-of-process frame');
-      } finally {
-        await unguarded.send(
-          'Target.setAutoAttach',
-          { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
-          attached.sessionId
-        );
-        await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
+            throw refusal('protected out-of-process frame');
+        } finally {
+          await unguarded.send(
+            'Target.setAutoAttach',
+            { autoAttach: false, waitForDebuggerOnStart: false, flatten: true },
+            attached.sessionId
+          );
+          await unguarded.send('Target.detachFromTarget', { sessionId: attached.sessionId });
+        }
       }
     }
     const frameRules = options.extensionFrames ? options.protectedOrigins.extensionFrames : null;

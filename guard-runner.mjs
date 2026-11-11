@@ -213,6 +213,78 @@ class Execution {
     this.requestStart = undefined;
     this.trace = [];
     this.stopped = false;
+    this.cdpTrace = [];
+  }
+
+  installClientTrace() {
+    if (!this.spawnWorkerKind() || this.client.__sliccCdpTraced) return;
+    const send = this.client.send.bind(this.client);
+    const typeOf = (sessionId) => {
+      if (!sessionId) return 'browser';
+      for (let i = this.client.events.length - 1; i >= 0; i--) {
+        const event = this.client.events[i];
+        if (event.method === 'Target.attachedToTarget' && event.params?.sessionId === sessionId)
+          return event.params.targetInfo?.type ?? '';
+      }
+      return '';
+    };
+    this.client.send = async (method, params = {}, sessionId) => {
+      const started = Date.now();
+      let status = 'ok';
+      const type = typeOf(sessionId);
+      const bound =
+        method === 'Page.getFrameTree'
+          ? async () => {
+              let timer;
+              try {
+                return await Promise.race([
+                  send(method, params, sessionId),
+                  new Promise((_, reject) => {
+                    timer = setTimeout(
+                      () =>
+                        reject(
+                          new Error(
+                            `Page.getFrameTree timed out on ${type || 'unknown'} session ${sessionId ?? 'browser'} after 3000ms`
+                          )
+                        ),
+                      3000
+                    );
+                  }),
+                ]);
+              } finally {
+                clearTimeout(timer);
+              }
+            }
+          : () => send(method, params, sessionId);
+      try {
+        return await bound();
+      } catch (error) {
+        status = String(error?.message ?? error);
+        throw error;
+      } finally {
+        this.cdpTrace.push({
+          method,
+          sessionId: sessionId ?? '',
+          type,
+          ms: Date.now() - started,
+          status,
+        });
+      }
+    };
+    this.client.__sliccCdpTraced = true;
+  }
+
+  noteClientTrace() {
+    if (!this.cdpTrace.length) return;
+    const last = this.cdpTrace.slice(-40);
+    this.notes.push(
+      `client cdp: ${last
+        .map(
+          (call) =>
+            `${call.method}@${call.sessionId || 'browser'}:${call.type || '?'} ${call.ms}ms ${call.status}`
+        )
+        .join(' | ')}`
+    );
   }
 
   actor() {
@@ -1953,6 +2025,7 @@ class Execution {
 
   async run() {
     this.requestStart = (await this.options.fixture.log()).length;
+    this.installClientTrace();
     let pumping;
     try {
       await this.seed();
@@ -1975,6 +2048,7 @@ class Execution {
         side: this.side,
       });
       const { live, liveWhy } = await this.liveness(unseen, incomplete);
+      if (this.errors.length) this.noteClientTrace();
       return {
         observed,
         live,
@@ -1992,6 +2066,9 @@ class Execution {
             .map(([name, out]) => [name, out.result.diagnostics ?? out.result])
         ),
       };
+    } catch (error) {
+      this.noteClientTrace();
+      throw error;
     } finally {
       this.stopped = true;
       await pumping;

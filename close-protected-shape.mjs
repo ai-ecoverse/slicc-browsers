@@ -212,10 +212,17 @@ async function shapeNavigating({
   const opened = await observerPage(reader, start, notes, internalSessions);
   if (!opened.ok) return opened;
   const { targetId, sessionId } = opened.result;
-  let held;
+  const sequence = [];
+  let paused;
   const waiter = new Promise((resolve) => {
-    held = resolve;
+    paused = resolve;
   });
+  const matchPause = (event) => {
+    if (event.method !== 'Fetch.requestPaused') return false;
+    if (event.params.resourceType !== 'Document') return false;
+    const url = event.params.request?.url ?? '';
+    return url === destination || /(?:\?|&)hold=1(?:&|$)/.test(url) || keptDocument(url);
+  };
   let cursor = reader.events.length;
   let stopped = false;
   const pump = (async () => {
@@ -223,11 +230,22 @@ async function shapeNavigating({
       for (const event of reader.events.slice(cursor)) {
         cursor++;
         if (
-          event.method === 'Fetch.requestPaused' &&
-          event.sessionId === sessionId &&
-          event.params.resourceType === 'Document'
-        ) {
-          held(event.params.requestId);
+          event.method === 'Fetch.requestPaused' ||
+          event.method === 'Page.frameStartedNavigating' ||
+          event.method === 'Page.frameNavigated'
+        )
+          sequence.push({
+            method: event.method,
+            sessionId: event.sessionId,
+            url: event.params.request?.url ?? event.params.url ?? event.params.frame?.url,
+            resourceType: event.params.resourceType,
+          });
+        if (matchPause(event)) {
+          paused({
+            requestId: event.params.requestId,
+            sessionId: event.sessionId,
+            url: event.params.request?.url,
+          });
           return;
         }
       }
@@ -236,26 +254,41 @@ async function shapeNavigating({
   })();
   await reader.send(
     'Fetch.enable',
-    { patterns: [{ resourceType: 'Document', requestStage: 'Request' }] },
+    {
+      patterns: [
+        { urlPattern: '*', resourceType: 'Document', requestStage: 'Request' },
+        { urlPattern: '*', requestStage: 'Request' },
+      ],
+    },
     sessionId
   );
   const nav = outcome(reader.send('Page.navigate', { url: destination }, sessionId));
-  const requestId = await Promise.race([waiter, pause(budget).then(() => undefined)]);
+  const waitBudget = Math.min(budget, 4000);
+  const held = await Promise.race([waiter, pause(waitBudget).then(() => undefined)]);
   const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
-  const shaped =
-    Boolean(requestId) &&
-    (targetInfo.url === start || targetInfo.url === 'about:blank' || !keptDocument(targetInfo.url));
+  const stillStart =
+    targetInfo.url === start || targetInfo.url === 'about:blank' || !keptDocument(targetInfo.url);
+  const shaped = Boolean(held?.requestId) && stillStart;
   noteShape(notes, 'navigating', {
     targetId,
     type: targetInfo.type,
     url: targetInfo.url,
+    openerId: targetInfo.openerId,
     pendingUrl: destination,
-    heldMs: budget,
+    fetchPaused: Boolean(held?.requestId),
+    pausedUrl: held?.url,
+    pausedSession: held?.sessionId,
+    observerSession: sessionId,
+    heldMs: waitBudget,
     releasedAfterClose: true,
+    sequence,
   });
   hold.release = async () => {
     stopped = true;
-    if (requestId) await outcome(reader.send('Fetch.continueRequest', { requestId }, sessionId));
+    if (held?.requestId)
+      await outcome(
+        reader.send('Fetch.continueRequest', { requestId: held.requestId }, held.sessionId)
+      );
     await Promise.race([Promise.allSettled([pump, nav]), pause(50)]);
   };
   return {

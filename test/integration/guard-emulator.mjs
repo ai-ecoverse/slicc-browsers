@@ -272,6 +272,14 @@ export function emulatedGuard(browser, options = {}) {
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
       (options.failDocumentOrigins ?? []).some((origin) => request.url.startsWith(`${origin}/`));
+    if (
+      options.closeProtected &&
+      event.params.resourceType === 'Document' &&
+      /(?:\?|&)hold=1(?:&|$)/.test(request.url ?? '')
+    ) {
+      markPending(owner.targetId, request.url ?? '');
+      return;
+    }
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});

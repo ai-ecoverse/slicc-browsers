@@ -16,9 +16,10 @@ const ids = [
   'C8.close-protected.blank-inherited',
 ];
 const vectors = set.vectors.filter((v) => ids.includes(v.id));
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test('a correct closeProtected guard refuses the five disguise shapes in real Chrome', {
-  timeout: 180000,
+  timeout: 300000,
 }, async () => {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
@@ -28,30 +29,59 @@ test('a correct closeProtected guard refuses the five disguise shapes in real Ch
     extraOrigins: [targets.seven, targets.vault],
     closeProtected: true,
   });
+  const rows = [];
   try {
-    const execution = await run(
-      { ...set, vectors, variants: { prompt: 0 } },
-      {
-        client: guard.client,
-        unguarded: browser.unguarded,
-        fixture,
-        capabilities: {
-          discovery: true,
-          closeProtected: true,
-          browserSession: true,
-          browserContexts: true,
-        },
-        targets,
-      }
+    for (const vector of vectors) {
+      const timed = await Promise.race([
+        run(
+          { ...set, vectors: [vector], variants: { prompt: 0 } },
+          {
+            client: guard.client,
+            unguarded: browser.unguarded,
+            fixture,
+            capabilities: {
+              discovery: true,
+              closeProtected: true,
+              browserSession: true,
+              browserContexts: true,
+            },
+            targets,
+          }
+        ).then((execution) => execution.results),
+        pause(55000).then(() => [
+          {
+            id: vector.id,
+            control: 'fail',
+            guarded: 'fail',
+            live: 'fail',
+            why: 'per-vector budget 55s',
+            notes: [],
+            errors: ['shape setup timed out'],
+            observations: {},
+          },
+        ]),
+      ]);
+      rows.push(...timed);
+    }
+    const report = rows.map((row) => ({
+      id: row.id,
+      control: row.control,
+      guarded: row.guarded,
+      live: row.live,
+      why: row.why,
+      incomplete: row.incomplete,
+      errors: row.errors,
+      notes: row.notes,
+      observations: row.observations,
+    }));
+    const failed = report.filter(
+      (row) => row.control !== 'pass' || row.guarded !== 'pass' || row.live !== 'pass'
     );
-    for (const row of execution.results) {
-      assert.equal(row.control, 'pass', `${row.id} control ${JSON.stringify(row)}`);
-      assert.equal(row.guarded, 'pass', `${row.id} guarded ${JSON.stringify(row)}`);
-      assert.equal(row.live, 'pass', `${row.id} live ${JSON.stringify(row)}`);
+    assert.equal(failed.length, 0, JSON.stringify(report, null, 2));
+    for (const row of rows) {
       assert.equal(row.observations.guarded.closed, false, row.id);
       assert.equal(row.observations.guarded.closeRefused, true, row.id);
     }
-    assert.equal(execution.summary().pass, true);
   } finally {
     await guard.stop();
     await browser.close();

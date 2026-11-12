@@ -115,6 +115,13 @@ function route(req, url, send, html, redirects) {
     '/csp': () => document(url, html),
     '/sw.js': () =>
       send(200, "self.addEventListener('install',()=>self.skipWaiting())", 'text/javascript'),
+    '/worker.js': () => send(200, 'onmessage=e=>postMessage(e.data)', 'text/javascript'),
+    '/shared-worker.js': () =>
+      send(
+        200,
+        'onconnect=e=>{e.ports[0].onmessage=m=>e.ports[0].postMessage(m.data)}',
+        'text/javascript'
+      ),
   };
   if (req.method === 'OPTIONS') return send(204, '');
   if (url.pathname.startsWith('/auth')) {

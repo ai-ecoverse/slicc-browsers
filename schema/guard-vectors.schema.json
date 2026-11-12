@@ -231,6 +231,9 @@
         },
         "eitherWhen": {
           "$ref": "#/$defs/check"
+        },
+        "absencePoll": {
+          "type": "boolean"
         }
       }
     },
@@ -564,6 +567,64 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["spawnWorker", "as"],
+          "properties": {
+            "spawnWorker": {
+              "enum": ["dedicated", "shared", "service"]
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "frame": {
+              "type": "string",
+              "minLength": 1
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["probeSessions", "as"],
+          "properties": {
+            "probeSessions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["since", "path"],
+              "properties": {
+                "since": {
+                  "$ref": "#/$defs/name"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "attach": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "$ref": "#/$defs/name"
+                  }
+                }
+              }
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["frameRead", "from", "as"],
           "properties": {
             "frameRead": {
@@ -690,6 +751,9 @@
               "$ref": "#/$defs/requires"
             },
             "refusable": {
+              "const": true
+            },
+            "reuseSession": {
               "const": true
             },
             "refusal": {
@@ -865,6 +929,21 @@
                     "type": {
                       "type": "string",
                       "minLength": 1
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["types"],
+                  "properties": {
+                    "types": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
                     }
                   }
                 }

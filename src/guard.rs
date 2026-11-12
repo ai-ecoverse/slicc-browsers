@@ -136,6 +136,12 @@ pub struct Observation {
         skip_serializing_if = "Option::is_none"
     )]
     pub either_when: Option<serde_json::Value>,
+    #[serde(
+        default,
+        rename = "absencePoll",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub absence_poll: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -189,6 +195,8 @@ pub struct Where {
     pub url_prefix: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub types: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -207,6 +215,16 @@ pub struct Step {
         skip_serializing_if = "Option::is_none"
     )]
     pub close_protected_shape: Option<String>,
+    #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
+    pub spawn_worker: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<String>,
+    #[serde(
+        default,
+        rename = "probeSessions",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub probe_sessions: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<String>,
     #[serde(rename = "extensionWorld", skip_serializing_if = "Option::is_none")]
@@ -239,6 +257,12 @@ pub struct Step {
     pub params: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refusable: bool,
+    #[serde(
+        default,
+        rename = "reuseSession",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub reuse_session: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<Refusal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

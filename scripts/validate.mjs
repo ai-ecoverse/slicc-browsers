@@ -302,6 +302,7 @@ for (const v of guard.vectors ?? []) {
       st.unparseable ||
       st.errorPage ||
       st.closeProtectedShape ||
+      st.spawnWorker ||
       st.redirectSecret ||
       st.frameRead ||
       st.bfcacheRestore ||
@@ -323,6 +324,8 @@ for (const v of guard.vectors ?? []) {
         gv(`${v.id}: refusal.match ${st.refusal.match} doesn't compile`);
       }
     }
+    if (st.reuseSession && st.cdp !== 'Target.attachToTarget')
+      gv(`${v.id}: reuseSession is only for Target.attachToTarget`);
   }
   const refusals = steps.flatMap((st, i) => (st.refusable ? [st.as ?? `refused.${i}`] : []));
   const first = steps.findIndex((st) => st.refusable);

@@ -32,12 +32,48 @@ import {
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
+import {
+  leftoverPersistentWorker,
+  persistentWorkerTypes,
+  probeHarnessIncomplete,
+  probeWorkerSessions,
+  protectedWorker,
+  releasePersistentWorkerSessions,
+  workerTypeForKind,
+} from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
+
+export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
+
+function autoAttachSession(events, start, targetId) {
+  return events
+    .slice(start)
+    .filter(
+      (event) =>
+        event.method === 'Target.attachedToTarget' &&
+        event.params?.targetInfo?.targetId === targetId &&
+        event.params?.sessionId
+    )
+    .at(-1)?.params?.sessionId;
+}
+
+export function reusableAttachSession(step, out, params, events, start) {
+  if (!step?.reuseSession || step.cdp !== 'Target.attachToTarget' || !params?.targetId)
+    return undefined;
+  if (out?.ok && out.result?.sessionId) return undefined;
+  const message = String(out?.error?.message ?? '');
+  if (/refused|not allowed/i.test(message)) return undefined;
+  const already =
+    (out?.ok === true && !out.result?.sessionId) ||
+    /already attached|attached already|Target is attaching or attached/i.test(message);
+  if (!already) return undefined;
+  return autoAttachSession(events, start, params.targetId);
+}
 const browserUiAttempts = 3;
 const browserUiMs = 5000;
 const q = JSON.stringify;
@@ -172,12 +208,71 @@ class Execution {
     this.refusalScale = options.refusalScale ?? 1;
     this.childRuns = new Map();
     this.named = new Map();
+    this.eventMarks = new Map();
     this.processed = new Set();
     this.eventStart = this.client.events.length;
     this.actionEventStart = this.eventStart;
     this.requestStart = undefined;
     this.trace = [];
     this.stopped = false;
+    this.cdpTrace = [];
+    this.cdpSessionTypes = new Map();
+    this.cdpTraceInstalled = false;
+  }
+
+  note(message) {
+    if (this.notes.length >= 80) this.notes.shift();
+    Array.prototype.push.call(this.notes, message);
+  }
+
+  installClientTrace() {
+    if (!this.spawnWorkerKind() || this.cdpTraceInstalled) return;
+    this.cdpTraceInstalled = true;
+    const prev = this.client.__sliccOnSend;
+    this.client.__sliccBoundGetFrameTree = true;
+    this.client.__sliccOnSend = (entry) => {
+      prev?.(entry);
+      this.recordCdpTrace(entry);
+    };
+  }
+
+  recordCdpTrace(entry) {
+    let type = entry.sessionId ? this.cdpSessionTypes.get(entry.sessionId) : 'browser';
+    if (entry.sessionId && type === undefined) {
+      type = '';
+      const events = this.client.events;
+      for (let i = events.length - 1; i >= 0; i--) {
+        const event = events[i];
+        if (
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.sessionId === entry.sessionId
+        ) {
+          type = event.params.targetInfo?.type ?? '';
+          break;
+        }
+      }
+      this.cdpSessionTypes.set(entry.sessionId, type);
+    }
+    if (this.cdpTrace.length >= 40) this.cdpTrace.shift();
+    this.cdpTrace.push({
+      method: entry.method,
+      sessionId: entry.sessionId ?? '',
+      type: type || (entry.sessionId ? '?' : 'browser'),
+      ms: entry.ms,
+      status: String(entry.status).slice(0, 200),
+    });
+  }
+
+  noteClientTrace() {
+    if (!this.cdpTrace.length) return;
+    this.note(
+      `client cdp: ${this.cdpTrace
+        .map(
+          (call) =>
+            `${call.method}@${call.sessionId || 'browser'}:${call.type || '?'} ${call.ms}ms ${call.status}`
+        )
+        .join(' | ')}`
+    );
   }
 
   actor() {
@@ -200,8 +295,7 @@ class Execution {
       );
       return read.ok && read.result.targetInfo?.attached === false;
     }, 5000);
-    if (!released)
-      this.notes.push(`client exit: the page stayed attached for ${this.bound(5000)}ms`);
+    if (!released) this.note(`client exit: the page stayed attached for ${this.bound(5000)}ms`);
     const { sessionId } = await this.reader.send('Target.attachToTarget', {
       targetId: this.pageTarget,
       flatten: true,
@@ -408,53 +502,55 @@ class Execution {
     );
   }
 
+  async readerFrameTree(targetId, label) {
+    const attached = await outcome(
+      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    if (!attached.ok) return { ok: false, sessionId: undefined, frameTree: undefined };
+    const sessionId = attached.result.sessionId;
+    await outcome(this.reader.send('Runtime.runIfWaitingForDebugger', {}, sessionId));
+    const read = await outcome(this.reader.send('Page.getFrameTree', {}, sessionId));
+    if (!read.ok) {
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
+      throw new Error(
+        `Page.getFrameTree timed out on ${label} target ${targetId} session ${sessionId}: ${read.error?.message ?? 'unknown'}`
+      );
+    }
+    return { ok: true, sessionId, frameTree: read.result.frameTree };
+  }
+
   async blocked(spec, observer) {
     const urls = (spec.anyOf ?? [spec.url]).map(address);
     if (observer === 'client') return this.clientBlocked(spec, urls);
     const targetId = spec.session === 'child' ? this.targets.at(-1) : this.pageTarget;
     if (!targetId) return false;
-    const attached = await outcome(
-      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
-    );
+    const attached = await this.readerFrameTree(targetId, 'blocked page');
     if (!attached.ok) return false;
     try {
-      const read = await outcome(
-        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-      );
       const blockedFrame = (frame) =>
         Boolean(
           frame && urls.includes(frame.unreachableUrl) && frame.url.startsWith('chrome-error://')
         );
       const visit = (tree) =>
         Boolean(tree && (blockedFrame(tree.frame) || (tree.childFrames ?? []).some(visit)));
-      if (!read.ok) return false;
       if (spec.frame) {
-        if ((read.result.frameTree.childFrames ?? []).some(visit)) return true;
+        if ((attached.frameTree.childFrames ?? []).some(visit)) return true;
         return Boolean(await this.blockedFrameTarget(urls, targetId));
       }
-      return blockedFrame(read.result.frameTree.frame);
+      return blockedFrame(attached.frameTree.frame);
     } finally {
-      await outcome(
-        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-      );
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId: attached.sessionId }));
     }
   }
 
   async frameIds(targetId) {
-    const attached = await outcome(
-      this.reader.send('Target.attachToTarget', { targetId, flatten: true })
-    );
+    const attached = await this.readerFrameTree(targetId, 'frameIds page');
     if (!attached.ok) return [];
     try {
-      const read = await outcome(
-        this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-      );
       const ids = (tree) => [tree.frame.id, ...(tree.childFrames ?? []).flatMap(ids)];
-      return read.ok ? ids(read.result.frameTree) : [];
+      return ids(attached.frameTree);
     } finally {
-      await outcome(
-        this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-      );
+      await outcome(this.reader.send('Target.detachFromTarget', { sessionId: attached.sessionId }));
     }
   }
 
@@ -464,21 +560,16 @@ class Execution {
     if (!listed.ok) return undefined;
     for (const info of listed.result.targetInfos) {
       if (info.type !== 'iframe' || !parents.includes(info.parentFrameId)) continue;
-      const attached = await outcome(
-        this.reader.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
-      );
-      if (!attached.ok) continue;
+      let sessionId;
       try {
-        const read = await outcome(
-          this.reader.send('Page.getFrameTree', {}, attached.result.sessionId)
-        );
-        const frame = read.result?.frameTree?.frame;
+        const attached = await this.readerFrameTree(info.targetId, `iframe ${info.type}`);
+        if (!attached.ok) continue;
+        sessionId = attached.sessionId;
+        const frame = attached.frameTree?.frame;
         if (frame?.url.startsWith('chrome-error://') && urls.includes(frame.unreachableUrl))
           return info.targetId;
       } finally {
-        await outcome(
-          this.reader.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
-        );
+        if (sessionId) await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
       }
     }
     return undefined;
@@ -532,7 +623,7 @@ class Execution {
     } catch (error) {
       const message = String(error?.message ?? error);
       if (!/timed? ?out/i.test(message)) throw error;
-      this.notes.push(`Target.createBrowserContext retried once after: ${message}`);
+      this.note(`Target.createBrowserContext retried once after: ${message}`);
       return (await client.send('Target.createBrowserContext', {})).browserContextId;
     }
   }
@@ -594,17 +685,38 @@ class Execution {
     }
   }
 
+  async resumeWaiting(from = this.eventStart) {
+    for (const event of this.client.events.slice(from)) {
+      if (
+        event.method === 'Target.attachedToTarget' &&
+        event.params?.waitingForDebugger &&
+        event.params?.sessionId
+      )
+        await outcome(
+          this.client.send('Runtime.runIfWaitingForDebugger', {}, event.params.sessionId)
+        );
+    }
+  }
+
   adopt(event) {
     const info = event.params.targetInfo;
     const child = event.params.sessionId;
     if (info?.type === 'browser_ui') return;
     const paused = event.params.waitingForDebugger || this.tabSessions.has(event.sessionId);
+    const workerRow = Boolean(this.spawnWorkerKind());
     if (this.expectWhere && !this.childWhere) {
       this.deferred.push(event);
       return;
     }
-    if (info?.browserContextId && this.vars.context && info.browserContextId !== this.vars.context)
+    if (
+      info?.browserContextId &&
+      this.vars.context &&
+      info.browserContextId !== this.vars.context
+    ) {
+      if (paused && workerRow)
+        this.pending.push(outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child)));
       return;
+    }
     const matched = !this.childWhere || this.childMatches(info);
     const isTab = info?.type === 'tab';
     if (!matched && !isTab) {
@@ -621,6 +733,27 @@ class Execution {
       ? this.childSteps
       : this.childSteps.filter((step) => step.cdp === 'Target.setAutoAttach');
     const started = (async () => {
+      if (workerRow) {
+        if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
+        const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
+        if (reload < 0) await this.execute(nested, child);
+        else {
+          await this.execute(nested.slice(0, reload), child);
+          const start = this.client.events.length;
+          await this.poll(
+            () =>
+              this.client.events
+                .slice(start)
+                .some((e) => e.method === 'Page.loadEventFired' && e.sessionId === child),
+            1500
+          );
+          await this.execute(nested.slice(reload), child);
+        }
+        const resumed = this.client.events.length;
+        if (nested.some((step) => step.cdp === 'Page.enable'))
+          await this.poll(() => this.firstLoad(child, resumed), 5000);
+        return;
+      }
       const reload = nested.findIndex((step) => step.cdp === 'Page.reload');
       if (reload < 0) await this.execute(nested, child);
       else {
@@ -640,7 +773,13 @@ class Execution {
       if (paused) await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, child));
       if (nested.some((step) => step.cdp === 'Page.enable'))
         await this.poll(() => this.firstLoad(child, resumed), 5000);
-    })().catch((error) => this.errors.push(String(error.message ?? error)));
+    })().catch((error) =>
+      this.errors.push(
+        workerRow
+          ? `adopt ${info?.type ?? 'target'} ${child}: ${String(error.message ?? error)}`
+          : String(error.message ?? error)
+      )
+    );
     this.childRuns.set(child, started);
     this.pending.push(started);
   }
@@ -705,7 +844,11 @@ class Execution {
   }
 
   childMatches(info) {
-    if (this.childWhere.type && info?.type !== this.childWhere.type) return false;
+    if (this.childWhere.types !== undefined) {
+      if (!this.childWhere.types.includes(info?.type)) return false;
+    } else if (this.childWhere.type !== undefined) {
+      if (this.childWhere.type !== info?.type) return false;
+    }
     if (this.childWhere.openerId === 'page') return info?.openerId === this.pageTarget;
     if (this.childWhere.urlPrefix !== undefined)
       return String(info?.url ?? '').startsWith(this.childWhere.urlPrefix);
@@ -798,7 +941,7 @@ class Execution {
         Boolean(childSession) && !out.ok && this.detached(childSession)
       );
       if ((step.isolatedWorld || step.observer) && !out.ok)
-        this.notes.push(
+        this.note(
           `${step.isolatedWorld ? `isolatedWorld ${step.isolatedWorld}` : `observer ${step.observer}`}: ${out.error?.message ?? 'failed'}`
         );
       this.options.debug?.({ step, out, side: this.side });
@@ -833,7 +976,7 @@ class Execution {
       return Boolean(next);
     }, browserUiMs);
     if (!next) return undefined;
-    this.notes.push(
+    this.note(
       `{browserUi} ${vanished} was gone when ${step.cdp} reached it; retried with ${next.targetId}`
     );
     this.vars.browserUi = next.targetId;
@@ -864,63 +1007,14 @@ class Execution {
       return;
     }
     if (step.client) return outcome(this.exit());
-    if (step.redirectSecret) {
-      this.internalSessions.add(session);
-      try {
-        return await outcome(
-          redirectSecret({
-            client: this.client,
-            reader: this.reader,
-            session,
-            targetId: this.pageTarget,
-            ordinary: this.vars.ordinary,
-            tag: this.vars.tag,
-            fixture: this.options.fixture,
-            mode: step.redirectSecret,
-            side: this.side,
-            settleScale: this.scale,
-            controls: (this.clients.redirectSecretControls ??= {}),
-            internalSessions: this.internalSessions,
-          })
-        );
-      } finally {
-        this.internalSessions.delete(session);
-      }
-    }
-    if (step.errorPage)
-      return outcome(
-        protectedErrorPage({
-          client: this.client,
-          reader: this.reader,
-          session,
-          targetId: this.pageTarget,
-          ordinary: this.vars.ordinary,
-          protectedOrigin: this.vars.seven,
-          tag: this.vars.tag,
-          internalSessions: this.internalSessions,
-          mode: step.errorPage,
-          side: this.side,
-          secret: step.secret,
-          discovery: supported(['discovery'], this.options.capabilities),
-          notes: this.notes,
-          budget: this.bound(5000),
-        })
-      );
-    if (step.closeProtectedShape)
-      return outcome(
-        closeProtectedShape({
-          client: this.client,
-          reader: this.reader,
-          ordinary: this.vars.ordinary,
-          protectedOrigin: this.vars.target,
-          shape: step.closeProtectedShape,
-          tag: this.vars.tag,
-          internalSessions: this.internalSessions,
-          notes: this.notes,
-          budget: this.bound(5000),
-          releaseSlow: this.options.fixture.releaseSlow,
-        })
-      );
+    if (
+      step.redirectSecret ||
+      step.errorPage ||
+      step.closeProtectedShape ||
+      step.spawnWorker ||
+      step.probeSessions
+    )
+      return this.stepProbe(step, session);
     if (step.bfcacheRestore)
       return outcome(
         bfcacheRestore({
@@ -1031,12 +1125,10 @@ class Execution {
 
   async isolatedWorld(step) {
     const targetId = step.session === 'child' ? this.targets.at(-1) : this.pageTarget;
-    const { sessionId } = await this.reader.send('Target.attachToTarget', {
-      targetId,
-      flatten: true,
-    });
+    const attached = await this.readerFrameTree(targetId, 'isolatedWorld page');
+    if (!attached.ok) throw new Error('isolatedWorld attach failed');
+    const { sessionId, frameTree } = attached;
     try {
-      const { frameTree } = await this.reader.send('Page.getFrameTree', {}, sessionId);
       const { executionContextId } = await this.reader.send(
         'Page.createIsolatedWorld',
         { frameId: frameTree.frame.id, worldName: step.isolatedWorld },
@@ -1061,6 +1153,248 @@ class Execution {
     } finally {
       await outcome(this.reader.send('Target.detachFromTarget', { sessionId }));
     }
+  }
+
+  stepProbe(step, session) {
+    if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
+    if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
+    if (step.spawnWorker) return this.spawnWorker(step);
+    return this.probeSessions(step);
+  }
+
+  async originProbe(step, session) {
+    if (step.redirectSecret) {
+      this.internalSessions.add(session);
+      try {
+        return await outcome(
+          redirectSecret({
+            client: this.client,
+            reader: this.reader,
+            session,
+            targetId: this.pageTarget,
+            ordinary: this.vars.ordinary,
+            tag: this.vars.tag,
+            fixture: this.options.fixture,
+            mode: step.redirectSecret,
+            side: this.side,
+            settleScale: this.scale,
+            controls: (this.clients.redirectSecretControls ??= {}),
+            internalSessions: this.internalSessions,
+          })
+        );
+      } finally {
+        this.internalSessions.delete(session);
+      }
+    }
+    return outcome(
+      protectedErrorPage({
+        client: this.client,
+        reader: this.reader,
+        session,
+        targetId: this.pageTarget,
+        ordinary: this.vars.ordinary,
+        protectedOrigin: this.vars.seven,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        mode: step.errorPage,
+        side: this.side,
+        secret: step.secret,
+        discovery: supported(['discovery'], this.options.capabilities),
+        notes: this.notes,
+        budget: this.bound(5000),
+      })
+    );
+  }
+
+  runCloseProtectedShape(step) {
+    return outcome(
+      closeProtectedShape({
+        client: this.client,
+        reader: this.reader,
+        ordinary: this.vars.ordinary,
+        protectedOrigin: this.vars.target,
+        shape: step.closeProtectedShape,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        releaseSlow: this.options.fixture.releaseSlow,
+      })
+    );
+  }
+
+  spawnWorkerKind() {
+    return allSteps([...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])]).find(
+      (step) => step.spawnWorker
+    )?.spawnWorker;
+  }
+
+  async ensurePriorWorkersGone(kind) {
+    if (this.side !== 'guarded') return;
+    const type = workerTypeForKind(kind);
+    if (!persistentWorkerTypes.has(type)) return;
+    const prior = this.clients.priorWorker;
+    const leftover = await leftoverPersistentWorker(this.reader ?? this.client, {
+      type,
+      ...(prior?.url || prior?.targetId ? { url: prior?.url, targetId: prior?.targetId } : {}),
+    });
+    if (leftover)
+      throw new Error(
+        `leftover ${type} still present before guarded spawn: ${leftover.url ?? leftover.targetId}`
+      );
+  }
+
+  async spawnWorker(step) {
+    if (step.as) this.eventMarks.set(step.as, this.client.events.length);
+    const pageUrl = expand(step.url ?? '{target}/doc?n=host-{tag}', this.vars);
+    const hostUrl = step.frame ? expand(step.frame, this.vars) : undefined;
+    await this.ensurePriorWorkersGone(step.spawnWorker);
+    const out = await outcome(
+      protectedWorker({
+        reader: this.reader,
+        kind: step.spawnWorker,
+        pageUrl,
+        hostUrl,
+        tag: this.vars.tag,
+        context: this.vars.context,
+        notes: this.notes,
+        budget: this.bound(5000),
+      })
+    );
+    if (out.ok && out.result?.browserContextId) {
+      this.contexts.push(out.result.browserContextId);
+      this.vars.context = out.result.browserContextId;
+    }
+    if (out.ok && out.result?.pageTargetId) this.targets.push(out.result.pageTargetId);
+    if (out.ok && out.result?.workerTargetId) {
+      this.vars.workerTarget = out.result.workerTargetId;
+      this.targets.push(out.result.workerTargetId);
+    }
+    if (out.ok && out.result?.workerUrl && this.side === 'control')
+      this.clients.priorWorker = {
+        type: out.result.type,
+        url: out.result.workerUrl,
+        targetId: out.result.workerTargetId,
+      };
+    if (!out.ok) this.errors.push(`spawnWorker: ${out.error?.message ?? 'probe failed'}`);
+    if (out.ok && out.result?.incomplete)
+      this.incomplete.push(`spawnWorker: ${out.result.incomplete}`);
+    return out;
+  }
+
+  probeSessionIds(step) {
+    const mark = this.eventMarks.get(step.probeSessions.since) ?? this.eventStart;
+    const sessions = [];
+    for (const event of this.client.events.slice(mark)) {
+      if (event.method === 'Target.attachedToTarget' && event.params?.sessionId)
+        sessions.push(event.params.sessionId);
+    }
+    for (const name of step.probeSessions.attach ?? ['attach']) {
+      const sessionId = this.calls[name]?.result?.sessionId;
+      if (sessionId) sessions.push(sessionId);
+    }
+    return sessions;
+  }
+
+  async probeSessions(step) {
+    const out = await outcome(
+      probeWorkerSessions({
+        client: this.client,
+        sessions: this.probeSessionIds(step),
+        path: expand(step.probeSessions.path, this.vars),
+        tag: this.vars.tag,
+        detached: (sessionId) => this.detached(sessionId),
+      })
+    );
+    this.probedSessionIds ??= new Set();
+    for (const sessionId of out.result?.probedIds ?? []) this.probedSessionIds.add(sessionId);
+    if (!out.ok) {
+      this.errors.push(`probeSessions: ${out.error?.message ?? 'probe failed'}`);
+      return out;
+    }
+    if (out.result?.incomplete) {
+      const reason = probeHarnessIncomplete(this.side, out.result.incomplete);
+      if (reason) this.incomplete.push(`probeSessions: ${reason}`);
+      const { incomplete: _drop, ...result } = out.result;
+      return { ...out, result };
+    }
+    return out;
+  }
+
+  probeStep() {
+    return [...(this.vector.setup ?? []), ...(this.vector.trigger ?? [])].find(
+      (entry) => entry.probeSessions
+    );
+  }
+
+  async probeFreshSessions() {
+    const step = this.probeStep();
+    if (!step?.probeSessions) return false;
+    const expanded = expand(step, this.vars);
+    this.probedSessionIds ??= new Set();
+    const fresh = this.probeSessionIds(expanded).filter(
+      (sessionId) => sessionId && !this.probedSessionIds.has(sessionId)
+    );
+    if (!fresh.length) return this.calls.probe?.result?.reachable === true;
+    const out = await probeWorkerSessions({
+      client: this.client,
+      sessions: fresh,
+      path: expand(expanded.probeSessions.path, this.vars),
+      tag: this.vars.tag,
+      detached: (sessionId) => this.detached(sessionId),
+    });
+    for (const sessionId of out.probedIds ?? []) this.probedSessionIds.add(sessionId);
+    const sessions = [
+      ...new Set([...(this.calls.probe?.result?.sessions ?? []), ...(out.probedIds ?? fresh)]),
+    ];
+    if (out.incomplete) {
+      this.calls.probe = {
+        ok: true,
+        result: { ...(this.calls.probe?.result ?? {}), ...out, sessions },
+      };
+      const reason = probeHarnessIncomplete(this.side, out.incomplete);
+      if (reason) {
+        this.incomplete.push(`probeSessions: ${reason}`);
+        return 'incomplete';
+      }
+    }
+    const reachable = out.reachable || this.calls.probe?.result?.reachable === true;
+    this.calls.probe = {
+      ok: true,
+      result: {
+        ...(this.calls.probe?.result ?? {}),
+        reachable,
+        probed: (this.calls.probe?.result?.probed ?? 0) + (out.probed ?? 0),
+        sessions,
+      },
+    };
+    return reachable;
+  }
+
+  async observeProbeReachable(want, check) {
+    if (want !== true && want !== false) return this.check(check);
+    let seen = await this.probeFreshSessions();
+    if (seen === 'incomplete') return this.side === 'control' ? false : 'incomplete';
+    if (seen === true) return true;
+    const met = await this.poll(
+      async () => {
+        if (this.clients.flight?.abandoned) return true;
+        seen = await this.probeFreshSessions();
+        if (seen === 'incomplete') return true;
+        return seen === true;
+      },
+      observeMs,
+      false
+    );
+    if (seen === 'incomplete') return this.side === 'control' ? false : 'incomplete';
+    if (want === true && !met && !this.clients.flight?.abandoned) {
+      if (this.side === 'control') return false;
+      this.incomplete.push(
+        `workerReachable: probe evidence not observed within ${this.bound(observeMs)}ms`
+      );
+      return 'incomplete';
+    }
+    return seen === true;
   }
 
   async watchPage(step) {
@@ -1130,7 +1464,7 @@ class Execution {
   async settle(settle) {
     const refused = () => (settle.dependsOn ?? []).some((name) => this.refused[name]);
     const skipped = () => {
-      this.notes.push(
+      this.note(
         `settle:skipped-refused ${settle.beacon ? `beacon ${settle.beacon}` : settle.served ? `request ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'}`
       );
     };
@@ -1246,6 +1580,14 @@ class Execution {
       this.contexts.push(this.vars.context);
       await this.seedContext(this.vars.context);
     }
+    if (step.reuseSession) {
+      const reused = reusableAttachSession(step, out, params, this.client.events, this.eventStart);
+      if (reused) {
+        await outcome(this.client.send('Runtime.runIfWaitingForDebugger', {}, reused));
+        this.note(`Target.attachToTarget reused auto-attach session for ${params.targetId}`);
+        return { ok: true, result: { sessionId: reused, reused: true } };
+      }
+    }
     return out;
   }
 
@@ -1254,6 +1596,27 @@ class Execution {
       cookies: [{ name: this.vars.cookie, value: this.vars.tag, url: this.vars.target }],
       browserContextId: context,
     });
+  }
+
+  namedCallSummaries() {
+    return Object.fromEntries(
+      ['attach', 'spawn', 'targets', 'probe', 'tabs']
+        .filter((name) => this.calls[name])
+        .map((name) => {
+          const out = this.calls[name];
+          return [
+            name,
+            {
+              ok: out.ok,
+              ...(out.result?.sessionId ? { sessionId: true } : {}),
+              ...(out.result?.exists !== undefined ? { exists: out.result.exists } : {}),
+              ...(out.result?.reachable !== undefined ? { reachable: out.result.reachable } : {}),
+              ...(out.result?.incomplete ? { incomplete: out.result.incomplete } : {}),
+              ...(out.error ? { error: String(out.error?.message ?? out.error) } : {}),
+            },
+          ];
+        })
+    );
   }
 
   async page(step, session, phase) {
@@ -1367,20 +1730,30 @@ class Execution {
     return !!late;
   }
 
-  async observe(name, check) {
-    const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
-      name
-    ];
+  observeEarly(name, check, want) {
+    if (name === 'workerReachable' && this.probeStep())
+      return this.observeProbeReachable(want, check);
     if (check?.forwarded) return this.forwardedCheck(name, check, want);
     if (
       check?.result &&
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
     )
       return 'incomplete';
+    return undefined;
+  }
+
+  async observe(name, check) {
+    const want = (this.side === 'control' ? this.vector.control.expected : this.vector.expected)?.[
+      name
+    ];
+    const early = this.observeEarly(name, check, want);
+    if (early !== undefined) return early;
     const plan = steps(this.vector, this.side, this.vars);
     const names = resultNames(check);
+    const absencePoll = this.vector.observe?.[name]?.absencePoll === true;
     const snapshots =
-      this.side === 'control' && want === true && !this.clients.flight?.abandoned
+      !this.clients.flight?.abandoned &&
+      ((this.side === 'control' && want === true) || (want === false && absencePoll))
         ? [...plan.setup, ...plan.trigger].filter(
             (step) =>
               names.includes(step.as) &&
@@ -1389,17 +1762,28 @@ class Execution {
               supported(step.requires, this.options.capabilities)
           )
         : [];
+    const hasEvent = (node) =>
+      Boolean(node?.event) ||
+      [...(node?.all ?? []), ...(node?.any ?? []), ...(node?.not ? [node.not] : [])].some(hasEvent);
     const polled =
       check?.observer === 'fixture' || check?.world !== undefined || check?.script !== undefined;
-    if (want === false && (check?.world !== undefined || check?.script !== undefined))
+    const shouldPoll =
+      (want === true && (polled || snapshots.length > 0)) ||
+      (want === false && absencePoll && snapshots.length > 0);
+    if (
+      want === false &&
+      !shouldPoll &&
+      (check?.world !== undefined || check?.script !== undefined || hasEvent(check))
+    )
       return this.absenceCheck(check);
-    if (want !== true || (!polled && !snapshots.length)) return this.check(check);
+    if (!shouldPoll) return this.check(check);
     let seen = false;
     const met = await this.poll(
       async () => {
         if (this.clients.flight?.abandoned) return true;
         seen = await this.check(check);
         if (seen === 'unwatched' || seen === 'incomplete') return true;
+        if (want === false && seen === true) return true;
         if (seen !== true && snapshots.length) {
           await this.execute(snapshots, undefined, 'observation');
           if (this.clients.flight?.abandoned) return true;
@@ -1412,7 +1796,7 @@ class Execution {
       snapshots.length > 0
     );
     if (seen === 'unwatched' || seen === 'incomplete') return seen;
-    if ((!met || this.clients.flight?.abandoned) && snapshots.length) {
+    if (want === true && (!met || this.clients.flight?.abandoned) && snapshots.length) {
       this.incomplete.push(
         `${name}: snapshot evidence not observed within ${this.bound(observeMs)}ms`
       );
@@ -1697,6 +2081,7 @@ class Execution {
 
   async run() {
     this.requestStart = (await this.options.fixture.log()).length;
+    this.installClientTrace();
     let pumping;
     try {
       await this.seed();
@@ -1719,6 +2104,7 @@ class Execution {
         side: this.side,
       });
       const { live, liveWhy } = await this.liveness(unseen, incomplete);
+      if (this.errors.length) this.noteClientTrace();
       return {
         observed,
         live,
@@ -1727,6 +2113,7 @@ class Execution {
         notes: this.notes,
         incomplete: this.incomplete,
         unsupported: this.unsupported,
+        calls: this.namedCallSummaries(),
         evidence: Object.fromEntries(
           Object.entries(this.calls)
             .filter(
@@ -1735,13 +2122,25 @@ class Execution {
             .map(([name, out]) => [name, out.result.diagnostics ?? out.result])
         ),
       };
+    } catch (error) {
+      this.noteClientTrace();
+      throw error;
     } finally {
       this.stopped = true;
       await pumping;
-      if (this.watch)
-        await outcome(
-          this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
-        );
+      await this.cleanupLeg();
+    }
+  }
+
+  async cleanupLeg() {
+    if (this.watch)
+      await outcome(
+        this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
+      );
+    if (this.spawnWorkerKind()) {
+      await Promise.allSettled(this.pending);
+      await this.cleanupSpawnedWorkerLeg();
+    } else {
       for (const session of this.attachSettings.keys())
         await outcome(
           this.client.send(
@@ -1752,22 +2151,48 @@ class Execution {
         );
       for (const targetId of new Set(this.targets))
         await outcome((this.reader ?? this.client).send('Target.closeTarget', { targetId }));
-      for (const browserContextId of new Set(this.contexts))
-        await outcome(
-          (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
-        );
-      await Promise.allSettled(this.pending);
-      if (
-        this.side === 'guarded' &&
-        this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
-      ) {
-        const violation = discoveryViolation(
-          this.client.events.slice(this.eventStart),
-          supported(['discovery'], this.options.capabilities)
-        );
-        if (violation) this.errors.push(violation);
-      }
     }
+    for (const browserContextId of new Set(this.contexts))
+      await outcome(
+        (this.reader ?? this.client).send('Target.disposeBrowserContext', { browserContextId })
+      );
+    this.contexts = [];
+    if (!this.spawnWorkerKind()) await Promise.allSettled(this.pending);
+    if (
+      this.side === 'guarded' &&
+      this.vector.observe?.eventsRedacted?.requires?.includes('discovery')
+    ) {
+      const violation = discoveryViolation(
+        this.client.events.slice(this.eventStart),
+        supported(['discovery'], this.options.capabilities)
+      );
+      if (violation) this.errors.push(violation);
+    }
+  }
+
+  async cleanupSpawnedWorkerLeg() {
+    await this.resumeWaiting();
+    await releasePersistentWorkerSessions({
+      client: this.client,
+      reader: this.reader,
+      events: this.client.events,
+      from: this.eventStart,
+      tag: this.vars.tag,
+      targets: this.targets,
+      attachSessions: [...this.attachSettings.keys()],
+    });
+    if (this.reader && this.reader !== this.client)
+      await releasePersistentWorkerSessions({
+        client: this.reader,
+        reader: this.reader,
+        events: this.reader.events,
+        from: 0,
+        tag: this.vars.tag,
+        targets: this.targets,
+        attachSessions: [],
+      });
+    this.targets = [];
+    this.attachSettings.clear();
   }
 }
 
@@ -1786,7 +2211,7 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
-    (step) => step.isolatedWorld || step.observer
+    (step) => step.isolatedWorld || step.observer || step.spawnWorker
   ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(
@@ -1892,14 +2317,75 @@ function variables(targets, target, side, slot, index) {
   return vars;
 }
 
+function sessionTypeOf(client, sessionId) {
+  if (!sessionId) return 'browser';
+  const events = client.events ?? [];
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.method === 'Target.attachedToTarget' && event.params?.sessionId === sessionId)
+      return event.params.targetInfo?.type || 'unknown';
+  }
+  return 'unknown';
+}
+
+function boundFrameTree(rawSend, client, params, sessionId) {
+  let timer;
+  const type = sessionTypeOf(client, sessionId);
+  return Promise.race([
+    rawSend('Page.getFrameTree', params, sessionId),
+    new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `Page.getFrameTree timed out on ${type} session ${sessionId ?? 'browser'} after 3000ms`
+            )
+          ),
+        3000
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 function tracked(client, calls, name) {
   if (!client || typeof client.send !== 'function') return client;
   let next = 0;
+  const rawSend = client.send.bind(client);
   const send = (method, params, sessionId) => {
     const id = ++next;
     calls.set(id, { name, method, session: sessionId, since: Date.now() });
+    if (!client.__sliccOnSend && !client.__sliccBoundGetFrameTree) {
+      return Promise.resolve()
+        .then(() => client.send(method, params, sessionId))
+        .finally(() => calls.delete(id));
+    }
+    const started = Date.now();
+    const run =
+      method === 'Page.getFrameTree' && client.__sliccBoundGetFrameTree
+        ? () => boundFrameTree(rawSend, client, params, sessionId)
+        : () => rawSend(method, params, sessionId);
     return Promise.resolve()
-      .then(() => client.send(method, params, sessionId))
+      .then(run)
+      .then(
+        (result) => {
+          client.__sliccOnSend?.({
+            method,
+            sessionId,
+            ms: Date.now() - started,
+            status: 'ok',
+          });
+          return result;
+        },
+        (error) => {
+          client.__sliccOnSend?.({
+            method,
+            sessionId,
+            ms: Date.now() - started,
+            status: String(error?.message ?? error).slice(0, 200),
+          });
+          throw error;
+        }
+      )
       .finally(() => calls.delete(id));
   };
   return new Proxy(client, {
@@ -2047,12 +2533,27 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   }
   if (legs.control.unsupported === 'trustedEmulation')
     return skipRow(base, 'not-supported:trustedEmulation');
+  const row = finishRow(vector, base, legs, opts);
+  opts.log?.(row);
+  return row;
+}
+
+function finishRow(vector, base, legs, opts) {
+  const caps = Array.isArray(opts.capabilities)
+    ? opts.capabilities
+    : Object.keys(opts.capabilities).filter((k) => opts.capabilities[k] === true);
+  const calls = {
+    ...(legs.control.calls && Object.keys(legs.control.calls).length
+      ? { control: legs.control.calls }
+      : {}),
+    ...(legs.guarded.calls && Object.keys(legs.guarded.calls).length
+      ? { guarded: legs.guarded.calls }
+      : {}),
+  };
   const row = {
     ...result(vector, {
       ...base,
-      capabilities: Array.isArray(opts.capabilities)
-        ? opts.capabilities
-        : Object.keys(opts.capabilities).filter((k) => opts.capabilities[k] === true),
+      capabilities: caps,
       control: legs.control.observed,
       guarded: legs.guarded.observed,
       live: legs.control.live && legs.guarded.live,
@@ -2062,6 +2563,7 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     observations: { control: legs.control.observed, guarded: legs.guarded.observed },
     errors: [...legs.control.errors, ...legs.guarded.errors],
     designDependent: vector.designDependent ?? [],
+    ...(Object.keys(calls).length ? { calls } : {}),
     ...probeEvidence(legs),
   };
   const notes = [
@@ -2074,7 +2576,6 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
     row.control = 'fail';
     row.guarded = 'fail';
   }
-  opts.log?.(row);
   return row;
 }
 

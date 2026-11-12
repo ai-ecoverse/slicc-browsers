@@ -165,6 +165,7 @@ test('post-navigation settles wait for load or served, not the start-page title'
     assert.ok(settles.length > 0, id);
     for (const settle of settles) {
       assert.equal(settle.title, undefined, `${id} must not settle on title`);
+      assert.equal(settle.required, undefined, `${id} must not require a load`);
       assert.ok(settle.or?.served || settle.served || settle.ms !== undefined, id);
     }
   }

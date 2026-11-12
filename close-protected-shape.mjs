@@ -454,12 +454,13 @@ export async function closeProtectedShape({
 }) {
   const until = (check) => waitFor(check, budget);
   const result = {};
+  const hold = {};
   const missing = async (reason) => {
     await hold.release?.();
     return { ...result, incomplete: `close-protected-shape: ${reason}` };
   };
+  if (!reader) return missing('missing unguarded reader');
   const origin = protectedOrigin;
-  const hold = {};
   let shaped;
   if (shape === 'view-source') {
     shaped = await shapeViewSource({

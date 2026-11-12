@@ -2211,7 +2211,7 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
-    (step) => step.isolatedWorld || step.observer || step.spawnWorker
+    (step) => step.isolatedWorld || step.observer || step.spawnWorker || step.closeProtectedShape
   ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(

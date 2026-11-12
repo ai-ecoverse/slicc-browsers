@@ -177,6 +177,40 @@ test('an undeclared run skips the disguise rows', async () => {
   assert.equal(execution.summary().pass, true);
 });
 
+test('without an unguarded observer the disguise rows skip within five seconds', async () => {
+  const fixture = await fixtureServer();
+  const started = Date.now();
+  try {
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const execution = await run(
+      { ...set, vectors, variants: { prompt: 0 } },
+      {
+        client: quarantining(chrome(), { closeProtected: true }),
+        fixture,
+        settleScale: 0.1,
+        capabilities: { discovery: true, closeProtected: true },
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          vault: origin('vault.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+    assert.ok(Date.now() - started < 5000);
+    assert.equal(execution.results.length, 5);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'skip', row.id);
+      assert.equal(row.guarded, 'skip', row.id);
+      assert.equal(row.reason, 'not-supported:unguarded-observer', row.id);
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('a declared guard that refuses the disguise shapes passes', async () => {
   const execution = await rows();
   for (const row of execution.results) {

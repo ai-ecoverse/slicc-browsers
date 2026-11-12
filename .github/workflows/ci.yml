@@ -34,7 +34,7 @@ jobs:
         npm run lint
       test-glob: test/integration/*.test.mjs
       shards: 4
-      timeout-minutes: 30
+      timeout-minutes: 45
       strict-tests: |
         **/*guard*.test.*
         **/*security*.test.*

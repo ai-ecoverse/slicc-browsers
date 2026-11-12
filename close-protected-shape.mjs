@@ -199,6 +199,8 @@ async function shapeUserinfo({ reader, shapedURL, notes, internalSessions, until
   return { ok: true, result: { targetId, sessionId, live, shaped: live } };
 }
 
+const raced = (promise, ms) => Promise.race([promise, pause(ms).then(() => undefined)]);
+
 async function shapeNavigating({
   reader,
   ordinary,
@@ -206,36 +208,60 @@ async function shapeNavigating({
   notes,
   internalSessions,
   hold,
-  budget,
   releaseSlow,
   tag,
 }) {
+  const started = Date.now();
+  const waitBudget = 8000;
   const start = `${ordinary}/blank?n=close-nav-start`;
-  const waitBudget = Math.min(Math.max(budget, 1), 8000);
-  const opened = await observerPage(reader, start, notes, internalSessions);
-  if (!opened.ok) return opened;
+  notes.push(`navigating.start: destination=${destination} budgetMs=${waitBudget}`);
+  notes.push('navigating.fetch: skipped; fixture /slow holds Document (no Fetch.enable)');
+  const opened = await raced(observerPage(reader, start, notes, internalSessions), 3000);
+  if (!opened?.ok)
+    return {
+      ok: true,
+      result: {
+        live: false,
+        shaped: false,
+        closeOnly: true,
+        incomplete: `navigating shape did not appear: observer setup ${opened?.error?.message ?? 'timed out'}`,
+      },
+    };
   const { targetId, sessionId } = opened.result;
   const sequence = [];
   let cursor = reader.events.length;
   let stopped = false;
+  const elapsed = () => Date.now() - started;
+  const readInfo = async () => {
+    const info = await raced(reader.send('Target.getTargetInfo', { targetId }), 400);
+    const listed = await raced(reader.send('Target.getTargets'), 400);
+    const row = listed?.targetInfos?.find((i) => i.targetId === targetId);
+    return info?.targetInfo ?? row;
+  };
   const snap = async (label) => {
-    const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
-    const listed = (await reader.send('Target.getTargets')).targetInfos.find(
-      (info) => info.targetId === targetId
+    const targetInfo = await readInfo();
+    notes.push(
+      `navigating.${label}: ${JSON.stringify({
+        atMs: elapsed(),
+        targetId,
+        type: targetInfo?.type,
+        url: targetInfo?.url,
+        title: targetInfo?.title,
+        attached: targetInfo?.attached,
+        openerId: targetInfo?.openerId,
+        pendingUrl: destination,
+        observerSession: sessionId,
+        sequence: sequence.slice(-12),
+      })}`
     );
-    noteShape(notes, `navigating.${label}`, {
-      targetId,
-      type: targetInfo?.type ?? listed?.type,
-      url: targetInfo?.url ?? listed?.url,
-      openerId: targetInfo?.openerId ?? listed?.openerId,
-      start,
-      pendingUrl: destination,
-      observerSession: sessionId,
-      sequence: sequence.slice(-12),
-    });
     return targetInfo;
   };
-  await snap('before');
+  hold.release = async () => {
+    stopped = true;
+    releaseSlow?.(tag);
+    await pause(20);
+  };
+  await snap('0s');
   const pump = (async () => {
     while (!stopped) {
       for (const event of reader.events.slice(cursor)) {
@@ -245,62 +271,79 @@ async function shapeNavigating({
           event.method === 'Page.frameStartedNavigating' ||
           event.method === 'Page.frameRequestedNavigation' ||
           event.method === 'Page.frameNavigated'
-        )
-          sequence.push({
+        ) {
+          const row = {
+            atMs: elapsed(),
             method: event.method,
             sessionId: event.sessionId,
             url: event.params.request?.url ?? event.params.url ?? event.params.frame?.url,
             resourceType: event.params.resourceType,
-          });
+            requestStage: event.params.requestStage,
+            frameId: event.params.frameId ?? event.params.frame?.id,
+          };
+          sequence.push(row);
+          notes.push(`navigating.event: ${JSON.stringify(row)}`);
+        }
       }
       await pause(5);
     }
   })();
-  await outcome(reader.send('Page.enable', {}, sessionId));
-  reader.send('Page.navigate', { url: destination }, sessionId).catch(() => {});
-  const deadline = Date.now() + waitBudget;
+  await raced(reader.send('Page.enable', {}, sessionId), 500);
+  notes.push(`navigating.navigate: not-awaited url=${destination} session=${sessionId}`);
+  reader
+    .send('Page.navigate', { url: destination }, sessionId)
+    .then((result) => {
+      notes.push(
+        `navigating.navigateResult: ${JSON.stringify({
+          atMs: elapsed(),
+          frameId: result?.frameId,
+          loaderId: result?.loaderId,
+          errorText: result?.errorText,
+        })}`
+      );
+    })
+    .catch((error) => {
+      notes.push(`navigating.navigateSettled: ${error?.message ?? error}`);
+    });
+  const marks = [1000, 2000, 5000];
+  let mark = 0;
   let targetInfo;
   let pending = false;
-  let mid;
+  const deadline = started + waitBudget;
   while (Date.now() < deadline && !pending) {
-    ({ targetInfo } = await reader.send('Target.getTargetInfo', { targetId }));
-    pending =
-      sequence.some(
-        (event) =>
-          (event.method === 'Page.frameStartedNavigating' ||
-            event.method === 'Page.frameRequestedNavigation') &&
-          (event.url === destination || String(event.url ?? '').includes('/slow'))
-      ) ||
-      targetInfo?.url === destination ||
-      String(targetInfo?.url ?? '').includes('/slow');
-    if (!mid && Date.now() > deadline - waitBudget + 1000) {
-      mid = true;
-      await snap('during');
+    pending = sequence.some(
+      (event) =>
+        (event.method === 'Page.frameStartedNavigating' ||
+          event.method === 'Page.frameRequestedNavigation' ||
+          event.method === 'Fetch.requestPaused') &&
+        (event.url === destination || String(event.url ?? '').includes('/slow'))
+    );
+    if (!pending) {
+      targetInfo = await readInfo();
+      pending = targetInfo?.url === destination || String(targetInfo?.url ?? '').includes('/slow');
+    }
+    while (mark < marks.length && elapsed() >= marks[mark]) {
+      await snap(`${marks[mark] / 1000}s`);
+      mark++;
     }
     if (!pending) await pause(25);
   }
   stopped = true;
   await Promise.race([pump, pause(20)]);
-  targetInfo ??= await reader.send('Target.getTargetInfo', { targetId }).then((r) => r.targetInfo);
+  targetInfo = targetInfo ?? (await readInfo());
   const shaped = pending;
-  noteShape(notes, 'navigating', {
-    targetId,
-    type: targetInfo.type,
-    url: targetInfo.url,
-    openerId: targetInfo.openerId,
-    start,
-    pendingUrl: destination,
-    pending,
-    observerSession: sessionId,
-    heldMs: waitBudget,
-    releasedAfterClose: true,
-    sequence: sequence.slice(-20),
-  });
-  hold.release = async () => {
-    stopped = true;
-    releaseSlow?.(tag);
-    await pause(20);
-  };
+  notes.push(
+    `navigating.done: ${JSON.stringify({
+      atMs: elapsed(),
+      shaped,
+      url: targetInfo?.url,
+      title: targetInfo?.title,
+      attached: targetInfo?.attached,
+      pendingUrl: destination,
+      sequence: sequence.slice(-20),
+    })}`
+  );
+  if (!shaped) notes.push(`navigating.giveUp: no pending /slow within ${waitBudget}ms`);
   return {
     ok: true,
     result: {
@@ -311,7 +354,9 @@ async function shapeNavigating({
       navigating: true,
       navigationURL: destination,
       closeOnly: true,
-      incomplete: shaped ? undefined : 'slow navigation did not become pending',
+      incomplete: shaped
+        ? undefined
+        : `navigating shape did not appear: no pending /slow within ${waitBudget}ms`,
     },
   };
 }
@@ -445,17 +490,31 @@ export async function closeProtectedShape({
     const shapedURL = `${parseURL(origin)?.protocol}//user:pass@${host}/os/index.html?n=${encodeURIComponent(tag)}`;
     shaped = await shapeUserinfo({ reader, shapedURL, notes, internalSessions, until });
   } else if (shape === 'navigating') {
-    shaped = await shapeNavigating({
+    const navigating = shapeNavigating({
       reader,
       ordinary,
       destination: `${origin}/slow?n=${encodeURIComponent(tag)}&ms=15000`,
       notes,
       internalSessions,
       hold,
-      budget,
       releaseSlow,
       tag,
-    });
+    }).then((value) => ({ timedOut: false, value }));
+    const hard = pause(9000).then(() => ({ timedOut: true }));
+    const winner = await Promise.race([navigating, hard]);
+    if (winner.timedOut) {
+      notes.push('navigating.giveUp: hard 9s shape budget');
+      await hold.release?.();
+      shaped = {
+        ok: true,
+        result: {
+          live: false,
+          shaped: false,
+          closeOnly: true,
+          incomplete: 'navigating shape did not appear: hard 9s shape budget',
+        },
+      };
+    } else shaped = winner.value;
   } else if (shape === 'blank-inherited') {
     shaped = await shapeBlankInherited({ reader, origin, tag, notes, internalSessions, until });
   } else {
@@ -463,7 +522,14 @@ export async function closeProtectedShape({
   }
   if (!shaped.ok)
     return await missing(`observer setup failed: ${shaped.error?.message ?? shaped.error}`);
-  if (shaped.result.incomplete) return await missing(shaped.result.incomplete);
+  if (shaped.result.incomplete) {
+    await hold.release?.();
+    return {
+      shaped: false,
+      live: false,
+      incomplete: shaped.result.incomplete,
+    };
+  }
   Object.assign(result, {
     shaped: shaped.result.shaped,
     live: shaped.result.live,

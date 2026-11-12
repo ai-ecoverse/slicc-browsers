@@ -125,8 +125,21 @@ export function emulatedGuard(browser, options = {}) {
   };
   const keepClosed = async (targetId) => {
     if (options.allowKeptClose) return false;
-    const { targetInfo } = await unguarded.send('Target.getTargetInfo', { targetId });
     learnFrames();
+    if (navigating.has(targetId))
+      return unclosableShape({
+        url: navigationURLs.get(targetId) ?? '',
+        documentURL: frames.get(targetId)?.url,
+        securityOrigin: frames.get(targetId)?.securityOrigin,
+        navigating: true,
+        navigationURL: navigationURLs.get(targetId),
+      });
+    const info = await Promise.race([
+      unguarded.send('Target.getTargetInfo', { targetId }),
+      pause(400).then(() => undefined),
+    ]);
+    if (!info) return false;
+    const { targetInfo } = info;
     let f = frames.get(targetId);
     if (!f) {
       const attached = await outcome(
@@ -135,9 +148,10 @@ export function emulatedGuard(browser, options = {}) {
       if (attached.ok) {
         observerSessions.set(attached.result.sessionId, targetId);
         await outcome(unguarded.send('Page.enable', {}, attached.result.sessionId));
-        const tree = await outcome(
-          unguarded.send('Page.getFrameTree', {}, attached.result.sessionId)
-        );
+        const tree = await Promise.race([
+          outcome(unguarded.send('Page.getFrameTree', {}, attached.result.sessionId)),
+          pause(400).then(() => ({ ok: false })),
+        ]);
         if (tree.ok) {
           f = tree.result.frameTree.frame;
           frames.set(targetId, f);
@@ -148,10 +162,11 @@ export function emulatedGuard(browser, options = {}) {
     const blank =
       !targetInfo.url || targetInfo.url === 'about:blank' || targetInfo.url === 'about:srcdoc';
     if (blank && (!securityOrigin || securityOrigin === '://') && targetInfo.openerId) {
-      const opener = await unguarded.send('Target.getTargetInfo', {
-        targetId: targetInfo.openerId,
-      });
-      securityOrigin = parseURL(opener.targetInfo.url)?.origin ?? opener.targetInfo.url;
+      const opener = await Promise.race([
+        unguarded.send('Target.getTargetInfo', { targetId: targetInfo.openerId }),
+        pause(400).then(() => undefined),
+      ]);
+      if (opener) securityOrigin = parseURL(opener.targetInfo.url)?.origin ?? opener.targetInfo.url;
     }
     return unclosableShape({
       url: targetInfo.url,

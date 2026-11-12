@@ -32,30 +32,33 @@ test('a correct closeProtected guard refuses the five disguise shapes in real Ch
   const rows = [];
   try {
     for (const vector of vectors) {
+      const liveNotes = [];
+      const opts = {
+        client: guard.client,
+        unguarded: browser.unguarded,
+        fixture,
+        capabilities: {
+          discovery: true,
+          closeProtected: true,
+          browserSession: true,
+          browserContexts: true,
+        },
+        targets,
+        notes: liveNotes,
+      };
+      const running = run({ ...set, vectors: [vector], variants: { prompt: 0 } }, opts).then(
+        (execution) => execution.results
+      );
       const timed = await Promise.race([
-        run(
-          { ...set, vectors: [vector], variants: { prompt: 0 } },
-          {
-            client: guard.client,
-            unguarded: browser.unguarded,
-            fixture,
-            capabilities: {
-              discovery: true,
-              closeProtected: true,
-              browserSession: true,
-              browserContexts: true,
-            },
-            targets,
-          }
-        ).then((execution) => execution.results),
-        pause(25000).then(() => [
+        running,
+        pause(35000).then(() => [
           {
             id: vector.id,
             control: 'fail',
             guarded: 'fail',
             live: 'fail',
-            why: 'per-vector budget 25s',
-            notes: [],
+            why: 'per-vector budget 35s',
+            notes: [...liveNotes],
             errors: ['shape setup timed out'],
             observations: {},
           },

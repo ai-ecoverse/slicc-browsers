@@ -158,7 +158,7 @@ class Execution {
     this.incomplete = [];
     this.unsupported = undefined;
     this.preSent = [];
-    this.notes = [];
+    this.notes = options.notes ?? [];
     this.answers = [];
     this.internalSessions = new Set();
     this.attachSettings = new Map();

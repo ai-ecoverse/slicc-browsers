@@ -27,11 +27,18 @@ const attackIds = [
   'C3.tab-blank',
   'C3.tab-protected.synthetic',
   'C3.tab-blank.synthetic',
-  'C3.tab-worker-leak',
   'C3.tab-iframe-leak',
+  'C3.protected-worker-dedicated',
+  'C3.protected-worker-shared',
+  'C3.protected-worker-framed',
 ];
 const attackVectors = set.vectors.filter((vector) => attackIds.includes(vector.id));
-const positiveStockIds = ['E7.init-world-error', 'E7.init-world-error.script'];
+const positiveStockIds = [
+  'E7.init-world-error',
+  'E7.init-world-error.script',
+  'C3.tab-worker-leak',
+  'C3.tab-service-worker-leak',
+];
 const base = { autoAttach: true, browserSession: true, browserContexts: true };
 const stockCaps = { ...base, stockSetup: true, syntheticAutoAttach: true, forwardAudit: true };
 
@@ -535,6 +542,12 @@ async function runCarry(mode, { vectors = carryVectors, rewrite } = {}) {
     guard = emulatedGuard(browser, {
       refuse: (method) => method === 'Page.createIsolatedWorld',
     });
+  } else if (mode === 'fail-document-refuse-world') {
+    guard = emulatedGuard(browser, {
+      failDocumentOrigins: [targets.seven, targets.vault],
+      refuse: (method) => method === 'Page.createIsolatedWorld',
+    });
+    pageEvidenceOnly(guard.client);
   } else if (mode === 'late-lying-refuse') {
     guard = {
       client: lateCommitClient(browser.client, targets, { refuse: true, delayMs: 400 }),
@@ -704,6 +717,55 @@ test('a correct refusal of createIsolatedWorld passes E7.isolated-foreign.script
     assert.equal(row.control, 'pass', JSON.stringify(row));
     assert.equal(row.live, 'pass', JSON.stringify(row));
     assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  }
+});
+
+test('a guard that fails the protected document without a load passes E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const settle = isolatedForeignScript[0].trigger.find((step) => step.settle)?.settle;
+  assert.ok(settle);
+  assert.equal(settle.required, undefined);
+  assert.ok(settle.or?.served || settle.ms !== undefined);
+  const { execution } = await runCarry('fail-document-refuse-world', {
+    vectors: isolatedForeignScript,
+  });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(
+      row.errors.filter((error) => String(error).includes('settle:')).length,
+      0,
+      JSON.stringify(row)
+    );
+  }
+  const required = isolatedForeignScript.map((vector) => ({
+    ...vector,
+    trigger: vector.trigger.map((step) =>
+      step.settle ? { settle: { ...step.settle, required: true } } : step
+    ),
+  }));
+  const { execution: requiredExecution } = await runCarry('fail-document-refuse-world', {
+    vectors: required,
+  });
+  for (const row of requiredExecution.results) {
+    assert.ok(
+      row.errors.some((error) => /settle: no load within /.test(String(error))),
+      JSON.stringify(row)
+    );
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  }
+});
+
+test('a guard that loads the protected document and admits the foreign world fails E7.isolated-foreign.script', {
+  timeout: 600000,
+}, async () => {
+  const { execution } = await runCarry('keep', { vectors: isolatedForeignScript });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.guarded.world, true, JSON.stringify(row));
   }
 });
 

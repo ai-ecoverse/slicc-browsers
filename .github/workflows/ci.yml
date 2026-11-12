@@ -34,7 +34,7 @@ jobs:
         npm run lint
       test-glob: test/integration/*.test.mjs
       shards: 4
-      timeout-minutes: 30
+      timeout-minutes: 45
       strict-tests: |
         **/*guard*.test.*
         **/*security*.test.*
@@ -52,6 +52,14 @@ jobs:
         test/integration/debugger-stage1-packaging.test.mjs
         test/integration/protected-premise.test.mjs
         test/integration/guard-refusable-nav.test.mjs
+        test/integration/guard-protected-worker.test.mjs
+        test/integration/guard-protected-worker-chrome-narrow.test.mjs
+        test/integration/guard-protected-worker-chrome-hide.test.mjs
+        test/integration/guard-protected-worker-chrome-hide-cut.test.mjs
+        test/integration/guard-protected-worker-chrome-admit.test.mjs
+        test/integration/guard-protected-worker-chrome-late.test.mjs
+        test/integration/guard-protected-worker-chrome-rewrite.test.mjs
+        test/integration/guard-protected-worker-chrome-rewrite-late.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

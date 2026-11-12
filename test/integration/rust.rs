@@ -202,6 +202,18 @@ fn the_protected_vectors_parse_and_round_trip() {
 }
 
 #[test]
+fn where_type_stays_string() {
+    let w = guard::Where {
+        opener_id: None,
+        url_prefix: None,
+        r#type: Some(String::from("page")),
+        types: vec!["page".into(), "iframe".into()],
+    };
+    assert_eq!(w.r#type.as_deref(), Some("page"));
+    assert_eq!(w.types, vec!["page".to_string(), "iframe".to_string()]);
+}
+
+#[test]
 fn the_guard_vectors_parse_and_round_trip() {
     let v = guard::vectors();
     assert_eq!(v.schema_version, slicc_browsers::SCHEMA);

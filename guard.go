@@ -107,12 +107,13 @@ type GuardVector struct {
 }
 
 type GuardObservation struct {
-	Means      string          `json:"means"`
-	Check      json.RawMessage `json:"check"`
-	DependsOn  []string        `json:"dependsOn,omitzero"`
-	Requires   []string        `json:"requires,omitempty"`
-	Unless     []string        `json:"unless,omitempty"`
-	EitherWhen json.RawMessage `json:"eitherWhen,omitempty"`
+	Means       string          `json:"means"`
+	Check       json.RawMessage `json:"check"`
+	DependsOn   []string        `json:"dependsOn,omitzero"`
+	Requires    []string        `json:"requires,omitempty"`
+	Unless      []string        `json:"unless,omitempty"`
+	EitherWhen  json.RawMessage `json:"eitherWhen,omitempty"`
+	AbsencePoll bool            `json:"absencePoll,omitempty"`
 }
 
 type GuardObservable struct {
@@ -180,6 +181,9 @@ type GuardStep struct {
 	Client         string          `json:"client,omitempty"`
 	RedirectSecret string          `json:"redirectSecret,omitempty"`
 	ErrorPage      string          `json:"errorPage,omitempty"`
+	SpawnWorker    string          `json:"spawnWorker,omitempty"`
+	Frame          string          `json:"frame,omitempty"`
+	ProbeSessions  json.RawMessage `json:"probeSessions,omitempty"`
 	Secret         string          `json:"secret,omitempty"`
 	Unparseable    bool            `json:"unparseable,omitempty"`
 	ExtensionWorld string          `json:"extensionWorld,omitempty"`
@@ -193,6 +197,7 @@ type GuardStep struct {
 	CDP            string          `json:"cdp,omitempty"`
 	Params         json.RawMessage `json:"params,omitempty"`
 	Refusable      bool            `json:"refusable,omitempty"`
+	ReuseSession   bool            `json:"reuseSession,omitempty"`
 	Refusal        *GuardRefusal   `json:"refusal,omitempty"`
 	Page           string          `json:"page,omitempty"`
 	URL            string          `json:"url,omitempty"`
@@ -217,9 +222,10 @@ type GuardStep struct {
 }
 
 type GuardWhere struct {
-	OpenerID  string `json:"openerId,omitempty"`
-	URLPrefix string `json:"urlPrefix,omitempty"`
-	Type      string `json:"type,omitempty"`
+	OpenerID  string   `json:"openerId,omitempty"`
+	URLPrefix string   `json:"urlPrefix,omitempty"`
+	Type      string   `json:"type,omitempty"`
+	Types     []string `json:"types,omitempty"`
 }
 
 type GuardRefusal struct {

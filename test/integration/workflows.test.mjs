@@ -92,7 +92,7 @@ test('the pipeline runs on its own runners with the repo lint, and nothing after
     assert.equal(input(name), undefined, name);
   assert.doesNotMatch(pipeline, /runs-on/);
   assert.equal(input('shards'), '4');
-  assert.equal(input('timeout-minutes'), '30');
+  assert.equal(input('timeout-minutes'), '45');
   assert.equal(pkg.engines.node, '>=24');
   const lint = block('lint');
   assert.match(

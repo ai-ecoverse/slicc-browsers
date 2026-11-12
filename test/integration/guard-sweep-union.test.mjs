@@ -185,6 +185,33 @@ test('a row must pass its control and fail its protection, unless it is a drivab
   assert.deepEqual(changed('apex', 'C6.read-cookies', {}), []);
 });
 
+test('a failing sweep row includes errors, notes and named call errors in the problem', () => {
+  const set = selection(published, 'vault');
+  const results = clean(set, 'vault').map((row) =>
+    row.id === 'C3.protected-worker-dedicated'
+      ? {
+          ...row,
+          control: 'fail',
+          why: 'control attachSession: got false, want true',
+          errors: ['attach failed without a refusal: No target with given id'],
+          notes: ['control protected worker dedicated: page p, worker w'],
+          calls: {
+            control: {
+              attach: { ok: false, error: 'No target with given id' },
+              spawn: { ok: true, exists: true },
+            },
+          },
+        }
+      : row
+  );
+  const problems = verdictProblems(set, ['vault'], results);
+  const hit = problems.find((problem) => problem.includes('C3.protected-worker-dedicated'));
+  assert.match(hit, /errors attach failed without a refusal/);
+  assert.match(hit, /notes control protected worker dedicated/);
+  assert.match(hit, /control attach error No target with given id/);
+  assert.match(hit, /control spawn exists=true/);
+});
+
 test('a missing, repeated or unselected row fails the sweep', () => {
   const set = selection(published, 'vault');
   const results = clean(set, 'vault');

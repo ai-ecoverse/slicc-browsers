@@ -1239,7 +1239,6 @@ class Execution {
         client: this.client,
         reader: this.reader,
         protectedOrigin: this.vars.target,
-        cross: this.vars.cross,
         ordinary: this.vars.ordinary,
         mode: step.protectedParentIframes,
         tag: this.vars.tag,

@@ -69,6 +69,12 @@ function collectIframes(infos, pageId) {
   );
 }
 
+function crossSiteOrdinary(ordinary) {
+  const url = new URL(ordinary);
+  url.hostname = 'cross.control.test';
+  return url.origin;
+}
+
 function matchLeak(info, rawIds, rawUrls, pageId, rawParentIds) {
   if (!info) return false;
   if (rawIds.has(info.targetId)) return true;
@@ -286,7 +292,6 @@ async function nestedCross({
   reader,
   client,
   protectedOrigin,
-  cross,
   ordinary,
   tag,
   notes,
@@ -295,8 +300,14 @@ async function nestedCross({
   internalSessions,
   eventStart,
 }) {
-  const mid = `${cross}/oopif-mid?inner=${encodeURIComponent(`${ordinary}/doc?n=inner-${tag}`)}&n=mid-${tag}`;
+  const midOrigin = crossSiteOrdinary(ordinary);
+  const mid = `${midOrigin}/oopif-mid?inner=${encodeURIComponent(`${ordinary}/doc?n=inner-${tag}`)}&n=mid-${tag}`;
   const page = `${protectedOrigin}/oopif-nest?mid=${encodeURIComponent(mid)}&n=host-${tag}`;
+  note(notes, 'protected-parent.nest-urls', {
+    host: protectedOrigin,
+    mid: midOrigin,
+    inner: ordinary,
+  });
   const opened = await openProtected(reader, page, notes, internalSessions);
   if (!opened.ok)
     return {
@@ -304,12 +315,23 @@ async function nestedCross({
     };
   if (opened.result.incomplete) return { live: false, incomplete: opened.result.incomplete };
   const { targetId: pageId, sessionId } = opened.result;
+  await until(
+    async () => {
+      const tree = await readTree(reader, sessionId);
+      return walkFrames(tree).length >= 3 ? tree : null;
+    },
+    Math.min(budget, 2000)
+  );
   const tree = await readTree(reader, sessionId);
   note(notes, 'protected-parent.frame-tree', {
     frames: walkFrames(tree).map((frame) => ({ id: frame.id, url: frame.url })),
   });
   const raw = await waitRawIframes(reader, pageId, budget, notes, 2);
   if (!raw) {
+    const late = await readTree(reader, sessionId);
+    note(notes, 'protected-parent.frame-tree-late', {
+      frames: walkFrames(late).map((frame) => ({ id: frame.id, url: frame.url })),
+    });
     return {
       live: true,
       incomplete: 'nested ordinary iframe targets did not appear in the raw leg within the budget',
@@ -428,7 +450,6 @@ export async function protectedParentIframes({
   client,
   reader,
   protectedOrigin,
-  cross,
   ordinary,
   mode,
   tag,
@@ -450,7 +471,6 @@ export async function protectedParentIframes({
           reader,
           client,
           protectedOrigin,
-          cross,
           ordinary,
           tag,
           notes,

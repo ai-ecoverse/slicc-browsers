@@ -2456,7 +2456,7 @@
           }
         },
         "closed": {
-          "means": "closeProtected view-source vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "means": "closeProtected view-source vault: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "shape",
             "path": "result.closed",
@@ -2539,7 +2539,7 @@
           }
         },
         "closed": {
-          "means": "closeProtected blob vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "means": "closeProtected blob vault: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "shape",
             "path": "result.closed",
@@ -2622,7 +2622,7 @@
           }
         },
         "closed": {
-          "means": "closeProtected userinfo seven UI: the unguarded reader still lists the tab after Target.closeTarget",
+          "means": "closeProtected userinfo seven UI: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "shape",
             "path": "result.closed",
@@ -2696,7 +2696,7 @@
           }
         },
         "closed": {
-          "means": "closeProtected navigating vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "means": "closeProtected navigating vault: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "shape",
             "path": "result.closed",
@@ -2750,7 +2750,7 @@
       "targets": ["vault"],
       "observe": {
         "shaped": {
-          "means": "closeProtected blank-inherited vault: window.open('') with userGesture created an about:blank page target whose opener is the vault tab",
+          "means": "closeProtected blank-inherited vault: an about:blank popup whose opener is a vault tab",
           "check": {
             "result": "shape",
             "path": "result.shaped",
@@ -2777,7 +2777,7 @@
           }
         },
         "closed": {
-          "means": "closeProtected blank-inherited vault: the unguarded reader still lists the tab after Target.closeTarget",
+          "means": "closeProtected blank-inherited vault: Target.closeTarget on the locked tab is answered with success and the tab is gone",
           "check": {
             "result": "shape",
             "path": "result.closed",

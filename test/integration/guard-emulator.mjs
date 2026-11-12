@@ -1002,7 +1002,17 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
+  const navigationURLs = new Map();
   let frameCursor = 0;
+  const markPending = (targetId, url) => {
+    if (!targetId) return;
+    navigating.add(targetId);
+    if (url !== undefined) navigationURLs.set(targetId, url);
+  };
+  const clearPending = (targetId) => {
+    navigating.delete(targetId);
+    navigationURLs.delete(targetId);
+  };
   const learnFrames = () => {
     for (const event of unguarded.events.slice(frameCursor)) {
       frameCursor++;
@@ -1011,7 +1021,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
         const f = event.params.frame;
         frames.set(owner.targetId, f);
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
         const previous = decisions.get(owner.targetId) ?? false;
         decisions.set(
           owner.targetId,
@@ -1027,12 +1037,12 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
         event.params.frameId === frames.get(owner.targetId)?.id &&
         !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
       )
-        navigating.add(owner.targetId);
+        markPending(owner.targetId, event.params.url ?? '');
       if (
         event.method === 'Page.frameStoppedLoading' &&
         event.params.frameId === frames.get(owner.targetId)?.id
       )
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
     }
   };
   const redactInfo = (info) => {

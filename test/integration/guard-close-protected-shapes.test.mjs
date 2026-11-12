@@ -232,6 +232,75 @@ test('a declared mutant that closes every kept disguise fails each row', async (
   assert.equal(execution.summary().pass, false);
 });
 
+test('a mutant that grants the first attach then refuses duplicates fails the attach-claiming rows', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = chrome();
+    const serverRelease = fixture.releaseSlow.bind(fixture);
+    fixture.releaseSlow = (n) => {
+      browser.releaseSlow(n);
+      return serverRelease(n);
+    };
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const granted = new Set();
+    const guarded = quarantining(browser, { closeProtected: true });
+    const raw = browser.connect();
+    const client = {
+      get events() {
+        return guarded.events;
+      },
+      send: async (method, params = {}, sessionId) => {
+        if (
+          method === 'Target.attachToTarget' &&
+          params.targetId &&
+          !granted.has(params.targetId)
+        ) {
+          granted.add(params.targetId);
+          return raw.send(method, params, sessionId);
+        }
+        return guarded.send(method, params, sessionId);
+      },
+    };
+    const execution = await run(
+      { ...set, vectors, variants: { prompt: 0 } },
+      {
+        client,
+        unguarded: browser.connect(),
+        fixture,
+        settleScale: 0.1,
+        capabilities: { discovery: true, closeProtected: true },
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          vault: origin('vault.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+    const attachClaiming = [
+      'C8.close-protected.view-source',
+      'C8.close-protected.blob',
+      'C8.close-protected.userinfo',
+      'C8.close-protected.blank-inherited',
+    ];
+    for (const id of attachClaiming) {
+      const row = execution.results.find((entry) => entry.id === id);
+      assert.equal(row.control, 'pass', id);
+      assert.equal(row.guarded, 'fail', `${id} ${JSON.stringify(row.observations?.guarded)}`);
+      assert.equal(row.observations.guarded.attachRefused, false, id);
+    }
+    const correct = await rows();
+    for (const row of correct.results) {
+      assert.equal(row.control, 'pass', row.id);
+      assert.equal(row.guarded, 'pass', `${row.id} ${JSON.stringify(row)}`);
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('a missing shape is incomplete on both legs, never a fail verdict', async () => {
   const execution = await rows({ denyShapes: true });
   assert.equal(execution.results.length, 5);

@@ -69,6 +69,7 @@ async function lockChecks({
   until,
   closeOnly,
   skipEvaluate,
+  attachRefused,
 }) {
   if (!closeOnly) {
     if (session && !skipEvaluate) {
@@ -82,9 +83,7 @@ async function lockChecks({
         )
       );
     }
-    result.attachRefused = refused(
-      await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }))
-    );
+    result.attachRefused = attachRefused;
   }
   const close = await outcome(client.send('Target.closeTarget', { targetId }));
   result.closeRefused = refused(close);
@@ -219,6 +218,7 @@ async function shapeNavigating({
       },
     };
   const { targetId, sessionId } = opened.result;
+  hold.targetId = targetId;
   const sequence = [];
   let cursor = reader.events.length;
   let stopped = false;
@@ -252,6 +252,7 @@ async function shapeNavigating({
     releaseSlow?.(tag);
     await pause(20);
   };
+  hold.abort = hold.release;
   await snap('0s');
   const pump = (async () => {
     while (!stopped) {
@@ -340,6 +341,8 @@ async function shapeNavigating({
       ok: true,
       result: {
         incomplete: `navigating shape did not appear: no pending /slow within ${waitBudget}ms`,
+        targetId,
+        sessionId,
       },
     };
   }
@@ -377,6 +380,7 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
       ok: true,
       result: {
         incomplete: `window.open failed: ${openedBlank.error?.message ?? openedBlank.error}`,
+        parentId: parent.targetId,
       },
     };
   let child;
@@ -399,7 +403,10 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
     });
     return {
       ok: true,
-      result: { incomplete: 'about:blank popup with opener was not created' },
+      result: {
+        incomplete: 'about:blank popup with opener was not created',
+        parentId: parent.targetId,
+      },
     };
   }
   const { sessionId } = await reader.send('Target.attachToTarget', {
@@ -415,10 +422,6 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
   } catch {
     securityOrigin = undefined;
   }
-  const originMatch =
-    securityOrigin === origin ||
-    securityOrigin === parseURL(origin)?.origin ||
-    child.openerId === parent.targetId;
   noteShape(notes, 'blank-inherited', {
     targetId: child.targetId,
     type: child.type,
@@ -433,8 +436,8 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
       targetId: child.targetId,
       sessionId,
       parentId: parent.targetId,
-      live: originMatch,
-      shaped: originMatch,
+      live: true,
+      shaped: true,
       securityOrigin,
     },
   };
@@ -455,13 +458,18 @@ export async function closeProtectedShape({
   const until = (check) => waitFor(check, budget);
   const result = {};
   const hold = {};
+  let shaped;
   const missing = async (reason) => {
+    hold.abort?.();
     await hold.release?.();
+    const targetId = shaped?.result?.targetId ?? hold.targetId;
+    const parentId = shaped?.result?.parentId ?? hold.parentId;
+    if (targetId) await outcome(reader.send('Target.closeTarget', { targetId }));
+    if (parentId) await outcome(reader.send('Target.closeTarget', { targetId: parentId }));
     return { ...result, incomplete: `close-protected-shape: ${reason}` };
   };
   if (!reader) return missing('missing unguarded reader');
   const origin = protectedOrigin;
-  let shaped;
   if (shape === 'view-source') {
     shaped = await shapeViewSource({
       reader,
@@ -491,10 +499,14 @@ export async function closeProtectedShape({
     const winner = await Promise.race([navigating, hard]);
     if (winner.timedOut) {
       notes.push('navigating.giveUp: hard 9s shape budget');
+      hold.abort?.();
       await hold.release?.();
       shaped = {
         ok: true,
-        result: { incomplete: 'navigating shape did not appear: hard 9s shape budget' },
+        result: {
+          incomplete: 'navigating shape did not appear: hard 9s shape budget',
+          targetId: hold.targetId,
+        },
       };
     } else shaped = winner.value;
   } else if (shape === 'blank-inherited') {
@@ -539,6 +551,7 @@ export async function closeProtectedShape({
       until,
       closeOnly,
       skipEvaluate: true,
+      attachRefused,
     });
     return result;
   } finally {

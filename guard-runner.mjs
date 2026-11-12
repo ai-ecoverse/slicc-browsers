@@ -194,7 +194,8 @@ class Execution {
     this.incomplete = [];
     this.unsupported = undefined;
     this.preSent = [];
-    this.notes = options.notes ?? [];
+    this.notes = [];
+    this.sharedNotes = Array.isArray(options.notes) ? options.notes : undefined;
     this.answers = [];
     this.internalSessions = new Set();
     this.attachSettings = new Map();
@@ -223,6 +224,10 @@ class Execution {
   note(message) {
     if (this.notes.length >= 80) this.notes.shift();
     Array.prototype.push.call(this.notes, message);
+    if (this.sharedNotes && this.sharedNotes !== this.notes) {
+      if (this.sharedNotes.length >= 80) this.sharedNotes.shift();
+      Array.prototype.push.call(this.sharedNotes, message);
+    }
   }
 
   installClientTrace() {

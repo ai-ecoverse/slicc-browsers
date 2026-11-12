@@ -275,9 +275,10 @@ export function emulatedGuard(browser, options = {}) {
     if (
       options.closeProtected &&
       event.params.resourceType === 'Document' &&
-      /(?:\?|&)hold=1(?:&|$)/.test(request.url ?? '')
+      /\/slow(?:\?|$)/.test(request.url ?? '')
     ) {
       markPending(owner.targetId, request.url ?? '');
+      await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
       return;
     }
     if (!blocked) {

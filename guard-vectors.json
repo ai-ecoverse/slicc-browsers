@@ -2710,7 +2710,7 @@
       "targets": ["vault"],
       "observe": {
         "shaped": {
-          "means": "closeProtected navigating vault: Fetch.requestPaused holds the vault Document while the committed URL is still the ordinary start page; pending until continueRequest after the close attempt",
+          "means": "closeProtected navigating vault: fixture /slow holds the vault Document response while Page.frameStartedNavigating (or target URL) shows the pending navigation; released after the close attempt",
           "check": {
             "result": "shape",
             "path": "result.shaped",

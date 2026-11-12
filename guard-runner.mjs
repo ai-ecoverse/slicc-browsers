@@ -918,6 +918,7 @@ class Execution {
           internalSessions: this.internalSessions,
           notes: this.notes,
           budget: this.bound(5000),
+          releaseSlow: this.options.fixture.releaseSlow,
         })
       );
     if (step.bfcacheRestore)

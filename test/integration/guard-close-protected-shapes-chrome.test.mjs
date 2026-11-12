@@ -48,13 +48,13 @@ test('a correct closeProtected guard refuses the five disguise shapes in real Ch
             targets,
           }
         ).then((execution) => execution.results),
-        pause(55000).then(() => [
+        pause(25000).then(() => [
           {
             id: vector.id,
             control: 'fail',
             guarded: 'fail',
             live: 'fail',
-            why: 'per-vector budget 55s',
+            why: 'per-vector budget 25s',
             notes: [],
             errors: ['shape setup timed out'],
             observations: {},

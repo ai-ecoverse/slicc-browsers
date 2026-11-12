@@ -98,6 +98,7 @@ export function chrome() {
       ...(failed ? { errorText: 'net::ERR_BLOCKED_BY_CLIENT' } : {}),
     };
   };
+  const slowHolds = new Map();
   async function navigate(tab, url, replace = false) {
     if (!tabs.has(tab.targetId)) return {};
     let failed = false;
@@ -114,6 +115,15 @@ export function chrome() {
         if (!failed && s.targetId === tab.targetId && s.fetch)
           failed = (await intercept(s.conn, sessionId, url, tab.targetId)) === 'fail';
       failed ||= interceptors.some((fails) => fails(tab, url));
+    }
+    const slow = URL.parse(url);
+    if (!failed && slow?.pathname === '/slow') {
+      const n = slow.searchParams.get('n') ?? '';
+      await new Promise((resolve) => {
+        slowHolds.set(n, resolve);
+      });
+      slowHolds.delete(n);
+      if (!tabs.has(tab.targetId)) return {};
     }
     try {
       return commit(tab, url, failed, replace);
@@ -255,7 +265,19 @@ export function chrome() {
   };
   const attached = (conn, targetId) =>
     [...sessions.values()].some((s) => s.conn === conn && s.targetId === targetId);
-  return { connect, commits, interceptors, attached, tabOf };
+  return {
+    connect,
+    commits,
+    interceptors,
+    attached,
+    tabOf,
+    releaseSlow: (n) => {
+      const resolve = slowHolds.get(String(n ?? ''));
+      if (!resolve) return false;
+      resolve();
+      return true;
+    },
+  };
 }
 
 export function quarantining(

@@ -150,10 +150,31 @@ function requestURL(req, scheme) {
   };
 }
 
+async function holdSlow({ req, res, url, p, html, entries, history, slows }) {
+  const n = p.get('n') ?? '';
+  const ms = Math.min(Math.max(Number(p.get('ms') ?? 15000) || 15000, 1), 60000);
+  const entry = {
+    time: Date.now(),
+    url: url.href,
+    method: req.method,
+    headers: { ...req.headers },
+  };
+  entries.push(entry);
+  history.push(entry);
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    slows.set(n, { resolve, timer });
+  });
+  slows.delete(n);
+  if (res.writableEnded) return;
+  return html('slow', `<p>slow ${escape(n)}</p>`);
+}
+
 export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency } = {}) {
   let entries = [];
   const history = [];
   const redirects = new Map();
+  const slows = new Map();
   const redirectSecret = async ({ path, host = '', search = '', remove, ...value }) => {
     if (
       typeof path !== 'string' ||
@@ -164,6 +185,14 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
     const key = `${host}${path}${search}`;
     if (remove) redirects.delete(key);
     else redirects.set(key, value);
+  };
+  const releaseSlow = (n) => {
+    const entry = slows.get(String(n ?? ''));
+    if (!entry) return false;
+    clearTimeout(entry.timer);
+    entry.resolve();
+    slows.delete(String(n ?? ''));
+    return true;
   };
   const scheme = tls ? 'https' : 'http';
   const handler = async (req, res) => {
@@ -186,6 +215,10 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
         'text/html',
         headers
       );
+    if (req.method === 'GET' && url.pathname === '/slow') {
+      await holdSlow({ req, res, url, p, html, entries, history, slows });
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/log') {
       const from = Number(p.get('since') ?? 0);
       if (!Number.isInteger(from) || from < 0 || from > history.length)
@@ -223,6 +256,7 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
   return {
     redirects,
     redirectSecret,
+    releaseSlow,
     port: address.port,
     origin: `${scheme}://${host}:${address.port}`,
     log: () => structuredClone(entries),
@@ -231,6 +265,7 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
     },
     close: () =>
       new Promise((resolve, reject) => {
+        for (const n of [...slows.keys()]) releaseSlow(n);
         server.closeAllConnections();
         server.close((error) => (error ? reject(error) : resolve()));
       }),

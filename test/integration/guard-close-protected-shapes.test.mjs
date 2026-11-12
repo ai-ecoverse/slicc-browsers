@@ -135,6 +135,11 @@ async function rows({
   const fixture = await fixtureServer();
   try {
     const browser = chrome();
+    const serverRelease = fixture.releaseSlow.bind(fixture);
+    fixture.releaseSlow = (n) => {
+      browser.releaseSlow(n);
+      return serverRelease(n);
+    };
     const origin = (host) => `http://${host}:${fixture.port}`;
     return await run(
       { ...set, vectors, variants: { prompt: 0 } },

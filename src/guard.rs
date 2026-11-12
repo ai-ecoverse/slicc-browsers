@@ -210,6 +210,11 @@ pub struct Step {
     pub unparseable: bool,
     #[serde(rename = "errorPage", skip_serializing_if = "Option::is_none")]
     pub error_page: Option<String>,
+    #[serde(
+        rename = "closeProtectedShape",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub close_protected_shape: Option<String>,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

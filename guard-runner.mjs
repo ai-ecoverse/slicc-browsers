@@ -3,6 +3,7 @@ import { fixtureClient, prepareFixture } from './fixture-client.mjs';
 export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
+import { closeProtectedShape } from './close-protected-shape.mjs';
 import { extensionFrame } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
@@ -194,6 +195,7 @@ class Execution {
     this.unsupported = undefined;
     this.preSent = [];
     this.notes = [];
+    this.sharedNotes = Array.isArray(options.notes) ? options.notes : undefined;
     this.answers = [];
     this.internalSessions = new Set();
     this.attachSettings = new Map();
@@ -222,6 +224,10 @@ class Execution {
   note(message) {
     if (this.notes.length >= 80) this.notes.shift();
     Array.prototype.push.call(this.notes, message);
+    if (this.sharedNotes && this.sharedNotes !== this.notes) {
+      if (this.sharedNotes.length >= 80) this.sharedNotes.shift();
+      Array.prototype.push.call(this.sharedNotes, message);
+    }
   }
 
   installClientTrace() {
@@ -894,6 +900,7 @@ class Execution {
       'redirectSecret',
       'unparseable',
       'errorPage',
+      'closeProtectedShape',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -902,9 +909,14 @@ class Execution {
     if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
-      ['errorPage', 'redirectSecret', 'extensionFrame', 'frameRead', 'bfcacheRestore'].includes(
-        probe
-      ) &&
+      [
+        'errorPage',
+        'closeProtectedShape',
+        'redirectSecret',
+        'extensionFrame',
+        'frameRead',
+        'bfcacheRestore',
+      ].includes(probe) &&
       out.ok &&
       out.result?.incomplete
     )
@@ -1000,9 +1012,14 @@ class Execution {
       return;
     }
     if (step.client) return outcome(this.exit());
-    if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
-    if (step.spawnWorker) return this.spawnWorker(step);
-    if (step.probeSessions) return this.probeSessions(step);
+    if (
+      step.redirectSecret ||
+      step.errorPage ||
+      step.closeProtectedShape ||
+      step.spawnWorker ||
+      step.probeSessions
+    )
+      return this.stepProbe(step, session);
     if (step.bfcacheRestore)
       return outcome(
         bfcacheRestore({
@@ -1143,6 +1160,13 @@ class Execution {
     }
   }
 
+  stepProbe(step, session) {
+    if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
+    if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
+    if (step.spawnWorker) return this.spawnWorker(step);
+    return this.probeSessions(step);
+  }
+
   async originProbe(step, session) {
     if (step.redirectSecret) {
       this.internalSessions.add(session);
@@ -1183,6 +1207,23 @@ class Execution {
         discovery: supported(['discovery'], this.options.capabilities),
         notes: this.notes,
         budget: this.bound(5000),
+      })
+    );
+  }
+
+  runCloseProtectedShape(step) {
+    return outcome(
+      closeProtectedShape({
+        client: this.client,
+        reader: this.reader,
+        ordinary: this.vars.ordinary,
+        protectedOrigin: this.vars.target,
+        shape: step.closeProtectedShape,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        releaseSlow: this.options.fixture.releaseSlow,
       })
     );
   }
@@ -2175,7 +2216,7 @@ const observerRequired = (check) => {
 const needsObserver = (vector) =>
   vector.control.via === 'unguarded' ||
   allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
-    (step) => step.isolatedWorld || step.observer || step.spawnWorker
+    (step) => step.isolatedWorld || step.observer || step.spawnWorker || step.closeProtectedShape
   ) ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(

@@ -551,6 +551,22 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["closeProtectedShape", "as"],
+          "properties": {
+            "closeProtectedShape": {
+              "enum": ["view-source", "blob", "userinfo", "navigating", "blank-inherited"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["spawnWorker", "as"],
           "properties": {
             "spawnWorker": {

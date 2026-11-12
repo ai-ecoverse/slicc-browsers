@@ -444,6 +444,58 @@ function wrapListInfo(client, mode) {
   return client;
 }
 
+function wrapOrdered(client, method, behaviors) {
+  const send = client.send.bind(client);
+  let index = 0;
+  client.send = async (name, params, sessionId) => {
+    if (name === method) {
+      const id = params?.targetId ?? '';
+      if (
+        (method === 'Target.attachToTarget' || method === 'Target.getTargetInfo') &&
+        !/^I\d/.test(id)
+      )
+        return send(name, params, sessionId);
+      const behavior = behaviors[Math.min(index, behaviors.length - 1)];
+      index += 1;
+      if (behavior === 'timeout') throw new Error('timeout: no answer');
+      if (behavior === 'refused') throw new Error('slicc: refused: protected target');
+    }
+    return send(name, params, sessionId);
+  };
+  return client;
+}
+
+async function runProtectedParent(guard, browser, fixture, targets) {
+  return run(
+    {
+      ...set,
+      vectors: vectors.filter((v) => v.id === 'C3.protected-parent-iframes'),
+      variants: { prompt: 0 },
+    },
+    {
+      client: guard.client,
+      unguarded: browser.unguarded,
+      fixture,
+      settleScale: 0.1,
+      capabilities: { discovery: true, browserSession: true },
+      targets,
+    }
+  );
+}
+
+function protectedParentTargets(fixture) {
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  return {
+    ordinary: origin('ordinary.example.test'),
+    seven: origin('seven.sliccy.ai'),
+    vault: origin('vault.sliccy.ai'),
+    own: origin('client.example.test'),
+    client: origin('client.example.test'),
+    cross: origin('cross.test'),
+    log: origin('log.example.test'),
+  };
+}
+
 test('unanswered getTargets and getTargetInfo leave protected-parent incomplete, not a pass', async () => {
   const fixture = await fixtureServer();
   try {
@@ -503,43 +555,130 @@ test('slicc refused getTargets and getTargetInfo are valid negatives for protect
   const fixture = await fixtureServer();
   try {
     const browser = nestedFake();
-    const origin = (host) => `http://${host}:${fixture.port}`;
-    const targets = {
-      ordinary: origin('ordinary.example.test'),
-      seven: origin('seven.sliccy.ai'),
-      vault: origin('vault.sliccy.ai'),
-      own: origin('client.example.test'),
-      client: origin('client.example.test'),
-      cross: origin('cross.test'),
-      log: origin('log.example.test'),
-    };
+    const targets = protectedParentTargets(fixture);
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: [targets.seven, targets.vault],
     });
     wrapListInfo(guard.client, 'refused');
     try {
-      const execution = await run(
-        {
-          ...set,
-          vectors: vectors.filter((v) => v.id === 'C3.protected-parent-iframes'),
-          variants: { prompt: 0 },
-        },
-        {
-          client: guard.client,
-          unguarded: browser.unguarded,
-          fixture,
-          settleScale: 0.1,
-          capabilities: { discovery: true, browserSession: true },
-          targets,
-        }
-      );
+      const execution = await runProtectedParent(guard, browser, fixture, targets);
       for (const row of execution.results) {
         assert.deepEqual(
           [row.control, row.guarded, row.live],
           ['pass', 'pass', 'pass'],
           describe(row)
         );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('first getTargetInfo refused and second timed out leaves protected-parent incomplete', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const targets = protectedParentTargets(fixture);
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    wrapOrdered(guard.client, 'Target.getTargetInfo', ['refused', 'timeout']);
+    try {
+      const execution = await runProtectedParent(guard, browser, fixture, targets);
+      for (const row of execution.results) {
+        assert.equal(row.control, 'pass', describe(row));
+        assert.notEqual(row.guarded, 'pass', describe(row));
+        assert.ok([row.guarded, row.live].includes('incomplete'), describe(row));
+        assert.match(
+          `${row.why ?? ''};${(row.incomplete ?? []).join(';')}`,
+          /Target\.getTargetInfo unanswered/
+        );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('first attachToTarget refused and second timed out leaves protected-parent incomplete', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const targets = protectedParentTargets(fixture);
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    wrapOrdered(guard.client, 'Target.attachToTarget', ['refused', 'timeout']);
+    try {
+      const execution = await runProtectedParent(guard, browser, fixture, targets);
+      for (const row of execution.results) {
+        assert.equal(row.control, 'pass', describe(row));
+        assert.notEqual(row.guarded, 'pass', describe(row));
+        assert.ok([row.guarded, row.live].includes('incomplete'), describe(row));
+        assert.match(
+          `${row.why ?? ''};${(row.incomplete ?? []).join(';')}`,
+          /Target\.attachToTarget unanswered/
+        );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('both attachToTarget refusals are valid negatives for protected-parent', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const targets = protectedParentTargets(fixture);
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    wrapOrdered(guard.client, 'Target.attachToTarget', ['refused', 'refused']);
+    try {
+      const execution = await runProtectedParent(guard, browser, fixture, targets);
+      for (const row of execution.results) {
+        assert.deepEqual(
+          [row.control, row.guarded, row.live],
+          ['pass', 'pass', 'pass'],
+          describe(row)
+        );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('first getTargetInfo leak and second timeout fails protected-parent', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const targets = protectedParentTargets(fixture);
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+      redactIframeUrlKeepId: true,
+    });
+    wrapOrdered(guard.client, 'Target.getTargetInfo', ['leak', 'timeout']);
+    try {
+      const execution = await runProtectedParent(guard, browser, fixture, targets);
+      for (const row of execution.results) {
+        assert.equal(row.control, 'pass', describe(row));
+        assert.equal(row.guarded, 'fail', describe(row));
       }
     } finally {
       await guard.stop();

@@ -196,20 +196,20 @@ async function measureInfo(client, rawIds, rawUrls, pageId, rawParentIds) {
   let out;
   let leak = false;
   let unanswered = false;
+  let unansweredId;
   for (const targetId of rawIds) {
     const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
-    if (!out) {
-      out = info;
-      if (!answered(info)) {
-        unanswered = true;
-        break;
-      }
+    out ??= info;
+    if (!answered(info)) {
+      unanswered = true;
+      unansweredId ??= targetId;
+      continue;
     }
     if (!info.ok) continue;
     const targetInfo = info.result?.targetInfo;
     if (matchLeak(targetInfo, rawIds, rawUrls, pageId, rawParentIds)) leak = true;
   }
-  return { out, leak, unanswered };
+  return { out, leak, unanswered, unansweredId };
 }
 
 async function measureAttach(client, rawIds) {
@@ -217,16 +217,16 @@ async function measureAttach(client, rawIds) {
   let attachSession = false;
   let attachRefused = false;
   let unanswered = false;
+  let unansweredId;
   for (const targetId of rawIds) {
     const attached = await outcome(
       client.send('Target.attachToTarget', { targetId, flatten: true })
     );
-    if (!out) {
-      out = attached;
-      if (!answered(attached)) {
-        unanswered = true;
-        break;
-      }
+    out ??= attached;
+    if (!answered(attached)) {
+      unanswered = true;
+      unansweredId ??= targetId;
+      continue;
     }
     if (attached.ok && attached.result?.sessionId) {
       attachSession = true;
@@ -234,21 +234,18 @@ async function measureAttach(client, rawIds) {
       await outcome(
         client.send('Target.detachFromTarget', { sessionId: attached.result.sessionId })
       );
-      break;
+      continue;
     }
     if (refused(attached)) attachRefused = true;
   }
-  return { out, attachSession, attachRefused, unanswered };
+  return { out, attachSession, attachRefused, unanswered, unansweredId };
 }
 
 function takeFirst(slot, sample, apply) {
-  if (!slot.out) {
-    slot.out = sample.out;
-    slot.unanswered = sample.unanswered;
-    if (!sample.unanswered) apply(sample);
-    return;
-  }
-  if (!slot.unanswered) apply(sample);
+  if (!slot.out) slot.out = sample.out;
+  slot.unanswered ||= sample.unanswered;
+  slot.unansweredId ??= sample.unansweredId;
+  apply(sample);
 }
 
 function settleArm(result, key, unanswered, label, missing, fallback) {
@@ -279,12 +276,12 @@ async function measureClient({
     const listed = await measureList(client, rawIds, rawUrls, pageId, rawParentIds);
     takeFirst(list, listed, (sample) => {
       if (sample.leak) result.iframeListed = true;
-      else result.iframeListed ??= false;
+      else if (!sample.unanswered) result.iframeListed ??= false;
     });
     const informed = await measureInfo(client, rawIds, rawUrls, pageId, rawParentIds);
     takeFirst(info, informed, (sample) => {
       if (sample.leak) result.infoRead = true;
-      else result.infoRead ??= false;
+      else if (!sample.unanswered) result.infoRead ??= false;
     });
     if (
       discovery &&
@@ -293,15 +290,16 @@ async function measureClient({
       result.eventsSeen = true;
       firstEvents = true;
     }
-    if (
-      result.attachSession === undefined &&
-      result.attachRefused === undefined &&
-      !attach.unanswered
-    ) {
+    if (result.attachSession !== true) {
       const attached = await measureAttach(client, rawIds);
       takeFirst(attach, attached, (sample) => {
-        result.attachSession = sample.attachSession;
-        result.attachRefused = sample.attachRefused;
+        if (sample.attachSession) {
+          result.attachSession = true;
+          result.attachRefused = false;
+        } else if (!sample.unanswered) {
+          result.attachSession = sample.attachSession;
+          result.attachRefused = sample.attachRefused;
+        }
       });
     }
     if (
@@ -317,14 +315,23 @@ async function measureClient({
   settleArm(result, 'iframeListed', list.unanswered, 'Target.getTargets unanswered', missing, {
     iframeListed: false,
   });
-  settleArm(result, 'infoRead', info.unanswered, 'Target.getTargetInfo unanswered', missing, {
-    infoRead: false,
-  });
+  settleArm(
+    result,
+    'infoRead',
+    info.unanswered,
+    info.unansweredId
+      ? `Target.getTargetInfo unanswered (${info.unansweredId})`
+      : 'Target.getTargetInfo unanswered',
+    missing,
+    { infoRead: false }
+  );
   settleArm(
     result,
     'attachSession',
     attach.unanswered,
-    'Target.attachToTarget unanswered',
+    attach.unansweredId
+      ? `Target.attachToTarget unanswered (${attach.unansweredId})`
+      : 'Target.attachToTarget unanswered',
     missing,
     { attachSession: false, attachRefused: false }
   );
@@ -364,6 +371,8 @@ async function nestedCross({
     host: protectedOrigin,
     mid: cross,
     inner: ordinary,
+    crossMapping:
+      '{cross} must be a different registrable domain from {ordinary} (e.g. cross.test); same-site {cross} leaves nested iframe targets missing and this row incomplete',
   });
   const opened = await openProtected(reader, page, notes, internalSessions);
   if (!opened.ok)

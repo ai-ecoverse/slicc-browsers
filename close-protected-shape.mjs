@@ -188,13 +188,7 @@ async function shapeUserinfo({ reader, shapedURL, notes, internalSessions, until
   if (!live && info?.url?.includes('/os/') && !info.url.includes('@'))
     return {
       ok: true,
-      result: {
-        targetId,
-        sessionId,
-        live: false,
-        shaped: false,
-        incomplete: 'userinfo stripped from top-level target URL',
-      },
+      result: { incomplete: 'userinfo stripped from top-level target URL' },
     };
   return { ok: true, result: { targetId, sessionId, live, shaped: live } };
 }
@@ -221,9 +215,6 @@ async function shapeNavigating({
     return {
       ok: true,
       result: {
-        live: false,
-        shaped: false,
-        closeOnly: true,
         incomplete: `navigating shape did not appear: observer setup ${opened?.error?.message ?? 'timed out'}`,
       },
     };
@@ -343,20 +334,25 @@ async function shapeNavigating({
       sequence: sequence.slice(-20),
     })}`
   );
-  if (!shaped) notes.push(`navigating.giveUp: no pending /slow within ${waitBudget}ms`);
+  if (!shaped) {
+    notes.push(`navigating.giveUp: no pending /slow within ${waitBudget}ms`);
+    return {
+      ok: true,
+      result: {
+        incomplete: `navigating shape did not appear: no pending /slow within ${waitBudget}ms`,
+      },
+    };
+  }
   return {
     ok: true,
     result: {
       targetId,
       sessionId,
-      live: shaped,
-      shaped,
+      live: true,
+      shaped: true,
       navigating: true,
       navigationURL: destination,
       closeOnly: true,
-      incomplete: shaped
-        ? undefined
-        : `navigating shape did not appear: no pending /slow within ${waitBudget}ms`,
     },
   };
 }
@@ -380,10 +376,6 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
     return {
       ok: true,
       result: {
-        targetId: parent.targetId,
-        sessionId: parent.sessionId,
-        live: false,
-        shaped: false,
         incomplete: `window.open failed: ${openedBlank.error?.message ?? openedBlank.error}`,
       },
     };
@@ -407,13 +399,7 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
     });
     return {
       ok: true,
-      result: {
-        targetId: parent.targetId,
-        sessionId: parent.sessionId,
-        live: false,
-        shaped: false,
-        incomplete: 'about:blank popup with opener was not created',
-      },
+      result: { incomplete: 'about:blank popup with opener was not created' },
     };
   }
   const { sessionId } = await reader.send('Target.attachToTarget', {
@@ -507,12 +493,7 @@ export async function closeProtectedShape({
       await hold.release?.();
       shaped = {
         ok: true,
-        result: {
-          live: false,
-          shaped: false,
-          closeOnly: true,
-          incomplete: 'navigating shape did not appear: hard 9s shape budget',
-        },
+        result: { incomplete: 'navigating shape did not appear: hard 9s shape budget' },
       };
     } else shaped = winner.value;
   } else if (shape === 'blank-inherited') {
@@ -522,19 +503,12 @@ export async function closeProtectedShape({
   }
   if (!shaped.ok)
     return await missing(`observer setup failed: ${shaped.error?.message ?? shaped.error}`);
-  if (shaped.result.incomplete) {
-    await hold.release?.();
-    return {
-      shaped: false,
-      live: false,
-      incomplete: shaped.result.incomplete,
-    };
-  }
+  if (shaped.result.incomplete) return await missing(shaped.result.incomplete);
+  if (!shaped.result.live) return await missing(`shape ${shape} did not appear`);
   Object.assign(result, {
     shaped: shaped.result.shaped,
     live: shaped.result.live,
   });
-  if (!shaped.result.live) return await missing(`shape ${shape} did not appear`);
   const { targetId } = shaped.result;
   const closeOnly = shaped.result.closeOnly === true;
   const skipEvaluate = shape === 'blank-inherited';

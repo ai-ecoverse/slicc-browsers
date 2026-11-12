@@ -130,11 +130,12 @@ async function rows({
   closeProtected = true,
   refuseClose = false,
   allowKeptClose = false,
+  denyShapes = false,
   capabilities = { closeProtected: true },
 } = {}) {
   const fixture = await fixtureServer();
   try {
-    const browser = chrome();
+    const browser = chrome({ denyShapes });
     const serverRelease = fixture.releaseSlow.bind(fixture);
     fixture.releaseSlow = (n) => {
       browser.releaseSlow(n);
@@ -196,4 +197,16 @@ test('a declared mutant that closes every kept disguise fails each row', async (
     assert.equal(row.guarded, 'fail', `${row.id} ${JSON.stringify(row.observations?.guarded)}`);
   }
   assert.equal(execution.summary().pass, false);
+});
+
+test('a missing shape is incomplete on both legs, never a fail verdict', async () => {
+  const execution = await rows({ denyShapes: true });
+  assert.equal(execution.results.length, 5);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'incomplete', `${row.id} control ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'incomplete', `${row.id} guarded ${JSON.stringify(row)}`);
+    assert.notEqual(row.control, 'fail', row.id);
+    assert.notEqual(row.guarded, 'fail', row.id);
+    assert.match(JSON.stringify(row.incomplete ?? []), /closeProtectedShape/, row.id);
+  }
 });

@@ -9,7 +9,7 @@ const vault = (url) => {
 };
 const protectedHost = (url) => seven(url) || vault(url) || keptDocument(url);
 
-export function chrome() {
+export function chrome({ denyShapes = false } = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const paused = new Map();
@@ -90,7 +90,7 @@ export function chrome() {
         () => navigate(tab, page.searchParams.get('to'), true),
         Number(page.searchParams.get('defer'))
       );
-    if (!failed && page?.pathname === '/blob-nav')
+    if (!failed && !denyShapes && page?.pathname === '/blob-nav')
       setTimeout(() => navigate(tab, `blob:${originOf(url)}/${++next}`, true), 0);
     return {
       frameId: tab.targetId,
@@ -101,6 +101,20 @@ export function chrome() {
   const slowHolds = new Map();
   async function navigate(tab, url, replace = false) {
     if (!tabs.has(tab.targetId)) return {};
+    if (denyShapes) {
+      if (url.startsWith('view-source:')) url = url.slice('view-source:'.length);
+      try {
+        const stripped = new URL(url);
+        if (stripped.username || stripped.password) {
+          stripped.username = '';
+          stripped.password = '';
+          url = stripped.href;
+        }
+      } catch {
+        undefined;
+      }
+      if (URL.parse(url)?.pathname === '/slow') return {};
+    }
     let failed = false;
     const httpish = /^(https?:|view-source:)/.test(url);
     if (httpish) {
@@ -164,7 +178,7 @@ export function chrome() {
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
     if (expression === 'location.href') return { result: { type: 'string', value: tab.frame.url } };
     if (expression === "window.open('')" || expression === "window.open(''); undefined") {
-      openBlank(tab);
+      if (!denyShapes) openBlank(tab);
       return { result: { type: 'undefined' } };
     }
     return { result: { type: 'undefined' } };

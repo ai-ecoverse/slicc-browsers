@@ -617,10 +617,10 @@ export function emulatedGuard(browser, options = {}) {
       catalog &&
       !options.catalogAttachOnly &&
       targetId &&
-      method === 'Target.closeTarget' &&
       options.closeProtected &&
-      !options.refuseClose &&
-      (await keepClosed(targetId))
+      (method === 'Target.closeTarget'
+        ? !options.refuseClose && (await keepClosed(targetId))
+        : method === 'Target.attachToTarget' && (await keepClosed(targetId)))
     )
       throw refusal('protected target');
     if (

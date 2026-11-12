@@ -31562,6 +31562,207 @@
         "workerReachable": false
       },
       "designDependent": ["attachRefused", "workerAttached"]
+    },
+
+    {
+      "id": "C3.protected-parent-iframes",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a protected page frames a cross-site ordinary iframe that frames a further ordinary iframe; the guarded client must not list, discover, or attach to either ordinary iframe target"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "protectedParentIframes": "nested-cross",
+          "as": "probe",
+          "requires": ["browserSession"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "requires": ["browserSession"],
+      "observe": {
+        "iframeListed": {
+          "means": "C3.protected-parent-iframes: Target.getTargets through the client shows an ordinary iframe under the protected parent by id, URL, or parentId chain",
+          "check": {
+            "result": "probe",
+            "path": "result.iframeListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "infoRead": {
+          "means": "C3.protected-parent-iframes: Target.getTargetInfo through the client returns either ordinary iframe under the protected parent",
+          "check": {
+            "result": "probe",
+            "path": "result.infoRead",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C3.protected-parent-iframes: a discovery event carries either ordinary iframe under the protected parent",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C3.protected-parent-iframes: Target.attachToTarget on a raw ordinary iframe id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C3.protected-parent-iframes: Target.attachToTarget on a raw ordinary iframe id was refused",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded reader opened the protected host page",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "iframeListed": true,
+          "infoRead": true,
+          "eventsSeen": true,
+          "attachSession": true,
+          "attachRefused": false
+        }
+      },
+      "expected": {
+        "iframeListed": false,
+        "infoRead": false,
+        "eventsSeen": false,
+        "attachSession": false,
+        "attachRefused": true
+      }
+    },
+    {
+      "id": "C3.protected-parent-srcdoc",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "a seven page frames a sandboxed srcdoc iframe without allow-same-origin; when Chrome gives it its own target the guarded client must hide it, otherwise the row is incomplete with that evidence"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "protectedParentIframes": "sandboxed-srcdoc",
+          "as": "probe",
+          "requires": ["browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "requires": ["browserSession"],
+      "observe": {
+        "iframeListed": {
+          "means": "C3.protected-parent-srcdoc: Target.getTargets through the client shows the sandboxed srcdoc iframe under seven by id, URL, or parentId chain",
+          "check": {
+            "result": "probe",
+            "path": "result.iframeListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "infoRead": {
+          "means": "C3.protected-parent-srcdoc: Target.getTargetInfo through the client returns the sandboxed srcdoc iframe under seven",
+          "check": {
+            "result": "probe",
+            "path": "result.infoRead",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C3.protected-parent-srcdoc: a discovery event carries the sandboxed srcdoc iframe under seven",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C3.protected-parent-srcdoc: Target.attachToTarget on the raw srcdoc iframe id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C3.protected-parent-srcdoc: Target.attachToTarget on the raw srcdoc iframe id was refused",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded reader opened the protected host page",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "iframeListed": true,
+          "infoRead": true,
+          "eventsSeen": true,
+          "attachSession": true,
+          "attachRefused": false
+        }
+      },
+      "expected": {
+        "iframeListed": false,
+        "infoRead": false,
+        "eventsSeen": false,
+        "attachSession": false,
+        "attachRefused": true
+      }
     }
   ]
 }

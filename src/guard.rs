@@ -215,6 +215,11 @@ pub struct Step {
         skip_serializing_if = "Option::is_none"
     )]
     pub close_protected_shape: Option<String>,
+    #[serde(
+        rename = "protectedParentIframes",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub protected_parent_iframes: Option<String>,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

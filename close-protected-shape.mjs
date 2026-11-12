@@ -511,13 +511,9 @@ export async function closeProtectedShape({
   });
   const { targetId } = shaped.result;
   const closeOnly = shaped.result.closeOnly === true;
-  const skipEvaluate = shape === 'blank-inherited';
   const { session, attachRefused } = await attachClient(client, targetId);
   if (!session) {
-    if (!closeOnly) {
-      result.attachRefused = attachRefused;
-      if (!skipEvaluate) result.evaluateRefused = attachRefused;
-    }
+    if (!closeOnly) result.attachRefused = attachRefused;
     const close = await outcome(client.send('Target.closeTarget', { targetId }));
     result.closeRefused = refused(close);
     result.closed =
@@ -541,7 +537,7 @@ export async function closeProtectedShape({
       result,
       until,
       closeOnly,
-      skipEvaluate,
+      skipEvaluate: true,
     });
     return result;
   } finally {

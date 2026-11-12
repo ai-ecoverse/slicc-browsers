@@ -2437,15 +2437,6 @@
             "observer": "client"
           }
         },
-        "evaluateRefused": {
-          "means": "closeProtected view-source vault: Runtime.evaluate through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.evaluateRefused",
-            "equals": true,
-            "observer": "client"
-          }
-        },
         "attachRefused": {
           "means": "closeProtected view-source vault: Target.attachToTarget through the client is refused",
           "check": {
@@ -2486,7 +2477,6 @@
         "via": "unguarded",
         "expected": {
           "shaped": true,
-          "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
           "closed": true
@@ -2494,7 +2484,6 @@
       },
       "expected": {
         "shaped": true,
-        "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
         "closed": false
@@ -2527,15 +2516,6 @@
           "check": {
             "result": "shape",
             "path": "result.shaped",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "evaluateRefused": {
-          "means": "closeProtected blob vault: Runtime.evaluate through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.evaluateRefused",
             "equals": true,
             "observer": "client"
           }
@@ -2580,7 +2560,6 @@
         "via": "unguarded",
         "expected": {
           "shaped": true,
-          "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
           "closed": true
@@ -2588,7 +2567,6 @@
       },
       "expected": {
         "shaped": true,
-        "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
         "closed": false
@@ -2621,15 +2599,6 @@
           "check": {
             "result": "shape",
             "path": "result.shaped",
-            "equals": true,
-            "observer": "client"
-          }
-        },
-        "evaluateRefused": {
-          "means": "closeProtected userinfo seven UI: Runtime.evaluate through the client is refused",
-          "check": {
-            "result": "shape",
-            "path": "result.evaluateRefused",
             "equals": true,
             "observer": "client"
           }
@@ -2674,7 +2643,6 @@
         "via": "unguarded",
         "expected": {
           "shaped": true,
-          "evaluateRefused": false,
           "attachRefused": false,
           "closeRefused": false,
           "closed": true
@@ -2682,7 +2650,6 @@
       },
       "expected": {
         "shaped": true,
-        "evaluateRefused": true,
         "attachRefused": true,
         "closeRefused": true,
         "closed": false

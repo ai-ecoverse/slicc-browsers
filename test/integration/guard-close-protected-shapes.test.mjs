@@ -28,14 +28,15 @@ test('closeProtected disguise rows require closeProtected and refuse close when 
     assert.equal(vector.observe.closed.requires, undefined, vector.id);
     assert.equal(vector.observe.closeRefused.unless, undefined, vector.id);
   }
+  for (const vector of vectors) {
+    assert.equal(vector.expected.evaluateRefused, undefined, vector.id);
+    assert.equal(vector.observe.evaluateRefused, undefined, vector.id);
+    assert.equal(vector.control.expected.evaluateRefused, undefined, vector.id);
+  }
   const navigating = vectors.find((v) => v.id === 'C8.close-protected.navigating');
-  assert.equal(navigating.expected.evaluateRefused, undefined);
   assert.equal(navigating.expected.attachRefused, undefined);
-  assert.equal(navigating.observe.evaluateRefused, undefined);
   assert.equal(navigating.observe.attachRefused, undefined);
   const blank = vectors.find((v) => v.id === 'C8.close-protected.blank-inherited');
-  assert.equal(blank.expected.evaluateRefused, undefined);
-  assert.equal(blank.observe.evaluateRefused, undefined);
   assert.equal(blank.expected.attachRefused, true);
   for (const id of [
     'C8.close-protected.view-source',
@@ -43,7 +44,6 @@ test('closeProtected disguise rows require closeProtected and refuse close when 
     'C8.close-protected.userinfo',
   ]) {
     const vector = vectors.find((v) => v.id === id);
-    assert.equal(vector.expected.evaluateRefused, true, id);
     assert.equal(vector.expected.attachRefused, true, id);
   }
   assert.deepEqual(vectors.find((v) => v.id === 'C8.close-protected.userinfo').targets, ['seven']);
@@ -107,7 +107,6 @@ test('judge expects a declared run to fail when a disguise close succeeds', () =
   assert.equal(
     judge(vector, 'guarded', {
       shaped: true,
-      evaluateRefused: true,
       attachRefused: true,
       closeRefused: false,
       closed: true,
@@ -117,7 +116,6 @@ test('judge expects a declared run to fail when a disguise close succeeds', () =
   assert.equal(
     judge(vector, 'guarded', {
       shaped: true,
-      evaluateRefused: true,
       attachRefused: true,
       closeRefused: true,
       closed: false,
@@ -131,6 +129,7 @@ async function rows({
   refuseClose = false,
   allowKeptClose = false,
   denyShapes = false,
+  evaluate = false,
   capabilities = { closeProtected: true },
 } = {}) {
   const fixture = await fixtureServer();
@@ -145,7 +144,7 @@ async function rows({
     return await run(
       { ...set, vectors, variants: { prompt: 0 } },
       {
-        client: quarantining(browser, { closeProtected, refuseClose, allowKeptClose }),
+        client: quarantining(browser, { closeProtected, refuseClose, allowKeptClose, evaluate }),
         unguarded: browser.connect(),
         fixture,
         settleScale: 0.1,
@@ -209,4 +208,16 @@ test('a missing shape is incomplete on both legs, never a fail verdict', async (
     assert.notEqual(row.guarded, 'fail', row.id);
     assert.match(JSON.stringify(row.incomplete ?? []), /closeProtectedShape/, row.id);
   }
+});
+
+test('a guard that allows evaluation still passes the disguise rows that only claim close', async () => {
+  const execution = await rows({ evaluate: true });
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', `${row.id} control ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'pass', `${row.id} guarded ${JSON.stringify(row)}`);
+    assert.equal(row.observations.guarded.evaluateRefused, undefined, row.id);
+    assert.equal(row.observations.guarded.closeRefused, true, row.id);
+    assert.equal(row.observations.guarded.closed, false, row.id);
+  }
+  assert.equal(execution.summary().pass, true);
 });

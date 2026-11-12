@@ -101,6 +101,25 @@ function route(req, url, send, html, redirects) {
         `<script>navigator.sendBeacon(${JSON.stringify(pre)})</script><iframe src="${escape(to)}"></iframe>`
       );
     },
+    '/oopif-nest': () => {
+      const mid = p.get('mid') ?? 'about:blank';
+      return html(
+        'oopif-nest',
+        `<p>oopif-nest ${escape(p.get('n') ?? '')}</p><iframe src="${escape(mid)}"></iframe>`
+      );
+    },
+    '/oopif-mid': () => {
+      const inner = p.get('inner') ?? 'about:blank';
+      return html(
+        'oopif-mid',
+        `<p>oopif-mid ${escape(p.get('n') ?? '')}</p><iframe src="${escape(inner)}"></iframe>`
+      );
+    },
+    '/oopif-srcdoc': () =>
+      html(
+        'oopif-srcdoc',
+        `<p>oopif-srcdoc ${escape(p.get('n') ?? '')}</p><iframe sandbox="allow-scripts allow-forms" srcdoc="${escape('<!doctype html><title>srcdoc</title><p>ordinary srcdoc</p>')}"></iframe>`
+      ),
     '/bfcache': () => {
       const marker = JSON.stringify(`bfcache-marker-${p.get('n') ?? ''}`).replaceAll(
         '<',

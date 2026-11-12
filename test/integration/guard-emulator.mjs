@@ -5,6 +5,94 @@ import { redactProtectedURLs } from '../../redirect-redaction.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function iframeAncestorProtected(unguarded, catalog, info, options, decisions) {
+  if (!catalog || info?.type !== 'iframe') return false;
+  if (options.iframeOwnUrlOnly) return Boolean(catalog.url(info.url));
+  const listed = await unguarded.send('Target.getTargets').catch(() => null);
+  const byId = new Map((listed?.targetInfos ?? []).map((entry) => [entry.targetId, entry]));
+  let depth = 0;
+  let cur = info;
+  const seen = new Set();
+  while (cur?.parentId) {
+    if (seen.has(cur.parentId)) break;
+    seen.add(cur.parentId);
+    const parent = byId.get(cur.parentId);
+    if (!parent) break;
+    depth += 1;
+    const held = decisions.get(parent.targetId) === true;
+    const protectedUrl = Boolean(catalog.url(parent.url));
+    if (options.iframeHeldParentOnly) {
+      if (held) return true;
+    } else if (protectedUrl || held) {
+      if (options.leakNestedIframeOnly && depth > 1) return false;
+      return true;
+    }
+    if (parent.type !== 'iframe') break;
+    cur = parent;
+  }
+  return false;
+}
+
+function rewriteIframeInfo(info, options) {
+  if (options.redactIframeUrlKeepId) return { ...info, url: '', title: '' };
+  return info;
+}
+
+function emitProtectedParentIframeLeak(event, options, ctx) {
+  const info = event.params?.targetInfo;
+  const publish = (exposed) => {
+    if (ctx.mentions(exposed) || ctx.hidden(exposed)) return;
+    ctx.messages.push(JSON.stringify(exposed));
+    ctx.events.push(exposed);
+    for (const waiter of ctx.waiters)
+      if (waiter.pred(exposed)) {
+        ctx.waiters.delete(waiter);
+        waiter.resolve(exposed);
+      }
+  };
+  if (options.leakTargetDestroyed && info?.targetId) {
+    if (!ctx.destroyedIds.has(info.targetId)) {
+      ctx.destroyedIds.add(info.targetId);
+      publish(
+        ctx.sanitize({
+          method: 'Target.targetDestroyed',
+          params: { targetId: info.targetId },
+        })
+      );
+    }
+    return 'skip';
+  }
+  if (options.leakAttachedToTarget) {
+    if (!info?.targetId || ctx.destroyedIds.has(`attached:${info.targetId}`)) return 'skip';
+    ctx.destroyedIds.add(`attached:${info.targetId}`);
+    publish(
+      ctx.sanitize({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: event.params?.sessionId ?? `leak-${info.targetId}`,
+          targetInfo: rewriteIframeInfo(info, options),
+          waitingForDebugger: false,
+        },
+      })
+    );
+    return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
+  }
+  if (!options.leakIframeEvents && !options.redactIframeUrlKeepId) return 'skip';
+  publish(
+    ctx.sanitize({
+      ...event,
+      params: {
+        ...event.params,
+        targetInfo: rewriteIframeInfo(
+          options.redactIframeUrlKeepId ? info : ctx.redactInfo(info),
+          options
+        ),
+      },
+    })
+  );
+  return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
+}
+
 function emulatedGuardPlain(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
@@ -216,6 +304,7 @@ function emulatedGuardPlain(browser, options = {}) {
   };
   const events = [];
   const messages = [];
+  const destroyedIds = new Set();
   const protectedBodies = new Set();
   let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
@@ -393,6 +482,32 @@ function emulatedGuardPlain(browser, options = {}) {
           event.method === 'Page.loadEventFired'
         )
           continue;
+        if (
+          catalog &&
+          ['Target.targetCreated', 'Target.targetInfoChanged', 'Target.attachedToTarget'].includes(
+            event.method
+          ) &&
+          event.params?.targetInfo?.type === 'iframe' &&
+          (await iframeAncestorProtected(
+            unguarded,
+            catalog,
+            event.params.targetInfo,
+            options,
+            decisions
+          ))
+        ) {
+          const leaked = emitProtectedParentIframeLeak(event, options, {
+            messages,
+            events,
+            waiters,
+            sanitize,
+            redactInfo,
+            mentions,
+            hidden,
+            destroyedIds,
+          });
+          if (leaked !== 'attached') continue;
+        }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {
@@ -419,9 +534,6 @@ function emulatedGuardPlain(browser, options = {}) {
         if (info.type !== 'page' || shielded.has(info.targetId)) continue;
         shielded.add(info.targetId);
         pages.add(info.targetId);
-        if (event.params.waitingForDebugger) children.add(event.params.sessionId);
-        if (!pages.has(info.targetId) && !pages.has(info.openerId))
-          foreign.add(event.params.sessionId);
         const ready = shield(
           info.targetId,
           event.params.waitingForDebugger ? event.params.sessionId : undefined,
@@ -752,7 +864,14 @@ function emulatedGuardPlain(browser, options = {}) {
       const { targetInfo } = await unguarded.send('Target.getTargetInfo', {
         targetId: params.targetId,
       });
-      if (await decision(params.targetId))
+      const underParent = await iframeAncestorProtected(
+        unguarded,
+        catalog,
+        targetInfo,
+        options,
+        decisions
+      );
+      if ((await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach))
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
           : refusal('protected target');
@@ -920,8 +1039,18 @@ function emulatedGuardPlain(browser, options = {}) {
       }
       await readyShields.get(params.targetId);
     }
-    if (method === 'Target.getTargetInfo' && catalog)
-      return { ...result, targetInfo: redactInfo(result.targetInfo) };
+    if (method === 'Target.getTargetInfo' && catalog) {
+      const info = result.targetInfo;
+      if (
+        info &&
+        (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)) &&
+        options.redactIframeUrlKeepId
+      )
+        return { ...result, targetInfo: rewriteIframeInfo(info, options) };
+      if (info && (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
+        throw refusal('protected target');
+      return { ...result, targetInfo: redactInfo(info) };
+    }
     if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
       const visible = [];
       for (const info of result.targetInfos) {
@@ -931,6 +1060,14 @@ function emulatedGuardPlain(browser, options = {}) {
           catalog?.extensionFrame(info.url)
         )
           continue;
+        const underParent = catalog
+          ? await iframeAncestorProtected(unguarded, catalog, info, options, decisions)
+          : false;
+        if (underParent && options.redactIframeUrlKeepId) {
+          visible.push(rewriteIframeInfo(info, options));
+          continue;
+        }
+        if (underParent) continue;
         if (
           !mentions(info) &&
           !(options.hideTypes ?? []).includes(info.type) &&
@@ -1172,6 +1309,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   };
   const events = [];
   const messages = [];
+  const destroyedIds = new Set();
   const protectedBodies = new Set();
   let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
@@ -1396,6 +1534,32 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
           event.method === 'Page.loadEventFired'
         )
           continue;
+        if (
+          catalog &&
+          ['Target.targetCreated', 'Target.targetInfoChanged', 'Target.attachedToTarget'].includes(
+            event.method
+          ) &&
+          event.params?.targetInfo?.type === 'iframe' &&
+          (await iframeAncestorProtected(
+            unguarded,
+            catalog,
+            event.params.targetInfo,
+            options,
+            decisions
+          ))
+        ) {
+          const leaked = emitProtectedParentIframeLeak(event, options, {
+            messages,
+            events,
+            waiters,
+            sanitize,
+            redactInfo,
+            mentions,
+            hidden,
+            destroyedIds,
+          });
+          if (leaked !== 'attached') continue;
+        }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
             ? {
@@ -1778,7 +1942,15 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       });
       const worker = workerType(targetInfo);
       const pageLike = ['page', 'iframe', 'tab'].includes(targetInfo.type);
-      const blocked = await decision(params.targetId);
+      const underParent = await iframeAncestorProtected(
+        unguarded,
+        catalog,
+        targetInfo,
+        options,
+        decisions
+      );
+      const blocked =
+        (await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach);
       const emptyWorker =
         worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
       if (
@@ -1981,8 +2153,18 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       }
       await readyShields.get(params.targetId);
     }
-    if (method === 'Target.getTargetInfo' && catalog)
-      return { ...result, targetInfo: redactInfo(result.targetInfo) };
+    if (method === 'Target.getTargetInfo' && catalog) {
+      const info = result.targetInfo;
+      if (
+        info &&
+        (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)) &&
+        options.redactIframeUrlKeepId
+      )
+        return { ...result, targetInfo: rewriteIframeInfo(info, options) };
+      if (info && (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
+        throw refusal('protected target');
+      return { ...result, targetInfo: redactInfo(info) };
+    }
     if (method === 'Target.getTargets' && Array.isArray(result?.targetInfos)) {
       const visible = [];
       for (const info of result.targetInfos) {
@@ -1992,6 +2174,14 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
           catalog?.extensionFrame(info.url)
         )
           continue;
+        const underParent = catalog
+          ? await iframeAncestorProtected(unguarded, catalog, info, options, decisions)
+          : false;
+        if (underParent && options.redactIframeUrlKeepId) {
+          visible.push(rewriteIframeInfo(info, options));
+          continue;
+        }
+        if (underParent) continue;
         const worker = ['worker', 'shared_worker', 'service_worker'].includes(info.type);
         const blocked = catalog && (await decision(info.targetId));
         if (

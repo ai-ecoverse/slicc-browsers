@@ -32,6 +32,7 @@ import {
 } from './guard-driver.mjs';
 import { createObserverTarget, discoveryViolation } from './observer-target.mjs';
 import { protectedErrorPage } from './protected-error-page.mjs';
+import { protectedParentIframes } from './protected-parent-iframes.mjs';
 import {
   leftoverPersistentWorker,
   persistentWorkerTypes,
@@ -901,6 +902,7 @@ class Execution {
       'unparseable',
       'errorPage',
       'closeProtectedShape',
+      'protectedParentIframes',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -912,6 +914,7 @@ class Execution {
       [
         'errorPage',
         'closeProtectedShape',
+        'protectedParentIframes',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1016,6 +1019,7 @@ class Execution {
       step.redirectSecret ||
       step.errorPage ||
       step.closeProtectedShape ||
+      step.protectedParentIframes ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1163,6 +1167,7 @@ class Execution {
   stepProbe(step, session) {
     if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
     if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
+    if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1226,6 +1231,27 @@ class Execution {
         releaseSlow: this.options.fixture.releaseSlow,
       })
     );
+  }
+
+  async runProtectedParentIframes(step) {
+    const out = await outcome(
+      protectedParentIframes({
+        client: this.client,
+        reader: this.reader,
+        protectedOrigin: this.vars.target,
+        cross: this.options.targets?.cross,
+        ordinary: this.vars.ordinary,
+        mode: step.protectedParentIframes,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        discovery: supported(['discovery'], this.options.capabilities),
+        eventStart: this.eventStart,
+      })
+    );
+    if (out.ok && out.result?.pageId) this.targets.push(out.result.pageId);
+    return out;
   }
 
   spawnWorkerKind() {
@@ -2214,10 +2240,15 @@ const observerRequired = (check) => {
   return check?.not ? observerRequired(check.not) : false;
 };
 const needsObserver = (vector) =>
-  vector.control.via === 'unguarded' ||
   allSteps([...(vector.setup ?? []), ...(vector.trigger ?? [])]).some(
-    (step) => step.isolatedWorld || step.observer || step.spawnWorker || step.closeProtectedShape
+    (step) =>
+      step.isolatedWorld ||
+      step.observer ||
+      step.spawnWorker ||
+      step.closeProtectedShape ||
+      step.protectedParentIframes
   ) ||
+  vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
   Object.values(vector.observe ?? {}).some(
     (observation) => observerRequired(observation.check) || observerRequired(observation.eitherWhen)

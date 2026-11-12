@@ -140,7 +140,7 @@ async function start(fixture, { spki, signal, allowOrigin, isolation = true }) {
       '--no-proxy-server',
       ...(isolation ? ['--site-per-process'] : ['--disable-site-isolation-trials']),
       `--disable-features=${isolation ? '' : 'IsolateOrigins,site-per-process,OriginKeyedProcessesByDefault,'}HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,LocalNetworkAccessChecks,LocalNetworkAccessRestrictions,LocalNetworkAccessChecksWebRTC,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults`,
-      `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP *.control.test 127.0.0.1:${fixture.port}`,
+      `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP cross.test 127.0.0.1:${fixture.port}`,
       'about:blank',
     ],
     { detached: true, stdio: ['ignore', 'ignore', stderr] }
@@ -323,7 +323,7 @@ export function origins(fixture) {
     ordinary: origin('ordinary.example.test'),
     'ordinary-same-site': origin('ordinary.sliccy.ai'),
     plain: origin('ordinary.example.test'),
-    cross: origin('cross.example.test'),
+    cross: origin('cross.test'),
     seven: origin('seven.sliccy.ai'),
     vault: origin('vault.sliccy.ai'),
     'vault-x': origin('vault-x.sliccy.ai'),

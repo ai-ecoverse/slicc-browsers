@@ -302,6 +302,7 @@ for (const v of guard.vectors ?? []) {
       st.unparseable ||
       st.errorPage ||
       st.closeProtectedShape ||
+      st.protectedParentIframes ||
       st.spawnWorker ||
       st.redirectSecret ||
       st.frameRead ||

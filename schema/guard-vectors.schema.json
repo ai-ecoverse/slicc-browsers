@@ -567,6 +567,22 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["protectedParentIframes", "as"],
+          "properties": {
+            "protectedParentIframes": {
+              "enum": ["nested-cross", "sandboxed-srcdoc"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["spawnWorker", "as"],
           "properties": {
             "spawnWorker": {

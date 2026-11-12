@@ -1,4 +1,5 @@
-import { parseURL } from '../../guard-driver.mjs';
+import { unclosableShape } from '../../close-protected-shape.mjs';
+import { outcome, parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 import { redactProtectedURLs } from '../../redirect-redaction.mjs';
 
@@ -21,16 +22,56 @@ function emulatedGuardPlain(browser, options = {}) {
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
+  const navigationURLs = new Map();
+  const observerSessions = new Map();
   let frameCursor = 0;
+  const ownerOf = (sessionId) =>
+    shields.get(sessionId)?.targetId ?? observerSessions.get(sessionId);
+  const markPending = (targetId, url) => {
+    if (!targetId) return;
+    navigating.add(targetId);
+    if (url !== undefined) navigationURLs.set(targetId, url);
+  };
+  const clearPending = (targetId) => {
+    navigating.delete(targetId);
+    navigationURLs.delete(targetId);
+  };
   const learnFrames = () => {
     for (const event of unguarded.events.slice(frameCursor)) {
       frameCursor++;
+      if (event.method === 'Target.attachedToTarget') {
+        observerSessions.set(event.params.sessionId, event.params.targetInfo.targetId);
+        continue;
+      }
+      if (event.method === 'Target.detachedFromTarget') {
+        observerSessions.delete(event.params.sessionId);
+        continue;
+      }
+      const targetId = ownerOf(event.sessionId);
       const owner = shields.get(event.sessionId);
+      if (
+        event.method === 'Fetch.requestPaused' &&
+        event.params.resourceType === 'Document' &&
+        targetId
+      ) {
+        markPending(targetId, event.params.request?.url ?? '');
+        continue;
+      }
+      if (
+        event.method === 'Page.frameStartedNavigating' &&
+        targetId &&
+        !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
+      ) {
+        const frame = frames.get(targetId);
+        if (!frame || event.params.frameId === frame.id)
+          markPending(targetId, event.params.url ?? '');
+        continue;
+      }
       if (!owner || !catalog) continue;
       if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
         const f = event.params.frame;
         frames.set(owner.targetId, f);
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
         const previous = decisions.get(owner.targetId) ?? false;
         decisions.set(
           owner.targetId,
@@ -42,16 +83,10 @@ function emulatedGuardPlain(browser, options = {}) {
         );
       }
       if (
-        event.method === 'Page.frameStartedNavigating' &&
-        event.params.frameId === frames.get(owner.targetId)?.id &&
-        !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
-      )
-        navigating.add(owner.targetId);
-      if (
         event.method === 'Page.frameStoppedLoading' &&
         event.params.frameId === frames.get(owner.targetId)?.id
       )
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
     }
   };
   const redactInfo = (info) => {
@@ -87,6 +122,59 @@ function emulatedGuardPlain(browser, options = {}) {
           previous: options.unlockErrorPage ? false : previous,
         });
     return blocked;
+  };
+  const keepClosed = async (targetId) => {
+    if (options.allowKeptClose) return false;
+    learnFrames();
+    if (navigating.has(targetId))
+      return unclosableShape({
+        url: navigationURLs.get(targetId) ?? '',
+        documentURL: frames.get(targetId)?.url,
+        securityOrigin: frames.get(targetId)?.securityOrigin,
+        navigating: true,
+        navigationURL: navigationURLs.get(targetId),
+      });
+    const info = await Promise.race([
+      unguarded.send('Target.getTargetInfo', { targetId }),
+      pause(400).then(() => undefined),
+    ]);
+    if (!info) return false;
+    const { targetInfo } = info;
+    let f = frames.get(targetId);
+    if (!f) {
+      const attached = await outcome(
+        unguarded.send('Target.attachToTarget', { targetId, flatten: true })
+      );
+      if (attached.ok) {
+        observerSessions.set(attached.result.sessionId, targetId);
+        await outcome(unguarded.send('Page.enable', {}, attached.result.sessionId));
+        const tree = await Promise.race([
+          outcome(unguarded.send('Page.getFrameTree', {}, attached.result.sessionId)),
+          pause(400).then(() => ({ ok: false })),
+        ]);
+        if (tree.ok) {
+          f = tree.result.frameTree.frame;
+          frames.set(targetId, f);
+        }
+      }
+    }
+    let securityOrigin = f?.securityOrigin;
+    const blank =
+      !targetInfo.url || targetInfo.url === 'about:blank' || targetInfo.url === 'about:srcdoc';
+    if (blank && (!securityOrigin || securityOrigin === '://') && targetInfo.openerId) {
+      const opener = await Promise.race([
+        unguarded.send('Target.getTargetInfo', { targetId: targetInfo.openerId }),
+        pause(400).then(() => undefined),
+      ]);
+      if (opener) securityOrigin = parseURL(opener.targetInfo.url)?.origin ?? opener.targetInfo.url;
+    }
+    return unclosableShape({
+      url: targetInfo.url,
+      documentURL: f?.url ?? targetInfo.url,
+      securityOrigin,
+      navigating: navigating.has(targetId),
+      navigationURL: navigationURLs.get(targetId),
+    });
   };
   const contexts = new Set();
   const extensionContexts = new Map();
@@ -203,6 +291,15 @@ function emulatedGuardPlain(browser, options = {}) {
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
       failDocument;
+    if (
+      options.closeProtected &&
+      event.params.resourceType === 'Document' &&
+      /\/slow(?:\?|$)/.test(request.url ?? '')
+    ) {
+      markPending(owner.targetId, request.url ?? '');
+      await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
+      return;
+    }
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
@@ -544,6 +641,16 @@ function emulatedGuardPlain(browser, options = {}) {
         throw refusal('protected redirect destination');
     }
     const targetId = params?.targetId ?? sessions.get(sessionId);
+    if (
+      catalog &&
+      !options.catalogAttachOnly &&
+      targetId &&
+      options.closeProtected &&
+      (method === 'Target.closeTarget'
+        ? !options.refuseClose && (await keepClosed(targetId))
+        : method === 'Target.attachToTarget' && (await keepClosed(targetId)))
+    )
+      throw refusal('protected target');
     if (
       catalog &&
       !options.catalogAttachOnly &&
@@ -895,7 +1002,17 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
+  const navigationURLs = new Map();
   let frameCursor = 0;
+  const markPending = (targetId, url) => {
+    if (!targetId) return;
+    navigating.add(targetId);
+    if (url !== undefined) navigationURLs.set(targetId, url);
+  };
+  const clearPending = (targetId) => {
+    navigating.delete(targetId);
+    navigationURLs.delete(targetId);
+  };
   const learnFrames = () => {
     for (const event of unguarded.events.slice(frameCursor)) {
       frameCursor++;
@@ -904,7 +1021,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       if (event.method === 'Page.frameNavigated' && !event.params.frame.parentId) {
         const f = event.params.frame;
         frames.set(owner.targetId, f);
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
         const previous = decisions.get(owner.targetId) ?? false;
         decisions.set(
           owner.targetId,
@@ -920,12 +1037,12 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
         event.params.frameId === frames.get(owner.targetId)?.id &&
         !['sameDocument', 'historySameDocument'].includes(event.params.navigationType)
       )
-        navigating.add(owner.targetId);
+        markPending(owner.targetId, event.params.url ?? '');
       if (
         event.method === 'Page.frameStoppedLoading' &&
         event.params.frameId === frames.get(owner.targetId)?.id
       )
-        navigating.delete(owner.targetId);
+        clearPending(owner.targetId);
     }
   };
   const redactInfo = (info) => {
@@ -1130,6 +1247,15 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
       failDocument;
+    if (
+      options.closeProtected &&
+      event.params.resourceType === 'Document' &&
+      /\/slow(?:\?|$)/.test(request.url ?? '')
+    ) {
+      markPending(owner.targetId, request.url ?? '');
+      await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});
+      return;
+    }
     if (!blocked) {
       await pause(options.documentLatency?.(request.url) ?? 0);
       await unguarded.send('Fetch.continueRequest', { requestId }, event.sessionId).catch(() => {});

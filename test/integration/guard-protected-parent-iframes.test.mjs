@@ -96,7 +96,7 @@ function nestedFake({ srcdocTarget = true } = {}) {
       discover('Target.targetCreated', tab);
       if (/\/oopif-nest\?/.test(tab.url)) {
         const page = new URL(tab.url);
-        const mid = page.searchParams.get('mid') ?? 'http://cross.example.test/oopif-mid';
+        const mid = page.searchParams.get('mid') ?? 'http://cross.test/oopif-mid';
         const midUrl = new URL(mid);
         const inner = midUrl.searchParams.get('inner') ?? 'http://ordinary.example.test/doc';
         spawnIframes(tab, mid, inner);
@@ -240,8 +240,8 @@ async function runMode(mode, { srcdocTarget = true, ids: only = ids } = {}) {
       seven: origin('seven.sliccy.ai'),
       vault: origin('vault.sliccy.ai'),
       own: origin('client.example.test'),
-      client: origin('cross.example.test'),
-      cross: origin('cross.example.test'),
+      client: origin('client.example.test'),
+      cross: origin('cross.test'),
       log: origin('log.example.test'),
     };
     const guard =
@@ -314,6 +314,8 @@ const mutants = [
   ['iframeOwnUrlOnly', { iframeOwnUrlOnly: true }],
   ['iframeHeldParentOnly', { iframeHeldParentOnly: true }],
   ['leakIframeEvents', { leakIframeEvents: true }],
+  ['leakAttachedToTarget', { leakAttachedToTarget: true }],
+  ['leakTargetDestroyed', { leakTargetDestroyed: true }],
   ['allowProtectedParentAttach', { allowProtectedParentAttach: true }],
   ['redactIframeUrlKeepId', { redactIframeUrlKeepId: true }],
   ['leakNestedIframeOnly', { leakNestedIframeOnly: true }],
@@ -365,7 +367,8 @@ test('without an unguarded observer the protected-parent rows skip', async () =>
           seven: origin('seven.sliccy.ai'),
           vault: origin('vault.sliccy.ai'),
           own: origin('client.example.test'),
-          client: origin('cross.example.test'),
+          client: origin('client.example.test'),
+          cross: origin('cross.test'),
           log: origin('log.example.test'),
         },
       }
@@ -376,6 +379,172 @@ test('without an unguarded observer the protected-parent rows skip', async () =>
     }
   } finally {
     await guard.stop();
+    await fixture.close();
+  }
+});
+
+test('without a mapped {cross} origin the nested row is incomplete', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const targets = {
+      ordinary: origin('ordinary.example.test'),
+      seven: origin('seven.sliccy.ai'),
+      vault: origin('vault.sliccy.ai'),
+      own: origin('client.example.test'),
+      client: origin('client.example.test'),
+      cross: null,
+      log: origin('log.example.test'),
+    };
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    try {
+      const execution = await run(
+        {
+          ...set,
+          vectors: vectors.filter((v) => v.id === 'C3.protected-parent-iframes'),
+          variants: { prompt: 0 },
+        },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: { discovery: true, browserSession: true },
+          targets,
+        }
+      );
+      for (const row of execution.results) {
+        assert.ok([row.control, row.guarded].includes('incomplete'), describe(row));
+        assert.match(
+          `${row.why ?? ''};${(row.incomplete ?? []).join(';')}`,
+          /no cross-site ordinary origin \(\{cross\}\) mapped/
+        );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+function wrapListInfo(client, mode) {
+  const send = client.send.bind(client);
+  client.send = async (method, params, sessionId) => {
+    if (method === 'Target.getTargets' || method === 'Target.getTargetInfo') {
+      if (mode === 'timeout') throw new Error('timeout: no answer');
+      throw new Error('slicc: refused: protected target');
+    }
+    return send(method, params, sessionId);
+  };
+  return client;
+}
+
+test('unanswered getTargets and getTargetInfo leave protected-parent incomplete, not a pass', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const targets = {
+      ordinary: origin('ordinary.example.test'),
+      seven: origin('seven.sliccy.ai'),
+      vault: origin('vault.sliccy.ai'),
+      own: origin('client.example.test'),
+      client: origin('client.example.test'),
+      cross: origin('cross.test'),
+      log: origin('log.example.test'),
+    };
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    wrapListInfo(guard.client, 'timeout');
+    try {
+      const execution = await run(
+        {
+          ...set,
+          vectors: vectors.filter((v) => v.id === 'C3.protected-parent-iframes'),
+          variants: { prompt: 0 },
+        },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: { discovery: true, browserSession: true },
+          targets,
+        }
+      );
+      for (const row of execution.results) {
+        assert.equal(row.control, 'pass', describe(row));
+        assert.ok(
+          [row.guarded, row.live].includes('incomplete') || row.guarded === 'incomplete',
+          describe(row)
+        );
+        assert.match(
+          `${row.why ?? ''};${(row.incomplete ?? []).join(';')}`,
+          /Target\.getTargets unanswered|Target\.getTargetInfo unanswered/
+        );
+        assert.notEqual(row.guarded, 'pass', describe(row));
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('slicc refused getTargets and getTargetInfo are valid negatives for protected-parent', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = nestedFake();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const targets = {
+      ordinary: origin('ordinary.example.test'),
+      seven: origin('seven.sliccy.ai'),
+      vault: origin('vault.sliccy.ai'),
+      own: origin('client.example.test'),
+      client: origin('client.example.test'),
+      cross: origin('cross.test'),
+      log: origin('log.example.test'),
+    };
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [targets.seven, targets.vault],
+    });
+    wrapListInfo(guard.client, 'refused');
+    try {
+      const execution = await run(
+        {
+          ...set,
+          vectors: vectors.filter((v) => v.id === 'C3.protected-parent-iframes'),
+          variants: { prompt: 0 },
+        },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: { discovery: true, browserSession: true },
+          targets,
+        }
+      );
+      for (const row of execution.results) {
+        assert.deepEqual(
+          [row.control, row.guarded, row.live],
+          ['pass', 'pass', 'pass'],
+          describe(row)
+        );
+      }
+    } finally {
+      await guard.stop();
+    }
+  } finally {
     await fixture.close();
   }
 });

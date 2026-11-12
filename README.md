@@ -223,7 +223,7 @@ await fixture.close();
 You supply:
 - **a guarded client** per row: your guard's CDP connection, with `send(method, params, sessionId)`, `waitEvent(predicate, ms)` and an `events` array;
 - **an unguarded observer**: a direct CDP connection to the same browser, which runs the controls and checks liveness;
-- **origins**: the fixture server reachable as seven, the vault and an ordinary site. Point the protected hostnames at it with Chrome's `--host-resolver-rules`, so tests never touch the real seven;
+- **origins**: the fixture server reachable as seven, the vault, an ordinary site, and for some rows a cross-site ordinary `{cross}` (e.g. `cross.test`). Point those hostnames at it with Chrome's `--host-resolver-rules`, so tests never touch the real seven;
 - **capabilities**: what your transport can do. A row that needs something you don't declare is skipped as `not-supported:<capability>`.
 
 | capability | means the transport can |

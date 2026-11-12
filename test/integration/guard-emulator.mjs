@@ -38,6 +38,61 @@ function rewriteIframeInfo(info, options) {
   return info;
 }
 
+function emitProtectedParentIframeLeak(event, options, ctx) {
+  const info = event.params?.targetInfo;
+  const publish = (exposed) => {
+    if (ctx.mentions(exposed) || ctx.hidden(exposed)) return;
+    ctx.messages.push(JSON.stringify(exposed));
+    ctx.events.push(exposed);
+    for (const waiter of ctx.waiters)
+      if (waiter.pred(exposed)) {
+        ctx.waiters.delete(waiter);
+        waiter.resolve(exposed);
+      }
+  };
+  if (options.leakTargetDestroyed && info?.targetId) {
+    if (!ctx.destroyedIds.has(info.targetId)) {
+      ctx.destroyedIds.add(info.targetId);
+      publish(
+        ctx.sanitize({
+          method: 'Target.targetDestroyed',
+          params: { targetId: info.targetId },
+        })
+      );
+    }
+    return 'skip';
+  }
+  if (options.leakAttachedToTarget) {
+    if (!info?.targetId || ctx.destroyedIds.has(`attached:${info.targetId}`)) return 'skip';
+    ctx.destroyedIds.add(`attached:${info.targetId}`);
+    publish(
+      ctx.sanitize({
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: event.params?.sessionId ?? `leak-${info.targetId}`,
+          targetInfo: rewriteIframeInfo(info, options),
+          waitingForDebugger: false,
+        },
+      })
+    );
+    return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
+  }
+  if (!options.leakIframeEvents && !options.redactIframeUrlKeepId) return 'skip';
+  publish(
+    ctx.sanitize({
+      ...event,
+      params: {
+        ...event.params,
+        targetInfo: rewriteIframeInfo(
+          options.redactIframeUrlKeepId ? info : ctx.redactInfo(info),
+          options
+        ),
+      },
+    })
+  );
+  return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
+}
+
 function emulatedGuardPlain(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
@@ -249,6 +304,7 @@ function emulatedGuardPlain(browser, options = {}) {
   };
   const events = [];
   const messages = [];
+  const destroyedIds = new Set();
   const protectedBodies = new Set();
   let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
@@ -440,29 +496,17 @@ function emulatedGuardPlain(browser, options = {}) {
             decisions
           ))
         ) {
-          if (!options.leakIframeEvents && !options.redactIframeUrlKeepId) continue;
-          const exposedIframe = sanitize({
-            ...event,
-            params: {
-              ...event.params,
-              targetInfo: rewriteIframeInfo(
-                options.redactIframeUrlKeepId
-                  ? event.params.targetInfo
-                  : redactInfo(event.params.targetInfo),
-                options
-              ),
-            },
+          const leaked = emitProtectedParentIframeLeak(event, options, {
+            messages,
+            events,
+            waiters,
+            sanitize,
+            redactInfo,
+            mentions,
+            hidden,
+            destroyedIds,
           });
-          if (!mentions(exposedIframe) && !hidden(exposedIframe)) {
-            messages.push(JSON.stringify(exposedIframe));
-            events.push(exposedIframe);
-            for (const waiter of waiters)
-              if (waiter.pred(exposedIframe)) {
-                waiters.delete(waiter);
-                waiter.resolve(exposedIframe);
-              }
-          }
-          if (event.method !== 'Target.attachedToTarget') continue;
+          if (leaked !== 'attached') continue;
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
@@ -1265,6 +1309,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   };
   const events = [];
   const messages = [];
+  const destroyedIds = new Set();
   const protectedBodies = new Set();
   let bodyCursor = options.extensionFrames ? client.events.length : 0;
   const sanitize = (event) => {
@@ -1503,29 +1548,17 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
             decisions
           ))
         ) {
-          if (!options.leakIframeEvents && !options.redactIframeUrlKeepId) continue;
-          const exposedIframe = sanitize({
-            ...event,
-            params: {
-              ...event.params,
-              targetInfo: rewriteIframeInfo(
-                options.redactIframeUrlKeepId
-                  ? event.params.targetInfo
-                  : redactInfo(event.params.targetInfo),
-                options
-              ),
-            },
+          const leaked = emitProtectedParentIframeLeak(event, options, {
+            messages,
+            events,
+            waiters,
+            sanitize,
+            redactInfo,
+            mentions,
+            hidden,
+            destroyedIds,
           });
-          if (!mentions(exposedIframe) && !hidden(exposedIframe)) {
-            messages.push(JSON.stringify(exposedIframe));
-            events.push(exposedIframe);
-            for (const waiter of waiters)
-              if (waiter.pred(exposedIframe)) {
-                waiters.delete(waiter);
-                waiter.resolve(exposedIframe);
-              }
-          }
-          if (event.method !== 'Target.attachedToTarget') continue;
+          if (leaked !== 'attached') continue;
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog

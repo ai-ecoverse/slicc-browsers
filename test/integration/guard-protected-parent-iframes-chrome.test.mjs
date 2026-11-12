@@ -72,19 +72,30 @@ test('protected-parent iframe rows hide ordinary OOPIFs under a protected parent
       observations: row.observations,
     }));
     for (const row of rows) {
-      if (row.id === 'C3.protected-parent-srcdoc' && row.incomplete?.length) {
-        assert.match(
-          row.incomplete.join(';'),
-          /sandboxed srcdoc frame has no own target in this Chrome/,
-          JSON.stringify(report, null, 2)
-        );
+      if (row.id === 'C3.protected-parent-srcdoc') {
+        const incomplete = Boolean(row.incomplete?.length);
+        const branch = incomplete
+          ? 'srcdoc: no own target in this Chrome (incomplete)'
+          : 'srcdoc: own iframe target, hidden';
+        console.error(`protected-parent ${branch}`);
         assert.ok(
-          (row.notes ?? []).some((note) =>
-            /raw-iframes-missing|srcdoc-no-oopif|srcdoc-tree/.test(note)
-          ),
+          (row.notes ?? []).some((note) => note.includes(branch)),
           JSON.stringify(report, null, 2)
         );
-        continue;
+        if (incomplete) {
+          assert.match(
+            row.incomplete.join(';'),
+            /sandboxed srcdoc frame has no own target in this Chrome/,
+            JSON.stringify(report, null, 2)
+          );
+          assert.ok(
+            (row.notes ?? []).some((note) =>
+              /raw-iframes-missing|srcdoc-no-oopif|srcdoc-tree/.test(note)
+            ),
+            JSON.stringify(report, null, 2)
+          );
+          continue;
+        }
       }
       assert.equal(
         row.control,

@@ -16,6 +16,14 @@ const refused = (out) => {
   );
 };
 
+function answered(out) {
+  if (!out) return false;
+  if (out.ok) return true;
+  const err = out.error;
+  if (err && typeof err.code === 'number') return true;
+  return /^slicc: refused:/.test(String(err?.message ?? err ?? ''));
+}
+
 async function until(check, ms, step = 25) {
   const deadline = Date.now() + ms;
   for (;;) {
@@ -69,12 +77,6 @@ function collectIframes(infos, pageId) {
   );
 }
 
-function crossSiteOrdinary(ordinary) {
-  const url = new URL(ordinary);
-  url.hostname = 'cross.control.test';
-  return url.origin;
-}
-
 function matchLeak(info, rawIds, rawUrls, pageId, rawParentIds) {
   if (!info) return false;
   if (rawIds.has(info.targetId)) return true;
@@ -88,13 +90,16 @@ function leakFromList(infos, rawIds, rawUrls, pageId, rawParentIds) {
 }
 
 function leakFromEvents(events, rawIds, rawUrls, pageId, rawParentIds, from = 0) {
-  return (events ?? [])
-    .slice(from)
-    .some(
-      (event) =>
-        ['Target.targetCreated', 'Target.targetInfoChanged'].includes(event.method) &&
-        matchLeak(event.params?.targetInfo, rawIds, rawUrls, pageId, rawParentIds)
-    );
+  return (events ?? []).slice(from).some((event) => {
+    if (
+      ['Target.targetCreated', 'Target.targetInfoChanged', 'Target.attachedToTarget'].includes(
+        event.method
+      )
+    )
+      return matchLeak(event.params?.targetInfo, rawIds, rawUrls, pageId, rawParentIds);
+    if (event.method === 'Target.targetDestroyed') return rawIds.has(event.params?.targetId);
+    return false;
+  });
 }
 
 async function openProtected(reader, url, notes, internalSessions) {
@@ -177,8 +182,10 @@ async function waitRawIframes(reader, pageId, budget, notes, want = 2) {
 
 async function measureList(client, rawIds, rawUrls, pageId, rawParentIds) {
   const listed = await outcome(client.send('Target.getTargets', {}));
+  if (!answered(listed)) return { out: listed, unanswered: true, leak: false };
   return {
     out: listed,
+    unanswered: false,
     leak: listed.ok
       ? leakFromList(listed.result?.targetInfos ?? [], rawIds, rawUrls, pageId, rawParentIds)
       : false,
@@ -188,25 +195,39 @@ async function measureList(client, rawIds, rawUrls, pageId, rawParentIds) {
 async function measureInfo(client, rawIds, rawUrls, pageId, rawParentIds) {
   let out;
   let leak = false;
+  let unanswered = false;
   for (const targetId of rawIds) {
     const info = await outcome(client.send('Target.getTargetInfo', { targetId }));
-    out ??= info;
+    if (!out) {
+      out = info;
+      if (!answered(info)) {
+        unanswered = true;
+        break;
+      }
+    }
     if (!info.ok) continue;
     const targetInfo = info.result?.targetInfo;
     if (matchLeak(targetInfo, rawIds, rawUrls, pageId, rawParentIds)) leak = true;
   }
-  return { out, leak };
+  return { out, leak, unanswered };
 }
 
 async function measureAttach(client, rawIds) {
   let out;
   let attachSession = false;
   let attachRefused = false;
+  let unanswered = false;
   for (const targetId of rawIds) {
     const attached = await outcome(
       client.send('Target.attachToTarget', { targetId, flatten: true })
     );
-    out ??= attached;
+    if (!out) {
+      out = attached;
+      if (!answered(attached)) {
+        unanswered = true;
+        break;
+      }
+    }
     if (attached.ok && attached.result?.sessionId) {
       attachSession = true;
       attachRefused = false;
@@ -217,7 +238,22 @@ async function measureAttach(client, rawIds) {
     }
     if (refused(attached)) attachRefused = true;
   }
-  return { out, attachSession, attachRefused };
+  return { out, attachSession, attachRefused, unanswered };
+}
+
+function takeFirst(slot, sample, apply) {
+  if (!slot.out) {
+    slot.out = sample.out;
+    slot.unanswered = sample.unanswered;
+    if (!sample.unanswered) apply(sample);
+    return;
+  }
+  if (!slot.unanswered) apply(sample);
+}
+
+function settleArm(result, key, unanswered, label, missing, fallback) {
+  if (unanswered) missing.push(label);
+  else if (result[key] === undefined) Object.assign(result, fallback);
 }
 
 async function measureClient({
@@ -231,26 +267,25 @@ async function measureClient({
   budget,
   notes,
 }) {
-  const result = {
-    iframeListed: false,
-    infoRead: false,
-    eventsSeen: false,
-    attachSession: false,
-    attachRefused: false,
-  };
+  const result = {};
+  const missing = [];
   const windowMs = Math.min(budget, 1500);
   const deadline = Date.now() + windowMs;
-  let firstList;
-  let firstInfo;
-  let firstAttach;
+  const list = { out: undefined, unanswered: false };
+  const info = { out: undefined, unanswered: false };
+  const attach = { out: undefined, unanswered: false };
   let firstEvents = false;
   while (Date.now() <= deadline) {
     const listed = await measureList(client, rawIds, rawUrls, pageId, rawParentIds);
-    firstList ??= listed.out;
-    if (listed.leak) result.iframeListed = true;
-    const info = await measureInfo(client, rawIds, rawUrls, pageId, rawParentIds);
-    firstInfo ??= info.out;
-    if (info.leak) result.infoRead = true;
+    takeFirst(list, listed, (sample) => {
+      if (sample.leak) result.iframeListed = true;
+      else result.iframeListed ??= false;
+    });
+    const informed = await measureInfo(client, rawIds, rawUrls, pageId, rawParentIds);
+    takeFirst(info, informed, (sample) => {
+      if (sample.leak) result.infoRead = true;
+      else result.infoRead ??= false;
+    });
     if (
       discovery &&
       leakFromEvents(client.events ?? [], rawIds, rawUrls, pageId, rawParentIds, eventStart)
@@ -258,40 +293,62 @@ async function measureClient({
       result.eventsSeen = true;
       firstEvents = true;
     }
-    if (!result.attachSession && !result.attachRefused) {
+    if (
+      result.attachSession === undefined &&
+      result.attachRefused === undefined &&
+      !attach.unanswered
+    ) {
       const attached = await measureAttach(client, rawIds);
-      firstAttach ??= attached.out;
-      result.attachSession = attached.attachSession;
-      result.attachRefused = attached.attachRefused;
+      takeFirst(attach, attached, (sample) => {
+        result.attachSession = sample.attachSession;
+        result.attachRefused = sample.attachRefused;
+      });
     }
     if (
-      result.iframeListed &&
-      result.infoRead &&
-      (!discovery || result.eventsSeen) &&
-      result.attachSession
+      result.iframeListed === true &&
+      result.infoRead === true &&
+      (!discovery || result.eventsSeen === true) &&
+      result.attachSession === true
     )
       break;
     await pause(50);
   }
-  note(notes, 'protected-parent.client', {
-    iframeListed: result.iframeListed,
-    infoRead: result.infoRead,
-    eventsSeen: discovery ? result.eventsSeen : 'not-declared',
-    attachSession: result.attachSession,
-    attachRefused: result.attachRefused,
-    windowMs,
-    firstListOk: firstList?.ok,
-    firstInfoOk: firstInfo?.ok,
-    firstAttachOk: firstAttach?.ok,
-    firstEvents,
+  if (discovery && result.eventsSeen === undefined) result.eventsSeen = false;
+  settleArm(result, 'iframeListed', list.unanswered, 'Target.getTargets unanswered', missing, {
+    iframeListed: false,
   });
-  return result;
+  settleArm(result, 'infoRead', info.unanswered, 'Target.getTargetInfo unanswered', missing, {
+    infoRead: false,
+  });
+  settleArm(
+    result,
+    'attachSession',
+    attach.unanswered,
+    'Target.attachToTarget unanswered',
+    missing,
+    { attachSession: false, attachRefused: false }
+  );
+  note(notes, 'protected-parent.client', {
+    iframeListed: result.iframeListed ?? 'unmeasured',
+    infoRead: result.infoRead ?? 'unmeasured',
+    eventsSeen: discovery ? (result.eventsSeen ?? false) : 'not-declared',
+    attachSession: result.attachSession ?? 'unmeasured',
+    attachRefused: result.attachRefused ?? 'unmeasured',
+    windowMs,
+    firstListOk: list.out?.ok,
+    firstInfoOk: info.out?.ok,
+    firstAttachOk: attach.out?.ok,
+    firstEvents,
+    unanswered: missing,
+  });
+  return missing.length ? { ...result, incomplete: missing.join('; ') } : result;
 }
 
 async function nestedCross({
   reader,
   client,
   protectedOrigin,
+  cross,
   ordinary,
   tag,
   notes,
@@ -300,12 +357,12 @@ async function nestedCross({
   internalSessions,
   eventStart,
 }) {
-  const midOrigin = crossSiteOrdinary(ordinary);
-  const mid = `${midOrigin}/oopif-mid?inner=${encodeURIComponent(`${ordinary}/doc?n=inner-${tag}`)}&n=mid-${tag}`;
+  if (!cross) return { incomplete: 'no cross-site ordinary origin ({cross}) mapped' };
+  const mid = `${cross}/oopif-mid?inner=${encodeURIComponent(`${ordinary}/doc?n=inner-${tag}`)}&n=mid-${tag}`;
   const page = `${protectedOrigin}/oopif-nest?mid=${encodeURIComponent(mid)}&n=host-${tag}`;
   note(notes, 'protected-parent.nest-urls', {
     host: protectedOrigin,
-    mid: midOrigin,
+    mid: cross,
     inner: ordinary,
   });
   const opened = await openProtected(reader, page, notes, internalSessions);
@@ -404,6 +461,7 @@ async function sandboxedSrcdoc({
       frameTreeHasChild: Boolean(srcdocFrame),
       childUrl: srcdocFrame?.url ?? null,
     });
+    notes.push('srcdoc: no own target in this Chrome (incomplete)');
     return {
       live: true,
       incomplete: reason,
@@ -426,6 +484,7 @@ async function sandboxedSrcdoc({
       parentId: info.parentId,
     })),
   });
+  notes.push('srcdoc: own iframe target, hidden');
   const measured = await measureClient({
     client,
     rawIds,
@@ -450,6 +509,7 @@ export async function protectedParentIframes({
   client,
   reader,
   protectedOrigin,
+  cross,
   ordinary,
   mode,
   tag,
@@ -471,6 +531,7 @@ export async function protectedParentIframes({
           reader,
           client,
           protectedOrigin,
+          cross,
           ordinary,
           tag,
           notes,

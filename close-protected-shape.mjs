@@ -268,17 +268,24 @@ async function shapeNavigating({
   const { targetInfo } = await reader.send('Target.getTargetInfo', { targetId });
   const stillStart =
     targetInfo.url === start || targetInfo.url === 'about:blank' || !keptDocument(targetInfo.url);
-  const shaped = Boolean(held?.requestId) && stillStart;
+  const pausedHold =
+    Boolean(held?.requestId) &&
+    (held.url === destination ||
+      /(?:\?|&)hold=1(?:&|$)/.test(held.url ?? '') ||
+      keptDocument(held.url ?? ''));
+  const shaped = pausedHold;
   noteShape(notes, 'navigating', {
     targetId,
     type: targetInfo.type,
     url: targetInfo.url,
     openerId: targetInfo.openerId,
+    start,
     pendingUrl: destination,
     fetchPaused: Boolean(held?.requestId),
     pausedUrl: held?.url,
     pausedSession: held?.sessionId,
     observerSession: sessionId,
+    stillStart,
     heldMs: waitBudget,
     releasedAfterClose: true,
     sequence,
@@ -316,7 +323,7 @@ async function shapeBlankInherited({ reader, origin, tag, notes, internalSession
   const openedBlank = await outcome(
     reader.send(
       'Runtime.evaluate',
-      { expression: "window.open('')", returnByValue: true, userGesture: true },
+      { expression: "window.open(''); undefined", returnByValue: true, userGesture: true },
       parent.sessionId
     )
   );

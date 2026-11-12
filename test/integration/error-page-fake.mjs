@@ -153,7 +153,7 @@ export function chrome() {
       return { result: { type: 'string', value: 'complete' } };
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
     if (expression === 'location.href') return { result: { type: 'string', value: tab.frame.url } };
-    if (expression === "window.open('')") {
+    if (expression === "window.open('')" || expression === "window.open(''); undefined") {
       openBlank(tab);
       return { result: { type: 'undefined' } };
     }

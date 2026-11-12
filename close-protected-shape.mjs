@@ -85,14 +85,17 @@ async function lockChecks({
     }
     result.attachRefused = attachRefused;
   }
+  await measureClose({ client, reader, targetId, result, until });
+}
+
+async function measureClose({ client, reader, targetId, result, until }) {
   const close = await outcome(client.send('Target.closeTarget', { targetId }));
-  result.closeRefused = refused(close);
-  result.closed =
-    close.result?.success === true &&
-    (await until(
-      async () =>
-        !(await reader.send('Target.getTargets')).targetInfos.some((i) => i.targetId === targetId)
-    ));
+  const gone = await until(
+    async () =>
+      !(await reader.send('Target.getTargets')).targetInfos.some((i) => i.targetId === targetId)
+  );
+  result.closed = gone;
+  result.closeRefused = refused(close) && !gone;
 }
 
 async function attachClient(client, targetId) {
@@ -495,8 +498,12 @@ export async function closeProtectedShape({
       releaseSlow,
       tag,
     }).then((value) => ({ timedOut: false, value }));
-    const hard = pause(9000).then(() => ({ timedOut: true }));
+    let hardTimer;
+    const hard = new Promise((resolve) => {
+      hardTimer = setTimeout(() => resolve({ timedOut: true }), 9000);
+    });
     const winner = await Promise.race([navigating, hard]);
+    clearTimeout(hardTimer);
     if (winner.timedOut) {
       notes.push('navigating.giveUp: hard 9s shape budget');
       hold.abort?.();
@@ -527,14 +534,7 @@ export async function closeProtectedShape({
   const { session, attachRefused } = await attachClient(client, targetId);
   if (!session) {
     if (!closeOnly) result.attachRefused = attachRefused;
-    const close = await outcome(client.send('Target.closeTarget', { targetId }));
-    result.closeRefused = refused(close);
-    result.closed =
-      close.result?.success === true &&
-      (await until(
-        async () =>
-          !(await reader.send('Target.getTargets')).targetInfos.some((i) => i.targetId === targetId)
-      ));
+    await measureClose({ client, reader, targetId, result, until });
     await hold.release?.();
     await outcome(reader.send('Target.closeTarget', { targetId }));
     if (shaped.result.parentId)

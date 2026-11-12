@@ -232,6 +232,67 @@ test('a declared mutant that closes every kept disguise fails each row', async (
   assert.equal(execution.summary().pass, false);
 });
 
+test('a mutant that forwards close then answers refused fails every disguise row', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = chrome();
+    const serverRelease = fixture.releaseSlow.bind(fixture);
+    fixture.releaseSlow = (n) => {
+      browser.releaseSlow(n);
+      return serverRelease(n);
+    };
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guarded = quarantining(browser, { closeProtected: true });
+    const raw = browser.connect();
+    const client = {
+      get events() {
+        return guarded.events;
+      },
+      send: async (method, params = {}, sessionId) => {
+        if (method === 'Target.closeTarget') {
+          await raw.send(method, params, sessionId);
+          throw new Error('slicc: refused: protected');
+        }
+        return guarded.send(method, params, sessionId);
+      },
+    };
+    const execution = await run(
+      { ...set, vectors, variants: { prompt: 0 } },
+      {
+        client,
+        unguarded: browser.connect(),
+        fixture,
+        settleScale: 0.1,
+        capabilities: { discovery: true, closeProtected: true },
+        targets: {
+          ordinary: origin('ordinary.example.test'),
+          seven: origin('seven.sliccy.ai'),
+          vault: origin('vault.sliccy.ai'),
+          own: origin('client.example.test'),
+          client: origin('client.example.test'),
+          log: origin('log.example.test'),
+        },
+      }
+    );
+    for (const row of execution.results) {
+      assert.equal(row.control, 'pass', `${row.id} control ${JSON.stringify(row)}`);
+      assert.equal(row.observations.control.closed, true, row.id);
+      assert.equal(row.guarded, 'fail', `${row.id} ${JSON.stringify(row.observations?.guarded)}`);
+      assert.equal(row.observations.guarded.closed, true, row.id);
+      assert.equal(row.observations.guarded.closeRefused, false, row.id);
+    }
+    const correct = await rows();
+    for (const row of correct.results) {
+      assert.equal(row.control, 'pass', row.id);
+      assert.equal(row.guarded, 'pass', `${row.id} ${JSON.stringify(row)}`);
+      assert.equal(row.observations.guarded.closed, false, row.id);
+      assert.equal(row.observations.guarded.closeRefused, true, row.id);
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('a mutant that grants the first attach then refuses duplicates fails the attach-claiming rows', async () => {
   const fixture = await fixtureServer();
   try {

@@ -1166,8 +1166,14 @@ function adoptLiveRaw(raw, liveRaw) {
 
 async function evaluateContexts(client, sessionIds, contexts, evaluateArm, result) {
   const sessions = [...new Set((sessionIds ?? []).filter(Boolean))];
+  let anyUnanswered = false;
+  let unansweredId;
   for (const context of contexts) {
-    for (const sessionId of sessions) {
+    const ordered = [
+      context.sessionId,
+      ...sessions.filter((id) => id && id !== context.sessionId),
+    ].filter(Boolean);
+    for (const sessionId of [...new Set(ordered)]) {
       const evaluated = await outcome(
         client.send(
           'Runtime.evaluate',
@@ -1179,19 +1185,29 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
       const gone =
         !evaluated.ok &&
         /Cannot find context|No context|Invalid context|Session with given id/i.test(message);
+      if (!answered(evaluated) && !gone) {
+        anyUnanswered = true;
+        unansweredId ??= context.id;
+        continue;
+      }
       takeFirst(
         evaluateArm,
-        { out: evaluated, unanswered: !answered(evaluated) && !gone, unansweredId: context.id },
+        { out: evaluated, unanswered: false, unansweredId: context.id },
         (sample) => {
-          if (sample.unanswered) return;
           if (sample.out.ok) result.contextEvaluate = true;
           else result.contextEvaluate ??= false;
         }
       );
-      if (result.contextEvaluate === true) return;
-      if (gone) continue;
-      break;
+      if (result.contextEvaluate === true) {
+        evaluateArm.unanswered = false;
+        return;
+      }
     }
+  }
+  if (result.contextEvaluate !== true && anyUnanswered) {
+    evaluateArm.unanswered = true;
+    evaluateArm.unansweredId ??= unansweredId;
+    evaluateArm.out ??= { ok: false };
   }
 }
 
@@ -1231,6 +1247,7 @@ async function pollPageClient({
   evaluateArm,
   result,
   budget,
+  skipEvaluate = false,
 }) {
   const windowMs = Math.min(budget, 1500);
   const deadline = Date.now() + windowMs;
@@ -1245,7 +1262,7 @@ async function pollPageClient({
       : (result.midFrameAttached ?? false);
     if (liveContexts.length) {
       if (events.some((event) => contextHit(event, raw))) result.contextCreated = true;
-      if (result.contextEvaluate !== true)
+      if (!skipEvaluate && result.contextEvaluate !== true)
         await evaluateContexts(
           client,
           [sessionId, ...childSessions],
@@ -1260,7 +1277,7 @@ async function pollPageClient({
       result.resourceTree === true &&
       result.frameEvents === true &&
       result.contextCreated === true &&
-      result.contextEvaluate === true &&
+      (skipEvaluate || result.contextEvaluate === true) &&
       result.midFrameAttached === true
     )
       break;
@@ -1714,6 +1731,7 @@ async function measurePageClient({
     evaluateArm,
     result,
     budget,
+    skipEvaluate: innerKind === 'srcdoc',
   });
   await finishPageClient(
     client,
@@ -1728,7 +1746,8 @@ async function measurePageClient({
     missing,
     notes,
     childSessions,
-    windowMs
+    windowMs,
+    innerKind === 'srcdoc'
   );
   if (missing.length) return { ...result, incomplete: missing.join('; ') };
   return result;
@@ -1747,7 +1766,8 @@ function finishPageClient(
   missing,
   notes,
   childSessions,
-  windowMs
+  windowMs,
+  skipEvaluate = false
 ) {
   result.targetEvents = (client.events ?? [])
     .slice(clientEventStart)
@@ -1773,23 +1793,25 @@ function finishPageClient(
   if (!liveContexts.length) missing.push('grandchild execution context missing in raw leg');
   else {
     result.contextCreated ??= false;
-    settleArm(
-      result,
-      'contextEvaluate',
-      evaluateArm.unanswered,
-      evaluateArm.unansweredId
-        ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
-        : 'Runtime.evaluate unanswered',
-      missing,
-      { contextEvaluate: false }
-    );
+    if (!skipEvaluate) {
+      settleArm(
+        result,
+        'contextEvaluate',
+        evaluateArm.unanswered,
+        evaluateArm.unansweredId
+          ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
+          : 'Runtime.evaluate unanswered',
+        missing,
+        { contextEvaluate: false }
+      );
+    }
   }
   note(notes, 'protected-parent.page-client', {
     frameTree: result.frameTree ?? 'unmeasured',
     resourceTree: result.resourceTree ?? 'unmeasured',
     frameEvents: result.frameEvents ?? 'unmeasured',
     contextCreated: result.contextCreated ?? 'unmeasured',
-    contextEvaluate: result.contextEvaluate ?? 'unmeasured',
+    contextEvaluate: skipEvaluate ? 'skipped' : (result.contextEvaluate ?? 'unmeasured'),
     midFrameAttached: result.midFrameAttached ?? 'unmeasured',
     targetInfo: result.targetInfo ?? 'unmeasured',
     childAttach: result.childAttach ?? 'unmeasured',
@@ -1800,7 +1822,7 @@ function finishPageClient(
     childSessions: [...childSessions],
     firstTreeOk: treeArm.out?.ok,
     firstResourceOk: resourceArm.out?.ok,
-    firstEvaluateOk: evaluateArm.out?.ok,
+    firstEvaluateOk: skipEvaluate ? false : evaluateArm.out?.ok,
     unanswered: missing,
   });
   return outcome(client.send('Target.detachFromTarget', { sessionId }));

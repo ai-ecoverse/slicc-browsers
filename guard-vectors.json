@@ -31973,16 +31973,6 @@
           },
           "absencePoll": true
         },
-        "contextEvaluate": {
-          "means": "C3.protected-parent-srcdoc.page: Runtime.evaluate in the grandchild context through the page session succeeded",
-          "check": {
-            "result": "probe",
-            "path": "result.contextEvaluate",
-            "equals": true,
-            "observer": "client"
-          },
-          "absencePoll": true
-        },
         "midFrameAttached": {
           "means": "C3.protected-parent-srcdoc.page: Page.frameAttached on the page session exposes the middle frameId",
           "check": {
@@ -32039,7 +32029,6 @@
           "resourceTree": true,
           "frameEvents": true,
           "contextCreated": true,
-          "contextEvaluate": true,
           "midFrameAttached": true,
           "targetInfo": true,
           "childAttach": true,
@@ -32051,7 +32040,6 @@
         "resourceTree": false,
         "frameEvents": false,
         "contextCreated": false,
-        "contextEvaluate": false,
         "midFrameAttached": "either",
         "targetInfo": false,
         "childAttach": false,

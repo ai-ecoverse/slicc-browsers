@@ -1236,10 +1236,46 @@ async function sampleTrees(client, sessionIds, treeArm, result, raw) {
   }
 }
 
-async function enableChildDomains(client, childSessions) {
+function recordChildEnable(out, label, child, childSessions, missing, result) {
+  if (out.ok) return 'ok';
+  if (refused(out)) {
+    if (result) result.childEnableRefused = true;
+    const message = String(out.error?.message ?? out.error ?? '');
+    if (/No session with given id|Session with given id not found|Target closed/i.test(message))
+      childSessions.delete(child);
+    return 'refused';
+  }
+  if (!answered(out)) {
+    missing.push(`${label} unanswered`);
+    return 'missing';
+  }
+  missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
+  return 'missing';
+}
+
+async function enableChildDomains(client, childSessions, missing, result) {
   for (const child of [...childSessions]) {
-    await outcome(client.send('Page.enable', {}, child));
-    await outcome(client.send('Runtime.enable', {}, child));
+    const pageOut = await outcome(client.send('Page.enable', {}, child));
+    const pageStatus = recordChildEnable(
+      pageOut,
+      'Page.enable',
+      child,
+      childSessions,
+      missing,
+      result
+    );
+    if (pageStatus === 'missing') return;
+    if (pageStatus === 'refused') continue;
+    const runtimeOut = await outcome(client.send('Runtime.enable', {}, child));
+    const runtimeStatus = recordChildEnable(
+      runtimeOut,
+      'Runtime.enable',
+      child,
+      childSessions,
+      missing,
+      result
+    );
+    if (runtimeStatus === 'missing') return;
   }
 }
 
@@ -1249,7 +1285,9 @@ async function adoptLiveClientSessions(
   clientEventStart,
   raw,
   childSessions,
-  internalSessions
+  internalSessions,
+  missing,
+  result
 ) {
   await autoAttachSession(client, sessionId);
   pullAutoSessions(client, clientEventStart, childSessions);
@@ -1261,15 +1299,30 @@ async function adoptLiveClientSessions(
   }
   for (const child of [...childSessions]) await autoAttachSession(client, child);
   pullAutoSessions(client, clientEventStart, childSessions);
-  await enableChildDomains(client, childSessions);
+  await enableChildDomains(client, childSessions, missing, result);
 }
 
-async function armNewChildSessions(client, events, childSessions) {
+async function armNewChildSessions(client, events, childSessions, missing, result) {
   for (const child of collectAutoSessions(events, 0)) {
     if (childSessions.has(child)) continue;
     childSessions.add(child);
-    await outcome(client.send('Page.enable', {}, child));
-    await outcome(client.send('Runtime.enable', {}, child));
+    const pageOut = await outcome(client.send('Page.enable', {}, child));
+    const pageStatus = recordChildEnable(
+      pageOut,
+      'Page.enable',
+      child,
+      childSessions,
+      missing,
+      result
+    );
+    if (pageStatus === 'missing') return;
+    if (pageStatus === 'refused') continue;
+    const runtimeOut = await outcome(client.send('Runtime.enable', {}, child));
+    if (
+      recordChildEnable(runtimeOut, 'Runtime.enable', child, childSessions, missing, result) ===
+      'missing'
+    )
+      return;
   }
 }
 
@@ -1362,8 +1415,10 @@ async function pollPageClient({
   raw,
   liveContexts,
   treeArm,
+  resourceArm,
   evaluateArm,
   result,
+  missing,
   budget,
   skipEvaluate = false,
 }) {
@@ -1371,7 +1426,8 @@ async function pollPageClient({
   const deadline = Date.now() + windowMs;
   while (Date.now() <= deadline) {
     const events = (client.events ?? []).slice(clientEventStart);
-    await armNewChildSessions(client, events, childSessions);
+    await armNewChildSessions(client, events, childSessions, missing, result);
+    if (missing.length) break;
     result.frameEvents = events.some((event) => frameEventHit(event, raw))
       ? true
       : (result.frameEvents ?? false);
@@ -1390,6 +1446,7 @@ async function pollPageClient({
         );
     }
     await sampleTrees(client, [sessionId, ...childSessions], treeArm, result, raw);
+    await sampleResources(client, [sessionId, ...childSessions], resourceArm, result, raw);
     if (
       result.frameTree === true &&
       result.resourceTree === true &&
@@ -1427,6 +1484,7 @@ async function sampleResources(client, sessionIds, resourceArm, result, raw) {
   for (const sessionId of sessionIds) {
     if (result.resourceTree === true) return;
     const resourceOut = await outcome(client.send('Page.getResourceTree', {}, sessionId));
+    if (!resourceOut.ok && refused(resourceOut)) continue;
     applyTreeSample(
       resourceArm,
       { out: resourceOut, unanswered: !answered(resourceOut) },
@@ -1794,17 +1852,14 @@ async function measurePageClient({
   if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
   const sessions = [sessionId, ...childSessions];
   await sampleTrees(client, sessions, treeArm, result, raw);
-  await sampleResources(client, sessions, resourceArm, result, raw);
   enableFailure(
     await outcome(client.send('Runtime.enable', {}, sessionId)),
     'Runtime.enable',
     missing
   );
   if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-  for (const child of childSessions) {
-    await outcome(client.send('Page.enable', {}, child));
-    await outcome(client.send('Runtime.enable', {}, child));
-  }
+  await enableChildDomains(client, childSessions, missing, result);
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
   await outcome(client.send('Network.enable', {}, sessionId));
   if (contexts.length)
     result.contextCreated = (client.events ?? [])
@@ -1833,8 +1888,11 @@ async function measurePageClient({
     clientEventStart,
     raw,
     childSessions,
-    internalSessions
+    internalSessions,
+    missing,
+    result
   );
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
   await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
   if (raw.midTargetId || raw.grandchildTargetId) {
     const remasured = await remasureLiveGrandchild({
@@ -1865,8 +1923,11 @@ async function measurePageClient({
         clientEventStart,
         raw,
         childSessions,
-        internalSessions
+        internalSessions,
+        missing,
+        result
       );
+      if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
       await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
     }
   }
@@ -1879,6 +1940,7 @@ async function measurePageClient({
     notes
   );
   if (clientContexts.length) liveContexts = clientContexts;
+  await sampleResources(client, [sessionId, ...childSessions], resourceArm, result, raw);
   const windowMs = await pollPageClient({
     client,
     sessionId,
@@ -1887,11 +1949,14 @@ async function measurePageClient({
     raw,
     liveContexts,
     treeArm,
+    resourceArm,
     evaluateArm,
     result,
+    missing,
     budget,
     skipEvaluate: innerKind === 'srcdoc',
   });
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
   await finishPageClient(
     client,
     sessionId,

@@ -724,6 +724,7 @@ const nestedMutants = [
   ['leakProtectedDescendantFrames', { leakProtectedDescendantFrames: true }],
   ['leakProtectedFrameEvents', { leakProtectedFrameEvents: true }],
   ['leakProtectedFrameContexts', { leakProtectedFrameContexts: true }],
+  ['leakResourceTreeAfterLive', { leakResourceTreeAfterLive: true }],
 ];
 
 for (const [name, options] of nestedMutants) {
@@ -842,6 +843,125 @@ test('unanswered Page.enable on the page session is incomplete, not a guarded pa
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
     assert.match(String(result.incomplete), /Page\.enable|Runtime\.enable/);
     assert.equal(result.frameTree, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('unanswered child Page.enable is incomplete, not a guarded pass', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let pageEnables = 0;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (sessionId && method === 'Page.enable') {
+          pageEnables += 1;
+          if (pageEnables > 1) throw new Error('timeout: no answer');
+        }
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'child-page-enable',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.enable unanswered/);
+    assert.equal(result.frameEvents, undefined);
+    assert.equal(result.contextCreated, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('unanswered child Runtime.enable is incomplete, not a guarded pass', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let runtimeEnables = 0;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (sessionId && method === 'Runtime.enable') {
+          runtimeEnables += 1;
+          if (runtimeEnables > 1) throw new Error('timeout: no answer');
+        }
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'child-runtime-enable',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Runtime\.enable unanswered/);
+    assert.equal(result.frameEvents, undefined);
+    assert.equal(result.contextCreated, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('refused child Page.enable is incomplete, not an inferred guarded pass', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let pageEnables = 0;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (sessionId && method === 'Page.enable') {
+          pageEnables += 1;
+          if (pageEnables > 1) throw new Error('slicc: refused: protected frame');
+        }
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'child-page-enable-refused',
+      notes,
+      budget: 2000,
+    });
+    assert.equal(result.incomplete, undefined, JSON.stringify({ result, notes }));
+    assert.equal(result.childEnableRefused, true, JSON.stringify({ result, notes }));
+    assert.ok(
+      notes.some((note) => note.includes('protected-parent.page-client')),
+      notes.join('\n')
+    );
   } finally {
     await fixture.close();
   }

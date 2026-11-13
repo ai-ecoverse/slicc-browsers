@@ -266,6 +266,7 @@ function emulatedGuardPlain(browser, options = {}) {
   const frameUrls = new Map();
   const frameParents = new Map();
   let frameCursor = 0;
+  let liveResourceTreeReads = 0;
   const ownerOf = (sessionId) =>
     shields.get(sessionId)?.targetId ?? observerSessions.get(sessionId);
   const markPending = (targetId, url) => {
@@ -996,7 +997,14 @@ function emulatedGuardPlain(browser, options = {}) {
     )
       throw refusal('protected target');
     learnWorlds();
-    if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+    if (
+      cutSessions.has(sessionId) &&
+      !(
+        options.protectedParentPages &&
+        (method === 'Page.getResourceTree' || method === 'Page.getFrameTree')
+      )
+    )
+      throw refusal('session cut on protected execution context');
     if (catalog && !options.exposeExtensionWorlds && sessionId) {
       const worlds = [...extensionContexts.entries()]
         .filter(([key]) => key.startsWith(`${sessionId}:`))
@@ -1372,6 +1380,13 @@ function emulatedGuardPlain(browser, options = {}) {
     ) {
       const blocked = collectProtectedDescendantIds(result.frameTree, catalog, options);
       if (sessionId) sessionBlocked.set(sessionId, blocked);
+      if (options.leakResourceTreeAfterLive) {
+        const live = /[?&]live=|-live-/.test(JSON.stringify(result.frameTree));
+        if (live) {
+          liveResourceTreeReads += 1;
+          if (liveResourceTreeReads > 1) return result;
+        }
+      }
       return scrubProtectedResourceTree(result, catalog, options);
     }
     if (
@@ -2167,7 +2182,14 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       throw refusal('protected target');
     }
     learnWorlds();
-    if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+    if (
+      cutSessions.has(sessionId) &&
+      !(
+        options.protectedParentPages &&
+        (method === 'Page.getResourceTree' || method === 'Page.getFrameTree')
+      )
+    )
+      throw refusal('session cut on protected execution context');
     if (catalog && !options.exposeExtensionWorlds && sessionId) {
       const worlds = [...extensionContexts.entries()]
         .filter(([key]) => key.startsWith(`${sessionId}:`))

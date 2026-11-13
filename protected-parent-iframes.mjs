@@ -644,24 +644,61 @@ function hitFromMidTree(midTree, innerNeedle, midUrl) {
   return null;
 }
 
-async function attachMidTarget(reader, pageId, midHint, internalSessions) {
+async function attachIframeTarget(reader, match, internalSessions) {
   const listed = await outcome(reader.send('Target.getTargets', {}));
   if (!answered(listed) || !listed.ok) return null;
-  const midInfo = (listed.result?.targetInfos ?? []).find((info) => {
-    if (info.type !== 'iframe') return false;
-    if (!midMatches(info.url ?? '', midHint)) return false;
-    if (pageId && info.parentId && info.parentId !== pageId) return false;
-    return true;
-  });
-  if (!midInfo?.targetId) return null;
+  const info = (listed.result?.targetInfos ?? []).find(
+    (entry) => entry.type === 'iframe' && match(entry)
+  );
+  if (!info?.targetId) return null;
   const attached = await outcome(
-    reader.send('Target.attachToTarget', { targetId: midInfo.targetId, flatten: true })
+    reader.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
   );
   if (!answered(attached) || !attached.ok || !attached.result?.sessionId) return null;
   internalSessions?.add(attached.result.sessionId);
   await outcome(reader.send('Page.enable', {}, attached.result.sessionId));
   await outcome(reader.send('Runtime.enable', {}, attached.result.sessionId));
-  return { midInfo, midSession: attached.result.sessionId };
+  return { info, sessionId: attached.result.sessionId };
+}
+
+async function hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions) {
+  const midTree = await readTree(reader, midAttached.sessionId);
+  const midFrameId = midTree?.frame?.id;
+  const midUrl = midTree?.frame?.url ?? midAttached.info.url ?? '';
+  const fromMid = hitFromMidTree(midTree, innerHint, midUrl);
+  if (fromMid) {
+    return {
+      tree: midTree,
+      hit: fromMid,
+      via: 'mid-target',
+      midSession: midAttached.sessionId,
+      midTargetId: midAttached.info.targetId,
+    };
+  }
+  const child = await attachIframeTarget(
+    reader,
+    (info) =>
+      info.parentId === midAttached.info.targetId && childMatches(info.url ?? '', innerHint),
+    internalSessions
+  );
+  if (!child) return null;
+  const childTree = await readTree(reader, child.sessionId);
+  if (!childTree?.frame) return null;
+  return {
+    tree: childTree,
+    hit: {
+      midFrameId: midFrameId ?? midAttached.info.targetId,
+      midUrl,
+      frameId: childTree.frame.id,
+      url: childTree.frame.url ?? child.info.url ?? '',
+      parentId: childTree.frame.parentId ?? midFrameId,
+    },
+    via: 'grandchild-target',
+    midSession: midAttached.sessionId,
+    midTargetId: midAttached.info.targetId,
+    grandchildSession: child.sessionId,
+    grandchildTargetId: child.info.targetId,
+  };
 }
 
 async function waitGrandchild(
@@ -679,18 +716,17 @@ async function waitGrandchild(
     const tree = await readTree(reader, sessionId);
     const hit = findGrandchild(tree, midHint, innerHint);
     if (hit) return { tree, hit, via: 'top' };
-    midAttached ??= await attachMidTarget(reader, pageId, midHint, internalSessions);
+    midAttached ??= await attachIframeTarget(
+      reader,
+      (info) => {
+        if (!midMatches(info.url ?? '', midHint)) return false;
+        if (pageId && info.parentId && info.parentId !== pageId) return false;
+        return true;
+      },
+      internalSessions
+    );
     if (!midAttached) return null;
-    const midTree = await readTree(reader, midAttached.midSession);
-    const fromMid = hitFromMidTree(midTree, innerHint, midAttached.midInfo.url);
-    if (!fromMid) return null;
-    return {
-      tree: midTree,
-      hit: fromMid,
-      via: 'mid-target',
-      midSession: midAttached.midSession,
-      midTargetId: midAttached.midInfo.targetId,
-    };
+    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions);
   }, budget);
   if (found) {
     note(notes, 'protected-parent.page-raw', {
@@ -701,6 +737,7 @@ async function waitGrandchild(
       parentId: found.hit.parentId,
       via: found.via,
       midTargetId: found.midTargetId,
+      grandchildTargetId: found.grandchildTargetId,
       frames: walkFrames(found.tree).map((frame) => ({
         id: frame.id,
         url: frame.url,
@@ -835,11 +872,10 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
   }
 }
 
-function collectAutoSessions(events, from, pageSessionId) {
+function collectAutoSessions(events, from) {
   const sessions = new Set();
   for (const event of events.slice(from)) {
     if (event.method !== 'Target.attachedToTarget') continue;
-    if (event.sessionId && event.sessionId !== pageSessionId) continue;
     const child = event.params?.sessionId;
     const type = event.params?.targetInfo?.type;
     if (child && (type === 'iframe' || type === 'page' || !type)) sessions.add(child);
@@ -877,7 +913,7 @@ async function pollPageClient({
   const deadline = Date.now() + windowMs;
   while (Date.now() <= deadline) {
     const events = (client.events ?? []).slice(clientEventStart);
-    for (const child of collectAutoSessions(events, 0, sessionId)) childSessions.add(child);
+    for (const child of collectAutoSessions(events, 0)) childSessions.add(child);
     result.frameEvents = events.some((event) => frameEventHit(event, raw))
       ? true
       : (result.frameEvents ?? false);
@@ -999,6 +1035,47 @@ async function liveGrandchild({
   return liveContexts.length ? liveContexts : contexts;
 }
 
+async function gatherChildSessions(client, sessionId, clientEventStart, raw, internalSessions) {
+  const childSessions = new Set();
+  await outcome(
+    client.send(
+      'Target.setAutoAttach',
+      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      sessionId
+    )
+  );
+  for (const child of collectAutoSessions(client.events ?? [], clientEventStart))
+    childSessions.add(child);
+  for (const child of [...childSessions]) {
+    await outcome(
+      client.send(
+        'Target.setAutoAttach',
+        { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+        child
+      )
+    );
+  }
+  for (const child of collectAutoSessions(client.events ?? [], clientEventStart))
+    childSessions.add(child);
+  const listed = await outcome(client.send('Target.getTargets', {}));
+  if (!listed.ok) return childSessions;
+  for (const info of listed.result?.targetInfos ?? []) {
+    if (info.type !== 'iframe') continue;
+    const url = info.url ?? '';
+    const match = [...raw.urls].some(
+      (entry) => entry && (url === entry || url.includes(entry) || entry.includes(url))
+    );
+    if (!match) continue;
+    const attachedChild = await outcome(
+      client.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
+    );
+    if (!answered(attachedChild) || !attachedChild.ok || !attachedChild.result?.sessionId) continue;
+    childSessions.add(attachedChild.result.sessionId);
+    internalSessions?.add(attachedChild.result.sessionId);
+  }
+  return childSessions;
+}
+
 async function measurePageClient({
   client,
   reader,
@@ -1025,16 +1102,13 @@ async function measurePageClient({
   const treeArm = { out: undefined, unanswered: false };
   const resourceArm = { out: undefined, unanswered: false };
   const evaluateArm = { out: undefined, unanswered: false };
-  const childSessions = new Set();
-  await outcome(
-    client.send(
-      'Target.setAutoAttach',
-      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-      sessionId
-    )
+  const childSessions = await gatherChildSessions(
+    client,
+    sessionId,
+    clientEventStart,
+    raw,
+    internalSessions
   );
-  for (const child of collectAutoSessions(client.events ?? [], clientEventStart, sessionId))
-    childSessions.add(child);
   const sessions = [sessionId, ...childSessions];
   await sampleTrees(client, sessions, treeArm, result, raw);
   await sampleResources(client, sessions, resourceArm, result, raw);
@@ -1044,7 +1118,10 @@ async function measurePageClient({
     missing
   );
   if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-  for (const child of childSessions) await outcome(client.send('Runtime.enable', {}, child));
+  for (const child of childSessions) {
+    await outcome(client.send('Page.enable', {}, child));
+    await outcome(client.send('Runtime.enable', {}, child));
+  }
   await outcome(client.send('Network.enable', {}, sessionId));
   if (contexts.length)
     result.contextCreated = (client.events ?? [])
@@ -1190,7 +1267,9 @@ async function pageNested({
     if (rawFound.hit.url === 'about:srcdoc') raw.origins.add('://');
   }
   const readerEventStart = reader.events?.length ?? 0;
-  const readerSessions = [sessionId, rawFound.midSession].filter(Boolean);
+  const readerSessions = [sessionId, rawFound.midSession, rawFound.grandchildSession].filter(
+    Boolean
+  );
   const contexts = await rawContexts(
     reader,
     readerSessions,

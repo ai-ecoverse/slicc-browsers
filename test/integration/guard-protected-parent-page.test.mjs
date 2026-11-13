@@ -43,6 +43,13 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
     }
   };
   const isProtected = (url) => protectedHosts.some((host) => hostOf(url) === host);
+  const originOf = (url) => {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return '';
+    }
+  };
   const buildNest = (tab, midUrl) => {
     const midFrameId = `F${++next}`;
     const childFrameId = `F${++next}`;
@@ -54,20 +61,22 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
     } catch {
       childUrl = 'about:blank';
     }
+    const topOrigin = originOf(tab.url);
+    const midOrigin = originOf(midUrl);
+    const childOrigin = originOf(childUrl);
+    const oopifMid = Boolean(midOrigin && midOrigin !== topOrigin);
+    const oopifChild = Boolean(
+      oopifMid && childUrl !== 'about:srcdoc' && childOrigin !== midOrigin
+    );
+    const childNode = {
+      frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
+    };
     tab.frameTree = {
       frame: tab.frame,
       childFrames: [
         {
           frame: { id: midFrameId, url: midUrl, parentId: tab.frame.id },
-          childFrames: [
-            {
-              frame: {
-                id: childFrameId,
-                url: childUrl,
-                parentId: midFrameId,
-              },
-            },
-          ],
+          childFrames: oopifChild ? [] : [childNode],
         },
       ],
     };
@@ -75,35 +84,106 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
     tab.childFrameId = childFrameId;
     tab.childUrl = childUrl;
     tab.midUrl = midUrl;
-    tab.contexts = [
-      {
-        id: ++next,
-        origin: (() => {
-          try {
-            return new URL(childUrl).origin;
-          } catch {
-            return '://';
-          }
-        })(),
-        auxData: { frameId: childFrameId, isDefault: true },
-      },
-      {
-        id: ++next,
-        origin: (() => {
-          try {
-            return new URL(midUrl).origin;
-          } catch {
-            return '://';
-          }
-        })(),
-        auxData: { frameId: midFrameId, isDefault: true },
-      },
-    ];
+    tab.contexts = oopifChild
+      ? [
+          {
+            id: ++next,
+            origin: midOrigin || '://',
+            auxData: { frameId: midFrameId, isDefault: true },
+          },
+        ]
+      : [
+          {
+            id: ++next,
+            origin: childOrigin || '://',
+            auxData: { frameId: childFrameId, isDefault: true },
+          },
+          {
+            id: ++next,
+            origin: midOrigin || '://',
+            auxData: { frameId: midFrameId, isDefault: true },
+          },
+        ];
+    if (oopifMid) {
+      const midTab = {
+        targetId: `T${++next}`,
+        type: 'iframe',
+        url: midUrl,
+        title: midUrl,
+        parentId: tab.targetId,
+        frame: { id: midFrameId, url: midUrl },
+        frameTree: {
+          frame: { id: midFrameId, url: midUrl },
+          childFrames: oopifChild ? [] : [childNode],
+        },
+        contexts: [
+          {
+            id: ++next,
+            origin: midOrigin || '://',
+            auxData: { frameId: midFrameId, isDefault: true },
+          },
+        ],
+        children: [],
+      };
+      tabs.set(midTab.targetId, midTab);
+      tab.midTargetId = midTab.targetId;
+      if (oopifChild) {
+        const childTab = {
+          targetId: `T${++next}`,
+          type: 'iframe',
+          url: childUrl,
+          title: childUrl,
+          parentId: midTab.targetId,
+          frame: { id: childFrameId, url: childUrl },
+          frameTree: { frame: { id: childFrameId, url: childUrl }, childFrames: [] },
+          contexts: [
+            {
+              id: ++next,
+              origin: childOrigin || '://',
+              auxData: { frameId: childFrameId, isDefault: true },
+            },
+          ],
+          children: [],
+        };
+        tabs.set(childTab.targetId, childTab);
+        tab.childTargetId = childTab.targetId;
+        midTab.children = [childTab.targetId];
+      }
+    }
   };
   const emitFrameLife = (conn, sessionId, tab) => {
     if (!tab?.frameTree) return;
-    const mid = tab.frameTree.childFrames[0];
-    const child = mid.childFrames[0];
+    if (tab.type === 'iframe') {
+      emit(
+        conn,
+        'Page.frameNavigated',
+        { frame: { id: tab.frame.id, url: tab.frame.url } },
+        sessionId
+      );
+      for (const child of tab.frameTree.childFrames ?? []) {
+        emit(
+          conn,
+          'Page.frameAttached',
+          { frameId: child.frame.id, parentFrameId: tab.frame.id },
+          sessionId
+        );
+        emit(
+          conn,
+          'Page.frameNavigated',
+          {
+            frame: {
+              id: child.frame.id,
+              url: child.frame.url,
+              parentId: tab.frame.id,
+            },
+          },
+          sessionId
+        );
+      }
+      return;
+    }
+    const mid = tab.frameTree.childFrames?.[0];
+    if (!mid) return;
     emit(
       conn,
       'Page.frameAttached',
@@ -116,6 +196,8 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
       { frame: { id: mid.frame.id, url: mid.frame.url, parentId: tab.frame.id } },
       sessionId
     );
+    const child = mid.childFrames?.[0];
+    if (!child) return;
     emit(
       conn,
       'Page.frameAttached',
@@ -195,7 +277,29 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
       if (!tab) throw new Error('No target with given id');
       return { targetInfo: infoOf(tab) };
     }
-    if (method === 'Target.setAutoAttach') return {};
+    if (method === 'Target.setAutoAttach') {
+      if (!params?.autoAttach || !sessionId) return {};
+      const parent = tabs.get(sessions.get(sessionId));
+      if (!parent) return {};
+      for (const tab of tabs.values()) {
+        if (tab.type !== 'iframe') continue;
+        if (tab.parentId !== parent.targetId) continue;
+        const id = `S${++next}`;
+        sessions.set(id, tab.targetId);
+        sessionConn.set(id, conn);
+        emit(
+          conn,
+          'Target.attachedToTarget',
+          {
+            sessionId: id,
+            targetInfo: infoOf(tab),
+            waitingForDebugger: false,
+          },
+          sessionId
+        );
+      }
+      return {};
+    }
     if (method === 'Page.enable') {
       const tab = tabs.get(sessions.get(sessionId));
       if (tab?.frameTree) emitFrameLife(conn, sessionId, tab);

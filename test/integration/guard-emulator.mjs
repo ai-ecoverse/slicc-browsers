@@ -1069,14 +1069,18 @@ function emulatedGuardPlain(browser, options = {}) {
               event.sessionId === attached.sessionId &&
               event.params.targetInfo.type === 'iframe'
           );
-        if (
-          frames.some(
-            (event) =>
-              catalog.url(event.params.targetInfo.url) &&
-              !allowExtension(event.params.targetInfo.url)
-          )
-        )
-          throw refusal('protected out-of-process frame');
+        const blocked = targetBlocked.get(params.targetId) ?? {
+          ids: new Set(),
+          urls: new Set(),
+          midIds: new Set(),
+        };
+        for (const event of frames) {
+          const info = event.params.targetInfo;
+          if (!catalog.url(info.url) || allowExtension(info.url)) continue;
+          blocked.urls.add(info.url);
+          if (info.targetId) blocked.ids.add(info.targetId);
+        }
+        targetBlocked.set(params.targetId, blocked);
       } finally {
         await unguarded.send(
           'Target.setAutoAttach',

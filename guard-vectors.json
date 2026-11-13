@@ -26725,7 +26725,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
+            "source": "// slicc\u2028fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
             "worldName": "slicc-bound-ls-{tag}"
           },
           "as": "boundLs",
@@ -26737,7 +26737,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
+            "source": "// slicc\u2029fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
             "worldName": "slicc-bound-ps-{tag}"
           },
           "as": "boundPs",
@@ -26773,7 +26773,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "﻿fetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
+            "source": "\ufefffetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
             "worldName": "slicc-bound-bom-{tag}"
           },
           "as": "boundBom",
@@ -31563,7 +31563,6 @@
       },
       "designDependent": ["attachRefused", "workerAttached"]
     },
-
     {
       "id": "C3.protected-parent-iframes",
       "family": "C",
@@ -31845,6 +31844,36 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.protected-parent-iframes.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.protected-parent-iframes.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.protected-parent-iframes.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -31863,7 +31892,10 @@
           "frameEvents": true,
           "contextCreated": true,
           "contextEvaluate": true,
-          "midFrameAttached": true
+          "midFrameAttached": true,
+          "targetInfo": false,
+          "childAttach": false,
+          "targetEvents": false
         }
       },
       "expected": {
@@ -31872,7 +31904,10 @@
         "frameEvents": false,
         "contextCreated": false,
         "contextEvaluate": false,
-        "midFrameAttached": "either"
+        "midFrameAttached": "either",
+        "targetInfo": false,
+        "childAttach": false,
+        "targetEvents": false
       },
       "designDependent": ["midFrameAttached"]
     },
@@ -31957,6 +31992,36 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.protected-parent-srcdoc.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -31975,7 +32040,10 @@
           "frameEvents": true,
           "contextCreated": true,
           "contextEvaluate": true,
-          "midFrameAttached": true
+          "midFrameAttached": true,
+          "targetInfo": false,
+          "childAttach": false,
+          "targetEvents": false
         }
       },
       "expected": {
@@ -31984,7 +32052,10 @@
         "frameEvents": false,
         "contextCreated": false,
         "contextEvaluate": false,
-        "midFrameAttached": "either"
+        "midFrameAttached": "either",
+        "targetInfo": false,
+        "childAttach": false,
+        "targetEvents": false
       },
       "designDependent": ["midFrameAttached"]
     },
@@ -32069,6 +32140,36 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.ordinary-parent-iframes.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.ordinary-parent-iframes.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.ordinary-parent-iframes.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -32087,7 +32188,10 @@
           "frameEvents": true,
           "contextCreated": true,
           "contextEvaluate": true,
-          "midFrameAttached": true
+          "midFrameAttached": true,
+          "targetInfo": "either",
+          "childAttach": "either",
+          "targetEvents": "either"
         }
       },
       "expected": {
@@ -32096,8 +32200,12 @@
         "frameEvents": true,
         "contextCreated": true,
         "contextEvaluate": true,
-        "midFrameAttached": true
-      }
+        "midFrameAttached": true,
+        "targetInfo": "either",
+        "childAttach": "either",
+        "targetEvents": "either"
+      },
+      "designDependent": ["targetInfo", "childAttach", "targetEvents"]
     }
   ]
 }

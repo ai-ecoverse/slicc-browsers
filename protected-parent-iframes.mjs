@@ -729,6 +729,13 @@ async function waitGrandchild(
     return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions);
   }, budget);
   if (found) {
+    const branch =
+      found.via === 'top'
+        ? 'top-tree'
+        : found.via === 'mid-target'
+          ? 'mid-target'
+          : 'grandchild-target';
+    note(notes, 'protected-parent.page-branch', { branch, via: found.via });
     note(notes, 'protected-parent.page-raw', {
       midFrameId: found.hit.midFrameId,
       midUrl: found.hit.midUrl,
@@ -736,6 +743,7 @@ async function waitGrandchild(
       url: found.hit.url,
       parentId: found.hit.parentId,
       via: found.via,
+      branch,
       midTargetId: found.midTargetId,
       grandchildTargetId: found.grandchildTargetId,
       frames: walkFrames(found.tree).map((frame) => ({
@@ -832,6 +840,8 @@ async function attachOrdinaryTop(client, targetId, notes, internalSessions) {
 
 function adoptLiveRaw(raw, liveRaw) {
   raw.midFrameId = liveRaw.hit.midFrameId;
+  if (liveRaw.midTargetId) raw.midTargetId = liveRaw.midTargetId;
+  if (liveRaw.grandchildTargetId) raw.grandchildTargetId = liveRaw.grandchildTargetId;
   raw.frameIds = new Set([liveRaw.hit.frameId]);
   raw.urls = new Set([liveRaw.hit.url].filter((url) => typeof url === 'string' && url.length > 0));
   try {
@@ -1035,8 +1045,28 @@ async function liveGrandchild({
   return liveContexts.length ? liveContexts : contexts;
 }
 
-async function gatherChildSessions(client, sessionId, clientEventStart, raw, internalSessions) {
-  const childSessions = new Set();
+function targetInfoHit(info, raw) {
+  if (!info) return false;
+  if (raw.grandchildTargetId && info.targetId === raw.grandchildTargetId) return true;
+  if (raw.midTargetId && info.parentId === raw.midTargetId) {
+    const url = info.url ?? '';
+    if ([...raw.urls].some((entry) => entry && (url === entry || url.includes(entry)))) return true;
+  }
+  const url = info.url ?? '';
+  return [...raw.urls].some((entry) => entry && url === entry);
+}
+
+function targetEventHit(event, raw) {
+  if (
+    !['Target.targetCreated', 'Target.targetInfoChanged', 'Target.attachedToTarget'].includes(
+      event.method
+    )
+  )
+    return false;
+  return targetInfoHit(event.params?.targetInfo, raw);
+}
+
+async function autoAttachSession(client, sessionId) {
   await outcome(
     client.send(
       'Target.setAutoAttach',
@@ -1044,35 +1074,134 @@ async function gatherChildSessions(client, sessionId, clientEventStart, raw, int
       sessionId
     )
   );
+}
+
+function pullAutoSessions(client, clientEventStart, childSessions) {
   for (const child of collectAutoSessions(client.events ?? [], clientEventStart))
     childSessions.add(child);
-  for (const child of [...childSessions]) {
-    await outcome(
-      client.send(
-        'Target.setAutoAttach',
-        { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-        child
-      )
-    );
+}
+
+async function adoptAttachedSession(out, childSessions, internalSessions, result) {
+  if (!answered(out)) return 'unanswered';
+  if (out.ok && out.result?.sessionId) {
+    childSessions.add(out.result.sessionId);
+    internalSessions?.add(out.result.sessionId);
+    if (result) result.childAttach = true;
+    return 'attached';
   }
-  for (const child of collectAutoSessions(client.events ?? [], clientEventStart))
-    childSessions.add(child);
+  if (result) {
+    result.childAttach ??= false;
+    if (refused(out)) result.attachRefused = true;
+  }
+  return refused(out) ? 'refused' : 'failed';
+}
+
+async function probeListedGrandchildren(
+  client,
+  raw,
+  childSessions,
+  internalSessions,
+  result,
+  missing
+) {
   const listed = await outcome(client.send('Target.getTargets', {}));
-  if (!listed.ok) return childSessions;
-  for (const info of listed.result?.targetInfos ?? []) {
+  if (!answered(listed)) {
+    missing.push('Target.getTargets unanswered');
+    return;
+  }
+  if (!listed.ok) {
+    result.targetInfo ??= false;
+    return;
+  }
+  const infos = listed.result?.targetInfos ?? [];
+  if (infos.some((info) => targetInfoHit(info, raw))) result.targetInfo = true;
+  for (const info of infos) {
     if (info.type !== 'iframe') continue;
-    const url = info.url ?? '';
-    const match = [...raw.urls].some(
-      (entry) => entry && (url === entry || url.includes(entry) || entry.includes(url))
-    );
-    if (!match) continue;
+    if (!targetInfoHit(info, raw) && info.targetId !== raw.grandchildTargetId) continue;
     const attachedChild = await outcome(
       client.send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
     );
-    if (!answered(attachedChild) || !attachedChild.ok || !attachedChild.result?.sessionId) continue;
-    childSessions.add(attachedChild.result.sessionId);
-    internalSessions?.add(attachedChild.result.sessionId);
+    const status = await adoptAttachedSession(
+      attachedChild,
+      childSessions,
+      internalSessions,
+      result
+    );
+    if (status === 'unanswered')
+      missing.push(`Target.attachToTarget unanswered (${info.targetId})`);
   }
+}
+
+async function probeRawGrandchildTarget(
+  client,
+  raw,
+  childSessions,
+  internalSessions,
+  result,
+  missing
+) {
+  if (!raw.grandchildTargetId) {
+    result.targetInfo ??= false;
+    result.childAttach ??= false;
+    return;
+  }
+  if (result.childAttach === true) return;
+  const infoOut = await outcome(
+    client.send('Target.getTargetInfo', { targetId: raw.grandchildTargetId })
+  );
+  if (!answered(infoOut)) missing.push('Target.getTargetInfo unanswered for grandchild');
+  else if (infoOut.ok) result.targetInfo = true;
+  else result.targetInfo ??= false;
+  const attachedRaw = await outcome(
+    client.send('Target.attachToTarget', {
+      targetId: raw.grandchildTargetId,
+      flatten: true,
+    })
+  );
+  const status = await adoptAttachedSession(attachedRaw, childSessions, internalSessions, result);
+  if (status === 'unanswered')
+    missing.push('Target.attachToTarget unanswered for raw grandchild target');
+}
+
+async function gatherChildSessions(
+  client,
+  sessionId,
+  clientEventStart,
+  raw,
+  internalSessions,
+  result,
+  missing
+) {
+  const childSessions = new Set();
+  await autoAttachSession(client, sessionId);
+  await until(async () => {
+    pullAutoSessions(client, clientEventStart, childSessions);
+    return childSessions.size > 0 ? childSessions : null;
+  }, 200);
+  pullAutoSessions(client, clientEventStart, childSessions);
+  if (raw.midTargetId) {
+    const midAttached = await outcome(
+      client.send('Target.attachToTarget', { targetId: raw.midTargetId, flatten: true })
+    );
+    await adoptAttachedSession(midAttached, childSessions, internalSessions, null);
+  }
+  for (const child of [...childSessions]) await autoAttachSession(client, child);
+  const before = childSessions.size;
+  await until(async () => {
+    pullAutoSessions(client, clientEventStart, childSessions);
+    return childSessions.size > before ? childSessions : null;
+  }, 200);
+  pullAutoSessions(client, clientEventStart, childSessions);
+  result.targetEvents = (client.events ?? [])
+    .slice(clientEventStart)
+    .some((event) => targetEventHit(event, raw))
+    ? true
+    : (result.targetEvents ?? false);
+  await probeListedGrandchildren(client, raw, childSessions, internalSessions, result, missing);
+  await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+  result.targetInfo ??= false;
+  result.childAttach ??= false;
+  result.targetEvents ??= false;
   return childSessions;
 }
 
@@ -1107,8 +1236,11 @@ async function measurePageClient({
     sessionId,
     clientEventStart,
     raw,
-    internalSessions
+    internalSessions,
+    result,
+    missing
   );
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
   const sessions = [sessionId, ...childSessions];
   await sampleTrees(client, sessions, treeArm, result, raw);
   await sampleResources(client, sessions, resourceArm, result, raw);
@@ -1154,6 +1286,45 @@ async function measurePageClient({
     result,
     budget,
   });
+  await finishPageClient(
+    client,
+    sessionId,
+    clientEventStart,
+    raw,
+    liveContexts,
+    treeArm,
+    resourceArm,
+    evaluateArm,
+    result,
+    missing,
+    notes,
+    childSessions,
+    windowMs
+  );
+  if (missing.length) return { ...result, incomplete: missing.join('; ') };
+  return result;
+}
+
+function finishPageClient(
+  client,
+  sessionId,
+  clientEventStart,
+  raw,
+  liveContexts,
+  treeArm,
+  resourceArm,
+  evaluateArm,
+  result,
+  missing,
+  notes,
+  childSessions,
+  windowMs
+) {
+  result.targetEvents = (client.events ?? [])
+    .slice(clientEventStart)
+    .some((event) => targetEventHit(event, raw))
+    ? true
+    : (result.targetEvents ?? false);
   settleArm(result, 'frameTree', treeArm.unanswered, 'Page.getFrameTree unanswered', missing, {
     frameTree: false,
   });
@@ -1167,6 +1338,9 @@ async function measurePageClient({
   );
   result.frameEvents ??= false;
   result.midFrameAttached ??= false;
+  result.targetInfo ??= false;
+  result.childAttach ??= false;
+  result.targetEvents ??= false;
   if (!liveContexts.length) missing.push('grandchild execution context missing in raw leg');
   else {
     result.contextCreated ??= false;
@@ -1188,6 +1362,11 @@ async function measurePageClient({
     contextCreated: result.contextCreated ?? 'unmeasured',
     contextEvaluate: result.contextEvaluate ?? 'unmeasured',
     midFrameAttached: result.midFrameAttached ?? 'unmeasured',
+    targetInfo: result.targetInfo ?? 'unmeasured',
+    childAttach: result.childAttach ?? 'unmeasured',
+    targetEvents: result.targetEvents ?? 'unmeasured',
+    attachRefused: result.attachRefused ?? false,
+    grandchildTargetId: raw.grandchildTargetId ?? null,
     windowMs,
     childSessions: [...childSessions],
     firstTreeOk: treeArm.out?.ok,
@@ -1195,9 +1374,7 @@ async function measurePageClient({
     firstEvaluateOk: evaluateArm.out?.ok,
     unanswered: missing,
   });
-  await outcome(client.send('Target.detachFromTarget', { sessionId }));
-  if (missing.length) return { ...result, incomplete: missing.join('; ') };
-  return result;
+  return outcome(client.send('Target.detachFromTarget', { sessionId }));
 }
 
 async function pageNested({
@@ -1257,6 +1434,8 @@ async function pageNested({
   }
   const raw = {
     midFrameId: rawFound.hit.midFrameId,
+    midTargetId: rawFound.midTargetId,
+    grandchildTargetId: rawFound.grandchildTargetId,
     frameIds: new Set([rawFound.hit.frameId]),
     urls: new Set([rawFound.hit.url].filter((url) => typeof url === 'string' && url.length > 0)),
     origins: new Set(),

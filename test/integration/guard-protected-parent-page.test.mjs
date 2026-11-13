@@ -18,7 +18,10 @@ const vectors = set.vectors.filter((v) => ids.includes(v.id));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
-function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = {}) {
+function pageFake({
+  protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'],
+  oopifGrandchildTargets = false,
+} = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const sessionConn = new Map();
@@ -66,7 +69,11 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
     const childOrigin = originOf(childUrl);
     const oopifMid = Boolean(midOrigin && midOrigin !== topOrigin);
     const oopifChild = Boolean(
-      oopifMid && childUrl !== 'about:srcdoc' && childOrigin !== midOrigin
+      oopifGrandchildTargets &&
+        oopifMid &&
+        childUrl !== 'about:srcdoc' &&
+        childOrigin &&
+        childOrigin !== midOrigin
     );
     const childNode = {
       frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
@@ -432,17 +439,23 @@ test('judge fails a grandchild frameTree leak on the page row', () => {
     contextCreated: false,
     contextEvaluate: false,
     midFrameAttached: false,
+    targetInfo: false,
+    childAttach: false,
+    targetEvents: false,
   };
   assert.equal(judge(vector, 'guarded', ok).pass, true);
   assert.equal(judge(vector, 'guarded', { ...ok, frameTree: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, frameEvents: true }).pass, false);
+  assert.equal(judge(vector, 'guarded', { ...ok, targetInfo: true }).pass, false);
+  assert.equal(judge(vector, 'guarded', { ...ok, childAttach: true }).pass, false);
+  assert.equal(judge(vector, 'guarded', { ...ok, targetEvents: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, midFrameAttached: true }).pass, true);
 });
 
-async function runMode(mode, { only = ids } = {}) {
+async function runMode(mode, { only = ids, oopifGrandchildTargets = false } = {}) {
   const fixture = await fixtureServer();
   try {
-    const browser = pageFake();
+    const browser = pageFake({ oopifGrandchildTargets });
     const origin = (host) => `http://${host}:${fixture.port}`;
     const targets = {
       ordinary: origin('ordinary.example.test'),
@@ -504,14 +517,14 @@ function describe(row) {
 }
 
 test('a correct guard passes protected-parent page rows and the ordinary control', async () => {
-  const execution = await runMode({});
+  const execution = await runMode({}, { oopifGrandchildTargets: true });
   for (const row of execution.results) {
     assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
   }
 });
 
 test('an unguarded run passes control, fails guarded security page rows, and passes the ordinary control', async () => {
-  const execution = await runMode('none');
+  const execution = await runMode('none', { oopifGrandchildTargets: true });
   for (const row of execution.results) {
     assert.equal(row.control, 'pass', describe(row));
     assert.equal(row.live, 'pass', describe(row));
@@ -521,15 +534,46 @@ test('an unguarded run passes control, fails guarded security page rows, and pas
   }
 });
 
-const mutants = [
+test('nested-in-tree shape still passes a correct guard', async () => {
+  const execution = await runMode({}, { oopifGrandchildTargets: false });
+  for (const row of execution.results) {
+    if (row.id === 'C3.ordinary-parent-iframes.page') continue;
+    assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  }
+});
+
+const nestedMutants = [
   ['leakProtectedDescendantFrames', { leakProtectedDescendantFrames: true }],
   ['leakProtectedFrameEvents', { leakProtectedFrameEvents: true }],
   ['leakProtectedFrameContexts', { leakProtectedFrameContexts: true }],
 ];
 
-for (const [name, options] of mutants) {
-  test(`mutant ${name} fails a protected-parent page row`, async () => {
-    const execution = await runMode(options, { only: ['C3.protected-parent-iframes.page'] });
+for (const [name, options] of nestedMutants) {
+  test(`mutant ${name} fails a nested protected-parent page row`, async () => {
+    const execution = await runMode(options, {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: false,
+    });
+    const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+    assert.ok(row, name);
+    assert.equal(row.control, 'pass', describe(row));
+    assert.equal(row.guarded, 'fail', describe(row));
+  });
+}
+
+const oopifMutants = [
+  ['iframeOwnUrlOnly', { iframeOwnUrlOnly: true }],
+  ['allowProtectedParentAttach', { allowProtectedParentAttach: true }],
+  ['leakAttachedToTarget', { leakAttachedToTarget: true }],
+  ['leakIframeEvents', { leakIframeEvents: true }],
+];
+
+for (const [name, options] of oopifMutants) {
+  test(`mutant ${name} fails an OOPIF grandchild protected-parent page row`, async () => {
+    const execution = await runMode(options, {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: true,
+    });
     const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
     assert.ok(row, name);
     assert.equal(row.control, 'pass', describe(row));
@@ -540,7 +584,7 @@ for (const [name, options] of mutants) {
 test('overblockOrdinaryFrames fails the ordinary-parent page control', async () => {
   const execution = await runMode(
     { overblockOrdinaryFrames: true },
-    { only: ['C3.ordinary-parent-iframes.page'] }
+    { only: ['C3.ordinary-parent-iframes.page'], oopifGrandchildTargets: false }
   );
   const row = execution.results.find((entry) => entry.id === 'C3.ordinary-parent-iframes.page');
   assert.ok(row);

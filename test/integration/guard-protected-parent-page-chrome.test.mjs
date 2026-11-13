@@ -76,9 +76,24 @@ test('protected-parent page rows hide the ordinary grandchild on the top page se
       observations: row.observations,
     }));
     for (const row of rows) {
+      const branchNote = (row.notes ?? []).find((note) =>
+        note.includes('protected-parent.page-branch')
+      );
+      const branch = branchNote?.includes('grandchild-target')
+        ? 'grandchild-target'
+        : branchNote?.includes('mid-target')
+          ? 'mid-target'
+          : branchNote?.includes('top-tree')
+            ? 'top-tree'
+            : 'unknown';
+      console.error(`protected-parent.page ${row.id} branch=${branch}`);
       assert.ok(
         (row.notes ?? []).some((note) => note.includes('protected-parent.page-raw')),
         `${row.id} missing raw frame evidence: ${JSON.stringify(report, null, 2)}`
+      );
+      assert.ok(
+        (row.notes ?? []).some((note) => note.includes('protected-parent.page-branch')),
+        `${row.id} missing page-branch: ${JSON.stringify(row.notes)}`
       );
       assert.ok(
         (row.notes ?? []).some((note) => note.includes('mid-already-present')),
@@ -107,6 +122,9 @@ test('protected-parent page rows hide the ordinary grandchild on the top page se
         assert.equal(row.observations.guarded.frameTree, false, row.id);
         assert.equal(row.observations.guarded.frameEvents, false, row.id);
         assert.equal(row.observations.guarded.contextCreated, false, row.id);
+        assert.equal(row.observations.guarded.targetInfo, false, row.id);
+        assert.equal(row.observations.guarded.childAttach, false, row.id);
+        assert.equal(row.observations.guarded.targetEvents, false, row.id);
       }
     }
   } finally {

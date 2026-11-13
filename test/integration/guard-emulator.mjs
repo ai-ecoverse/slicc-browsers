@@ -206,6 +206,41 @@ function emitProtectedParentIframeLeak(event, options, ctx) {
   return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
 }
 
+async function leakDescendantIframeEvents(event, options, ctx, unguarded, catalog, decisions) {
+  if (!options.leakAttachedToTarget && !options.leakIframeEvents) return;
+  const parent = event.params?.targetInfo;
+  if (!parent?.targetId || parent.type !== 'iframe') return;
+  const listed = await unguarded.send('Target.getTargets').catch(() => null);
+  for (const info of listed?.targetInfos ?? []) {
+    if (info.type !== 'iframe' || info.parentId !== parent.targetId) continue;
+    if (!(await iframeAncestorProtected(unguarded, catalog, info, options, decisions))) continue;
+    emitProtectedParentIframeLeak(
+      {
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: `leak-child-${info.targetId}`,
+          targetInfo: info,
+          waitingForDebugger: false,
+        },
+        sessionId: event.params?.sessionId,
+      },
+      options,
+      ctx
+    );
+    if (options.leakIframeEvents) {
+      emitProtectedParentIframeLeak(
+        {
+          method: 'Target.targetInfoChanged',
+          params: { targetInfo: info },
+          sessionId: event.params?.sessionId,
+        },
+        options,
+        ctx
+      );
+    }
+  }
+}
+
 function emulatedGuardPlain(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
@@ -625,6 +660,28 @@ function emulatedGuardPlain(browser, options = {}) {
             destroyedIds,
           });
           if (leaked !== 'attached') continue;
+        } else if (
+          catalog &&
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.targetInfo?.type === 'iframe'
+        ) {
+          await leakDescendantIframeEvents(
+            event,
+            options,
+            {
+              messages,
+              events,
+              waiters,
+              sanitize,
+              redactInfo,
+              mentions,
+              hidden,
+              destroyedIds,
+            },
+            unguarded,
+            catalog,
+            decisions
+          );
         }
         const pageSession = event.sessionId;
         const blocked = pageSession ? sessionBlocked.get(pageSession) : undefined;
@@ -1765,6 +1822,28 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
             destroyedIds,
           });
           if (leaked !== 'attached') continue;
+        } else if (
+          catalog &&
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.targetInfo?.type === 'iframe'
+        ) {
+          await leakDescendantIframeEvents(
+            event,
+            options,
+            {
+              messages,
+              events,
+              waiters,
+              sanitize,
+              redactInfo,
+              mentions,
+              hidden,
+              destroyedIds,
+            },
+            unguarded,
+            catalog,
+            decisions
+          );
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog

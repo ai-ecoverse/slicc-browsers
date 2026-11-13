@@ -1236,6 +1236,124 @@ async function sampleTrees(client, sessionIds, treeArm, result, raw) {
   }
 }
 
+async function enableChildDomains(client, childSessions) {
+  for (const child of [...childSessions]) {
+    await outcome(client.send('Page.enable', {}, child));
+    await outcome(client.send('Runtime.enable', {}, child));
+  }
+}
+
+async function adoptLiveClientSessions(
+  client,
+  sessionId,
+  clientEventStart,
+  raw,
+  childSessions,
+  internalSessions
+) {
+  await autoAttachSession(client, sessionId);
+  pullAutoSessions(client, clientEventStart, childSessions);
+  for (const targetId of [raw.midTargetId, raw.grandchildTargetId].filter(Boolean)) {
+    const attached = await outcome(
+      client.send('Target.attachToTarget', { targetId, flatten: true })
+    );
+    await adoptAttachedSession(attached, childSessions, internalSessions, null);
+  }
+  for (const child of [...childSessions]) await autoAttachSession(client, child);
+  pullAutoSessions(client, clientEventStart, childSessions);
+  await enableChildDomains(client, childSessions);
+}
+
+async function armNewChildSessions(client, events, childSessions) {
+  for (const child of collectAutoSessions(events, 0)) {
+    if (childSessions.has(child)) continue;
+    childSessions.add(child);
+    await outcome(client.send('Page.enable', {}, child));
+    await outcome(client.send('Runtime.enable', {}, child));
+  }
+}
+
+async function remasureLiveGrandchild({
+  reader,
+  readerSessionId,
+  pageUrl,
+  targetId,
+  midHint,
+  innerHint,
+  innerKind,
+  raw,
+  budget,
+  notes,
+  internalSessions,
+}) {
+  const before = await listTargetSnapshot(reader);
+  const beforeIds = new Set(before.targets.map((info) => info.targetId).filter(Boolean));
+  const kind = innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary');
+  const childBudget = budget < 2000 ? budget : Math.max(budget, 4000);
+  if (raw.midTargetId) {
+    const midAttached = await attachIframeTarget(
+      reader,
+      (info) => info.targetId === raw.midTargetId,
+      internalSessions
+    );
+    if (midAttached) {
+      const stamp = stampedMidLive(midAttached.info.url ?? '', kind, innerHint);
+      note(notes, 'protected-parent.page-live-nav', {
+        via: 'mid-session-remeasure',
+        url: stamp.midUrl,
+        innerHint: stamp.innerHint,
+        midNeedle: stamp.midNeedle,
+        midTargetId: raw.midTargetId,
+      });
+      const navigated = await outcome(
+        reader.send('Page.navigate', { url: stamp.midUrl }, midAttached.sessionId)
+      );
+      if (answered(navigated) && navigated.ok) {
+        const found = await waitChildUnderMid(
+          reader,
+          midAttached,
+          stamp.innerHint || innerHint,
+          childBudget,
+          internalSessions,
+          beforeIds,
+          stamp.midNeedle
+        );
+        if (found) return found;
+      }
+    }
+  }
+  const plan = liveNestPlan(pageUrl, kind, innerHint);
+  let liveUrl = plan.liveUrl;
+  try {
+    const page = new URL(plan.liveUrl);
+    page.searchParams.set('live', String((Number(page.searchParams.get('live')) || 1) + 1));
+    liveUrl = page.toString();
+  } catch {
+    liveUrl = plan.liveUrl;
+  }
+  note(notes, 'protected-parent.page-live-nav', {
+    via: 'top-session-remeasure',
+    url: liveUrl,
+    innerHint: plan.innerHint,
+    midNeedle: plan.midNeedle,
+    beforeTargetIds: [...beforeIds],
+  });
+  const navigated = await outcome(reader.send('Page.navigate', { url: liveUrl }, readerSessionId));
+  if (!answered(navigated) || !navigated.ok) return null;
+  return waitGrandchild(
+    reader,
+    readerSessionId,
+    midHint,
+    plan.innerHint || innerHint,
+    childBudget,
+    notes,
+    targetId,
+    internalSessions,
+    plan.midNeedle,
+    beforeIds
+  );
+}
+
 async function pollPageClient({
   client,
   sessionId,
@@ -1253,7 +1371,7 @@ async function pollPageClient({
   const deadline = Date.now() + windowMs;
   while (Date.now() <= deadline) {
     const events = (client.events ?? []).slice(clientEventStart);
-    for (const child of collectAutoSessions(events, 0)) childSessions.add(child);
+    await armNewChildSessions(client, events, childSessions);
     result.frameEvents = events.some((event) => frameEventHit(event, raw))
       ? true
       : (result.frameEvents ?? false);
@@ -1692,7 +1810,7 @@ async function measurePageClient({
     result.contextCreated = (client.events ?? [])
       .slice(clientEventStart)
       .some((event) => contextHit(event, raw));
-  const liveContexts = await liveGrandchild({
+  let liveContexts = await liveGrandchild({
     reader,
     readerSessionId,
     readerSessions,
@@ -1709,17 +1827,58 @@ async function measurePageClient({
     internalSessions,
     missing,
   });
-  if (preferMidLive && raw.midTargetId) {
-    const midAgain = await outcome(
-      client.send('Target.attachToTarget', { targetId: raw.midTargetId, flatten: true })
-    );
-    await adoptAttachedSession(midAgain, childSessions, internalSessions, null);
-    await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
-    for (const child of [...childSessions]) {
-      await outcome(client.send('Page.enable', {}, child));
-      await outcome(client.send('Runtime.enable', {}, child));
+  await adoptLiveClientSessions(
+    client,
+    sessionId,
+    clientEventStart,
+    raw,
+    childSessions,
+    internalSessions
+  );
+  await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+  if (raw.midTargetId || raw.grandchildTargetId) {
+    const remasured = await remasureLiveGrandchild({
+      reader,
+      readerSessionId,
+      pageUrl,
+      targetId,
+      midHint,
+      innerHint,
+      innerKind,
+      raw,
+      budget,
+      notes,
+      internalSessions,
+    });
+    if (remasured) {
+      adoptLiveRaw(raw, remasured);
+      note(notes, 'protected-parent.page-live-raw', {
+        midFrameId: remasured.hit.midFrameId,
+        frameId: remasured.hit.frameId,
+        url: remasured.hit.url,
+        via: remasured.via,
+        remasure: true,
+      });
+      await adoptLiveClientSessions(
+        client,
+        sessionId,
+        clientEventStart,
+        raw,
+        childSessions,
+        internalSessions
+      );
+      await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
     }
   }
+  const clientContexts = await rawContexts(
+    client,
+    [sessionId, ...childSessions],
+    raw,
+    clientEventStart,
+    Math.min(budget, 1500),
+    notes
+  );
+  if (clientContexts.length) liveContexts = clientContexts;
   const windowMs = await pollPageClient({
     client,
     sessionId,

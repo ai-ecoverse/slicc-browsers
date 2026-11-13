@@ -29,6 +29,7 @@ jobs:
         GOLANGCI_LINT=v2.15.0
         curl -fsSL "https://raw.githubusercontent.com/golangci/golangci-lint/$GOLANGCI_LINT/install.sh" | sh -s -- -b "$RUNNER_TEMP/golangci-lint" "$GOLANGCI_LINT"
         export PATH="$RUNNER_TEMP/golangci-lint:$HOME/.cargo/bin:$PATH"
+        export RUSTUP_PERMIT_COPY_RENAME=1
         rustup toolchain install stable --profile minimal --component rustfmt,clippy --target wasm32-wasip1
         rustup default stable
         npm run lint
@@ -122,6 +123,7 @@ jobs:
           node-version: 26
 
       - run: |
+          export RUSTUP_PERMIT_COPY_RENAME=1
           rustup toolchain install stable --profile minimal
           rustup default stable
 

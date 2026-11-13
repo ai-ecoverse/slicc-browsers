@@ -514,6 +514,520 @@ async function sandboxedSrcdoc({
   };
 }
 
+const pageFrameEvents = [
+  'Page.frameAttached',
+  'Page.frameStartedLoading',
+  'Page.frameNavigated',
+  'Page.frameRequestedNavigation',
+  'Page.lifecycleEvent',
+  'Page.navigatedWithinDocument',
+];
+
+function frameEventHit(event, raw) {
+  if (!pageFrameEvents.includes(event.method)) return false;
+  const params = event.params ?? {};
+  const frame = params.frame ?? {};
+  const frameId = params.frameId ?? frame.id;
+  const parentId = params.parentFrameId ?? params.parentId ?? frame.parentId;
+  const url = params.url ?? frame.url ?? '';
+  if (frameId && raw.frameIds.has(frameId)) return true;
+  if (parentId && parentId === raw.midFrameId) return true;
+  if (typeof url === 'string' && url.length > 0 && raw.urls.has(url)) return true;
+  return false;
+}
+
+function contextHit(event, raw) {
+  if (event.method !== 'Runtime.executionContextCreated') return false;
+  const context = event.params?.context;
+  const frameId = context?.auxData?.frameId;
+  const origin = context?.origin ?? '';
+  if (frameId && raw.frameIds.has(frameId)) return true;
+  if (raw.origins.has(origin)) return true;
+  return false;
+}
+
+function treeMentions(tree, raw) {
+  for (const frame of walkFrames(tree)) {
+    if (raw.frameIds.has(frame.id)) return true;
+    if (typeof frame.url === 'string' && frame.url.length > 0 && raw.urls.has(frame.url))
+      return true;
+    if (frame.parentId && frame.parentId === raw.midFrameId) return true;
+  }
+  const visit = (node, underMid) => {
+    if (!node?.frame) return false;
+    const here = underMid || node.frame.id === raw.midFrameId;
+    for (const child of node.childFrames ?? []) {
+      if (here) return true;
+      if (visit(child, here)) return true;
+    }
+    return false;
+  };
+  return visit(tree, false);
+}
+
+function resourceMentions(resource, raw) {
+  const frameTree = resource?.frameTree ?? resource;
+  if (treeMentions(frameTree, raw)) return true;
+  const text = JSON.stringify(resource ?? {});
+  for (const id of raw.frameIds) if (text.includes(id)) return true;
+  for (const url of raw.urls) if (url && text.includes(url)) return true;
+  if (raw.midFrameId && text.includes(`"parentId":"${raw.midFrameId}"`)) return true;
+  return false;
+}
+
+function midFrameAttachedHit(event, raw) {
+  if (event.method !== 'Page.frameAttached') return false;
+  const frameId = event.params?.frameId;
+  return Boolean(frameId && frameId === raw.midFrameId);
+}
+
+function childMatches(url, innerNeedle) {
+  if (innerNeedle === 'about:srcdoc') return url === 'about:srcdoc';
+  return typeof url === 'string' && (url === innerNeedle || url.includes(innerNeedle));
+}
+
+function midMatches(midUrl, midHint) {
+  if (!midHint) return true;
+  try {
+    const hint = new URL(midHint);
+    const mid = new URL(midUrl);
+    return mid.origin === hint.origin;
+  } catch {
+    return midUrl.includes(midHint) || midUrl.startsWith(String(midHint).split('?')[0]);
+  }
+}
+
+function grandchildFromMid(mid, innerNeedle) {
+  const midUrl = mid.frame?.url ?? '';
+  for (const child of mid.childFrames ?? []) {
+    const url = child.frame?.url ?? '';
+    if (!childMatches(url, innerNeedle)) continue;
+    return {
+      midFrameId: mid.frame.id,
+      midUrl,
+      frameId: child.frame.id,
+      url,
+      parentId: child.frame.parentId ?? mid.frame.id,
+    };
+  }
+  return null;
+}
+
+function findGrandchild(tree, midHint, innerNeedle) {
+  if (!tree?.frame) return null;
+  for (const mid of tree.childFrames ?? []) {
+    if (!midMatches(mid.frame?.url ?? '', midHint)) continue;
+    const hit = grandchildFromMid(mid, innerNeedle);
+    if (hit) return hit;
+  }
+  for (const mid of tree.childFrames ?? []) {
+    if (!/\/oopif-(mid|srcdoc)/.test(mid.frame?.url ?? '')) continue;
+    const hit = grandchildFromMid(mid, innerNeedle);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+async function waitGrandchild(reader, sessionId, midHint, innerHint, budget, notes) {
+  const found = await until(async () => {
+    const tree = await readTree(reader, sessionId);
+    const hit = findGrandchild(tree, midHint, innerHint);
+    return hit ? { tree, hit } : null;
+  }, budget);
+  if (found) {
+    note(notes, 'protected-parent.page-raw', {
+      midFrameId: found.hit.midFrameId,
+      midUrl: found.hit.midUrl,
+      frameId: found.hit.frameId,
+      url: found.hit.url,
+      parentId: found.hit.parentId,
+      frames: walkFrames(found.tree).map((frame) => ({
+        id: frame.id,
+        url: frame.url,
+        parentId: frame.parentId,
+      })),
+    });
+    return found;
+  }
+  const tree = await readTree(reader, sessionId);
+  note(notes, 'protected-parent.page-raw-missing', {
+    midHint,
+    innerHint,
+    frames: walkFrames(tree).map((frame) => ({
+      id: frame.id,
+      url: frame.url,
+      parentId: frame.parentId,
+    })),
+  });
+  return null;
+}
+
+async function rawContexts(reader, sessionId, raw, eventStart, budget, notes) {
+  const deadline = Date.now() + Math.min(budget, 1500);
+  const contexts = [];
+  while (Date.now() <= deadline) {
+    for (const event of (reader.events ?? []).slice(eventStart)) {
+      if (event.sessionId && event.sessionId !== sessionId) continue;
+      if (!contextHit(event, raw)) continue;
+      const context = event.params?.context;
+      if (context?.id != null && !contexts.some((entry) => entry.id === context.id))
+        contexts.push({
+          id: context.id,
+          origin: context.origin,
+          frameId: context.auxData?.frameId,
+        });
+    }
+    if (contexts.length) break;
+    await pause(25);
+  }
+  note(notes, 'protected-parent.page-raw-contexts', { contexts });
+  return contexts;
+}
+
+function applyTreeSample(arm, sample, result, key, mentions) {
+  takeFirst(arm, sample, (entry) => {
+    if (entry.unanswered) return;
+    if (entry.out.ok) {
+      if (mentions(entry.out.result)) result[key] = true;
+      else if (result[key] !== true) result[key] = false;
+    } else if (result[key] !== true) result[key] = false;
+  });
+}
+
+async function attachOrdinaryTop(client, targetId, notes, internalSessions) {
+  note(notes, 'protected-parent.page-attach-order', {
+    midPresentBeforeAttach: true,
+    targetId,
+  });
+  const attached = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
+  if (!answered(attached)) {
+    note(notes, 'protected-parent.page-attach', {
+      ok: false,
+      unanswered: true,
+      error: String(attached.error?.message ?? attached.error ?? ''),
+    });
+    return { incomplete: 'Target.attachToTarget unanswered for ordinary top page' };
+  }
+  if (!attached.ok || !attached.result?.sessionId) {
+    note(notes, 'protected-parent.page-attach', {
+      ok: false,
+      refused: refused(attached),
+      error: String(attached.error?.message ?? attached.error ?? ''),
+    });
+    return {
+      incomplete: `Target.attachToTarget on ordinary top failed: ${attached.error?.message ?? attached.error}`,
+    };
+  }
+  internalSessions.add(attached.result.sessionId);
+  return { sessionId: attached.result.sessionId };
+}
+
+function adoptLiveRaw(raw, liveRaw) {
+  raw.midFrameId = liveRaw.hit.midFrameId;
+  raw.frameIds = new Set([liveRaw.hit.frameId]);
+  raw.urls = new Set([liveRaw.hit.url].filter((url) => typeof url === 'string' && url.length > 0));
+  try {
+    raw.origins = new Set([new URL(liveRaw.hit.url).origin]);
+  } catch {
+    if (liveRaw.hit.url === 'about:srcdoc') raw.origins = new Set(['://']);
+  }
+}
+
+async function evaluateContexts(client, sessionId, contexts, evaluateArm, result) {
+  for (const context of contexts) {
+    const evaluated = await outcome(
+      client.send(
+        'Runtime.evaluate',
+        { expression: 'location.href', returnByValue: true, contextId: context.id },
+        sessionId
+      )
+    );
+    const message = String(evaluated.error?.message ?? evaluated.error ?? '');
+    const gone = !evaluated.ok && /Cannot find context|No context|Invalid context/i.test(message);
+    takeFirst(
+      evaluateArm,
+      { out: evaluated, unanswered: !answered(evaluated) && !gone, unansweredId: context.id },
+      (sample) => {
+        if (sample.unanswered) return;
+        if (sample.out.ok) result.contextEvaluate = true;
+        else result.contextEvaluate ??= false;
+      }
+    );
+    if (result.contextEvaluate === true) break;
+  }
+}
+
+async function pollPageClient({
+  client,
+  sessionId,
+  clientEventStart,
+  raw,
+  liveContexts,
+  treeArm,
+  evaluateArm,
+  result,
+  budget,
+}) {
+  const windowMs = Math.min(budget, 1500);
+  const deadline = Date.now() + windowMs;
+  while (Date.now() <= deadline) {
+    const events = (client.events ?? []).slice(clientEventStart);
+    result.frameEvents = events.some((event) => frameEventHit(event, raw))
+      ? true
+      : (result.frameEvents ?? false);
+    result.midFrameAttached = events.some((event) => midFrameAttachedHit(event, raw))
+      ? true
+      : (result.midFrameAttached ?? false);
+    if (liveContexts.length) {
+      if (events.some((event) => contextHit(event, raw))) result.contextCreated = true;
+      if (result.contextEvaluate !== true)
+        await evaluateContexts(client, sessionId, liveContexts, evaluateArm, result);
+    }
+    const treeAgain = await outcome(client.send('Page.getFrameTree', {}, sessionId));
+    applyTreeSample(
+      treeArm,
+      { out: treeAgain, unanswered: !answered(treeAgain) },
+      result,
+      'frameTree',
+      (payload) => treeMentions(payload?.frameTree, raw)
+    );
+    if (
+      result.frameTree === true &&
+      result.resourceTree === true &&
+      result.frameEvents === true &&
+      result.contextCreated === true &&
+      result.contextEvaluate === true &&
+      result.midFrameAttached === true
+    )
+      break;
+    await pause(50);
+  }
+  return windowMs;
+}
+
+async function measurePageClient({
+  client,
+  reader,
+  readerSessionId,
+  targetId,
+  pageUrl,
+  midHint,
+  innerHint,
+  raw,
+  contexts,
+  budget,
+  notes,
+  internalSessions,
+}) {
+  const result = {};
+  const missing = [];
+  const attached = await attachOrdinaryTop(client, targetId, notes, internalSessions);
+  if (attached.incomplete) return attached;
+  const { sessionId } = attached;
+  const clientEventStart = client.events?.length ?? 0;
+  await outcome(client.send('Page.enable', {}, sessionId));
+  const treeArm = { out: undefined, unanswered: false };
+  const resourceArm = { out: undefined, unanswered: false };
+  const evaluateArm = { out: undefined, unanswered: false };
+  const treeOut = await outcome(client.send('Page.getFrameTree', {}, sessionId));
+  applyTreeSample(
+    treeArm,
+    { out: treeOut, unanswered: !answered(treeOut) },
+    result,
+    'frameTree',
+    (payload) => treeMentions(payload?.frameTree, raw)
+  );
+  const resourceOut = await outcome(client.send('Page.getResourceTree', {}, sessionId));
+  applyTreeSample(
+    resourceArm,
+    { out: resourceOut, unanswered: !answered(resourceOut) },
+    result,
+    'resourceTree',
+    (payload) => resourceMentions(payload, raw)
+  );
+  await outcome(client.send('Runtime.enable', {}, sessionId));
+  await outcome(client.send('Network.enable', {}, sessionId));
+  if (contexts.length)
+    result.contextCreated = (client.events ?? [])
+      .slice(clientEventStart)
+      .some((event) => contextHit(event, raw));
+  const liveUrl = pageUrl.includes('?') ? `${pageUrl}&live=1` : `${pageUrl}?live=1`;
+  note(notes, 'protected-parent.page-live-nav', { via: 'unguarded', url: liveUrl });
+  const navigated = await outcome(reader.send('Page.navigate', { url: liveUrl }, readerSessionId));
+  if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
+  else if (!navigated.ok)
+    missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
+  const liveRaw = await waitGrandchild(reader, readerSessionId, midHint, innerHint, budget, notes);
+  let liveContexts = contexts;
+  if (liveRaw) {
+    adoptLiveRaw(raw, liveRaw);
+    note(notes, 'protected-parent.page-live-raw', {
+      midFrameId: liveRaw.hit.midFrameId,
+      frameId: liveRaw.hit.frameId,
+      url: liveRaw.hit.url,
+    });
+    liveContexts = await rawContexts(
+      reader,
+      readerSessionId,
+      raw,
+      reader.events?.length ? reader.events.length - 50 : 0,
+      budget,
+      notes
+    );
+    if (!liveContexts.length) liveContexts = contexts;
+  } else missing.push('grandchild missing in raw leg after post-attach navigation');
+  const windowMs = await pollPageClient({
+    client,
+    sessionId,
+    clientEventStart,
+    raw,
+    liveContexts,
+    treeArm,
+    evaluateArm,
+    result,
+    budget,
+  });
+  settleArm(result, 'frameTree', treeArm.unanswered, 'Page.getFrameTree unanswered', missing, {
+    frameTree: false,
+  });
+  settleArm(
+    result,
+    'resourceTree',
+    resourceArm.unanswered,
+    'Page.getResourceTree unanswered',
+    missing,
+    { resourceTree: false }
+  );
+  result.frameEvents ??= false;
+  result.midFrameAttached ??= false;
+  if (!liveContexts.length) missing.push('grandchild execution context missing in raw leg');
+  else {
+    result.contextCreated ??= false;
+    settleArm(
+      result,
+      'contextEvaluate',
+      evaluateArm.unanswered,
+      evaluateArm.unansweredId
+        ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
+        : 'Runtime.evaluate unanswered',
+      missing,
+      { contextEvaluate: false }
+    );
+  }
+  note(notes, 'protected-parent.page-client', {
+    frameTree: result.frameTree ?? 'unmeasured',
+    resourceTree: result.resourceTree ?? 'unmeasured',
+    frameEvents: result.frameEvents ?? 'unmeasured',
+    contextCreated: result.contextCreated ?? 'unmeasured',
+    contextEvaluate: result.contextEvaluate ?? 'unmeasured',
+    midFrameAttached: result.midFrameAttached ?? 'unmeasured',
+    windowMs,
+    firstTreeOk: treeArm.out?.ok,
+    firstResourceOk: resourceArm.out?.ok,
+    firstEvaluateOk: evaluateArm.out?.ok,
+    unanswered: missing,
+  });
+  await outcome(client.send('Target.detachFromTarget', { sessionId }));
+  if (missing.length) return { ...result, incomplete: missing.join('; ') };
+  return result;
+}
+
+async function pageNested({
+  reader,
+  client,
+  midOrigin,
+  ordinary,
+  tag,
+  notes,
+  budget,
+  internalSessions,
+  eventStart,
+  innerKind,
+}) {
+  if (!midOrigin) return { incomplete: 'no middle origin mapped' };
+  const inner = innerKind === 'srcdoc' ? 'about:srcdoc' : `${ordinary}/doc?n=inner-${tag}`;
+  const mid =
+    innerKind === 'srcdoc'
+      ? `${midOrigin}/oopif-srcdoc?n=mid-${tag}`
+      : `${midOrigin}/oopif-mid?inner=${encodeURIComponent(inner)}&n=mid-${tag}`;
+  const page = `${ordinary}/oopif-nest?mid=${encodeURIComponent(mid)}&n=host-${tag}`;
+  note(notes, 'protected-parent.page-urls', {
+    top: ordinary,
+    mid: midOrigin,
+    inner,
+    page,
+    attachOrder: 'mid-already-present',
+  });
+  const opened = await openProtected(reader, page, notes, internalSessions);
+  if (!opened.ok)
+    return {
+      incomplete: `observer setup failed: ${opened.error?.message ?? opened.error}`,
+    };
+  if (opened.result.incomplete) return { live: false, incomplete: opened.result.incomplete };
+  const { targetId: pageId, sessionId } = opened.result;
+  const midHint = midOrigin;
+  const innerHint = innerKind === 'srcdoc' ? 'about:srcdoc' : `inner-${tag}`;
+  const rawFound = await waitGrandchild(reader, sessionId, midHint, innerHint, budget, notes);
+  if (!rawFound) {
+    return {
+      live: true,
+      incomplete:
+        innerKind === 'srcdoc'
+          ? 'srcdoc grandchild under the middle frame did not appear in the raw page frame tree within the budget'
+          : 'ordinary grandchild under the middle frame did not appear in the raw page frame tree within the budget',
+      pageId,
+    };
+  }
+  const raw = {
+    midFrameId: rawFound.hit.midFrameId,
+    frameIds: new Set([rawFound.hit.frameId]),
+    urls: new Set([rawFound.hit.url].filter((url) => typeof url === 'string' && url.length > 0)),
+    origins: new Set(),
+  };
+  try {
+    raw.origins.add(new URL(rawFound.hit.url).origin);
+  } catch {
+    if (rawFound.hit.url === 'about:srcdoc') raw.origins.add('://');
+  }
+  const readerEventStart = reader.events?.length ?? 0;
+  const contexts = await rawContexts(
+    reader,
+    sessionId,
+    raw,
+    Math.min(eventStart, readerEventStart),
+    budget,
+    notes
+  );
+  if (!contexts.length) {
+    note(notes, 'protected-parent.page-no-context', {
+      frameId: rawFound.hit.frameId,
+      url: rawFound.hit.url,
+    });
+  }
+  const measured = await measurePageClient({
+    client,
+    reader,
+    readerSessionId: sessionId,
+    targetId: pageId,
+    pageUrl: page,
+    midHint,
+    innerHint,
+    raw,
+    contexts,
+    budget,
+    notes,
+    internalSessions,
+  });
+  return {
+    live: true,
+    pageId,
+    frameIds: [...raw.frameIds],
+    frameUrls: [...raw.urls],
+    midFrameId: raw.midFrameId,
+    ...measured,
+  };
+}
+
 export async function protectedParentIframes({
   client,
   reader,
@@ -529,7 +1043,8 @@ export async function protectedParentIframes({
   eventStart = 0,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
-  if (discovery) {
+  const pageMode = ['page-nested', 'page-srcdoc', 'page-ordinary'].includes(mode);
+  if (discovery && !pageMode) {
     await outcome(client.send('Target.setDiscoverTargets', { discover: true }));
     await outcome(reader.send('Target.setDiscoverTargets', { discover: true }));
     notes.push('protected-parent.discovery: setDiscoverTargets discover=true');
@@ -561,7 +1076,46 @@ export async function protectedParentIframes({
             internalSessions,
             eventStart,
           })
-        : { incomplete: `unknown protectedParentIframes mode ${mode}` };
+        : mode === 'page-nested'
+          ? await pageNested({
+              reader,
+              client,
+              midOrigin: protectedOrigin,
+              ordinary,
+              tag,
+              notes,
+              budget,
+              internalSessions,
+              eventStart,
+              innerKind: 'ordinary',
+            })
+          : mode === 'page-srcdoc'
+            ? await pageNested({
+                reader,
+                client,
+                midOrigin: protectedOrigin,
+                ordinary,
+                tag,
+                notes,
+                budget,
+                internalSessions,
+                eventStart,
+                innerKind: 'srcdoc',
+              })
+            : mode === 'page-ordinary'
+              ? await pageNested({
+                  reader,
+                  client,
+                  midOrigin: cross,
+                  ordinary,
+                  tag,
+                  notes,
+                  budget,
+                  internalSessions,
+                  eventStart,
+                  innerKind: 'ordinary',
+                })
+              : { incomplete: `unknown protectedParentIframes mode ${mode}` };
   if (built.pageId) await outcome(reader.send('Target.closeTarget', { targetId: built.pageId }));
   return built;
 }

@@ -21,6 +21,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 function pageFake({
   protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'],
   oopifGrandchildTargets = false,
+  omitLiveGrandchild = false,
 } = {}) {
   const tabs = new Map();
   const sessions = new Map();
@@ -53,7 +54,7 @@ function pageFake({
       return '';
     }
   };
-  const buildNest = (tab, midUrl) => {
+  const buildNest = (tab, midUrl, { skipChild = false } = {}) => {
     const midFrameId = `F${++next}`;
     const childFrameId = `F${++next}`;
     let childUrl = 'about:blank';
@@ -69,12 +70,14 @@ function pageFake({
     const childOrigin = originOf(childUrl);
     const oopifMid = Boolean(midOrigin && midOrigin !== topOrigin);
     const oopifChild = Boolean(
-      oopifGrandchildTargets &&
+      !skipChild &&
+        oopifGrandchildTargets &&
         oopifMid &&
         childUrl !== 'about:srcdoc' &&
         childOrigin &&
         childOrigin !== midOrigin
     );
+    const nestChild = !skipChild;
     const childNode = {
       frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
     };
@@ -83,28 +86,36 @@ function pageFake({
       childFrames: [
         {
           frame: { id: midFrameId, url: midUrl, parentId: tab.frame.id },
-          childFrames: oopifChild ? [] : [childNode],
+          childFrames: nestChild && !oopifChild ? [childNode] : [],
         },
       ],
     };
     tab.midFrameId = midFrameId;
-    tab.childFrameId = childFrameId;
-    tab.childUrl = childUrl;
+    tab.childFrameId = nestChild ? childFrameId : undefined;
+    tab.childUrl = nestChild ? childUrl : undefined;
     tab.midUrl = midUrl;
-    tab.contexts = oopifChild
-      ? [
-          {
-            id: ++next,
-            origin: midOrigin || '://',
-            auxData: { frameId: midFrameId, isDefault: true },
-          },
-        ]
+    tab.contexts = nestChild
+      ? oopifChild
+        ? [
+            {
+              id: ++next,
+              origin: midOrigin || '://',
+              auxData: { frameId: midFrameId, isDefault: true },
+            },
+          ]
+        : [
+            {
+              id: ++next,
+              origin: childOrigin || '://',
+              auxData: { frameId: childFrameId, isDefault: true },
+            },
+            {
+              id: ++next,
+              origin: midOrigin || '://',
+              auxData: { frameId: midFrameId, isDefault: true },
+            },
+          ]
       : [
-          {
-            id: ++next,
-            origin: childOrigin || '://',
-            auxData: { frameId: childFrameId, isDefault: true },
-          },
           {
             id: ++next,
             origin: midOrigin || '://',
@@ -121,7 +132,7 @@ function pageFake({
         frame: { id: midFrameId, url: midUrl },
         frameTree: {
           frame: { id: midFrameId, url: midUrl },
-          childFrames: oopifChild ? [] : [childNode],
+          childFrames: nestChild && !oopifChild ? [childNode] : [],
         },
         contexts: [
           {
@@ -134,7 +145,7 @@ function pageFake({
       };
       tabs.set(midTab.targetId, midTab);
       tab.midTargetId = midTab.targetId;
-      if (oopifChild) {
+      if (oopifChild && nestChild) {
         const childTab = {
           targetId: `T${++next}`,
           type: 'iframe',
@@ -324,7 +335,8 @@ function pageFake({
           tab.url = params.url;
           tab.frame.url = params.url;
           const page = new URL(params.url);
-          buildNest(tab, page.searchParams.get('mid') ?? tab.midUrl);
+          const skipChild = omitLiveGrandchild && page.searchParams.get('live') === '1';
+          buildNest(tab, page.searchParams.get('mid') ?? tab.midUrl, { skipChild });
           for (const [otherSession, targetId] of sessions) {
             if (targetId !== tab.targetId) continue;
             const other = sessionConn.get(otherSession);
@@ -356,6 +368,17 @@ function pageFake({
     if (method === 'Runtime.evaluate') {
       if (params.expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
+      if (params.expression === 'document.querySelector("iframe")?.src || ""') {
+        const tab = tabs.get(sessions.get(sessionId));
+        const nested = tab?.children?.[0] ? tabs.get(tab.children[0]) : null;
+        const src =
+          nested?.url ??
+          tab?.childUrl ??
+          tab?.frameTree?.childFrames?.[0]?.frame?.url ??
+          tab?.frameTree?.childFrames?.[0]?.childFrames?.[0]?.frame?.url ??
+          '';
+        return { result: { type: 'string', value: src } };
+      }
       if (params.contextId != null) {
         const tab = tabs.get(sessions.get(sessionId));
         const context = (tab?.contexts ?? []).find((entry) => entry.id === params.contextId);
@@ -663,6 +686,38 @@ test('unanswered Page.enable on the page session is incomplete, not a guarded pa
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
     assert.match(String(result.incomplete), /Page\.enable|Runtime\.enable/);
     assert.equal(result.frameTree, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('missing live grandchild after post-attach navigation is incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true, omitLiveGrandchild: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: browser.connect(),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'live-missing',
+      notes,
+      budget: 800,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(
+      String(result.incomplete),
+      /grandchild missing in raw leg after post-attach navigation/
+    );
+    assert.ok(
+      notes.some((note) => note.includes('protected-parent.page-targets-after')),
+      notes.join('\n')
+    );
   } finally {
     await fixture.close();
   }

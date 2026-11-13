@@ -545,10 +545,10 @@ function contextHit(event, raw) {
   if (event.method !== 'Runtime.executionContextCreated') return false;
   const context = event.params?.context;
   const frameId = context?.auxData?.frameId;
-  const origin = context?.origin ?? '';
   if (frameId && raw.frameIds.has(frameId)) return true;
-  if (raw.origins.has(origin)) return true;
-  return false;
+  if (raw.frameIds.size) return false;
+  const origin = context?.origin ?? '';
+  return Boolean(origin && raw.origins.has(origin));
 }
 
 function treeMentions(tree, raw) {
@@ -667,34 +667,23 @@ async function listTargetSnapshot(reader) {
   return { unanswered: false, targets: targetSnapshot(listed.result?.targetInfos) };
 }
 
-function liveNestPlan(pageUrl, innerKind) {
+function liveNestPlan(pageUrl, innerKind, innerHint) {
   const page = new URL(pageUrl);
   const midRaw = page.searchParams.get('mid');
-  if (!midRaw) {
-    page.searchParams.set('live', '1');
-    return {
-      liveUrl: page.toString(),
-      innerHint: innerKind === 'srcdoc' ? 'about:srcdoc' : '',
-      midNeedle: null,
-    };
-  }
-  const mid = new URL(midRaw);
-  const stamp = `live-${Date.now().toString(36)}`;
-  mid.searchParams.set('n', `${mid.searchParams.get('n') ?? 'mid'}-${stamp}`);
-  let innerHint = 'about:srcdoc';
-  if (innerKind !== 'srcdoc') {
-    const innerRaw = mid.searchParams.get('inner');
-    if (innerRaw) {
-      const inner = new URL(innerRaw);
-      const prior = inner.searchParams.get('n') ?? `inner-${stamp}`;
-      inner.searchParams.set('n', `${prior}-${stamp}`);
-      mid.searchParams.set('inner', inner.toString());
-      innerHint = inner.searchParams.get('n');
+  let midNeedle = null;
+  if (midRaw) {
+    try {
+      midNeedle = new URL(midRaw).searchParams.get('n');
+    } catch {
+      midNeedle = null;
     }
   }
-  page.searchParams.set('mid', mid.toString());
   page.searchParams.set('live', '1');
-  return { liveUrl: page.toString(), innerHint, midNeedle: mid.searchParams.get('n') };
+  return {
+    liveUrl: page.toString(),
+    innerHint: innerHint || (innerKind === 'srcdoc' ? 'about:srcdoc' : ''),
+    midNeedle,
+  };
 }
 
 async function attachIframeTarget(reader, match, internalSessions) {
@@ -714,7 +703,39 @@ async function attachIframeTarget(reader, match, internalSessions) {
   return { info, sessionId: attached.result.sessionId };
 }
 
-async function hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions) {
+async function armMidChildWatch(reader, midSession) {
+  await outcome(
+    reader.send(
+      'Target.setAutoAttach',
+      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      midSession
+    )
+  );
+  await until(async () => {
+    const evaled = await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        { expression: 'document.querySelector("iframe")?.src || ""', returnByValue: true },
+        midSession
+      )
+    );
+    if (!answered(evaled) || !evaled.ok) return null;
+    const src = evaled.result?.result?.value;
+    return typeof src === 'string' && src.length > 0 ? src : null;
+  }, 1500);
+}
+
+async function hitFromGrandchildTarget(
+  reader,
+  midAttached,
+  innerHint,
+  internalSessions,
+  beforeIds = null
+) {
+  if (!midAttached.armed) {
+    await armMidChildWatch(reader, midAttached.sessionId);
+    midAttached.armed = true;
+  }
   const midTree = await readTree(reader, midAttached.sessionId);
   const midFrameId = midTree?.frame?.id;
   const midUrl = midTree?.frame?.url ?? midAttached.info.url ?? '';
@@ -730,8 +751,11 @@ async function hitFromGrandchildTarget(reader, midAttached, innerHint, internalS
   }
   const child = await attachIframeTarget(
     reader,
-    (info) =>
-      info.parentId === midAttached.info.targetId && childMatches(info.url ?? '', innerHint),
+    (info) => {
+      if (beforeIds?.has(info.targetId)) return false;
+      if (!childMatches(info.url ?? '', innerHint)) return false;
+      return info.parentId === midAttached.info.targetId;
+    },
     internalSessions
   );
   if (!child) return null;
@@ -754,7 +778,8 @@ async function hitFromGrandchildTarget(reader, midAttached, innerHint, internalS
   };
 }
 
-function midTargetMatch(info, midHint, pageId, midNeedle) {
+function midTargetMatch(info, midHint, pageId, midNeedle, beforeIds) {
+  if (beforeIds?.has(info.targetId)) return false;
   if (midNeedle && !(info.url ?? '').includes(midNeedle)) return false;
   if (!midMatches(info.url ?? '', midHint)) return false;
   if (pageId && info.parentId && info.parentId !== pageId) return false;
@@ -770,9 +795,11 @@ async function waitGrandchild(
   notes,
   pageId,
   internalSessions,
-  midNeedle = null
+  midNeedle = null,
+  beforeIds = null
 ) {
   let midAttached;
+  await outcome(reader.send('Target.setDiscoverTargets', { discover: true }));
   const found = await until(async () => {
     const tree = await readTree(reader, sessionId);
     const hit = findGrandchild(tree, midHint, innerHint);
@@ -786,11 +813,11 @@ async function waitGrandchild(
       midAttached = null;
     midAttached ??= await attachIframeTarget(
       reader,
-      (info) => midTargetMatch(info, midHint, pageId, midNeedle),
+      (info) => midTargetMatch(info, midHint, pageId, midNeedle, beforeIds),
       internalSessions
     );
     if (!midAttached) return null;
-    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions);
+    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions, beforeIds);
   }, budget);
   if (found) {
     const branch =
@@ -1078,13 +1105,15 @@ async function liveGrandchild({
   });
   const plan = liveNestPlan(
     pageUrl,
-    innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary')
+    innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
+    innerHint
   );
   note(notes, 'protected-parent.page-live-nav', {
     via: 'unguarded',
     url: plan.liveUrl,
     innerHint: plan.innerHint,
     midNeedle: plan.midNeedle,
+    beforeTargetIds: before.targets.map((info) => info.targetId),
   });
   const navigated = await outcome(
     reader.send('Page.navigate', { url: plan.liveUrl }, readerSessionId)
@@ -1092,16 +1121,19 @@ async function liveGrandchild({
   if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
   else if (!navigated.ok)
     missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
+  const beforeIds = new Set(before.targets.map((info) => info.targetId).filter(Boolean));
+  const liveBudget = budget < 2000 ? budget : Math.max(budget, 8000);
   const liveRaw = await waitGrandchild(
     reader,
     readerSessionId,
     midHint,
     plan.innerHint || innerHint,
-    Math.min(budget, 2000),
+    liveBudget,
     notes,
     targetId,
     internalSessions,
-    plan.midNeedle
+    plan.midNeedle,
+    beforeIds
   );
   const after = await listTargetSnapshot(reader);
   note(notes, 'protected-parent.page-targets-after', {
@@ -1109,29 +1141,22 @@ async function liveGrandchild({
     targets: after.targets,
     foundLive: Boolean(liveRaw),
   });
-  if (liveRaw) {
-    adoptLiveRaw(raw, liveRaw);
-    note(notes, 'protected-parent.page-live-raw', {
-      midFrameId: liveRaw.hit.midFrameId,
-      frameId: liveRaw.hit.frameId,
-      url: liveRaw.hit.url,
-      via: liveRaw.via,
-    });
-  } else {
-    note(notes, 'protected-parent.page-live-fallback', {
-      usedPreNavRaw: true,
-      midTargetId: raw.midTargetId ?? null,
-      grandchildTargetId: raw.grandchildTargetId ?? null,
-      urls: [...raw.urls],
-      beforeCount: before.targets.length,
-      afterCount: after.targets.length,
-    });
+  if (!liveRaw) {
+    missing.push('grandchild missing in raw leg after post-attach navigation');
+    return contexts;
   }
+  adoptLiveRaw(raw, liveRaw);
+  note(notes, 'protected-parent.page-live-raw', {
+    midFrameId: liveRaw.hit.midFrameId,
+    frameId: liveRaw.hit.frameId,
+    url: liveRaw.hit.url,
+    via: liveRaw.via,
+  });
   const liveSessions = [
     ...(readerSessions ?? []),
     readerSessionId,
-    liveRaw?.midSession,
-    liveRaw?.grandchildSession,
+    liveRaw.midSession,
+    liveRaw.grandchildSession,
   ].filter(Boolean);
   const liveContexts = await rawContexts(
     reader,

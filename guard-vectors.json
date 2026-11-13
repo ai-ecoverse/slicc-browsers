@@ -106,7 +106,8 @@
     "stockSetup": "the guard admits stock clients' setup calls: init scripts with no code (the no-code regex is matched on the whole string without the multiline flag), the four display emulation calls, bindings scoped to an isolated world, Page.createIsolatedWorld on an ordinary frame with grantUniveralAccess and contentSecurityPolicy stripped and no executionContextId for any other frame, and Target.setAutoAttach that either narrows to tab targets or hides per target so no protected-origin page, iframe or worker reaches the client (pages under the tab held like pages, with the same URL redaction in targetInfo)",
     "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
     "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
-    "closeProtected": "the guard lets Target.closeTarget close a protected tab"
+    "closeProtected": "the guard lets Target.closeTarget close a protected tab",
+    "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -31563,7 +31564,6 @@
       },
       "designDependent": ["attachRefused", "workerAttached"]
     },
-
     {
       "id": "C3.protected-parent-iframes",
       "family": "C",
@@ -31762,6 +31762,550 @@
         "eventsSeen": false,
         "attachSession": false,
         "attachRefused": true
+      }
+    },
+    {
+      "id": "C7.sign-in-hold.held-popup",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "seven's page opens about:blank#slicc-sign-in-<marker>, asks the slicc-held hold, then moves the popup to an ordinary URL; a guarded client must not list it in /json/list or Target.getTargets with URL/title, must not discover those, must not attach or read title/body; announcing only the id with empty URL/title while connect still completes is acceptable; an ordinary page's ordinary popup stays reachable on the control"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "held-popup",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.held-popup: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.held-popup: Target.getTargets through the client shows the sign-in or held tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.held-popup: a discovery event carries the sign-in or held tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.held-popup: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.held-popup: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.held-popup: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.held-popup: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.held-popup: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the sign-in or held tab and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "designDependent": ["idAnnounced"],
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": false,
+        "targetsListed": false,
+        "eventsSeen": false,
+        "idAnnounced": "either",
+        "attachSession": false,
+        "attachRefused": true,
+        "contentRead": false,
+        "connectCompletes": true
+      }
+    },
+    {
+      "id": "C7.sign-in-hold.callback",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "a tab at an authorize URL with client_id=any and redirect_uri naming seven's callback (percent-encoded once) must stay out of /json/list, Target.getTargets with URL/title, discovery, attach and title/body reads"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "callback",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.callback: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.callback: Target.getTargets through the client shows the sign-in or held tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.callback: a discovery event carries the sign-in or held tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.callback: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.callback: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.callback: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.callback: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.callback: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the sign-in or held tab and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "designDependent": ["idAnnounced"],
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": false,
+        "targetsListed": false,
+        "eventsSeen": false,
+        "idAnnounced": "either",
+        "attachSession": false,
+        "attachRefused": true,
+        "contentRead": false,
+        "connectCompletes": true
+      }
+    },
+    {
+      "id": "C7.sign-in-hold.callback-encoded",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "a tab at an authorize URL with client_id=any and redirect_uri naming seven's callback percent-encoded twice must stay out of reach the same way"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "callback-encoded",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.callback-encoded: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.callback-encoded: Target.getTargets through the client shows the sign-in or held tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.callback-encoded: a discovery event carries the sign-in or held tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.callback-encoded: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.callback-encoded: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.callback-encoded: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.callback-encoded: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.callback-encoded: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the sign-in or held tab and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "designDependent": ["idAnnounced"],
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": false,
+        "targetsListed": false,
+        "eventsSeen": false,
+        "idAnnounced": "either",
+        "attachSession": false,
+        "attachRefused": true,
+        "contentRead": false,
+        "connectCompletes": true
+      }
+    },
+    {
+      "id": "C7.sign-in-hold.callback-origin",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "a tab at an authorize URL with client_id=any and redirect_uri cut to https://www.sliccy.ai must stay out of reach the same way"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "callback-origin",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.callback-origin: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.callback-origin: Target.getTargets through the client shows the sign-in or held tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.callback-origin: a discovery event carries the sign-in or held tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.callback-origin: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.callback-origin: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.callback-origin: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.callback-origin: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.callback-origin: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the sign-in or held tab and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "designDependent": ["idAnnounced"],
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": false,
+        "targetsListed": false,
+        "eventsSeen": false,
+        "idAnnounced": "either",
+        "attachSession": false,
+        "attachRefused": true,
+        "contentRead": false,
+        "connectCompletes": true
       }
     }
   ]

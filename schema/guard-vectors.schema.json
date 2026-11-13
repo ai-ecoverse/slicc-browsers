@@ -154,6 +154,10 @@
         "closeProtected": {
           "type": "string",
           "minLength": 1
+        },
+        "signInHold": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -192,7 +196,8 @@
         "forwardAudit",
         "stockSetup",
         "syntheticAutoAttach",
-        "closeProtected"
+        "closeProtected",
+        "signInHold"
       ]
     },
     "requires": {
@@ -571,6 +576,28 @@
           "properties": {
             "protectedParentIframes": {
               "enum": ["nested-cross", "sandboxed-srcdoc"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["signInHold", "as"],
+          "properties": {
+            "signInHold": {
+              "enum": [
+                "held-popup",
+                "callback",
+                "callback-encoded",
+                "callback-origin",
+                "ordinary-popup"
+              ]
             },
             "as": {
               "$ref": "#/$defs/name"

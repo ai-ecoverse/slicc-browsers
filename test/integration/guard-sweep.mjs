@@ -41,6 +41,7 @@ export const capabilities = {
   syntheticAutoAttach: true,
   forwardAudit: true,
   closeProtected: true,
+  signInHold: true,
 };
 
 export const drivable = new Set([

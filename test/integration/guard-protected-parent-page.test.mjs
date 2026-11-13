@@ -77,6 +77,13 @@ function pageFake({
         childOrigin &&
         childOrigin !== midOrigin
     );
+    let midMarker = '';
+    try {
+      midMarker = new URL(midUrl).searchParams.get('n') ?? '';
+    } catch {
+      midMarker = '';
+    }
+    const srcdocTop = Boolean(!skipChild && !oopifMid && childUrl === 'about:srcdoc');
     const nestChild = !skipChild;
     const childNode = {
       frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
@@ -86,7 +93,10 @@ function pageFake({
       childFrames: [
         {
           frame: { id: midFrameId, url: midUrl, parentId: tab.frame.id },
-          childFrames: nestChild && !oopifChild ? [childNode] : [],
+          childFrames:
+            nestChild && !oopifChild && !srcdocTop && childUrl !== 'about:srcdoc'
+              ? [childNode]
+              : [],
         },
       ],
     };
@@ -94,8 +104,12 @@ function pageFake({
     tab.childFrameId = nestChild ? childFrameId : undefined;
     tab.childUrl = nestChild ? childUrl : undefined;
     tab.midUrl = midUrl;
+    tab.midMarker = midMarker;
+    const childAsOwnTarget = Boolean(
+      oopifChild || srcdocTop || (oopifMid && childUrl === 'about:srcdoc')
+    );
     tab.contexts = nestChild
-      ? oopifChild
+      ? childAsOwnTarget
         ? [
             {
               id: ++next,
@@ -122,6 +136,31 @@ function pageFake({
             auxData: { frameId: midFrameId, isDefault: true },
           },
         ];
+    if (srcdocTop && nestChild) {
+      const childTab = {
+        targetId: `T${++next}`,
+        type: 'iframe',
+        url: childUrl,
+        title: childUrl,
+        parentId: tab.targetId,
+        frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
+        frameTree: {
+          frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
+          childFrames: [],
+        },
+        contexts: [
+          {
+            id: ++next,
+            origin: '://',
+            auxData: { frameId: childFrameId, isDefault: true },
+          },
+        ],
+        children: [],
+        bodyText: `ordinary srcdoc ${midMarker}`,
+      };
+      tabs.set(childTab.targetId, childTab);
+      tab.childTargetId = childTab.targetId;
+    }
     if (oopifMid) {
       const midTab = {
         targetId: `T${++next}`,
@@ -142,6 +181,7 @@ function pageFake({
           },
         ],
         children: [],
+        midMarker,
       };
       tabs.set(midTab.targetId, midTab);
       tab.midTargetId = midTab.targetId;
@@ -166,6 +206,32 @@ function pageFake({
         tabs.set(childTab.targetId, childTab);
         tab.childTargetId = childTab.targetId;
         midTab.children = [childTab.targetId];
+      } else if (!skipChild && childUrl === 'about:srcdoc') {
+        const childTab = {
+          targetId: `T${++next}`,
+          type: 'iframe',
+          url: childUrl,
+          title: childUrl,
+          parentId: midTab.targetId,
+          frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
+          frameTree: {
+            frame: { id: childFrameId, url: childUrl, parentId: midFrameId },
+            childFrames: [],
+          },
+          contexts: [
+            {
+              id: ++next,
+              origin: '://',
+              auxData: { frameId: childFrameId, isDefault: true },
+            },
+          ],
+          children: [],
+          bodyText: `ordinary srcdoc ${midMarker}`,
+        };
+        tabs.set(childTab.targetId, childTab);
+        tab.childTargetId = childTab.targetId;
+        midTab.children = [childTab.targetId];
+        midTab.frameTree = { frame: midTab.frame, childFrames: [] };
       }
     }
   };
@@ -353,35 +419,51 @@ function pageFake({
           tab.frame = { id: tab.frame?.id ?? `F${++next}`, url: params.url };
           const skipChild = omitLiveGrandchild;
           let childUrl = 'about:blank';
+          let midMarker = '';
           try {
             const mid = new URL(params.url);
+            midMarker = mid.searchParams.get('n') ?? '';
             if (mid.pathname.includes('oopif-srcdoc')) childUrl = 'about:srcdoc';
             else childUrl = mid.searchParams.get('inner') ?? childUrl;
           } catch {
             childUrl = 'about:blank';
           }
+          tab.midMarker = midMarker;
           const childFrameId = `F${++next}`;
           const childOrigin = originOf(childUrl);
           const oopifChild = Boolean(
             oopifGrandchildTargets && childUrl !== 'about:srcdoc' && childOrigin
           );
-          if (!skipChild && oopifChild) {
+          const srcdocChild = childUrl === 'about:srcdoc';
+          if (!skipChild && (oopifChild || srcdocChild)) {
             const childTab = {
               targetId: `T${++next}`,
               type: 'iframe',
               url: childUrl,
               title: childUrl,
               parentId: tab.targetId,
-              frame: { id: childFrameId, url: childUrl },
-              frameTree: { frame: { id: childFrameId, url: childUrl }, childFrames: [] },
+              frame: {
+                id: childFrameId,
+                url: childUrl,
+                ...(srcdocChild ? { parentId: tab.frame.id } : {}),
+              },
+              frameTree: {
+                frame: {
+                  id: childFrameId,
+                  url: childUrl,
+                  ...(srcdocChild ? { parentId: tab.frame.id } : {}),
+                },
+                childFrames: [],
+              },
               contexts: [
                 {
                   id: ++next,
-                  origin: childOrigin || '://',
+                  origin: srcdocChild ? '://' : childOrigin || '://',
                   auxData: { frameId: childFrameId, isDefault: true },
                 },
               ],
               children: [],
+              ...(srcdocChild ? { bodyText: `ordinary srcdoc ${midMarker}` } : {}),
             };
             tabs.set(childTab.targetId, childTab);
             tab.children = [childTab.targetId];
@@ -442,6 +524,14 @@ function pageFake({
           tab?.frameTree?.childFrames?.[0]?.childFrames?.[0]?.frame?.url ??
           '';
         return { result: { type: 'string', value: src } };
+      }
+      if (
+        params.expression ===
+        '(document.body && (document.body.innerText || document.body.textContent)) || ""'
+      ) {
+        const tab = tabs.get(sessions.get(sessionId));
+        const text = tab?.bodyText ?? (tab?.midMarker ? `ordinary srcdoc ${tab.midMarker}` : '');
+        return { result: { type: 'string', value: text } };
       }
       if (params.contextId != null) {
         const tab = tabs.get(sessions.get(sessionId));

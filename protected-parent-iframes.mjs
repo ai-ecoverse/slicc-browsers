@@ -726,10 +726,18 @@ async function waitChildUnderMid(
   innerHint,
   budget,
   internalSessions,
-  beforeIds
+  beforeIds,
+  midNeedle = null
 ) {
   return until(async () => {
-    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions, beforeIds);
+    return hitFromGrandchildTarget(
+      reader,
+      midAttached,
+      innerHint,
+      internalSessions,
+      beforeIds,
+      midNeedle
+    );
   }, budget);
 }
 
@@ -777,7 +785,8 @@ async function hitFromGrandchildTarget(
   midAttached,
   innerHint,
   internalSessions,
-  beforeIds = null
+  beforeIds = null,
+  midNeedle = null
 ) {
   if (!midAttached.armed) {
     await armMidChildWatch(reader, midAttached.sessionId, 400);
@@ -786,6 +795,7 @@ async function hitFromGrandchildTarget(
   const midTree = await readTree(reader, midAttached.sessionId);
   const midFrameId = midTree?.frame?.id;
   const midUrl = midTree?.frame?.url ?? midAttached.info.url ?? '';
+  const tag = midTagFrom(midUrl, midNeedle);
   const fromMid = hitFromMidTree(midTree, innerHint, midUrl);
   if (fromMid) {
     return {
@@ -806,16 +816,26 @@ async function hitFromGrandchildTarget(
     internalSessions
   );
   if (!child) return null;
+  if (innerHint === 'about:srcdoc' && tag) {
+    if (!(await srcdocDocHasTag(reader, child.sessionId, tag))) return null;
+  }
   const childTree = await readTree(reader, child.sessionId);
   if (!childTree?.frame) return null;
+  const frameId = childTree.frame.id;
+  const frameParentId = childTree.frame.parentId ?? midFrameId;
+  const linked =
+    innerHint !== 'about:srcdoc' ||
+    srcdocLinkedToMid(reader, midFrameId ?? midAttached.info.targetId, frameId, frameParentId) ||
+    child.info.parentId === midAttached.info.targetId;
+  if (innerHint === 'about:srcdoc' && !linked) return null;
   return {
     tree: childTree,
     hit: {
       midFrameId: midFrameId ?? midAttached.info.targetId,
       midUrl,
-      frameId: childTree.frame.id,
+      frameId,
       url: childTree.frame.url ?? child.info.url ?? '',
-      parentId: childTree.frame.parentId ?? midFrameId,
+      parentId: frameParentId,
     },
     via: 'grandchild-target',
     midSession: midAttached.sessionId,
@@ -831,6 +851,142 @@ function midTargetMatch(info, midHint, pageId, midNeedle, beforeIds) {
   if (!midMatches(info.url ?? '', midHint)) return false;
   if (pageId && info.parentId && info.parentId !== pageId) return false;
   return true;
+}
+
+function midTagFrom(midUrl, midNeedle) {
+  if (typeof midNeedle === 'string' && midNeedle.length > 0) return midNeedle;
+  try {
+    return new URL(midUrl).searchParams.get('n');
+  } catch {
+    return null;
+  }
+}
+
+function localMidFrame(tree, midHint) {
+  if (!tree?.frame) return null;
+  for (const mid of tree.childFrames ?? []) {
+    if (!midMatches(mid.frame?.url ?? '', midHint)) continue;
+    return mid;
+  }
+  for (const mid of tree.childFrames ?? []) {
+    if (!/\/oopif-(mid|srcdoc)/.test(mid.frame?.url ?? '')) continue;
+    return mid;
+  }
+  return null;
+}
+
+async function srcdocDocHasTag(reader, sessionId, tag) {
+  if (!tag) return false;
+  const evaluated = await outcome(
+    reader.send(
+      'Runtime.evaluate',
+      {
+        expression:
+          '(document.body && (document.body.innerText || document.body.textContent)) || ""',
+        returnByValue: true,
+      },
+      sessionId
+    )
+  );
+  if (!answered(evaluated) || !evaluated.ok) return false;
+  const text = evaluated.result?.result?.value;
+  return typeof text === 'string' && text.includes(tag);
+}
+
+function srcdocLinkedToMid(reader, midFrameId, frameId, frameParentId) {
+  if (midFrameId && frameParentId && frameParentId === midFrameId) return true;
+  if (!midFrameId || !frameId) return false;
+  for (const event of reader.events ?? []) {
+    if (event.method === 'Page.frameAttached') {
+      if (event.params?.frameId === frameId && event.params?.parentFrameId === midFrameId)
+        return true;
+    }
+    if (event.method === 'Page.frameNavigated') {
+      const frame = event.params?.frame ?? {};
+      if (frame.id === frameId && frame.parentId === midFrameId) return true;
+    }
+  }
+  return false;
+}
+
+function srcdocTargetCandidate(info, pageId, midFrameId, beforeIds) {
+  if (info.type !== 'iframe') return false;
+  if ((info.url ?? '') !== 'about:srcdoc') return false;
+  if (beforeIds?.has(info.targetId)) return false;
+  if (!pageId || !info.parentId) return true;
+  return info.parentId === pageId || info.parentId === midFrameId;
+}
+
+function finishSrcdocHit({ tree, mid, info, attached, childTree, notes, pageId, tag, reader }) {
+  const midFrameId = mid.frame.id;
+  const frameId = childTree?.frame?.id ?? info.targetId;
+  const frameParentId = childTree?.frame?.parentId ?? null;
+  const linked = srcdocLinkedToMid(reader, midFrameId, frameId, frameParentId);
+  const topParentOnly = Boolean(pageId && info.parentId === pageId);
+  if (!linked && !topParentOnly) return null;
+  if (!linked && topParentOnly) {
+    note(notes, 'protected-parent.srcdoc-top-parent', {
+      midFrameId,
+      frameId,
+      targetId: info.targetId,
+      targetParentId: info.parentId,
+      tag,
+    });
+  }
+  return {
+    tree: childTree ?? tree,
+    hit: {
+      midFrameId,
+      midUrl: mid.frame.url ?? '',
+      frameId,
+      url: childTree?.frame?.url ?? info.url ?? 'about:srcdoc',
+      parentId: frameParentId ?? (linked ? midFrameId : info.parentId),
+    },
+    via: 'grandchild-target',
+    grandchildSession: attached.sessionId,
+    grandchildTargetId: topParentOnly ? undefined : info.targetId,
+  };
+}
+
+async function hitFromSrcdocUnderLocalMid(
+  reader,
+  tree,
+  midHint,
+  pageId,
+  internalSessions,
+  beforeIds,
+  midNeedle,
+  notes
+) {
+  const mid = localMidFrame(tree, midHint);
+  if (!mid?.frame?.id) return null;
+  const tag = midTagFrom(mid.frame.url ?? '', midNeedle);
+  if (!tag) return null;
+  const listed = await outcome(reader.send('Target.getTargets', {}));
+  if (!answered(listed) || !listed.ok) return null;
+  for (const info of listed.result?.targetInfos ?? []) {
+    if (!srcdocTargetCandidate(info, pageId, mid.frame.id, beforeIds)) continue;
+    const attached = await attachIframeTarget(
+      reader,
+      (entry) => entry.targetId === info.targetId,
+      internalSessions
+    );
+    if (!attached) continue;
+    if (!(await srcdocDocHasTag(reader, attached.sessionId, tag))) continue;
+    const hit = finishSrcdocHit({
+      tree,
+      mid,
+      info,
+      attached,
+      childTree: await readTree(reader, attached.sessionId),
+      notes,
+      pageId,
+      tag,
+      reader,
+    });
+    if (hit) return hit;
+  }
+  return null;
 }
 
 async function waitGrandchild(
@@ -851,6 +1007,19 @@ async function waitGrandchild(
     const tree = await readTree(reader, sessionId);
     const hit = findGrandchild(tree, midHint, innerHint);
     if (hit) return { tree, hit, via: 'top' };
+    if (innerHint === 'about:srcdoc') {
+      const underTop = await hitFromSrcdocUnderLocalMid(
+        reader,
+        tree,
+        midHint,
+        pageId,
+        internalSessions,
+        beforeIds,
+        midNeedle,
+        notes
+      );
+      if (underTop) return underTop;
+    }
     const listed = await outcome(reader.send('Target.getTargets', {}));
     const infos = answered(listed) && listed.ok ? (listed.result?.targetInfos ?? []) : [];
     if (
@@ -864,7 +1033,14 @@ async function waitGrandchild(
       internalSessions
     );
     if (!midAttached) return null;
-    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions, beforeIds);
+    return hitFromGrandchildTarget(
+      reader,
+      midAttached,
+      innerHint,
+      internalSessions,
+      beforeIds,
+      midNeedle
+    );
   }, budget);
   if (found) {
     const branch =
@@ -1168,7 +1344,8 @@ async function liveViaMidSession({
     stamp.innerHint || innerHint,
     childBudget,
     internalSessions,
-    beforeIds
+    beforeIds,
+    stamp.midNeedle
   );
   if (!found) return null;
   const branch = found.via === 'mid-target' ? 'mid-target' : 'grandchild-target';
@@ -1665,6 +1842,7 @@ async function pageNested({
   const { targetId: pageId, sessionId } = opened.result;
   const midHint = midOrigin;
   const innerHint = innerKind === 'srcdoc' ? 'about:srcdoc' : `inner-${tag}`;
+  const midNeedle = `mid-${tag}`;
   const rawFound = await waitGrandchild(
     reader,
     sessionId,
@@ -1673,7 +1851,8 @@ async function pageNested({
     budget,
     notes,
     pageId,
-    internalSessions
+    internalSessions,
+    midNeedle
   );
   if (!rawFound) {
     return {

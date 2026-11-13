@@ -32041,9 +32041,9 @@
           "contextCreated": true,
           "contextEvaluate": true,
           "midFrameAttached": true,
-          "targetInfo": false,
-          "childAttach": false,
-          "targetEvents": false
+          "targetInfo": true,
+          "childAttach": true,
+          "targetEvents": true
         }
       },
       "expected": {

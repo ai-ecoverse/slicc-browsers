@@ -628,11 +628,69 @@ function findGrandchild(tree, midHint, innerNeedle) {
   return null;
 }
 
-async function waitGrandchild(reader, sessionId, midHint, innerHint, budget, notes) {
+function hitFromMidTree(midTree, innerNeedle, midUrl) {
+  if (!midTree?.frame) return null;
+  for (const child of midTree.childFrames ?? []) {
+    const url = child.frame?.url ?? '';
+    if (!childMatches(url, innerNeedle)) continue;
+    return {
+      midFrameId: midTree.frame.id,
+      midUrl: midTree.frame.url ?? midUrl ?? '',
+      frameId: child.frame.id,
+      url,
+      parentId: child.frame.parentId ?? midTree.frame.id,
+    };
+  }
+  return null;
+}
+
+async function attachMidTarget(reader, pageId, midHint, internalSessions) {
+  const listed = await outcome(reader.send('Target.getTargets', {}));
+  if (!answered(listed) || !listed.ok) return null;
+  const midInfo = (listed.result?.targetInfos ?? []).find((info) => {
+    if (info.type !== 'iframe') return false;
+    if (!midMatches(info.url ?? '', midHint)) return false;
+    if (pageId && info.parentId && info.parentId !== pageId) return false;
+    return true;
+  });
+  if (!midInfo?.targetId) return null;
+  const attached = await outcome(
+    reader.send('Target.attachToTarget', { targetId: midInfo.targetId, flatten: true })
+  );
+  if (!answered(attached) || !attached.ok || !attached.result?.sessionId) return null;
+  internalSessions?.add(attached.result.sessionId);
+  await outcome(reader.send('Page.enable', {}, attached.result.sessionId));
+  await outcome(reader.send('Runtime.enable', {}, attached.result.sessionId));
+  return { midInfo, midSession: attached.result.sessionId };
+}
+
+async function waitGrandchild(
+  reader,
+  sessionId,
+  midHint,
+  innerHint,
+  budget,
+  notes,
+  pageId,
+  internalSessions
+) {
+  let midAttached;
   const found = await until(async () => {
     const tree = await readTree(reader, sessionId);
     const hit = findGrandchild(tree, midHint, innerHint);
-    return hit ? { tree, hit } : null;
+    if (hit) return { tree, hit, via: 'top' };
+    midAttached ??= await attachMidTarget(reader, pageId, midHint, internalSessions);
+    if (!midAttached) return null;
+    const midTree = await readTree(reader, midAttached.midSession);
+    const fromMid = hitFromMidTree(midTree, innerHint, midAttached.midInfo.url);
+    if (!fromMid) return null;
+    return {
+      tree: midTree,
+      hit: fromMid,
+      via: 'mid-target',
+      midSession: midAttached.midSession,
+      midTargetId: midAttached.midInfo.targetId,
+    };
   }, budget);
   if (found) {
     note(notes, 'protected-parent.page-raw', {
@@ -641,6 +699,8 @@ async function waitGrandchild(reader, sessionId, midHint, innerHint, budget, not
       frameId: found.hit.frameId,
       url: found.hit.url,
       parentId: found.hit.parentId,
+      via: found.via,
+      midTargetId: found.midTargetId,
       frames: walkFrames(found.tree).map((frame) => ({
         id: frame.id,
         url: frame.url,
@@ -650,6 +710,7 @@ async function waitGrandchild(reader, sessionId, midHint, innerHint, budget, not
     return found;
   }
   const tree = await readTree(reader, sessionId);
+  const listed = await outcome(reader.send('Target.getTargets', {}));
   note(notes, 'protected-parent.page-raw-missing', {
     midHint,
     innerHint,
@@ -658,16 +719,25 @@ async function waitGrandchild(reader, sessionId, midHint, innerHint, budget, not
       url: frame.url,
       parentId: frame.parentId,
     })),
+    targets: (listed.result?.targetInfos ?? [])
+      .filter((info) => info.type === 'iframe' || info.targetId === pageId)
+      .map((info) => ({
+        targetId: info.targetId,
+        type: info.type,
+        url: info.url,
+        parentId: info.parentId,
+      })),
   });
   return null;
 }
 
-async function rawContexts(reader, sessionId, raw, eventStart, budget, notes) {
+async function rawContexts(reader, sessionIds, raw, eventStart, budget, notes) {
+  const allowed = new Set((sessionIds ?? []).filter(Boolean));
   const deadline = Date.now() + Math.min(budget, 1500);
   const contexts = [];
   while (Date.now() <= deadline) {
     for (const event of (reader.events ?? []).slice(eventStart)) {
-      if (event.sessionId && event.sessionId !== sessionId) continue;
+      if (event.sessionId && allowed.size && !allowed.has(event.sessionId)) continue;
       if (!contextHit(event, raw)) continue;
       const context = event.params?.context;
       if (context?.id != null && !contexts.some((entry) => entry.id === context.id))
@@ -675,6 +745,7 @@ async function rawContexts(reader, sessionId, raw, eventStart, budget, notes) {
           id: context.id,
           origin: context.origin,
           frameId: context.auxData?.frameId,
+          sessionId: event.sessionId,
         });
     }
     if (contexts.length) break;
@@ -733,33 +804,67 @@ function adoptLiveRaw(raw, liveRaw) {
   }
 }
 
-async function evaluateContexts(client, sessionId, contexts, evaluateArm, result) {
+async function evaluateContexts(client, sessionIds, contexts, evaluateArm, result) {
+  const sessions = [...new Set((sessionIds ?? []).filter(Boolean))];
   for (const context of contexts) {
-    const evaluated = await outcome(
-      client.send(
-        'Runtime.evaluate',
-        { expression: 'location.href', returnByValue: true, contextId: context.id },
-        sessionId
-      )
+    for (const sessionId of sessions) {
+      const evaluated = await outcome(
+        client.send(
+          'Runtime.evaluate',
+          { expression: 'location.href', returnByValue: true, contextId: context.id },
+          sessionId
+        )
+      );
+      const message = String(evaluated.error?.message ?? evaluated.error ?? '');
+      const gone =
+        !evaluated.ok &&
+        /Cannot find context|No context|Invalid context|Session with given id/i.test(message);
+      takeFirst(
+        evaluateArm,
+        { out: evaluated, unanswered: !answered(evaluated) && !gone, unansweredId: context.id },
+        (sample) => {
+          if (sample.unanswered) return;
+          if (sample.out.ok) result.contextEvaluate = true;
+          else result.contextEvaluate ??= false;
+        }
+      );
+      if (result.contextEvaluate === true) return;
+      if (gone) continue;
+      break;
+    }
+  }
+}
+
+function collectAutoSessions(events, from, pageSessionId) {
+  const sessions = new Set();
+  for (const event of events.slice(from)) {
+    if (event.method !== 'Target.attachedToTarget') continue;
+    if (event.sessionId && event.sessionId !== pageSessionId) continue;
+    const child = event.params?.sessionId;
+    const type = event.params?.targetInfo?.type;
+    if (child && (type === 'iframe' || type === 'page' || !type)) sessions.add(child);
+  }
+  return sessions;
+}
+
+async function sampleTrees(client, sessionIds, treeArm, result, raw) {
+  for (const sessionId of sessionIds) {
+    const treeAgain = await outcome(client.send('Page.getFrameTree', {}, sessionId));
+    applyTreeSample(
+      treeArm,
+      { out: treeAgain, unanswered: !answered(treeAgain) },
+      result,
+      'frameTree',
+      (payload) => treeMentions(payload?.frameTree, raw)
     );
-    const message = String(evaluated.error?.message ?? evaluated.error ?? '');
-    const gone = !evaluated.ok && /Cannot find context|No context|Invalid context/i.test(message);
-    takeFirst(
-      evaluateArm,
-      { out: evaluated, unanswered: !answered(evaluated) && !gone, unansweredId: context.id },
-      (sample) => {
-        if (sample.unanswered) return;
-        if (sample.out.ok) result.contextEvaluate = true;
-        else result.contextEvaluate ??= false;
-      }
-    );
-    if (result.contextEvaluate === true) break;
+    if (result.frameTree === true) return;
   }
 }
 
 async function pollPageClient({
   client,
   sessionId,
+  childSessions,
   clientEventStart,
   raw,
   liveContexts,
@@ -772,6 +877,7 @@ async function pollPageClient({
   const deadline = Date.now() + windowMs;
   while (Date.now() <= deadline) {
     const events = (client.events ?? []).slice(clientEventStart);
+    for (const child of collectAutoSessions(events, 0, sessionId)) childSessions.add(child);
     result.frameEvents = events.some((event) => frameEventHit(event, raw))
       ? true
       : (result.frameEvents ?? false);
@@ -781,16 +887,15 @@ async function pollPageClient({
     if (liveContexts.length) {
       if (events.some((event) => contextHit(event, raw))) result.contextCreated = true;
       if (result.contextEvaluate !== true)
-        await evaluateContexts(client, sessionId, liveContexts, evaluateArm, result);
+        await evaluateContexts(
+          client,
+          [sessionId, ...childSessions],
+          liveContexts,
+          evaluateArm,
+          result
+        );
     }
-    const treeAgain = await outcome(client.send('Page.getFrameTree', {}, sessionId));
-    applyTreeSample(
-      treeArm,
-      { out: treeAgain, unanswered: !answered(treeAgain) },
-      result,
-      'frameTree',
-      (payload) => treeMentions(payload?.frameTree, raw)
-    );
+    await sampleTrees(client, [sessionId, ...childSessions], treeArm, result, raw);
     if (
       result.frameTree === true &&
       result.resourceTree === true &&
@@ -805,10 +910,100 @@ async function pollPageClient({
   return windowMs;
 }
 
+function enableFailure(out, label, missing) {
+  if (!answered(out)) missing.push(`${label} unanswered`);
+  else if (!out.ok) missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
+}
+
+async function abortPageClient(client, sessionId, notes, missing, result = {}) {
+  note(notes, 'protected-parent.page-client', {
+    unanswered: missing,
+    frameTree: result.frameTree ?? 'unmeasured',
+    resourceTree: result.resourceTree ?? 'unmeasured',
+    frameEvents: 'unmeasured',
+    contextCreated: 'unmeasured',
+    contextEvaluate: 'unmeasured',
+    midFrameAttached: 'unmeasured',
+  });
+  await outcome(client.send('Target.detachFromTarget', { sessionId }));
+  return { ...result, incomplete: missing.join('; ') };
+}
+
+async function sampleResources(client, sessionIds, resourceArm, result, raw) {
+  for (const sessionId of sessionIds) {
+    if (result.resourceTree === true) return;
+    const resourceOut = await outcome(client.send('Page.getResourceTree', {}, sessionId));
+    applyTreeSample(
+      resourceArm,
+      { out: resourceOut, unanswered: !answered(resourceOut) },
+      result,
+      'resourceTree',
+      (payload) => resourceMentions(payload, raw)
+    );
+  }
+}
+
+async function liveGrandchild({
+  reader,
+  readerSessionId,
+  readerSessions,
+  targetId,
+  pageUrl,
+  midHint,
+  innerHint,
+  raw,
+  contexts,
+  budget,
+  notes,
+  internalSessions,
+  missing,
+}) {
+  const liveUrl = pageUrl.includes('?') ? `${pageUrl}&live=1` : `${pageUrl}?live=1`;
+  note(notes, 'protected-parent.page-live-nav', { via: 'unguarded', url: liveUrl });
+  const navigated = await outcome(reader.send('Page.navigate', { url: liveUrl }, readerSessionId));
+  if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
+  else if (!navigated.ok)
+    missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
+  const liveRaw = await waitGrandchild(
+    reader,
+    readerSessionId,
+    midHint,
+    innerHint,
+    budget,
+    notes,
+    targetId,
+    internalSessions
+  );
+  if (!liveRaw) {
+    missing.push('grandchild missing in raw leg after post-attach navigation');
+    return contexts;
+  }
+  adoptLiveRaw(raw, liveRaw);
+  note(notes, 'protected-parent.page-live-raw', {
+    midFrameId: liveRaw.hit.midFrameId,
+    frameId: liveRaw.hit.frameId,
+    url: liveRaw.hit.url,
+    via: liveRaw.via,
+  });
+  const liveSessions = [...(readerSessions ?? []), readerSessionId, liveRaw.midSession].filter(
+    Boolean
+  );
+  const liveContexts = await rawContexts(
+    reader,
+    liveSessions,
+    raw,
+    reader.events?.length ? reader.events.length - 50 : 0,
+    budget,
+    notes
+  );
+  return liveContexts.length ? liveContexts : contexts;
+}
+
 async function measurePageClient({
   client,
   reader,
   readerSessionId,
+  readerSessions,
   targetId,
   pageUrl,
   midHint,
@@ -825,60 +1020,55 @@ async function measurePageClient({
   if (attached.incomplete) return attached;
   const { sessionId } = attached;
   const clientEventStart = client.events?.length ?? 0;
-  await outcome(client.send('Page.enable', {}, sessionId));
+  enableFailure(await outcome(client.send('Page.enable', {}, sessionId)), 'Page.enable', missing);
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing);
   const treeArm = { out: undefined, unanswered: false };
   const resourceArm = { out: undefined, unanswered: false };
   const evaluateArm = { out: undefined, unanswered: false };
-  const treeOut = await outcome(client.send('Page.getFrameTree', {}, sessionId));
-  applyTreeSample(
-    treeArm,
-    { out: treeOut, unanswered: !answered(treeOut) },
-    result,
-    'frameTree',
-    (payload) => treeMentions(payload?.frameTree, raw)
+  const childSessions = new Set();
+  await outcome(
+    client.send(
+      'Target.setAutoAttach',
+      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      sessionId
+    )
   );
-  const resourceOut = await outcome(client.send('Page.getResourceTree', {}, sessionId));
-  applyTreeSample(
-    resourceArm,
-    { out: resourceOut, unanswered: !answered(resourceOut) },
-    result,
-    'resourceTree',
-    (payload) => resourceMentions(payload, raw)
+  for (const child of collectAutoSessions(client.events ?? [], clientEventStart, sessionId))
+    childSessions.add(child);
+  const sessions = [sessionId, ...childSessions];
+  await sampleTrees(client, sessions, treeArm, result, raw);
+  await sampleResources(client, sessions, resourceArm, result, raw);
+  enableFailure(
+    await outcome(client.send('Runtime.enable', {}, sessionId)),
+    'Runtime.enable',
+    missing
   );
-  await outcome(client.send('Runtime.enable', {}, sessionId));
+  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
+  for (const child of childSessions) await outcome(client.send('Runtime.enable', {}, child));
   await outcome(client.send('Network.enable', {}, sessionId));
   if (contexts.length)
     result.contextCreated = (client.events ?? [])
       .slice(clientEventStart)
       .some((event) => contextHit(event, raw));
-  const liveUrl = pageUrl.includes('?') ? `${pageUrl}&live=1` : `${pageUrl}?live=1`;
-  note(notes, 'protected-parent.page-live-nav', { via: 'unguarded', url: liveUrl });
-  const navigated = await outcome(reader.send('Page.navigate', { url: liveUrl }, readerSessionId));
-  if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
-  else if (!navigated.ok)
-    missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
-  const liveRaw = await waitGrandchild(reader, readerSessionId, midHint, innerHint, budget, notes);
-  let liveContexts = contexts;
-  if (liveRaw) {
-    adoptLiveRaw(raw, liveRaw);
-    note(notes, 'protected-parent.page-live-raw', {
-      midFrameId: liveRaw.hit.midFrameId,
-      frameId: liveRaw.hit.frameId,
-      url: liveRaw.hit.url,
-    });
-    liveContexts = await rawContexts(
-      reader,
-      readerSessionId,
-      raw,
-      reader.events?.length ? reader.events.length - 50 : 0,
-      budget,
-      notes
-    );
-    if (!liveContexts.length) liveContexts = contexts;
-  } else missing.push('grandchild missing in raw leg after post-attach navigation');
+  const liveContexts = await liveGrandchild({
+    reader,
+    readerSessionId,
+    readerSessions,
+    targetId,
+    pageUrl,
+    midHint,
+    innerHint,
+    raw,
+    contexts,
+    budget,
+    notes,
+    internalSessions,
+    missing,
+  });
   const windowMs = await pollPageClient({
     client,
     sessionId,
+    childSessions,
     clientEventStart,
     raw,
     liveContexts,
@@ -922,6 +1112,7 @@ async function measurePageClient({
     contextEvaluate: result.contextEvaluate ?? 'unmeasured',
     midFrameAttached: result.midFrameAttached ?? 'unmeasured',
     windowMs,
+    childSessions: [...childSessions],
     firstTreeOk: treeArm.out?.ok,
     firstResourceOk: resourceArm.out?.ok,
     firstEvaluateOk: evaluateArm.out?.ok,
@@ -967,7 +1158,16 @@ async function pageNested({
   const { targetId: pageId, sessionId } = opened.result;
   const midHint = midOrigin;
   const innerHint = innerKind === 'srcdoc' ? 'about:srcdoc' : `inner-${tag}`;
-  const rawFound = await waitGrandchild(reader, sessionId, midHint, innerHint, budget, notes);
+  const rawFound = await waitGrandchild(
+    reader,
+    sessionId,
+    midHint,
+    innerHint,
+    budget,
+    notes,
+    pageId,
+    internalSessions
+  );
   if (!rawFound) {
     return {
       live: true,
@@ -990,9 +1190,10 @@ async function pageNested({
     if (rawFound.hit.url === 'about:srcdoc') raw.origins.add('://');
   }
   const readerEventStart = reader.events?.length ?? 0;
+  const readerSessions = [sessionId, rawFound.midSession].filter(Boolean);
   const contexts = await rawContexts(
     reader,
-    sessionId,
+    readerSessions,
     raw,
     Math.min(eventStart, readerEventStart),
     budget,
@@ -1002,12 +1203,14 @@ async function pageNested({
     note(notes, 'protected-parent.page-no-context', {
       frameId: rawFound.hit.frameId,
       url: rawFound.hit.url,
+      via: rawFound.via,
     });
   }
   const measured = await measurePageClient({
     client,
     reader,
     readerSessionId: sessionId,
+    readerSessions,
     targetId: pageId,
     pageUrl: page,
     midHint,

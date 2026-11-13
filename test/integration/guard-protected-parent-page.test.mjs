@@ -195,6 +195,7 @@ function pageFake({ protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'] } = 
       if (!tab) throw new Error('No target with given id');
       return { targetInfo: infoOf(tab) };
     }
+    if (method === 'Target.setAutoAttach') return {};
     if (method === 'Page.enable') {
       const tab = tabs.get(sessions.get(sessionId));
       if (tab?.frameTree) emitFrameLife(conn, sessionId, tab);
@@ -476,6 +477,45 @@ test('without an unguarded observer the protected-parent page rows skip', async 
     }
   } finally {
     await guard.stop();
+    await fixture.close();
+  }
+});
+
+test('unanswered Page.enable on the page session is incomplete, not a guarded pass', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const ordinary = origin('ordinary.example.test');
+    const seven = origin('seven.sliccy.ai');
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (sessionId && (method === 'Page.enable' || method === 'Runtime.enable'))
+          throw new Error('timeout: no answer');
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const reader = browser.unguarded;
+    const client = wrap(browser.connect());
+    const notes = [];
+    const result = await protectedParentIframes({
+      client,
+      reader,
+      protectedOrigin: seven,
+      cross: origin('cross.test'),
+      ordinary,
+      mode: 'page-nested',
+      tag: 'enable-timeout',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.enable|Runtime\.enable/);
+    assert.equal(result.frameTree, undefined);
+  } finally {
     await fixture.close();
   }
 });

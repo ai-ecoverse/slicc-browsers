@@ -84,16 +84,11 @@ test('protected-parent page rows hide the ordinary grandchild on the top page se
         (row.notes ?? []).some((note) => note.includes('mid-already-present')),
         `${row.id} missing mid-already-present attach order: ${JSON.stringify(row.notes)}`
       );
-      if (row.incomplete?.length) {
-        console.error(`protected-parent page incomplete ${row.id}: ${row.incomplete.join('; ')}`);
-        assert.ok(
-          (row.notes ?? []).some((note) =>
-            /page-raw|page-no-context|page-live|page-client/.test(note)
-          ),
-          JSON.stringify(report, null, 2)
-        );
-        continue;
-      }
+      assert.equal(
+        row.incomplete?.length ?? 0,
+        0,
+        `${row.id} incomplete=${JSON.stringify(row.incomplete)} notes=${JSON.stringify(row.notes)}`
+      );
       assert.equal(
         row.control,
         'pass',

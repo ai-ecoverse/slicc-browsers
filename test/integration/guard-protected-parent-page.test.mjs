@@ -580,7 +580,11 @@ test('protected-parent page rows need no browserSession and the ordinary control
   assert.equal(drivable.has('C3.protected-parent-srcdoc.page'), false);
   assert.deepEqual(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').designDependent,
-    ['midFrameAttached']
+    ['midFrameAttached', 'childEnableRefused']
+  );
+  assert.equal(
+    vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.childEnableRefused,
+    'either'
   );
   assert.equal(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.midFrameAttached,
@@ -616,10 +620,12 @@ test('judge fails a grandchild frameTree leak on the page row', () => {
     contextCreated: false,
     contextEvaluate: false,
     midFrameAttached: false,
+    childEnableRefused: false,
     targetInfo: false,
     childAttach: false,
     targetEvents: false,
   };
+  assert.equal(judge(vector, 'guarded', { ...ok, childEnableRefused: true }).pass, true);
   assert.equal(judge(vector, 'guarded', ok).pass, true);
   assert.equal(judge(vector, 'guarded', { ...ok, frameTree: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, frameEvents: true }).pass, false);
@@ -725,6 +731,7 @@ const nestedMutants = [
   ['leakProtectedFrameEvents', { leakProtectedFrameEvents: true }],
   ['leakProtectedFrameContexts', { leakProtectedFrameContexts: true }],
   ['leakResourceTreeAfterLive', { leakResourceTreeAfterLive: true }],
+  ['refuseChildEnableLeakEvents', { refuseChildEnableLeakEvents: true }],
 ];
 
 for (const [name, options] of nestedMutants) {
@@ -745,6 +752,7 @@ const oopifMutants = [
   ['allowProtectedParentAttach', { allowProtectedParentAttach: true }],
   ['leakAttachedToTarget', { leakAttachedToTarget: true }],
   ['leakIframeEvents', { leakIframeEvents: true }],
+  ['refuseChildEnableAllowAttach', { refuseChildEnableAllowAttach: true }],
 ];
 
 for (const [name, options] of oopifMutants) {
@@ -926,7 +934,7 @@ test('unanswered child Runtime.enable is incomplete, not a guarded pass', async 
   }
 });
 
-test('refused child Page.enable is incomplete, not an inferred guarded pass', async () => {
+test('refused child Page.enable records the guard error text and keeps watching', async () => {
   const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
   const fixture = await fixtureServer();
   try {
@@ -957,9 +965,19 @@ test('refused child Page.enable is incomplete, not an inferred guarded pass', as
       budget: 2000,
     });
     assert.equal(result.incomplete, undefined, JSON.stringify({ result, notes }));
-    assert.equal(result.childEnableRefused, true, JSON.stringify({ result, notes }));
+    assert.match(
+      String(result.childEnableRefused),
+      /^slicc: refused: protected frame/,
+      JSON.stringify({ result, notes })
+    );
+    assert.equal(result.frameEvents, false, JSON.stringify({ result, notes }));
+    assert.equal(result.contextCreated, false, JSON.stringify({ result, notes }));
     assert.ok(
-      notes.some((note) => note.includes('protected-parent.page-client')),
+      notes.some(
+        (note) =>
+          note.includes('protected-parent.page-client') &&
+          note.includes('slicc: refused: protected frame')
+      ),
       notes.join('\n')
     );
   } finally {

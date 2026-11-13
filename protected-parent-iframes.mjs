@@ -1239,8 +1239,8 @@ async function sampleTrees(client, sessionIds, treeArm, result, raw) {
 function recordChildEnable(out, label, child, childSessions, missing, result) {
   if (out.ok) return 'ok';
   if (refused(out)) {
-    if (result) result.childEnableRefused = true;
     const message = String(out.error?.message ?? out.error ?? '');
+    if (result) result.childEnableRefused = message;
     if (/No session with given id|Session with given id not found|Target closed/i.test(message))
       childSessions.delete(child);
     return 'refused';
@@ -2014,6 +2014,7 @@ function finishPageClient(
   result.targetInfo ??= false;
   result.childAttach ??= false;
   result.targetEvents ??= false;
+  result.childEnableRefused ??= false;
   if (!liveContexts.length) missing.push('grandchild execution context missing in raw leg');
   else {
     result.contextCreated ??= false;
@@ -2040,6 +2041,7 @@ function finishPageClient(
     targetInfo: result.targetInfo ?? 'unmeasured',
     childAttach: result.childAttach ?? 'unmeasured',
     targetEvents: result.targetEvents ?? 'unmeasured',
+    childEnableRefused: result.childEnableRefused ?? false,
     attachRefused: result.attachRefused ?? false,
     grandchildTargetId: raw.grandchildTargetId ?? null,
     windowMs,

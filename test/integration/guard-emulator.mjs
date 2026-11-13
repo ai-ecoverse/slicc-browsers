@@ -99,9 +99,25 @@ function descendantOfProtected(frameId, catalog, frameUrls, frameParents, option
   return false;
 }
 
+function leakProtectedPageEvents(options) {
+  return Boolean(options.leakProtectedFrameEvents || options.refuseChildEnableLeakEvents);
+}
+
+function leakProtectedPageContexts(options) {
+  return Boolean(options.leakProtectedFrameContexts || options.refuseChildEnableLeakEvents);
+}
+
+function allowProtectedParentChildAttach(options) {
+  return Boolean(options.allowProtectedParentAttach || options.refuseChildEnableAllowAttach);
+}
+
+function refuseProtectedChildEnable(options) {
+  return Boolean(options.refuseChildEnableLeakEvents || options.refuseChildEnableAllowAttach);
+}
+
 function pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) {
-  if (options.leakProtectedFrameEvents && pageFrameEventName(event.method)) return false;
-  if (options.leakProtectedFrameContexts && event.method === 'Runtime.executionContextCreated')
+  if (leakProtectedPageEvents(options) && pageFrameEventName(event.method)) return false;
+  if (leakProtectedPageContexts(options) && event.method === 'Runtime.executionContextCreated')
     return false;
   const params = event.params ?? {};
   const frame = params.frame ?? {};
@@ -701,9 +717,9 @@ function emulatedGuardPlain(browser, options = {}) {
           if (
             catalog &&
             pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) &&
-            !(options.leakProtectedFrameEvents && pageFrameEventName(event.method)) &&
+            !(leakProtectedPageEvents(options) && pageFrameEventName(event.method)) &&
             !(
-              options.leakProtectedFrameContexts &&
+              leakProtectedPageContexts(options) &&
               event.method === 'Runtime.executionContextCreated'
             )
           ) {
@@ -722,7 +738,11 @@ function emulatedGuardPlain(browser, options = {}) {
             pageDescendantEvent(
               event,
               blocked,
-              { ...options, leakProtectedFrameContexts: false },
+              {
+                ...options,
+                leakProtectedFrameContexts: false,
+                refuseChildEnableLeakEvents: false,
+              },
               catalog,
               frameUrls,
               frameParents
@@ -1100,7 +1120,10 @@ function emulatedGuardPlain(browser, options = {}) {
         options,
         decisions
       );
-      if ((await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach))
+      if (
+        (await decision(params.targetId)) ||
+        (underParent && !allowProtectedParentChildAttach(options))
+      )
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
           : refusal('protected target');
@@ -1301,6 +1324,26 @@ function emulatedGuardPlain(browser, options = {}) {
       if (owner && targetBlocked.has(owner))
         sessionBlocked.set(sessionId, targetBlocked.get(owner));
     }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      refuseProtectedChildEnable(options) &&
+      sessionId &&
+      (method === 'Page.enable' || method === 'Runtime.enable')
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && !pages.has(owner)) {
+        const { targetInfo } = await unguarded
+          .send('Target.getTargetInfo', { targetId: owner })
+          .catch(() => ({ targetInfo: null }));
+        if (
+          (await decision(owner)) ||
+          (targetInfo &&
+            (await iframeAncestorProtected(unguarded, catalog, targetInfo, options, decisions)))
+        )
+          throw refusal('protected frame');
+      }
+    }
     if (method === 'Target.getTargetInfo' && catalog) {
       const info = result.targetInfo;
       if (
@@ -1349,7 +1392,7 @@ function emulatedGuardPlain(browser, options = {}) {
       sessionId &&
       params?.contextId != null &&
       blockedContexts.has(`${sessionId}:${params.contextId}`) &&
-      !options.leakProtectedFrameContexts
+      !leakProtectedPageContexts(options)
     )
       throw refusal('protected frame context');
     if (
@@ -2288,7 +2331,8 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
         decisions
       );
       const blocked =
-        (await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach);
+        (await decision(params.targetId)) ||
+        (underParent && !allowProtectedParentChildAttach(options));
       const emptyWorker =
         worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
       if (

@@ -31845,6 +31845,18 @@
           },
           "absencePoll": true
         },
+        "childEnableRefused": {
+          "means": "C3.protected-parent-iframes.page: child Page.enable or Runtime.enable on a protected-descendant session was refused with the guard error text",
+          "check": {
+            "result": "probe",
+            "path": "result.childEnableRefused",
+            "equals": {
+              "$regex": "^slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
         "targetInfo": {
           "means": "C3.protected-parent-iframes.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
           "check": {
@@ -31893,6 +31905,7 @@
           "contextCreated": true,
           "contextEvaluate": true,
           "midFrameAttached": true,
+          "childEnableRefused": false,
           "targetInfo": false,
           "childAttach": false,
           "targetEvents": false
@@ -31905,11 +31918,12 @@
         "contextCreated": false,
         "contextEvaluate": false,
         "midFrameAttached": "either",
+        "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
         "targetEvents": false
       },
-      "designDependent": ["midFrameAttached"]
+      "designDependent": ["midFrameAttached", "childEnableRefused"]
     },
     {
       "id": "C3.protected-parent-srcdoc.page",
@@ -31983,6 +31997,18 @@
           },
           "absencePoll": true
         },
+        "childEnableRefused": {
+          "means": "C3.protected-parent-srcdoc.page: child Page.enable or Runtime.enable on a protected-descendant session was refused with the guard error text",
+          "check": {
+            "result": "probe",
+            "path": "result.childEnableRefused",
+            "equals": {
+              "$regex": "^slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
         "targetInfo": {
           "means": "C3.protected-parent-srcdoc.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
           "check": {
@@ -32030,6 +32056,7 @@
           "frameEvents": true,
           "contextCreated": true,
           "midFrameAttached": true,
+          "childEnableRefused": false,
           "targetInfo": true,
           "childAttach": true,
           "targetEvents": true
@@ -32041,11 +32068,12 @@
         "frameEvents": false,
         "contextCreated": false,
         "midFrameAttached": "either",
+        "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
         "targetEvents": false
       },
-      "designDependent": ["midFrameAttached"]
+      "designDependent": ["midFrameAttached", "childEnableRefused"]
     },
     {
       "id": "C3.ordinary-parent-iframes.page",

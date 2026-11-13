@@ -121,20 +121,6 @@ async function openPage(reader, url, notes, internalSessions) {
   return created;
 }
 
-async function listFromTargets(client) {
-  const listed = await outcome(client.send('Target.getTargets', {}));
-  if (!listed.ok) return listed;
-  return {
-    ok: true,
-    result: (listed.result?.targetInfos ?? []).map((info) => ({
-      id: info.targetId,
-      type: info.type,
-      url: info.url,
-      title: info.title,
-    })),
-  };
-}
-
 async function listHttp(client, notes) {
   if (typeof client?.jsonList === 'function') {
     const listed = await outcome(client.jsonList());
@@ -158,28 +144,34 @@ async function listHttp(client, notes) {
           }
         })()
       : null);
-  if (base) {
-    try {
-      const response = await fetch(`${base}/json/list`);
-      if (!response.ok)
-        return { ok: false, error: { message: `json/list HTTP ${response.status}` } };
-      const body = await response.json();
-      note(notes, 'sign-in-hold.json-list', { via: 'http', count: body?.length ?? 0 });
-      return { ok: true, result: body };
-    } catch (error) {
-      note(notes, 'sign-in-hold.json-list', {
-        via: 'http-failed',
-        error: String(error?.message ?? error),
-      });
-    }
+  if (!base) {
+    note(notes, 'sign-in-hold.json-list', { via: 'unavailable' });
+    return { ok: false, missing: true, error: { message: '/json/list unavailable' } };
   }
-  const listed = await listFromTargets(client);
-  note(notes, 'sign-in-hold.json-list', {
-    via: 'getTargets',
-    ok: listed.ok,
-    count: listed.ok ? (listed.result?.length ?? 0) : undefined,
-  });
-  return listed;
+  try {
+    const response = await fetch(`${base}/json/list`);
+    if (!response.ok) {
+      note(notes, 'sign-in-hold.json-list', {
+        via: 'http',
+        ok: false,
+        status: response.status,
+      });
+      return { ok: false, error: { message: `json/list HTTP ${response.status}` } };
+    }
+    const body = await response.json();
+    note(notes, 'sign-in-hold.json-list', { via: 'http', count: body?.length ?? 0 });
+    return { ok: true, result: body };
+  } catch (error) {
+    note(notes, 'sign-in-hold.json-list', {
+      via: 'http-failed',
+      error: String(error?.message ?? error),
+    });
+    return {
+      ok: false,
+      missing: true,
+      error: { message: String(error?.message ?? error) },
+    };
+  }
 }
 
 function jsonEntryLeak(entry, rawId, rawUrl, mark) {
@@ -195,8 +187,8 @@ function jsonEntryLeak(entry, rawId, rawUrl, mark) {
 }
 
 function recordJson(listed, result, missing, rawId, rawUrl, mark) {
-  if (listed.missing) {
-    result.jsonListed = false;
+  if (listed?.missing) {
+    missing.push('/json/list unavailable');
     return;
   }
   if (!answered(listed)) {
@@ -407,7 +399,7 @@ function holdExpression(control, ordinary, tag, marker, heldUrl) {
           channel.postMessage({ type: 'hold', marker });
         });
         channel.close();
-        if (answer === 'held' && popup) popup.location.href = heldUrl;
+        if (popup && (answer === 'held' || answer === 'timeout')) popup.location.href = heldUrl;
         return { answer, opened: Boolean(popup) };
       })()`;
 }
@@ -473,6 +465,7 @@ async function heldPopup({
         expression: holdExpression(control, ordinary, tag, marker, heldUrl),
         awaitPromise: true,
         returnByValue: true,
+        userGesture: true,
       },
       sessionId
     )
@@ -484,7 +477,19 @@ async function heldPopup({
       openerId,
     };
   const holdAnswer = asked.result?.result?.value?.answer ?? 'missing';
-  note(notes, 'sign-in-hold.hold', { holdAnswer, control: Boolean(control) });
+  const openedPopup = asked.result?.result?.value?.opened;
+  note(notes, 'sign-in-hold.hold', {
+    holdAnswer,
+    control: Boolean(control),
+    opened: openedPopup,
+  });
+  if (openedPopup === false)
+    return {
+      live: false,
+      incomplete: 'window.open returned null',
+      holdAnswer,
+      openerId,
+    };
   const raw = await until(async () => {
     const listed = await outcome(reader.send('Target.getTargets', {}));
     if (!listed.ok) return null;
@@ -495,13 +500,6 @@ async function heldPopup({
     );
   }, budget);
   if (!raw) {
-    if (!control && (holdAnswer === 'timeout' || holdAnswer === 'missing'))
-      return {
-        live: false,
-        incomplete: `hold unanswered (${holdAnswer})`,
-        holdAnswer,
-        openerId,
-      };
     return {
       live: false,
       incomplete: 'popup target did not appear in the raw leg within the budget',
@@ -509,18 +507,6 @@ async function heldPopup({
       openerId,
     };
   }
-  if (
-    !control &&
-    holdAnswer !== 'held' &&
-    (holdAnswer === 'timeout' || holdAnswer === 'missing' || holdAnswer === 'none')
-  )
-    return {
-      live: true,
-      incomplete: `hold not held (${holdAnswer})`,
-      holdAnswer,
-      openerId,
-      targetId: raw.targetId,
-    };
   if (!control) await moveHeldPopup(reader, raw, heldUrl, budget, internalSessions);
   const settled = await until(
     async () => {

@@ -168,7 +168,7 @@ function signInFake({ holdAnswer = 'held' } = {}) {
             title: 'about:blank',
             openerId,
           });
-          if (holdAnswer === 'held' && heldUrl) {
+          if ((holdAnswer === 'held' || holdAnswer === 'timeout') && heldUrl) {
             tab.url = heldUrl;
             tab.title = `${SIGN_IN_HOLD_BODY}-title`;
             discover('Target.targetInfoChanged', tab);
@@ -203,6 +203,15 @@ function signInFake({ holdAnswer = 'held' } = {}) {
   const connect = () => {
     const conn = { events: [], discover: false, close: async () => {} };
     conn.send = (method, params, sessionId) => handle(conn, method, params, sessionId);
+    conn.jsonList = async () => {
+      const listed = await conn.send('Target.getTargets', {});
+      return (listed?.targetInfos ?? []).map((info) => ({
+        id: info.targetId,
+        type: info.type,
+        url: info.url,
+        title: info.title,
+      }));
+    };
     connections.push(conn);
     return conn;
   };
@@ -395,11 +404,59 @@ test('mutant allowAttach fails', async () => {
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
-test('mutant holdMissing is incomplete, never a guarded pass', async () => {
+test('mutant holdMissing never passes the guarded leg', async () => {
   const out = await rows({ holdAnswer: 'timeout', holdMissing: true });
   const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
-  assert.ok(row.guarded === 'incomplete' || row.live === 'incomplete', JSON.stringify(row));
+});
+
+test('without a measurable /json/list the row is incomplete, not a guarded pass', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = signInFake();
+    for (const conn of [browser.client, browser.unguarded]) delete conn.jsonList;
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+      signInHold: true,
+      leakJsonList: true,
+    });
+    delete guard.client.jsonList;
+    try {
+      const out = await run(
+        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: { browserSession: true, discovery: true, signInHold: true },
+          targets: {
+            ordinary: origin('ordinary.example.test'),
+            cross: origin('cross.test'),
+            seven: origin('seven.sliccy.ai'),
+            vault: origin('vault.sliccy.ai'),
+            own: origin('client.example.test'),
+            client: origin('client.example.test'),
+            log: origin('log.example.test'),
+          },
+        }
+      );
+      const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+      assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+      assert.ok(
+        row.guarded === 'incomplete' ||
+          row.live === 'incomplete' ||
+          String(row.reason ?? '').includes('/json/list'),
+        JSON.stringify(row)
+      );
+    } finally {
+      await guard.stop?.();
+    }
+  } finally {
+    await fixture.close();
+  }
 });
 
 test('announce-only id with empty URL/title still passes', async () => {

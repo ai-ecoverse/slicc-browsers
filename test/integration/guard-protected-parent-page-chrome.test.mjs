@@ -25,6 +25,7 @@ test('protected-parent page rows hide the ordinary grandchild on the top page se
   const guard = emulatedGuard(browser, {
     protectedOrigins: catalog.protectedOrigins,
     extraOrigins: [targets.seven, targets.vault],
+    protectedParentPages: true,
   });
   const rows = [];
   try {

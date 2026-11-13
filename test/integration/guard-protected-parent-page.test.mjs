@@ -649,6 +649,7 @@ async function runMode(mode, { only = ids, oopifGrandchildTargets = false } = {}
         : emulatedGuard(browser, {
             protectedOrigins: catalog.protectedOrigins,
             extraOrigins: [targets.seven, targets.vault],
+            protectedParentPages: true,
             ...mode,
           });
     try {
@@ -776,6 +777,7 @@ test('without an unguarded observer the protected-parent page rows skip', async 
   const guard = emulatedGuard(browser, {
     protectedOrigins: catalog.protectedOrigins,
     extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
   });
   try {
     const execution = await run(
@@ -894,6 +896,7 @@ test('without a mapped {cross} the ordinary-parent page row is incomplete', asyn
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: [targets.seven, targets.vault],
+      protectedParentPages: true,
     });
     try {
       const execution = await run(
@@ -918,5 +921,61 @@ test('without a mapped {cross} the ordinary-parent page row is incomplete', asyn
     }
   } finally {
     await fixture.close();
+  }
+});
+
+test('emulator without protectedParentPages still refuses ordinary tops that frame protected children', async () => {
+  const source = await readFile(new URL('./guard-emulator.mjs', import.meta.url), 'utf8');
+  const plain = source.slice(
+    source.indexOf('function emulatedGuardPlain'),
+    source.indexOf('async function timedSend')
+  );
+  assert.ok(source.includes('options.protectedParentPages'));
+  assert.ok(plain.includes('if (options.protectedParentPages)'));
+  assert.ok(plain.includes('} else if (protectedFrame(frameTree)) throw refusal'));
+  const { protectedOrigins: rules } = catalog;
+  const unguarded = {
+    events: [],
+    send: async (method, params, sessionId) => {
+      if (method === 'Target.getTargetInfo')
+        return { targetInfo: { url: 'http://ordinary.example.test/', type: 'page' } };
+      if (method === 'Target.attachToTarget') return { sessionId: 'reader' };
+      if (method === 'Page.getFrameTree')
+        return {
+          frameTree: {
+            frame: { url: 'http://ordinary.example.test/' },
+            childFrames: [{ frame: { url: 'https://seven.sliccy.ai/doc' } }],
+          },
+        };
+      if (method === 'Target.setAutoAttach') return {};
+      if (method === 'Target.detachFromTarget') return {};
+      return {};
+    },
+  };
+  const calls = [];
+  const guard = emulatedGuard(
+    {
+      unguarded,
+      client: {
+        events: [],
+        send: async (method, params, sessionId) => {
+          calls.push({ method, params, sessionId });
+          return { sessionId: 'client' };
+        },
+      },
+    },
+    {
+      protectedOrigins: rules,
+      extraOrigins: ['https://seven.sliccy.ai'],
+    }
+  );
+  try {
+    await assert.rejects(
+      () => guard.client.send('Target.attachToTarget', { targetId: 'ord', flatten: true }),
+      /refused.*protected.*frame/
+    );
+    assert.deepEqual(calls, []);
+  } finally {
+    await guard.stop();
   }
 });

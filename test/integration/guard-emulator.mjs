@@ -99,25 +99,9 @@ function descendantOfProtected(frameId, catalog, frameUrls, frameParents, option
   return false;
 }
 
-function leakProtectedPageEvents(options) {
-  return Boolean(options.leakProtectedFrameEvents || options.refuseChildEnableLeakEvents);
-}
-
-function leakProtectedPageContexts(options) {
-  return Boolean(options.leakProtectedFrameContexts || options.refuseChildEnableLeakEvents);
-}
-
-function allowProtectedParentChildAttach(options) {
-  return Boolean(options.allowProtectedParentAttach || options.refuseChildEnableAllowAttach);
-}
-
-function refuseProtectedChildEnable(options) {
-  return Boolean(options.refuseChildEnableLeakEvents || options.refuseChildEnableAllowAttach);
-}
-
 function pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) {
-  if (leakProtectedPageEvents(options) && pageFrameEventName(event.method)) return false;
-  if (leakProtectedPageContexts(options) && event.method === 'Runtime.executionContextCreated')
+  if (options.leakProtectedFrameEvents && pageFrameEventName(event.method)) return false;
+  if (options.leakProtectedFrameContexts && event.method === 'Runtime.executionContextCreated')
     return false;
   const params = event.params ?? {};
   const frame = params.frame ?? {};
@@ -717,9 +701,12 @@ function emulatedGuardPlain(browser, options = {}) {
           if (
             catalog &&
             pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) &&
-            !(leakProtectedPageEvents(options) && pageFrameEventName(event.method)) &&
             !(
-              leakProtectedPageContexts(options) &&
+              (options.leakProtectedFrameEvents || options.refuseChildEnableLeakEvents) &&
+              pageFrameEventName(event.method)
+            ) &&
+            !(
+              (options.leakProtectedFrameContexts || options.refuseChildEnableLeakEvents) &&
               event.method === 'Runtime.executionContextCreated'
             )
           ) {
@@ -738,11 +725,7 @@ function emulatedGuardPlain(browser, options = {}) {
             pageDescendantEvent(
               event,
               blocked,
-              {
-                ...options,
-                leakProtectedFrameContexts: false,
-                refuseChildEnableLeakEvents: false,
-              },
+              { ...options, leakProtectedFrameContexts: false },
               catalog,
               frameUrls,
               frameParents
@@ -1122,7 +1105,9 @@ function emulatedGuardPlain(browser, options = {}) {
       );
       if (
         (await decision(params.targetId)) ||
-        (underParent && !allowProtectedParentChildAttach(options))
+        (underParent &&
+          !options.allowProtectedParentAttach &&
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach))
       )
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
@@ -1327,7 +1312,7 @@ function emulatedGuardPlain(browser, options = {}) {
     if (
       options.protectedParentPages &&
       catalog &&
-      refuseProtectedChildEnable(options) &&
+      (options.refuseChildEnableLeakEvents || options.refuseChildEnableAllowAttach) &&
       sessionId &&
       (method === 'Page.enable' || method === 'Runtime.enable')
     ) {
@@ -1392,7 +1377,8 @@ function emulatedGuardPlain(browser, options = {}) {
       sessionId &&
       params?.contextId != null &&
       blockedContexts.has(`${sessionId}:${params.contextId}`) &&
-      !leakProtectedPageContexts(options)
+      !options.leakProtectedFrameContexts &&
+      !options.refuseChildEnableLeakEvents
     )
       throw refusal('protected frame context');
     if (
@@ -2332,7 +2318,9 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       );
       const blocked =
         (await decision(params.targetId)) ||
-        (underParent && !allowProtectedParentChildAttach(options));
+        (underParent &&
+          !options.allowProtectedParentAttach &&
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach));
       const emptyWorker =
         worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
       if (

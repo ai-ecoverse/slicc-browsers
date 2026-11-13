@@ -686,6 +686,53 @@ function liveNestPlan(pageUrl, innerKind, innerHint) {
   };
 }
 
+function stampedMidLive(midUrl, innerKind, innerHint) {
+  const stamp = `live-${Date.now().toString(36)}`;
+  try {
+    const mid = new URL(midUrl);
+    mid.searchParams.set('n', `${mid.searchParams.get('n') ?? 'mid'}-${stamp}`);
+    if (innerKind === 'srcdoc' || innerHint === 'about:srcdoc') {
+      return {
+        midUrl: mid.toString(),
+        innerHint: 'about:srcdoc',
+        midNeedle: mid.searchParams.get('n'),
+      };
+    }
+    const innerRaw = mid.searchParams.get('inner');
+    if (!innerRaw) {
+      return {
+        midUrl: mid.toString(),
+        innerHint,
+        midNeedle: mid.searchParams.get('n'),
+      };
+    }
+    const inner = new URL(innerRaw);
+    const prior = inner.searchParams.get('n') ?? `inner-${stamp}`;
+    inner.searchParams.set('n', `${prior}-${stamp}`);
+    mid.searchParams.set('inner', inner.toString());
+    return {
+      midUrl: mid.toString(),
+      innerHint: inner.searchParams.get('n'),
+      midNeedle: mid.searchParams.get('n'),
+    };
+  } catch {
+    return { midUrl, innerHint, midNeedle: null };
+  }
+}
+
+async function waitChildUnderMid(
+  reader,
+  midAttached,
+  innerHint,
+  budget,
+  internalSessions,
+  beforeIds
+) {
+  return until(async () => {
+    return hitFromGrandchildTarget(reader, midAttached, innerHint, internalSessions, beforeIds);
+  }, budget);
+}
+
 async function attachIframeTarget(reader, match, internalSessions) {
   const listed = await outcome(reader.send('Target.getTargets', {}));
   if (!answered(listed) || !listed.ok) return null;
@@ -703,7 +750,7 @@ async function attachIframeTarget(reader, match, internalSessions) {
   return { info, sessionId: attached.result.sessionId };
 }
 
-async function armMidChildWatch(reader, midSession) {
+async function armMidChildWatch(reader, midSession, waitMs = 1500) {
   await outcome(
     reader.send(
       'Target.setAutoAttach',
@@ -722,7 +769,7 @@ async function armMidChildWatch(reader, midSession) {
     if (!answered(evaled) || !evaled.ok) return null;
     const src = evaled.result?.result?.value;
     return typeof src === 'string' && src.length > 0 ? src : null;
-  }, 1500);
+  }, waitMs);
 }
 
 async function hitFromGrandchildTarget(
@@ -733,7 +780,7 @@ async function hitFromGrandchildTarget(
   beforeIds = null
 ) {
   if (!midAttached.armed) {
-    await armMidChildWatch(reader, midAttached.sessionId);
+    await armMidChildWatch(reader, midAttached.sessionId, 400);
     midAttached.armed = true;
   }
   const midTree = await readTree(reader, midAttached.sessionId);
@@ -1079,6 +1126,56 @@ async function sampleResources(client, sessionIds, resourceArm, result, raw) {
   }
 }
 
+async function liveViaMidSession({
+  reader,
+  raw,
+  innerKind,
+  innerHint,
+  budget,
+  notes,
+  internalSessions,
+  beforeIds,
+  preferMidLive,
+}) {
+  if (!preferMidLive || !raw.midTargetId) return null;
+  const midAttached = await attachIframeTarget(
+    reader,
+    (info) => info.targetId === raw.midTargetId,
+    internalSessions
+  );
+  if (!midAttached) return null;
+  const midUrl = midAttached.info.url ?? '';
+  const stamp = stampedMidLive(
+    midUrl,
+    innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
+    innerHint
+  );
+  note(notes, 'protected-parent.page-live-nav', {
+    via: 'mid-session',
+    url: stamp.midUrl,
+    innerHint: stamp.innerHint,
+    midNeedle: stamp.midNeedle,
+    midTargetId: raw.midTargetId,
+  });
+  const navigated = await outcome(
+    reader.send('Page.navigate', { url: stamp.midUrl }, midAttached.sessionId)
+  );
+  if (!answered(navigated) || !navigated.ok) return null;
+  const childBudget = budget < 2000 ? budget : Math.max(budget, 8000);
+  const found = await waitChildUnderMid(
+    reader,
+    midAttached,
+    stamp.innerHint || innerHint,
+    childBudget,
+    internalSessions,
+    beforeIds
+  );
+  if (!found) return null;
+  const branch = found.via === 'mid-target' ? 'mid-target' : 'grandchild-target';
+  note(notes, 'protected-parent.page-branch', { branch, via: found.via, live: 'mid-session' });
+  return found;
+}
+
 async function liveGrandchild({
   reader,
   readerSessionId,
@@ -1088,6 +1185,7 @@ async function liveGrandchild({
   midHint,
   innerHint,
   innerKind,
+  preferMidLive,
   raw,
   contexts,
   budget,
@@ -1103,38 +1201,53 @@ async function liveGrandchild({
     grandchildTargetId: raw.grandchildTargetId ?? null,
     urls: [...raw.urls],
   });
-  const plan = liveNestPlan(
-    pageUrl,
-    innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
-    innerHint
-  );
-  note(notes, 'protected-parent.page-live-nav', {
-    via: 'unguarded',
-    url: plan.liveUrl,
-    innerHint: plan.innerHint,
-    midNeedle: plan.midNeedle,
-    beforeTargetIds: before.targets.map((info) => info.targetId),
-  });
-  const navigated = await outcome(
-    reader.send('Page.navigate', { url: plan.liveUrl }, readerSessionId)
-  );
-  if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
-  else if (!navigated.ok)
-    missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
   const beforeIds = new Set(before.targets.map((info) => info.targetId).filter(Boolean));
   const liveBudget = budget < 2000 ? budget : Math.max(budget, 8000);
-  const liveRaw = await waitGrandchild(
+  let liveRaw = await liveViaMidSession({
     reader,
-    readerSessionId,
-    midHint,
-    plan.innerHint || innerHint,
-    liveBudget,
+    raw,
+    innerKind,
+    innerHint,
+    budget: liveBudget,
     notes,
-    targetId,
     internalSessions,
-    plan.midNeedle,
-    beforeIds
-  );
+    beforeIds,
+    preferMidLive,
+  });
+  if (!liveRaw) {
+    const plan = liveNestPlan(
+      pageUrl,
+      innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
+      innerHint
+    );
+    note(notes, 'protected-parent.page-live-nav', {
+      via: 'top-session',
+      url: plan.liveUrl,
+      innerHint: plan.innerHint,
+      midNeedle: plan.midNeedle,
+      beforeTargetIds: [...beforeIds],
+    });
+    const navigated = await outcome(
+      reader.send('Page.navigate', { url: plan.liveUrl }, readerSessionId)
+    );
+    if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
+    else if (!navigated.ok)
+      missing.push(
+        `unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`
+      );
+    liveRaw = await waitGrandchild(
+      reader,
+      readerSessionId,
+      midHint,
+      plan.innerHint || innerHint,
+      liveBudget,
+      notes,
+      targetId,
+      internalSessions,
+      plan.midNeedle,
+      beforeIds
+    );
+  }
   const after = await listTargetSnapshot(reader);
   note(notes, 'protected-parent.page-targets-after', {
     unanswered: after.unanswered,
@@ -1339,6 +1452,7 @@ async function measurePageClient({
   midHint,
   innerHint,
   innerKind,
+  preferMidLive,
   raw,
   contexts,
   budget,
@@ -1393,6 +1507,7 @@ async function measurePageClient({
     midHint,
     innerHint,
     innerKind,
+    preferMidLive,
     raw,
     contexts,
     budget,
@@ -1400,6 +1515,17 @@ async function measurePageClient({
     internalSessions,
     missing,
   });
+  if (preferMidLive && raw.midTargetId) {
+    const midAgain = await outcome(
+      client.send('Target.attachToTarget', { targetId: raw.midTargetId, flatten: true })
+    );
+    await adoptAttachedSession(midAgain, childSessions, internalSessions, null);
+    await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+    for (const child of [...childSessions]) {
+      await outcome(client.send('Page.enable', {}, child));
+      await outcome(client.send('Runtime.enable', {}, child));
+    }
+  }
   const windowMs = await pollPageClient({
     client,
     sessionId,
@@ -1514,6 +1640,7 @@ async function pageNested({
   internalSessions,
   eventStart,
   innerKind,
+  preferMidLive = false,
 }) {
   if (!midOrigin) return { incomplete: 'no middle origin mapped' };
   const inner = innerKind === 'srcdoc' ? 'about:srcdoc' : `${ordinary}/doc?n=inner-${tag}`;
@@ -1600,6 +1727,7 @@ async function pageNested({
     midHint,
     innerHint,
     innerKind,
+    preferMidLive,
     raw,
     contexts,
     budget,
@@ -1676,6 +1804,7 @@ export async function protectedParentIframes({
               internalSessions,
               eventStart,
               innerKind: 'ordinary',
+              preferMidLive: true,
             })
           : mode === 'page-srcdoc'
             ? await pageNested({
@@ -1689,6 +1818,7 @@ export async function protectedParentIframes({
                 internalSessions,
                 eventStart,
                 innerKind: 'srcdoc',
+                preferMidLive: true,
               })
             : mode === 'page-ordinary'
               ? await pageNested({
@@ -1702,6 +1832,7 @@ export async function protectedParentIframes({
                   internalSessions,
                   eventStart,
                   innerKind: 'ordinary',
+                  preferMidLive: false,
                 })
               : { incomplete: `unknown protectedParentIframes mode ${mode}` };
   if (built.pageId) await outcome(reader.send('Target.closeTarget', { targetId: built.pageId }));

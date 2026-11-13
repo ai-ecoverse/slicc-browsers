@@ -344,6 +344,70 @@ function pageFake({
             emitFrameLife(other, otherSession, tab);
             emitContexts(other, otherSession, tab);
           }
+        } else if (tab?.type === 'iframe' && /\/oopif-(mid|srcdoc)/.test(params.url ?? '')) {
+          if (tab.children?.length) {
+            for (const childId of tab.children) tabs.delete(childId);
+            tab.children = [];
+          }
+          tab.url = params.url;
+          tab.frame = { id: tab.frame?.id ?? `F${++next}`, url: params.url };
+          const skipChild = omitLiveGrandchild;
+          let childUrl = 'about:blank';
+          try {
+            const mid = new URL(params.url);
+            if (mid.pathname.includes('oopif-srcdoc')) childUrl = 'about:srcdoc';
+            else childUrl = mid.searchParams.get('inner') ?? childUrl;
+          } catch {
+            childUrl = 'about:blank';
+          }
+          const childFrameId = `F${++next}`;
+          const childOrigin = originOf(childUrl);
+          const oopifChild = Boolean(
+            oopifGrandchildTargets && childUrl !== 'about:srcdoc' && childOrigin
+          );
+          if (!skipChild && oopifChild) {
+            const childTab = {
+              targetId: `T${++next}`,
+              type: 'iframe',
+              url: childUrl,
+              title: childUrl,
+              parentId: tab.targetId,
+              frame: { id: childFrameId, url: childUrl },
+              frameTree: { frame: { id: childFrameId, url: childUrl }, childFrames: [] },
+              contexts: [
+                {
+                  id: ++next,
+                  origin: childOrigin || '://',
+                  auxData: { frameId: childFrameId, isDefault: true },
+                },
+              ],
+              children: [],
+            };
+            tabs.set(childTab.targetId, childTab);
+            tab.children = [childTab.targetId];
+            tab.frameTree = { frame: tab.frame, childFrames: [] };
+          } else if (!skipChild) {
+            tab.frameTree = {
+              frame: tab.frame,
+              childFrames: [{ frame: { id: childFrameId, url: childUrl, parentId: tab.frame.id } }],
+            };
+          } else {
+            tab.frameTree = { frame: tab.frame, childFrames: [] };
+          }
+          tab.contexts = [
+            {
+              id: ++next,
+              origin: originOf(tab.url) || '://',
+              auxData: { frameId: tab.frame.id, isDefault: true },
+            },
+          ];
+          for (const [otherSession, targetId] of sessions) {
+            if (targetId !== tab.targetId) continue;
+            const other = sessionConn.get(otherSession);
+            if (!other) continue;
+            emitFrameLife(other, otherSession, tab);
+            emitContexts(other, otherSession, tab);
+          }
         }
       }
       return {};

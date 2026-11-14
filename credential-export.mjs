@@ -125,15 +125,19 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
     )
   );
   const value = planted.result?.result?.value;
-  if (
-    !planted.ok ||
-    !value ||
-    value.localStorage !== true ||
-    value.idb !== true ||
-    value.cache !== tag
-  )
+  if (!planted.ok || !value || value.localStorage !== true || value.idb !== true)
     return {
       incomplete: `plant storage failed: ${planted.error?.message ?? JSON.stringify(value)}`,
+    };
+  const cachePlanted = value.cache === tag;
+  const cacheUnavailable =
+    !cachePlanted &&
+    (value.cache === false ||
+      (typeof value.cache === 'string' &&
+        /caches is not defined|Secure contexts|secure context/i.test(value.cache)));
+  if (!cachePlanted && !cacheUnavailable)
+    return {
+      incomplete: `plant cache failed: ${typeof value.cache === 'string' ? value.cache : JSON.stringify(value.cache)}`,
     };
   const all = await outcome(reader.send('Network.getAllCookies', {}, sessionId));
   if (!all.ok)
@@ -147,8 +151,9 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
     open,
     lsKey,
     dbName,
-    cacheName,
-    cacheUrl,
+    cacheName: cachePlanted ? cacheName : null,
+    cacheUrl: cachePlanted ? cacheUrl : null,
+    cachePlanted,
   };
 }
 
@@ -521,6 +526,11 @@ async function measureStorageReads(client, clientSession, { origin, tag, planted
     result.indexedDBRefused = storageRefused(idbNames.out, names.includes(planted.dbName));
   }
 
+  if (!planted.cachePlanted) {
+    result.skips.push('not-supported:CacheStorage');
+    result.cacheStorageRefused = true;
+    return;
+  }
   const caches = await tryMethod(
     client,
     'CacheStorage.requestCacheNames',

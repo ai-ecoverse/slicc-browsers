@@ -385,6 +385,7 @@ function focusAwareTransport({ refuseShown = false } = {}) {
     if (method === 'Page.captureSnapshot') return { data: 'mhtml' };
     if (method === 'Page.printToPDF') return { data: 'pdf' };
     if (method === 'Page.startScreencast') return {};
+    if (method === 'Page.screencastFrameAck') return {};
     if (method === 'Page.stopScreencast') return {};
     if (method === 'HeadlessExperimental.beginFrame') return {};
     if (method.startsWith('Input.')) {
@@ -411,18 +412,26 @@ function focusAwareTransport({ refuseShown = false } = {}) {
     return {};
   };
   let castSession;
+  let castFrameSeq = 0;
   const client = { events: [], send: null };
+  const pushCastFrame = (sessionId) => {
+    castFrameSeq += 1;
+    client.events.push({
+      method: 'Page.screencastFrame',
+      params: { data: 'frame', sessionId: castFrameSeq },
+      sessionId,
+    });
+  };
   const send = async (method, params = {}, sessionId) => {
     if (method === 'Page.startScreencast') {
       castSession = sessionId;
       return rawSend(method, params, sessionId);
     }
-    if (castSession != null && method === 'Runtime.evaluate' && client.events.length === 0) {
-      client.events.push({
-        method: 'Page.screencastFrame',
-        params: { data: 'frame', sessionId: castSession },
-        sessionId: castSession,
-      });
+    if (castSession != null && method === 'Runtime.evaluate') {
+      const expression = params.expression ?? '';
+      if (client.events.length === 0) pushCastFrame(castSession);
+      else if (expression.includes('slicc-private-extension-frame-content'))
+        pushCastFrame(castSession);
     }
     if (method === 'Input.dispatchMouseEvent' && params.type !== 'mouseReleased') {
       await rawSend('Page.bringToFront', {}, sessionId);

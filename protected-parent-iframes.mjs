@@ -681,9 +681,101 @@ function liveNestPlan(pageUrl, innerKind, innerHint) {
   page.searchParams.set('live', '1');
   return {
     liveUrl: page.toString(),
+    midUrl: midRaw,
     innerHint: innerHint || (innerKind === 'srcdoc' ? 'about:srcdoc' : ''),
     midNeedle,
   };
+}
+
+function sameSiteOrigin(left, right) {
+  try {
+    return Boolean(left && right && new URL(left).origin === new URL(right).origin);
+  } catch {
+    return false;
+  }
+}
+
+function midUrlMatch(candidate, midUrls) {
+  if (!candidate) return false;
+  for (const mid of midUrls ?? []) {
+    if (!mid) continue;
+    if (candidate === mid) return true;
+    try {
+      const a = new URL(candidate);
+      const b = new URL(mid);
+      if (a.origin === b.origin && a.pathname === b.pathname) return true;
+    } catch {
+      if (candidate.startsWith(mid) || mid.startsWith(candidate)) return true;
+    }
+  }
+  return false;
+}
+
+function blockedNetworkFail(event, network) {
+  const url = network.get(event.params?.requestId);
+  if (
+    !url ||
+    !(event.params?.blockedReason || event.params?.errorText === 'net::ERR_BLOCKED_BY_CLIENT')
+  )
+    return null;
+  return {
+    url,
+    errorText: event.params?.errorText ?? null,
+    blockedReason: event.params?.blockedReason ?? null,
+    via: 'Network.loadingFailed',
+  };
+}
+
+function blockedFetchFail(event, fetchDocs) {
+  const url = fetchDocs.get(event.params?.requestId);
+  if (!url || (event.params?.errorReason && event.params.errorReason !== 'BlockedByClient'))
+    return null;
+  return {
+    url,
+    errorText: event.params?.errorReason ?? 'BlockedByClient',
+    blockedReason: 'Fetch',
+    via: 'Fetch.failRequest',
+  };
+}
+
+function trackMidDocument(event, midUrls, network, fetchDocs) {
+  if (event.method === 'Network.requestWillBeSent') {
+    const url = event.params?.request?.url;
+    if (event.params?.type === 'Document' && midUrlMatch(url, midUrls))
+      network.set(event.params.requestId, url);
+    return null;
+  }
+  if (event.method === 'Fetch.requestPaused') {
+    const url = event.params?.request?.url;
+    if (event.params?.resourceType === 'Document' && midUrlMatch(url, midUrls))
+      fetchDocs.set(event.params.requestId, url);
+    return null;
+  }
+  if (event.method === 'Network.loadingFailed') return blockedNetworkFail(event, network);
+  if (event.method === 'Fetch.failRequest') return blockedFetchFail(event, fetchDocs);
+  return null;
+}
+
+function liveMidBlocked(events, from, midUrls) {
+  if (!midUrls?.length) return null;
+  const network = new Map();
+  const fetchDocs = new Map();
+  for (const event of (events ?? []).slice(from)) {
+    const hit = trackMidDocument(event, midUrls, network, fetchDocs);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function liveMissingReason(pageUrl, midHint, raw) {
+  if (!raw.midTargetId && midHint && sameSiteOrigin(pageUrl, midHint))
+    return "grandchild missing in raw leg after post-attach navigation: mid host is same-site with {ordinary} (no mid target); seven's host should be cross-site from {ordinary} like {cross}";
+  return 'grandchild missing in raw leg after post-attach navigation';
+}
+
+async function armReaderNetwork(reader, sessionIds) {
+  for (const sessionId of [...new Set((sessionIds ?? []).filter(Boolean))])
+    await outcome(reader.send('Network.enable', {}, sessionId));
 }
 
 function stampedMidLive(midUrl, innerKind, innerHint) {
@@ -727,9 +819,12 @@ async function waitChildUnderMid(
   budget,
   internalSessions,
   beforeIds,
-  midNeedle = null
+  midNeedle = null,
+  blockCheck = null
 ) {
   return until(async () => {
+    const blocked = blockCheck?.();
+    if (blocked) return { blocked };
     return hitFromGrandchildTarget(
       reader,
       midAttached,
@@ -999,11 +1094,14 @@ async function waitGrandchild(
   pageId,
   internalSessions,
   midNeedle = null,
-  beforeIds = null
+  beforeIds = null,
+  blockCheck = null
 ) {
   let midAttached;
   await outcome(reader.send('Target.setDiscoverTargets', { discover: true }));
   const found = await until(async () => {
+    const blocked = blockCheck?.();
+    if (blocked) return { blocked };
     const tree = await readTree(reader, sessionId);
     const hit = findGrandchild(tree, midHint, innerHint);
     if (hit) return { tree, hit, via: 'top' };
@@ -1042,6 +1140,7 @@ async function waitGrandchild(
       midNeedle
     );
   }, budget);
+  if (found?.blocked) return found;
   if (found) {
     const branch =
       found.via === 'top'
@@ -1505,6 +1604,8 @@ async function liveViaMidSession({
   internalSessions,
   beforeIds,
   preferMidLive,
+  eventStart,
+  midUrls,
 }) {
   if (!preferMidLive || !raw.midTargetId) return null;
   const midAttached = await attachIframeTarget(
@@ -1519,6 +1620,8 @@ async function liveViaMidSession({
     innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
     innerHint
   );
+  midUrls.push(stamp.midUrl);
+  await armReaderNetwork(reader, [midAttached.sessionId]);
   note(notes, 'protected-parent.page-live-nav', {
     via: 'mid-session',
     url: stamp.midUrl,
@@ -1529,7 +1632,10 @@ async function liveViaMidSession({
   const navigated = await outcome(
     reader.send('Page.navigate', { url: stamp.midUrl }, midAttached.sessionId)
   );
-  if (!answered(navigated) || !navigated.ok) return null;
+  if (!answered(navigated) || !navigated.ok) {
+    const blocked = liveMidBlocked(reader.events, eventStart, midUrls);
+    return blocked ? { blocked } : null;
+  }
   const childBudget = budget < 2000 ? budget : Math.max(budget, 8000);
   const found = await waitChildUnderMid(
     reader,
@@ -1538,12 +1644,104 @@ async function liveViaMidSession({
     childBudget,
     internalSessions,
     beforeIds,
-    stamp.midNeedle
+    stamp.midNeedle,
+    () => liveMidBlocked(reader.events, eventStart, midUrls)
   );
-  if (!found) return null;
+  if (found?.blocked) return found;
+  if (!found) {
+    const blocked = liveMidBlocked(reader.events, eventStart, midUrls);
+    return blocked ? { blocked } : null;
+  }
   const branch = found.via === 'mid-target' ? 'mid-target' : 'grandchild-target';
   note(notes, 'protected-parent.page-branch', { branch, via: found.via, live: 'mid-session' });
   return found;
+}
+
+function acceptLiveBlocked(raw, notes, blocked) {
+  raw.liveBlocked = blocked;
+  note(notes, 'protected-parent.page-live-blocked', blocked);
+}
+
+function protectLiveChannels(result, skipEvaluate = false) {
+  result.resourceTree ??= false;
+  result.frameEvents ??= false;
+  if (!skipEvaluate) result.contextEvaluate ??= false;
+  result.midFrameAttached ??= false;
+}
+
+async function samplePreLiveChannels({
+  client,
+  sessionId,
+  childSessions,
+  clientEventStart,
+  raw,
+  contexts,
+  resourceArm,
+  evaluateArm,
+  result,
+  skipEvaluate = false,
+}) {
+  const sessions = [sessionId, ...childSessions];
+  await sampleResources(client, sessions, resourceArm, result, raw);
+  const events = (client.events ?? []).slice(clientEventStart);
+  result.frameEvents = events.some((event) => frameEventHit(event, raw))
+    ? true
+    : (result.frameEvents ?? false);
+  result.midFrameAttached = events.some((event) => midFrameAttachedHit(event, raw))
+    ? true
+    : (result.midFrameAttached ?? false);
+  if (!skipEvaluate && contexts.length)
+    await evaluateContexts(client, sessions, contexts, evaluateArm, result);
+}
+
+async function liveViaTopSession({
+  reader,
+  readerSessionId,
+  targetId,
+  pageUrl,
+  midHint,
+  innerHint,
+  innerKind,
+  liveBudget,
+  notes,
+  internalSessions,
+  beforeIds,
+  eventStart,
+  midUrls,
+  missing,
+}) {
+  const plan = liveNestPlan(
+    pageUrl,
+    innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
+    innerHint
+  );
+  if (plan.midUrl) midUrls.push(plan.midUrl);
+  note(notes, 'protected-parent.page-live-nav', {
+    via: 'top-session',
+    url: plan.liveUrl,
+    innerHint: plan.innerHint,
+    midNeedle: plan.midNeedle,
+    beforeTargetIds: [...beforeIds],
+  });
+  const navigated = await outcome(
+    reader.send('Page.navigate', { url: plan.liveUrl }, readerSessionId)
+  );
+  if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
+  else if (!navigated.ok)
+    missing.push(`unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`);
+  return waitGrandchild(
+    reader,
+    readerSessionId,
+    midHint,
+    plan.innerHint || innerHint,
+    liveBudget,
+    notes,
+    targetId,
+    internalSessions,
+    plan.midNeedle,
+    beforeIds,
+    () => liveMidBlocked(reader.events, eventStart, midUrls)
+  );
 }
 
 async function liveGrandchild({
@@ -1573,6 +1771,9 @@ async function liveGrandchild({
   });
   const beforeIds = new Set(before.targets.map((info) => info.targetId).filter(Boolean));
   const liveBudget = budget < 2000 ? budget : Math.max(budget, 8000);
+  const eventStart = reader.events?.length ?? 0;
+  const midUrls = [];
+  await armReaderNetwork(reader, [readerSessionId, ...(readerSessions ?? [])]);
   let liveRaw = await liveViaMidSession({
     reader,
     raw,
@@ -1583,49 +1784,43 @@ async function liveGrandchild({
     internalSessions,
     beforeIds,
     preferMidLive,
+    eventStart,
+    midUrls,
   });
-  if (!liveRaw) {
-    const plan = liveNestPlan(
-      pageUrl,
-      innerKind ?? (innerHint === 'about:srcdoc' ? 'srcdoc' : 'ordinary'),
-      innerHint
-    );
-    note(notes, 'protected-parent.page-live-nav', {
-      via: 'top-session',
-      url: plan.liveUrl,
-      innerHint: plan.innerHint,
-      midNeedle: plan.midNeedle,
-      beforeTargetIds: [...beforeIds],
-    });
-    const navigated = await outcome(
-      reader.send('Page.navigate', { url: plan.liveUrl }, readerSessionId)
-    );
-    if (!answered(navigated)) missing.push('unguarded Page.navigate unanswered after attach');
-    else if (!navigated.ok)
-      missing.push(
-        `unguarded Page.navigate failed: ${navigated.error?.message ?? navigated.error}`
-      );
-    liveRaw = await waitGrandchild(
+  if (liveRaw?.blocked) {
+    acceptLiveBlocked(raw, notes, liveRaw.blocked);
+    liveRaw = null;
+  } else if (!liveRaw) {
+    liveRaw = await liveViaTopSession({
       reader,
       readerSessionId,
+      targetId,
+      pageUrl,
       midHint,
-      plan.innerHint || innerHint,
+      innerHint,
+      innerKind,
       liveBudget,
       notes,
-      targetId,
       internalSessions,
-      plan.midNeedle,
-      beforeIds
-    );
+      beforeIds,
+      eventStart,
+      midUrls,
+      missing,
+    });
+    if (liveRaw?.blocked) {
+      acceptLiveBlocked(raw, notes, liveRaw.blocked);
+      liveRaw = null;
+    }
   }
   const after = await listTargetSnapshot(reader);
   note(notes, 'protected-parent.page-targets-after', {
     unanswered: after.unanswered,
     targets: after.targets,
     foundLive: Boolean(liveRaw),
+    liveBlocked: Boolean(raw.liveBlocked),
   });
   if (!liveRaw) {
-    missing.push('grandchild missing in raw leg after post-attach navigation');
+    if (!raw.liveBlocked) missing.push(liveMissingReason(pageUrl, midHint, raw));
     return contexts;
   }
   adoptLiveRaw(raw, liveRaw);
@@ -1865,6 +2060,18 @@ async function measurePageClient({
     result.contextCreated = (client.events ?? [])
       .slice(clientEventStart)
       .some((event) => contextHit(event, raw));
+  await samplePreLiveChannels({
+    client,
+    sessionId,
+    childSessions,
+    clientEventStart,
+    raw,
+    contexts,
+    resourceArm,
+    evaluateArm,
+    result,
+    skipEvaluate: innerKind === 'srcdoc',
+  });
   let liveContexts = await liveGrandchild({
     reader,
     readerSessionId,
@@ -1893,44 +2100,110 @@ async function measurePageClient({
     result
   );
   if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-  await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
-  if (raw.midTargetId || raw.grandchildTargetId) {
-    const remasured = await remasureLiveGrandchild({
-      reader,
-      readerSessionId,
-      pageUrl,
-      targetId,
-      midHint,
-      innerHint,
-      innerKind,
-      raw,
-      budget,
-      notes,
-      internalSessions,
-    });
-    if (remasured) {
-      adoptLiveRaw(raw, remasured);
-      note(notes, 'protected-parent.page-live-raw', {
-        midFrameId: remasured.hit.midFrameId,
-        frameId: remasured.hit.frameId,
-        url: remasured.hit.url,
-        via: remasured.via,
-        remasure: true,
-      });
-      await adoptLiveClientSessions(
-        client,
-        sessionId,
-        clientEventStart,
+  liveContexts = await continueAfterLive({
+    client,
+    reader,
+    readerSessionId,
+    sessionId,
+    clientEventStart,
+    pageUrl,
+    targetId,
+    midHint,
+    innerHint,
+    innerKind,
+    raw,
+    contexts,
+    liveContexts,
+    childSessions,
+    internalSessions,
+    treeArm,
+    resourceArm,
+    evaluateArm,
+    result,
+    missing,
+    notes,
+    budget,
+  });
+  if (missing.length) return { ...result, incomplete: missing.join('; ') };
+  return result;
+}
+
+async function continueAfterLive({
+  client,
+  reader,
+  readerSessionId,
+  sessionId,
+  clientEventStart,
+  pageUrl,
+  targetId,
+  midHint,
+  innerHint,
+  innerKind,
+  raw,
+  contexts,
+  liveContexts,
+  childSessions,
+  internalSessions,
+  treeArm,
+  resourceArm,
+  evaluateArm,
+  result,
+  missing,
+  notes,
+  budget,
+}) {
+  const skipEvaluate = innerKind === 'srcdoc';
+  if (raw.liveBlocked) {
+    protectLiveChannels(result, skipEvaluate);
+    if (!liveContexts.length) liveContexts = contexts;
+  } else {
+    await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+    if (raw.midTargetId || raw.grandchildTargetId) {
+      const remasured = await remasureLiveGrandchild({
+        reader,
+        readerSessionId,
+        pageUrl,
+        targetId,
+        midHint,
+        innerHint,
+        innerKind,
         raw,
-        childSessions,
+        budget,
+        notes,
         internalSessions,
-        missing,
-        result
-      );
-      if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-      await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+      });
+      if (remasured) {
+        adoptLiveRaw(raw, remasured);
+        note(notes, 'protected-parent.page-live-raw', {
+          midFrameId: remasured.hit.midFrameId,
+          frameId: remasured.hit.frameId,
+          url: remasured.hit.url,
+          via: remasured.via,
+          remasure: true,
+        });
+        await adoptLiveClientSessions(
+          client,
+          sessionId,
+          clientEventStart,
+          raw,
+          childSessions,
+          internalSessions,
+          missing,
+          result
+        );
+        if (!missing.length)
+          await probeRawGrandchildTarget(
+            client,
+            raw,
+            childSessions,
+            internalSessions,
+            result,
+            missing
+          );
+      }
     }
   }
+  if (missing.length) return liveContexts;
   const clientContexts = await rawContexts(
     client,
     [sessionId, ...childSessions],
@@ -1954,9 +2227,9 @@ async function measurePageClient({
     result,
     missing,
     budget,
-    skipEvaluate: innerKind === 'srcdoc',
+    skipEvaluate,
   });
-  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
+  if (missing.length) return liveContexts;
   await finishPageClient(
     client,
     sessionId,
@@ -1971,10 +2244,33 @@ async function measurePageClient({
     notes,
     childSessions,
     windowMs,
-    innerKind === 'srcdoc'
+    skipEvaluate
   );
-  if (missing.length) return { ...result, incomplete: missing.join('; ') };
-  return result;
+  return liveContexts;
+}
+
+function settlePageContexts(liveContexts, raw, evaluateArm, result, missing, skipEvaluate) {
+  if (!liveContexts.length) {
+    if (raw.liveBlocked) {
+      protectLiveChannels(result, skipEvaluate);
+      result.contextCreated ??= false;
+      return;
+    }
+    missing.push('grandchild execution context missing in raw leg');
+    return;
+  }
+  result.contextCreated ??= false;
+  if (skipEvaluate) return;
+  settleArm(
+    result,
+    'contextEvaluate',
+    evaluateArm.unanswered,
+    evaluateArm.unansweredId
+      ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
+      : 'Runtime.evaluate unanswered',
+    missing,
+    { contextEvaluate: false }
+  );
 }
 
 function finishPageClient(
@@ -2015,22 +2311,7 @@ function finishPageClient(
   result.childAttach ??= false;
   result.targetEvents ??= false;
   result.childEnableRefused ??= false;
-  if (!liveContexts.length) missing.push('grandchild execution context missing in raw leg');
-  else {
-    result.contextCreated ??= false;
-    if (!skipEvaluate) {
-      settleArm(
-        result,
-        'contextEvaluate',
-        evaluateArm.unanswered,
-        evaluateArm.unansweredId
-          ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
-          : 'Runtime.evaluate unanswered',
-        missing,
-        { contextEvaluate: false }
-      );
-    }
-  }
+  settlePageContexts(liveContexts, raw, evaluateArm, result, missing, skipEvaluate);
   note(notes, 'protected-parent.page-client', {
     frameTree: result.frameTree ?? 'unmeasured',
     resourceTree: result.resourceTree ?? 'unmeasured',
@@ -2044,6 +2325,7 @@ function finishPageClient(
     childEnableRefused: result.childEnableRefused ?? false,
     attachRefused: result.attachRefused ?? false,
     grandchildTargetId: raw.grandchildTargetId ?? null,
+    liveBlocked: raw.liveBlocked ?? null,
     windowMs,
     childSessions: [...childSessions],
     firstTreeOk: treeArm.out?.ok,

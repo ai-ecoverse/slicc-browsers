@@ -1409,6 +1409,7 @@ function emulatedGuardPlain(browser, options = {}) {
     ) {
       const blocked = collectProtectedDescendantIds(result.frameTree, catalog, options);
       if (sessionId) sessionBlocked.set(sessionId, blocked);
+      if (options.leakResourceTreeAlways) return result;
       if (options.leakResourceTreeAfterLive) {
         const live = /[?&]live=|-live-/.test(JSON.stringify(result.frameTree));
         if (live) {

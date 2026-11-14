@@ -1202,6 +1202,7 @@ export async function extensionFrame({
       castDrive = started.castDrive;
     }
     const embedded = await embed(reader, observer, mode, frameURL);
+    await noteCastInsertion(castDrive, embedded, missing);
     const want = mode === 'focused' ? 1 : 2;
     const frames = await frameTargets(
       reader,
@@ -1212,7 +1213,6 @@ export async function extensionFrame({
       frameMs === 0 ? 100 : 5000
     );
     const frame = frames[0];
-    await noteCastInsertion(castDrive, embedded, missing);
     await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);
     const castAfter = await finishCast(castDrive, embedded);

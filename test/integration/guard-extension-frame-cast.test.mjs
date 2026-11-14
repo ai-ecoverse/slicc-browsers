@@ -20,6 +20,7 @@ const capabilities = {
 function castTransport({
   emitBeforeInsert = false,
   emitAfterInsert = false,
+  emitDuringTargets = false,
   embedLoads = true,
 } = {}) {
   const sessions = new Map();
@@ -41,6 +42,7 @@ function castTransport({
   };
   const evaluate = (expression) => {
     if (expression.includes('new Promise') && expression.includes('createElement')) {
+      if (emitBeforeInsert && castSession != null) pushFrame(castSession);
       return { result: { type: 'boolean', value: embedLoads } };
     }
     if (expression.includes('slicc-private-extension-frame-content')) {
@@ -70,7 +72,8 @@ function castTransport({
       sessions.delete(params.sessionId);
       return {};
     }
-    if (method === 'Target.getTargets')
+    if (method === 'Target.getTargets') {
+      if (emitDuringTargets && castSession != null) pushFrame(castSession);
       return {
         targetInfos: [
           { targetId: pageId, type: 'page', url: `${origin}/`, browserContextId: 'B1' },
@@ -90,6 +93,7 @@ function castTransport({
           },
         ],
       };
+    }
     if (method === 'Target.getTargetInfo')
       return {
         targetInfo: {
@@ -121,7 +125,6 @@ function castTransport({
     if (method === 'Page.printToPDF') return { data: 'pdf' };
     if (method === 'Page.startScreencast') {
       castSession = sessionId;
-      if (emitBeforeInsert) pushFrame(sessionId);
       return {};
     }
     if (method === 'Page.screencastFrameAck') return {};
@@ -160,6 +163,14 @@ test('a compliant cast drops a pre-insertion screencast frame', async () => {
 
 test('a mutant cast that emits after insertion still leaks', async () => {
   const transport = castTransport({ emitBeforeInsert: true, emitAfterInsert: true });
+  const result = await probe(transport);
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.equal(result.castLeak, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('a mutant cast that emits during target discovery still leaks', async () => {
+  const transport = castTransport({ emitBeforeInsert: true, emitDuringTargets: true });
   const result = await probe(transport);
   assert.equal(result.castBefore, true, JSON.stringify(result));
   assert.equal(result.castLeak, true, JSON.stringify(result));

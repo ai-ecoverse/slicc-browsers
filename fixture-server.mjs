@@ -81,6 +81,11 @@ function route(req, url, send, html, redirects) {
         'blob-nav',
         `<p>blob-nav ${escape(p.get('n') ?? '')}</p><script>const b=URL.createObjectURL(new Blob(['<!doctype html><title>blob</title><p>blob ${escape(p.get('n') ?? '')}</p>'],{type:'text/html'}));location.replace(b);</script>`
       ),
+    '/credential': () =>
+      html(
+        'credential',
+        `<p>credential ${escape(p.get('n') ?? '')}</p><form><input name="u" /><button type="button">go</button></form>`
+      ),
     '/blank': () => html('blank', `<p>blank ${escape(p.get('n') ?? '')}</p>`),
     '/blank-open': () => html('blank-open', `<p>blank-open ${escape(p.get('n') ?? '')}</p>`),
     '/os/': () => html('os', `<p>os ${escape(p.get('n') ?? '')}</p>`),

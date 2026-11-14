@@ -245,6 +245,7 @@
         "vault-x",
         "apex",
         "own",
+        "idp",
         "chrome-newtab",
         "chrome-new-tab-page",
         "chrome-settings",
@@ -373,6 +374,13 @@
         "designDependent": {
           "type": "array",
           "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "notes": {
+          "type": "array",
           "items": {
             "type": "string",
             "minLength": 1
@@ -583,6 +591,19 @@
             },
             "requires": {
               "$ref": "#/$defs/requires"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["credentialExport", "as"],
+          "properties": {
+            "credentialExport": {
+              "const": true
+            },
+            "as": {
+              "$ref": "#/$defs/name"
             }
           }
         },

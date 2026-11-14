@@ -289,7 +289,7 @@ func TestTheGuardVectorsParse(t *testing.T) {
 	if !reflect.DeepEqual(decode(t, back), decode(t, sliccbrowsers.GuardVectorsJSON())) {
 		t.Fatal("guard vectors don't round-trip")
 	}
-	targets := []string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardTargetSeven, sliccbrowsers.GuardTargetVault, sliccbrowsers.GuardTargetVaultX, sliccbrowsers.GuardTargetApex, sliccbrowsers.GuardTargetOwn, sliccbrowsers.GuardTargetChromeNewtab, sliccbrowsers.GuardTargetChromeNewTabPage, sliccbrowsers.GuardTargetChromeSettings, sliccbrowsers.GuardTargetChromePasswords, sliccbrowsers.GuardTargetChromeSearch, sliccbrowsers.GuardTargetNetworkError, sliccbrowsers.GuardTargetChromeExtensionPage, sliccbrowsers.GuardTargetFileRoot}
+	targets := []string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardTargetSeven, sliccbrowsers.GuardTargetVault, sliccbrowsers.GuardTargetVaultX, sliccbrowsers.GuardTargetApex, sliccbrowsers.GuardTargetOwn, sliccbrowsers.GuardTargetIdp, sliccbrowsers.GuardTargetChromeNewtab, sliccbrowsers.GuardTargetChromeNewTabPage, sliccbrowsers.GuardTargetChromeSettings, sliccbrowsers.GuardTargetChromePasswords, sliccbrowsers.GuardTargetChromeSearch, sliccbrowsers.GuardTargetNetworkError, sliccbrowsers.GuardTargetChromeExtensionPage, sliccbrowsers.GuardTargetFileRoot}
 	for _, tg := range append([]string{sliccbrowsers.GuardOrdinary, sliccbrowsers.GuardSameSite}, targets...) {
 		if v.Targets[tg].Description == "" {
 			t.Fatalf("target %s: %+v", tg, v.Targets)

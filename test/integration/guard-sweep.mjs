@@ -41,6 +41,7 @@ export const capabilities = {
   syntheticAutoAttach: true,
   forwardAudit: true,
   closeProtected: true,
+  signInHold: true,
 };
 
 export const drivable = new Set([
@@ -222,9 +223,19 @@ async function factory(fixture, browsers, timeouts) {
     const browser = vector.requires?.includes('siteIsolationOff')
       ? await (shared ??= launch(fixture, { isolation: false }))
       : browsers[slot];
-    const raw = record(await connect(browser.ws));
+    const attachHttp = (client) => {
+      if (!client.ws && browser.ws) client.ws = browser.ws;
+      if (!client.devtoolsHttp && client.ws) {
+        try {
+          const parsed = new URL(client.ws);
+          client.devtoolsHttp = `${parsed.protocol === 'wss:' ? 'https:' : 'http:'}//${parsed.host}`;
+        } catch {}
+      }
+      return client;
+    };
+    const raw = attachHttp(record(await connect(browser.ws)));
     const client = /^E[46]\b/.test(vector.id)
-      ? {
+      ? attachHttp({
           ...raw,
           forwarded: raw.forwarded,
           send: (method, params, sessionId) =>
@@ -232,9 +243,9 @@ async function factory(fixture, browsers, timeouts) {
               if (/timed out/i.test(error.message)) timeouts.push(`${vector.id}: ${method}`);
               throw error;
             }),
-        }
+        })
       : raw;
-    const unguarded = record(await connect(browser.ws));
+    const unguarded = attachHttp(record(await connect(browser.ws)));
     return {
       client,
       unguarded,

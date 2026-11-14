@@ -43,6 +43,7 @@ import {
   workerTypeForKind,
 } from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
+import { signInHold } from './sign-in-hold.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
@@ -903,6 +904,7 @@ class Execution {
       'errorPage',
       'closeProtectedShape',
       'protectedParentIframes',
+      'signInHold',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -915,6 +917,7 @@ class Execution {
         'errorPage',
         'closeProtectedShape',
         'protectedParentIframes',
+        'signInHold',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1020,6 +1023,7 @@ class Execution {
       step.errorPage ||
       step.closeProtectedShape ||
       step.protectedParentIframes ||
+      step.signInHold ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1168,6 +1172,7 @@ class Execution {
     if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
     if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
     if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
+    if (step.signInHold) return this.runSignInHold(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1251,6 +1256,29 @@ class Execution {
       })
     );
     if (out.ok && out.result?.pageId) this.targets.push(out.result.pageId);
+    return out;
+  }
+
+  async runSignInHold(step) {
+    const out = await outcome(
+      signInHold({
+        client: this.client,
+        reader: this.reader,
+        mode: step.signInHold,
+        openerOrigin: this.vars.target,
+        ordinary: this.vars.ordinary,
+        cross: this.options.targets?.cross,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        discovery: supported(['discovery'], this.options.capabilities),
+        eventStart: this.eventStart,
+        control: this.side === 'control',
+      })
+    );
+    if (out.ok && out.result?.openerId) this.targets.push(out.result.openerId);
+    if (out.ok && out.result?.targetId) this.targets.push(out.result.targetId);
     return out;
   }
 
@@ -2246,7 +2274,8 @@ const needsObserver = (vector) =>
       step.observer ||
       step.spawnWorker ||
       step.closeProtectedShape ||
-      step.protectedParentIframes
+      step.protectedParentIframes ||
+      step.signInHold
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||

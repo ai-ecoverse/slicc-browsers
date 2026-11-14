@@ -63,6 +63,8 @@ jobs:
         test/integration/guard-protected-worker-chrome-rewrite-late.test.mjs
         test/integration/guard-protected-parent-iframes.test.mjs
         test/integration/guard-protected-parent-iframes-chrome.test.mjs
+        test/integration/guard-protected-parent-page.test.mjs
+        test/integration/guard-protected-parent-page-chrome.test.mjs
       review-prompt: |
         SLICC-BROWSERS
 

@@ -31765,6 +31765,466 @@
       }
     },
     {
+      "id": "C3.protected-parent-iframes.page",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an ordinary top page already frames a cross-site protected iframe that frames an ordinary same-site grandchild before the client attaches; through the top page session the guarded client must not see the grandchild in the frame tree, resource tree, frame events, or execution contexts"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "protectedParentIframes": "page-nested",
+          "as": "probe"
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "observe": {
+        "frameTree": {
+          "means": "C3.protected-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "resourceTree": {
+          "means": "C3.protected-parent-iframes.page: Page.getResourceTree through the page session shows the ordinary grandchild under the middle frame",
+          "check": {
+            "result": "probe",
+            "path": "result.resourceTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "frameEvents": {
+          "means": "C3.protected-parent-iframes.page: a Page frame event on the page session names the ordinary grandchild by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "contextCreated": {
+          "means": "C3.protected-parent-iframes.page: Runtime.executionContextCreated on the page session carries the grandchild frameId or origin",
+          "check": {
+            "result": "probe",
+            "path": "result.contextCreated",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "contextEvaluate": {
+          "means": "C3.protected-parent-iframes.page: Runtime.evaluate in the grandchild context through the page session succeeded",
+          "check": {
+            "result": "probe",
+            "path": "result.contextEvaluate",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "midFrameAttached": {
+          "means": "C3.protected-parent-iframes.page: Page.frameAttached on the page session exposes the middle frameId",
+          "check": {
+            "result": "probe",
+            "path": "result.midFrameAttached",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childEnableRefused": {
+          "means": "C3.protected-parent-iframes.page: child Page.enable or Runtime.enable on a protected-descendant session was refused with the guard error text",
+          "check": {
+            "result": "probe",
+            "path": "result.childEnableRefused",
+            "equals": {
+              "$regex": "^slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.protected-parent-iframes.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.protected-parent-iframes.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.protected-parent-iframes.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        }
+      },
+      "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "frameTree": true,
+          "resourceTree": true,
+          "frameEvents": true,
+          "contextCreated": true,
+          "contextEvaluate": true,
+          "midFrameAttached": true,
+          "childEnableRefused": false,
+          "targetInfo": false,
+          "childAttach": false,
+          "targetEvents": false
+        }
+      },
+      "expected": {
+        "frameTree": false,
+        "resourceTree": false,
+        "frameEvents": false,
+        "contextCreated": false,
+        "contextEvaluate": false,
+        "midFrameAttached": "either",
+        "childEnableRefused": "either",
+        "targetInfo": false,
+        "childAttach": false,
+        "targetEvents": false
+      },
+      "designDependent": ["midFrameAttached", "childEnableRefused"]
+    },
+    {
+      "id": "C3.protected-parent-srcdoc.page",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an ordinary top page already frames a cross-site seven iframe that frames a sandboxed srcdoc grandchild before the client attaches; through the top page session the guarded client must not see that srcdoc frame or its context under the protected parent"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "protectedParentIframes": "page-srcdoc",
+          "as": "probe"
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "frameTree": {
+          "means": "C3.protected-parent-srcdoc.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "resourceTree": {
+          "means": "C3.protected-parent-srcdoc.page: Page.getResourceTree through the page session shows the ordinary grandchild under the middle frame",
+          "check": {
+            "result": "probe",
+            "path": "result.resourceTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "frameEvents": {
+          "means": "C3.protected-parent-srcdoc.page: a Page frame event on the page session names the ordinary grandchild by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "contextCreated": {
+          "means": "C3.protected-parent-srcdoc.page: Runtime.executionContextCreated on the page session carries the grandchild frameId or origin",
+          "check": {
+            "result": "probe",
+            "path": "result.contextCreated",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "midFrameAttached": {
+          "means": "C3.protected-parent-srcdoc.page: Page.frameAttached on the page session exposes the middle frameId",
+          "check": {
+            "result": "probe",
+            "path": "result.midFrameAttached",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childEnableRefused": {
+          "means": "C3.protected-parent-srcdoc.page: child Page.enable or Runtime.enable on a protected-descendant session was refused with the guard error text",
+          "check": {
+            "result": "probe",
+            "path": "result.childEnableRefused",
+            "equals": {
+              "$regex": "^slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.protected-parent-srcdoc.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        }
+      },
+      "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "frameTree": true,
+          "resourceTree": true,
+          "frameEvents": true,
+          "contextCreated": true,
+          "midFrameAttached": true,
+          "childEnableRefused": false,
+          "targetInfo": true,
+          "childAttach": true,
+          "targetEvents": true
+        }
+      },
+      "expected": {
+        "frameTree": false,
+        "resourceTree": false,
+        "frameEvents": false,
+        "contextCreated": false,
+        "midFrameAttached": "either",
+        "childEnableRefused": "either",
+        "targetInfo": false,
+        "childAttach": false,
+        "targetEvents": false
+      },
+      "designDependent": ["midFrameAttached", "childEnableRefused"]
+    },
+    {
+      "id": "C3.ordinary-parent-iframes.page",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "text": "an ordinary top page frames a cross-site ordinary iframe that frames a further ordinary same-site grandchild; through the top page session the guard must still expose the grandchild so ordinary nesting is not over-blocked"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "protectedParentIframes": "page-ordinary",
+          "as": "probe"
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "frameTree": {
+          "means": "C3.ordinary-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "resourceTree": {
+          "means": "C3.ordinary-parent-iframes.page: Page.getResourceTree through the page session shows the ordinary grandchild under the middle frame",
+          "check": {
+            "result": "probe",
+            "path": "result.resourceTree",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "frameEvents": {
+          "means": "C3.ordinary-parent-iframes.page: a Page frame event on the page session names the ordinary grandchild by frameId, URL, or parentId",
+          "check": {
+            "result": "probe",
+            "path": "result.frameEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "contextCreated": {
+          "means": "C3.ordinary-parent-iframes.page: Runtime.executionContextCreated on the page session carries the grandchild frameId or origin",
+          "check": {
+            "result": "probe",
+            "path": "result.contextCreated",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "contextEvaluate": {
+          "means": "C3.ordinary-parent-iframes.page: Runtime.evaluate in the grandchild context through the page session succeeded",
+          "check": {
+            "result": "probe",
+            "path": "result.contextEvaluate",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "midFrameAttached": {
+          "means": "C3.ordinary-parent-iframes.page: Page.frameAttached on the page session exposes the middle frameId",
+          "check": {
+            "result": "probe",
+            "path": "result.midFrameAttached",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetInfo": {
+          "means": "C3.ordinary-parent-iframes.page: shows the ordinary grandchild target via Target.getTargets or Target.getTargetInfo using the unguarded raw id",
+          "check": {
+            "result": "probe",
+            "path": "result.targetInfo",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "childAttach": {
+          "means": "C3.ordinary-parent-iframes.page: Target.attachToTarget on the unguarded raw grandchild target id yields a session",
+          "check": {
+            "result": "probe",
+            "path": "result.childAttach",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetEvents": {
+          "means": "C3.ordinary-parent-iframes.page: Target.attachedToTarget/targetCreated/targetInfoChanged names the ordinary grandchild by the unguarded raw id or URL",
+          "check": {
+            "result": "probe",
+            "path": "result.targetEvents",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        }
+      },
+      "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "frameTree": true,
+          "resourceTree": true,
+          "frameEvents": true,
+          "contextCreated": true,
+          "contextEvaluate": true,
+          "midFrameAttached": true,
+          "targetInfo": "either",
+          "childAttach": "either",
+          "targetEvents": "either"
+        }
+      },
+      "expected": {
+        "frameTree": true,
+        "resourceTree": true,
+        "frameEvents": true,
+        "contextCreated": true,
+        "contextEvaluate": true,
+        "midFrameAttached": true,
+        "targetInfo": "either",
+        "childAttach": "either",
+        "targetEvents": "either"
+      },
+      "designDependent": ["targetInfo", "childAttach", "targetEvents"]
+    },
+    {
       "id": "C7.sign-in-hold.held-popup",
       "family": "C",
       "kind": "cdp",
@@ -31857,6 +32317,15 @@
             "observer": "client"
           }
         },
+        "held": {
+          "means": "C7.sign-in-hold.held-popup: the slicc-held BroadcastChannel hold was acknowledged",
+          "check": {
+            "result": "probe",
+            "path": "result.held",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "connectCompletes": {
           "means": "C7.sign-in-hold.held-popup: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
           "check": {
@@ -31886,7 +32355,8 @@
           "attachSession": true,
           "attachRefused": false,
           "contentRead": true,
-          "connectCompletes": true
+          "connectCompletes": true,
+          "held": false
         }
       },
       "expected": {
@@ -31897,7 +32367,8 @@
         "attachSession": false,
         "attachRefused": true,
         "contentRead": false,
-        "connectCompletes": true
+        "connectCompletes": true,
+        "held": true
       }
     },
     {

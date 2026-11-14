@@ -59,7 +59,7 @@ function idOnlySeen(info, rawId) {
 
 function leakFromEvents(events, rawId, rawUrl, mark, from = 0) {
   let urlLeaked = false;
-  let idAnnounced = false;
+  let idOnly = false;
   for (const event of (events ?? []).slice(from)) {
     if (
       ['Target.targetCreated', 'Target.targetInfoChanged', 'Target.attachedToTarget'].includes(
@@ -68,10 +68,10 @@ function leakFromEvents(events, rawId, rawUrl, mark, from = 0) {
     ) {
       const info = event.params?.targetInfo;
       if (identifyingLeak(info, rawId, rawUrl, mark)) urlLeaked = true;
-      if (idOnlySeen(info, rawId)) idAnnounced = true;
+      else if (idOnlySeen(info, rawId)) idOnly = true;
     }
   }
-  return { urlLeaked, idAnnounced };
+  return { urlLeaked, idAnnounced: idOnly && !urlLeaked };
 }
 
 async function until(check, ms, step = 25) {
@@ -188,16 +188,22 @@ function jsonEntryLeak(entry, rawId, rawUrl, mark) {
 
 function recordJson(listed, result, missing, rawId, rawUrl, mark) {
   if (listed?.missing) {
-    missing.push('/json/list unavailable');
+    if (!missing.includes('/json/list unavailable')) missing.push('/json/list unavailable');
     return;
   }
   if (!answered(listed)) {
-    missing.push('/json/list unanswered');
+    if (!missing.includes('/json/list unanswered')) missing.push('/json/list unanswered');
     return;
   }
-  result.jsonListed = listed.ok
+  const leak = listed.ok
     ? (listed.result ?? []).some((entry) => jsonEntryLeak(entry, rawId, rawUrl, mark))
     : false;
+  if (leak) {
+    result.jsonListed = true;
+    result.idAnnounced = false;
+  } else {
+    result.jsonListed = result.jsonListed ?? false;
+  }
 }
 
 function recordTargets(targets, result, missing, rawId, rawUrl, mark) {
@@ -209,19 +215,29 @@ function recordTargets(targets, result, missing, rawId, rawUrl, mark) {
   if (!targets.ok) return;
   const infos = targets.result?.targetInfos ?? [];
   const match = infos.find((info) => info.targetId === rawId);
-  result.targetsListed = identifyingLeak(match, rawId, rawUrl, mark)
+  const listed = identifyingLeak(match, rawId, rawUrl, mark)
     ? true
-    : infos.some((info) => identifyingLeak(info, rawId, rawUrl, mark))
-      ? true
-      : (result.targetsListed ?? false);
-  result.idAnnounced = idOnlySeen(match, rawId) ? true : (result.idAnnounced ?? false);
+    : infos.some((info) => identifyingLeak(info, rawId, rawUrl, mark));
+  if (listed) {
+    result.targetsListed = true;
+    result.idAnnounced = false;
+  } else {
+    result.targetsListed = result.targetsListed ?? false;
+    if (idOnlySeen(match, rawId)) result.idAnnounced = true;
+  }
 }
 
 function recordEvents(client, result, discovery, rawId, rawUrl, mark, eventStart) {
   if (!discovery) return;
   const leaked = leakFromEvents(client.events ?? [], rawId, rawUrl, mark, eventStart);
-  result.eventsSeen = leaked.urlLeaked ? true : (result.eventsSeen ?? false);
-  if (leaked.idAnnounced) result.idAnnounced = true;
+  if (leaked.urlLeaked) {
+    result.eventsSeen = true;
+    result.idAnnounced = false;
+  } else {
+    result.eventsSeen = result.eventsSeen ?? false;
+    if (leaked.idAnnounced && result.targetsListed !== true && result.jsonListed !== true)
+      result.idAnnounced = true;
+  }
 }
 
 async function recordAttach(client, result, missing, rawId, mark) {
@@ -289,6 +305,7 @@ function finalizeMeasured(result, discovery) {
   result.jsonListed ??= false;
   result.targetsListed ??= false;
   result.idAnnounced ??= false;
+  if (result.targetsListed || result.jsonListed || result.eventsSeen) result.idAnnounced = false;
   result.attachSession ??= false;
   result.attachRefused ??= false;
   result.contentRead ??= false;
@@ -311,14 +328,12 @@ async function measureClient({
   const deadline = Date.now() + windowMs;
   let firstTargets;
   let firstAttach;
-  let firstJson;
   let firstConnect;
 
   while (Date.now() <= deadline) {
-    if (firstJson === undefined) {
-      firstJson = await listHttp(client, notes);
-      recordJson(firstJson, result, missing, rawId, rawUrl, mark);
-    }
+    const listedHttp = await listHttp(client, notes);
+    recordJson(listedHttp, result, missing, rawId, rawUrl, mark);
+    if (result.jsonListed === true) result.idAnnounced = false;
     const targets = await outcome(client.send('Target.getTargets', {}));
     firstTargets ??= targets;
     recordTargets(targets, result, missing, rawId, rawUrl, mark);
@@ -537,14 +552,15 @@ async function heldPopup({
     budget,
     notes,
   });
+  const held = !control && holdAnswer === 'held';
   return {
     live: true,
     holdAnswer: control ? 'none' : holdAnswer,
-    held: !control && holdAnswer === 'held',
     openerId,
     targetId: raw.targetId,
     rawUrl,
     ...measured,
+    held,
   };
 }
 

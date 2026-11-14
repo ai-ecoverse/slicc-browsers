@@ -39,6 +39,119 @@ function rewriteIframeInfo(info, options) {
   return info;
 }
 
+function collectProtectedDescendantIds(tree, catalog, options) {
+  const ids = new Set();
+  const urls = new Set();
+  const midIds = new Set();
+  if (!tree?.frame || !catalog) return { ids, urls, midIds };
+  const visit = (node, underProtected, depth) => {
+    if (!node?.frame) return;
+    const protectedUrl = Boolean(catalog.url(node.frame.url));
+    if (protectedUrl || (options.overblockOrdinaryFrames && depth >= 1)) midIds.add(node.frame.id);
+    const under = underProtected || protectedUrl;
+    const blockedChild = under || (options.overblockOrdinaryFrames && depth >= 1);
+    if (underProtected || (options.overblockOrdinaryFrames && depth >= 1)) {
+      ids.add(node.frame.id);
+      if (node.frame.url) urls.add(node.frame.url);
+    }
+    for (const child of node.childFrames ?? []) visit(child, blockedChild, depth + 1);
+  };
+  visit(tree, false, 0);
+  return { ids, urls, midIds };
+}
+
+function scrubProtectedDescendantTree(tree, catalog, options) {
+  if (!tree?.frame || !catalog || options.leakProtectedDescendantFrames) return tree;
+  const walk = (node, depth) => {
+    const protectedUrl = Boolean(catalog.url(node.frame?.url ?? ''));
+    const drop = protectedUrl || (options.overblockOrdinaryFrames && depth >= 1);
+    const childFrames = drop ? [] : (node.childFrames ?? []).map((child) => walk(child, depth + 1));
+    return { ...node, childFrames };
+  };
+  return walk(tree, 0);
+}
+
+function scrubProtectedResourceTree(result, catalog, options) {
+  if (!result?.frameTree || !catalog || options.leakProtectedDescendantFrames) return result;
+  return {
+    ...result,
+    frameTree: scrubProtectedDescendantTree(result.frameTree, catalog, options),
+  };
+}
+
+function frameIsProtected(frameId, catalog, frameUrls) {
+  const url = frameUrls?.get(frameId) ?? '';
+  return Boolean(url && catalog?.url(url));
+}
+
+function descendantOfProtected(frameId, catalog, frameUrls, frameParents, options) {
+  if (!frameId) return false;
+  let cur = frameParents?.get(frameId);
+  let depth = 1;
+  const seen = new Set();
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    if (frameIsProtected(cur, catalog, frameUrls)) return true;
+    if (options.overblockOrdinaryFrames && depth >= 1 && frameUrls?.has(cur)) return true;
+    cur = frameParents?.get(cur);
+    depth += 1;
+    if (depth > 8) break;
+  }
+  return false;
+}
+
+function pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) {
+  if (options.leakProtectedFrameEvents && pageFrameEventName(event.method)) return false;
+  if (options.leakProtectedFrameContexts && event.method === 'Runtime.executionContextCreated')
+    return false;
+  const params = event.params ?? {};
+  const frame = params.frame ?? {};
+  const frameId = params.frameId ?? frame.id;
+  const parentId = params.parentFrameId ?? params.parentId ?? frame.parentId;
+  const url = params.url ?? frame.url ?? '';
+  if (frameId && url) frameUrls?.set(frameId, url);
+  if (frameId && parentId) frameParents?.set(frameId, parentId);
+  if (frameId && descendantOfProtected(frameId, catalog, frameUrls, frameParents, options)) {
+    blocked?.ids?.add(frameId);
+    return true;
+  }
+  if (parentId && frameIsProtected(parentId, catalog, frameUrls)) {
+    if (frameId) blocked?.ids?.add(frameId);
+    return true;
+  }
+  if (parentId && blocked?.midIds?.has(parentId)) {
+    if (frameId) blocked?.ids?.add(frameId);
+    return true;
+  }
+  if (options.overblockOrdinaryFrames && parentId && frameParents?.has(parentId)) {
+    if (frameId) blocked?.ids?.add(frameId);
+    return true;
+  }
+  if (frameId && blocked?.ids?.has(frameId)) return true;
+  if (url && blocked?.urls?.has(url)) return true;
+  if (event.method === 'Runtime.executionContextCreated') {
+    const context = params.context;
+    const contextFrame = context?.auxData?.frameId;
+    if (contextFrame && blocked?.ids?.has(contextFrame)) return true;
+    if (descendantOfProtected(contextFrame, catalog, frameUrls, frameParents, options)) {
+      if (contextFrame) blocked?.ids?.add(contextFrame);
+      return true;
+    }
+  }
+  return false;
+}
+
+function pageFrameEventName(method) {
+  return [
+    'Page.frameAttached',
+    'Page.frameStartedLoading',
+    'Page.frameNavigated',
+    'Page.frameRequestedNavigation',
+    'Page.lifecycleEvent',
+    'Page.navigatedWithinDocument',
+  ].includes(method);
+}
+
 function emitProtectedParentIframeLeak(event, options, ctx) {
   const info = event.params?.targetInfo;
   const publish = (exposed) => {
@@ -94,6 +207,41 @@ function emitProtectedParentIframeLeak(event, options, ctx) {
   return event.method === 'Target.attachedToTarget' ? 'attached' : 'skip';
 }
 
+async function leakDescendantIframeEvents(event, options, ctx, unguarded, catalog, decisions) {
+  if (!options.leakAttachedToTarget && !options.leakIframeEvents) return;
+  const parent = event.params?.targetInfo;
+  if (!parent?.targetId || parent.type !== 'iframe') return;
+  const listed = await unguarded.send('Target.getTargets').catch(() => null);
+  for (const info of listed?.targetInfos ?? []) {
+    if (info.type !== 'iframe' || info.parentId !== parent.targetId) continue;
+    if (!(await iframeAncestorProtected(unguarded, catalog, info, options, decisions))) continue;
+    emitProtectedParentIframeLeak(
+      {
+        method: 'Target.attachedToTarget',
+        params: {
+          sessionId: `leak-child-${info.targetId}`,
+          targetInfo: info,
+          waitingForDebugger: false,
+        },
+        sessionId: event.params?.sessionId,
+      },
+      options,
+      ctx
+    );
+    if (options.leakIframeEvents) {
+      emitProtectedParentIframeLeak(
+        {
+          method: 'Target.targetInfoChanged',
+          params: { targetInfo: info },
+          sessionId: event.params?.sessionId,
+        },
+        options,
+        ctx
+      );
+    }
+  }
+}
+
 function emulatedGuardPlain(browser, options = {}) {
   const { client, unguarded } = browser;
   const hosts = options.protectedHosts ?? [];
@@ -113,7 +261,13 @@ function emulatedGuardPlain(browser, options = {}) {
   const navigating = new Set();
   const navigationURLs = new Map();
   const observerSessions = new Map();
+  const sessionBlocked = new Map();
+  const targetBlocked = new Map();
+  const blockedContexts = new Set();
+  const frameUrls = new Map();
+  const frameParents = new Map();
   let frameCursor = 0;
+  let liveResourceTreeReads = 0;
   const ownerOf = (sessionId) =>
     shields.get(sessionId)?.targetId ?? observerSessions.get(sessionId);
   const markPending = (targetId, url) => {
@@ -508,6 +662,77 @@ function emulatedGuardPlain(browser, options = {}) {
             destroyedIds,
           });
           if (leaked !== 'attached') continue;
+        } else if (
+          catalog &&
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.targetInfo?.type === 'iframe'
+        ) {
+          await leakDescendantIframeEvents(
+            event,
+            options,
+            {
+              messages,
+              events,
+              waiters,
+              sanitize,
+              redactInfo,
+              mentions,
+              hidden,
+              destroyedIds,
+            },
+            unguarded,
+            catalog,
+            decisions
+          );
+        }
+        const pageSession = event.sessionId;
+        if (options.protectedParentPages) {
+          const blocked = pageSession ? sessionBlocked.get(pageSession) : undefined;
+          if (event.method === 'Page.frameNavigated' && event.params?.frame?.id) {
+            frameUrls.set(event.params.frame.id, event.params.frame.url ?? '');
+            if (event.params.frame.parentId)
+              frameParents.set(event.params.frame.id, event.params.frame.parentId);
+          }
+          if (
+            event.method === 'Page.frameAttached' &&
+            event.params?.frameId &&
+            event.params.parentFrameId
+          )
+            frameParents.set(event.params.frameId, event.params.parentFrameId);
+          if (
+            catalog &&
+            pageDescendantEvent(event, blocked, options, catalog, frameUrls, frameParents) &&
+            !(
+              (options.leakProtectedFrameEvents || options.refuseChildEnableLeakEvents) &&
+              pageFrameEventName(event.method)
+            ) &&
+            !(
+              (options.leakProtectedFrameContexts || options.refuseChildEnableLeakEvents) &&
+              event.method === 'Runtime.executionContextCreated'
+            )
+          ) {
+            if (
+              event.method === 'Runtime.executionContextCreated' &&
+              pageSession &&
+              event.params?.context?.id != null
+            )
+              blockedContexts.add(`${pageSession}:${event.params.context.id}`);
+            continue;
+          }
+          if (
+            catalog &&
+            event.method === 'Runtime.executionContextCreated' &&
+            pageSession &&
+            pageDescendantEvent(
+              event,
+              blocked,
+              { ...options, leakProtectedFrameContexts: false },
+              catalog,
+              frameUrls,
+              frameParents
+            )
+          )
+            blockedContexts.add(`${pageSession}:${event.params.context.id}`);
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
@@ -776,7 +1001,14 @@ function emulatedGuardPlain(browser, options = {}) {
     )
       throw refusal('protected target');
     learnWorlds();
-    if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+    if (
+      cutSessions.has(sessionId) &&
+      !(
+        options.protectedParentPages &&
+        (method === 'Page.getResourceTree' || method === 'Page.getFrameTree')
+      )
+    )
+      throw refusal('session cut on protected execution context');
     if (catalog && !options.exposeExtensionWorlds && sessionId) {
       const worlds = [...extensionContexts.entries()]
         .filter(([key]) => key.startsWith(`${sessionId}:`))
@@ -872,7 +1104,12 @@ function emulatedGuardPlain(browser, options = {}) {
         options,
         decisions
       );
-      if ((await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach))
+      if (
+        (await decision(params.targetId)) ||
+        (underParent &&
+          !options.allowProtectedParentAttach &&
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach))
+      )
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
           : refusal('protected target');
@@ -889,7 +1126,20 @@ function emulatedGuardPlain(browser, options = {}) {
             catalog.url(tree.frame.securityOrigin) &&
             !allowExtension(tree.frame.securityOrigin)) ||
           (tree.childFrames ?? []).some(protectedFrame);
-        if (protectedFrame(frameTree)) throw refusal('protected frame');
+        if (options.protectedParentPages) {
+          const top = frameTree?.frame;
+          const topProtected =
+            top &&
+            ((catalog.url(top.url) && !allowExtension(top.url)) ||
+              (top.securityOrigin &&
+                catalog.url(top.securityOrigin) &&
+                !allowExtension(top.securityOrigin)));
+          if (topProtected) throw refusal('protected frame');
+          targetBlocked.set(
+            params.targetId,
+            collectProtectedDescendantIds(frameTree, catalog, options)
+          );
+        } else if (protectedFrame(frameTree)) throw refusal('protected frame');
         const start = unguarded.events.length;
         await unguarded.send(
           'Target.setAutoAttach',
@@ -904,7 +1154,20 @@ function emulatedGuardPlain(browser, options = {}) {
               event.sessionId === attached.sessionId &&
               event.params.targetInfo.type === 'iframe'
           );
-        if (
+        if (options.protectedParentPages) {
+          const blocked = targetBlocked.get(params.targetId) ?? {
+            ids: new Set(),
+            urls: new Set(),
+            midIds: new Set(),
+          };
+          for (const event of frames) {
+            const info = event.params.targetInfo;
+            if (!catalog.url(info.url) || allowExtension(info.url)) continue;
+            blocked.urls.add(info.url);
+            if (info.targetId) blocked.ids.add(info.targetId);
+          }
+          targetBlocked.set(params.targetId, blocked);
+        } else if (
           frames.some(
             (event) =>
               catalog.url(event.params.targetInfo.url) &&
@@ -1039,6 +1302,33 @@ function emulatedGuardPlain(browser, options = {}) {
         }
       }
       await readyShields.get(params.targetId);
+      if (options.protectedParentPages && catalog && targetBlocked.has(params.targetId))
+        sessionBlocked.set(result.sessionId, targetBlocked.get(params.targetId));
+    }
+    if (options.protectedParentPages && catalog && method === 'Page.enable' && sessionId) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && targetBlocked.has(owner))
+        sessionBlocked.set(sessionId, targetBlocked.get(owner));
+    }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      (options.refuseChildEnableLeakEvents || options.refuseChildEnableAllowAttach) &&
+      sessionId &&
+      (method === 'Page.enable' || method === 'Runtime.enable')
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && !pages.has(owner)) {
+        const { targetInfo } = await unguarded
+          .send('Target.getTargetInfo', { targetId: owner })
+          .catch(() => ({ targetInfo: null }));
+        if (
+          (await decision(owner)) ||
+          (targetInfo &&
+            (await iframeAncestorProtected(unguarded, catalog, targetInfo, options, decisions)))
+        )
+          throw refusal('protected frame');
+      }
     }
     if (method === 'Target.getTargetInfo' && catalog) {
       const info = result.targetInfo;
@@ -1080,6 +1370,54 @@ function emulatedGuardPlain(browser, options = {}) {
         ...result,
         targetInfos: visible.map((info) => (catalog ? redactInfo(info) : info)),
       };
+    }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      method === 'Runtime.evaluate' &&
+      sessionId &&
+      params?.contextId != null &&
+      blockedContexts.has(`${sessionId}:${params.contextId}`) &&
+      !options.leakProtectedFrameContexts &&
+      !options.refuseChildEnableLeakEvents
+    )
+      throw refusal('protected frame context');
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      method === 'Page.getFrameTree' &&
+      result?.frameTree
+    ) {
+      const blocked = collectProtectedDescendantIds(result.frameTree, catalog, options);
+      if (sessionId) sessionBlocked.set(sessionId, blocked);
+      const learn = (node, parentId) => {
+        if (!node?.frame) return;
+        frameUrls.set(node.frame.id, node.frame.url ?? '');
+        if (parentId) frameParents.set(node.frame.id, parentId);
+        for (const child of node.childFrames ?? []) learn(child, node.frame.id);
+      };
+      learn(result.frameTree, undefined);
+      return {
+        ...result,
+        frameTree: scrubProtectedDescendantTree(result.frameTree, catalog, options),
+      };
+    }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      method === 'Page.getResourceTree' &&
+      result?.frameTree
+    ) {
+      const blocked = collectProtectedDescendantIds(result.frameTree, catalog, options);
+      if (sessionId) sessionBlocked.set(sessionId, blocked);
+      if (options.leakResourceTreeAfterLive) {
+        const live = /[?&]live=|-live-/.test(JSON.stringify(result.frameTree));
+        if (live) {
+          liveResourceTreeReads += 1;
+          if (liveResourceTreeReads > 1) return result;
+        }
+      }
+      return scrubProtectedResourceTree(result, catalog, options);
     }
     if (
       options.extensionFrames &&
@@ -1560,6 +1898,28 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
             destroyedIds,
           });
           if (leaked !== 'attached') continue;
+        } else if (
+          catalog &&
+          event.method === 'Target.attachedToTarget' &&
+          event.params?.targetInfo?.type === 'iframe'
+        ) {
+          await leakDescendantIframeEvents(
+            event,
+            options,
+            {
+              messages,
+              events,
+              waiters,
+              sanitize,
+              redactInfo,
+              mentions,
+              hidden,
+              destroyedIds,
+            },
+            unguarded,
+            catalog,
+            decisions
+          );
         }
         const exposed = sanitize(
           event.params?.targetInfo && catalog
@@ -1852,7 +2212,14 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       throw refusal('protected target');
     }
     learnWorlds();
-    if (cutSessions.has(sessionId)) throw refusal('session cut on protected execution context');
+    if (
+      cutSessions.has(sessionId) &&
+      !(
+        options.protectedParentPages &&
+        (method === 'Page.getResourceTree' || method === 'Page.getFrameTree')
+      )
+    )
+      throw refusal('session cut on protected execution context');
     if (catalog && !options.exposeExtensionWorlds && sessionId) {
       const worlds = [...extensionContexts.entries()]
         .filter(([key]) => key.startsWith(`${sessionId}:`))
@@ -1951,7 +2318,10 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
         decisions
       );
       const blocked =
-        (await decision(params.targetId)) || (underParent && !options.allowProtectedParentAttach);
+        (await decision(params.targetId)) ||
+        (underParent &&
+          !options.allowProtectedParentAttach &&
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach));
       const emptyWorker =
         worker && !(typeof targetInfo.url === 'string' && targetInfo.url.length > 0);
       if (

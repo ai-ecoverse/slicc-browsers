@@ -278,6 +278,10 @@ test('signInHold capability is declared and rows require it', () => {
     assert.equal(vector.expected.connectCompletes, true, vector.id);
     assert.equal(vector.expected.idAnnounced, 'either', vector.id);
     assert.deepEqual(vector.designDependent, ['idAnnounced'], vector.id);
+    if (vector.id === 'C7.sign-in-hold.held-popup') {
+      assert.equal(vector.expected.held, true, vector.id);
+      assert.equal(vector.control.expected.held, false, vector.id);
+    }
     assert.equal(vector.control.expected.jsonListed, true, vector.id);
     assert.equal(vector.control.expected.attachSession, true, vector.id);
     assert.equal(vector.control.expected.contentRead, true, vector.id);

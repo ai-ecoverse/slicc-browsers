@@ -115,11 +115,13 @@ function route(req, url, send, html, redirects) {
         `<p>oopif-mid ${escape(p.get('n') ?? '')}</p><iframe src="${escape(inner)}"></iframe>`
       );
     },
-    '/oopif-srcdoc': () =>
-      html(
+    '/oopif-srcdoc': () => {
+      const marker = p.get('n') ?? '';
+      return html(
         'oopif-srcdoc',
-        `<p>oopif-srcdoc ${escape(p.get('n') ?? '')}</p><iframe sandbox="allow-scripts allow-forms" srcdoc="${escape('<!doctype html><title>srcdoc</title><p>ordinary srcdoc</p>')}"></iframe>`
-      ),
+        `<p>oopif-srcdoc ${escape(marker)}</p><iframe sandbox="allow-scripts allow-forms" srcdoc="${escape(`<!doctype html><title>srcdoc</title><p>ordinary srcdoc ${marker}</p>`)}"></iframe>`
+      );
+    },
     '/bfcache': () => {
       const marker = JSON.stringify(`bfcache-marker-${p.get('n') ?? ''}`).replaceAll(
         '<',

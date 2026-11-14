@@ -570,7 +570,13 @@
           "required": ["protectedParentIframes", "as"],
           "properties": {
             "protectedParentIframes": {
-              "enum": ["nested-cross", "sandboxed-srcdoc"]
+              "enum": [
+                "nested-cross",
+                "sandboxed-srcdoc",
+                "page-nested",
+                "page-srcdoc",
+                "page-ordinary"
+              ]
             },
             "as": {
               "$ref": "#/$defs/name"

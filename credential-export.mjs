@@ -142,6 +142,9 @@ function emptyCredentialResult() {
     indexedDBRefused: false,
     cacheStorageRefused: false,
     ordinaryCookiesExportable: false,
+    adobeComCookiesExportable: false,
+    partitionedStorageKeyFiltered: false,
+    adobeComStorageKeyExportable: false,
     pageDrivable: false,
     evaluateOk: false,
     subHostNotCredential: true,
@@ -248,6 +251,11 @@ function markOrdinaryExportable(result, cookies, ordinaryCookie, ordinaryHost, t
     result.ordinaryCookiesExportable = true;
 }
 
+function markAdobeComExportable(result, cookies, adobeComCookie, tag) {
+  if (cookieHit(cookies, { name: adobeComCookie, host: 'adobe.com', value: tag }))
+    result.adobeComCookiesExportable = true;
+}
+
 function applyFilteredCookieRead(result, key, out, planted, host, tag) {
   const cookies = cookiesFrom(out);
   result[key] = refused(out) || !credentialCookieLeaked(cookies, planted, host, tag);
@@ -262,6 +270,7 @@ async function measureCookieReads(
     ordinaryOrigin,
     ordinaryHost,
     ordinaryCookie,
+    adobeComCookie,
     host,
     tag,
     planted,
@@ -270,10 +279,15 @@ async function measureCookieReads(
     note,
   }
 ) {
+  const markControls = (cookies) => {
+    markOrdinaryExportable(result, cookies, ordinaryCookie, ordinaryHost, tag);
+    markAdobeComExportable(result, cookies, adobeComCookie, tag);
+  };
+
   const getCookies = await tryMethod(
     client,
     'Network.getCookies',
-    { urls: [`${origin}/`, `${ordinaryOrigin}/`] },
+    { urls: [`${origin}/`, `${ordinaryOrigin}/`, 'https://www.adobe.com/'] },
     clientSession
   );
   if (getCookies.skip) result.skips.push(getCookies.skip);
@@ -286,9 +300,7 @@ async function measureCookieReads(
       host,
       tag
     );
-    result.ordinaryCookiesExportable =
-      cookieHit(cookies, { name: ordinaryCookie, host: ordinaryHost, value: tag }) ||
-      result.ordinaryCookiesExportable;
+    markControls(cookies);
     if (
       refused(getCookies.out) &&
       !String(getCookies.out.error?.message ?? '').startsWith(refusalPrefix)
@@ -307,7 +319,7 @@ async function measureCookieReads(
       host,
       tag
     );
-    markOrdinaryExportable(result, cookies, ordinaryCookie, ordinaryHost, tag);
+    markControls(cookies);
   }
 
   const storageGet = await tryMethod(client, 'Storage.getCookies', {}, undefined);
@@ -321,7 +333,7 @@ async function measureCookieReads(
       host,
       tag
     );
-    markOrdinaryExportable(result, cookies, ordinaryCookie, ordinaryHost, tag);
+    markControls(cookies);
   }
 
   const pageGet = await tryMethod(client, 'Page.getCookies', {}, clientSession);
@@ -341,6 +353,50 @@ async function measureCookieReads(
         host: ordinaryHost,
         value: tag,
       });
+  }
+  if (!result.adobeComCookiesExportable) {
+    const adobeOnly = await tryMethod(
+      client,
+      'Network.getCookies',
+      { urls: ['https://www.adobe.com/'] },
+      clientSession
+    );
+    if (!adobeOnly.skip && adobeOnly.out.ok)
+      markAdobeComExportable(result, cookiesFrom(adobeOnly.out), adobeComCookie, tag);
+  }
+}
+
+async function measurePartitionedStorageKeys(
+  client,
+  clientSession,
+  { ordinaryOrigin, tag, result }
+) {
+  const lsKey = `cred-part-${tag}`;
+  const adobeloginKey = `${ordinaryOrigin}/^0https://adobelogin.com`;
+  const adobeComKey = `${ordinaryOrigin}/^0https://adobe.com`;
+
+  const read = async (storageKey) =>
+    tryMethod(
+      client,
+      'DOMStorage.getDOMStorageItems',
+      { storageId: { storageKey, isLocalStorage: true } },
+      clientSession
+    );
+
+  const adobelogin = await read(adobeloginKey);
+  if (adobelogin.skip) result.skips.push(adobelogin.skip);
+  else {
+    const entries = adobelogin.out.result?.entries ?? [];
+    const leaked = entries.some((entry) => entry?.[0] === lsKey && entry?.[1] === tag);
+    result.partitionedStorageKeyFiltered = refused(adobelogin.out) || !leaked;
+  }
+
+  const adobeCom = await read(adobeComKey);
+  if (adobeCom.skip) result.skips.push(adobeCom.skip);
+  else {
+    const entries = adobeCom.out.result?.entries ?? [];
+    result.adobeComStorageKeyExportable =
+      adobeCom.out.ok && entries.some((entry) => entry?.[0] === lsKey && entry?.[1] === tag);
   }
 }
 
@@ -440,6 +496,7 @@ async function probeCredentialClient(ctx) {
     ordinaryOrigin,
     ordinaryHost,
     ordinaryCookie,
+    adobeComCookie,
     tag,
     planted,
     until,
@@ -462,6 +519,7 @@ async function probeCredentialClient(ctx) {
     ordinaryOrigin,
     ordinaryHost,
     ordinaryCookie,
+    adobeComCookie,
     host,
     tag,
     planted,
@@ -471,6 +529,7 @@ async function probeCredentialClient(ctx) {
   });
   await measureCookieWrites(client, clientSession, { origin, tag, planted, result });
   await measureStorageReads(client, clientSession, { origin, tag, planted, result });
+  await measurePartitionedStorageKeys(client, clientSession, { ordinaryOrigin, tag, result });
 }
 
 export async function credentialExport({
@@ -526,6 +585,28 @@ export async function credentialExport({
       path: '/',
     })
   );
+  const adobeComCookie = `adobecom-${tag}`;
+  await outcome(
+    reader.send('Network.setCookie', {
+      name: adobeComCookie,
+      value: tag,
+      domain: '.adobe.com',
+      path: '/',
+    })
+  );
+  const lsKey = `cred-part-${tag}`;
+  for (const site of ['https://adobelogin.com', 'https://adobe.com']) {
+    await outcome(
+      reader.send('DOMStorage.setDOMStorageItem', {
+        storageId: {
+          storageKey: `${ordinaryOrigin}/^0${site}`,
+          isLocalStorage: true,
+        },
+        key: lsKey,
+        value: tag,
+      })
+    );
+  }
 
   await probeCredentialClient({
     client,
@@ -536,6 +617,7 @@ export async function credentialExport({
     ordinaryOrigin,
     ordinaryHost,
     ordinaryCookie,
+    adobeComCookie,
     tag,
     planted,
     until,
@@ -548,6 +630,9 @@ export async function credentialExport({
     getCookiesFiltered: result.getCookiesFiltered,
     getAllCookiesFiltered: result.getAllCookiesFiltered,
     ordinaryCookiesExportable: result.ordinaryCookiesExportable,
+    adobeComCookiesExportable: result.adobeComCookiesExportable,
+    partitionedStorageKeyFiltered: result.partitionedStorageKeyFiltered,
+    adobeComStorageKeyExportable: result.adobeComStorageKeyExportable,
     pageDrivable: result.pageDrivable,
     skips: result.skips,
   });

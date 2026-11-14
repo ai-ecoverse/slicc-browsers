@@ -234,9 +234,16 @@ export function credentialBrowser() {
       for (const cookie of params.cookies ?? []) setCookie(cookie);
       return {};
     }
+    if (method === 'DOMStorage.setDOMStorageItem') {
+      const key = params.storageId?.storageKey ?? params.storageId?.securityOrigin ?? '';
+      const store = localStores.get(key) ?? new Map();
+      store.set(params.key, params.value);
+      localStores.set(key, store);
+      return {};
+    }
     if (method === 'DOMStorage.getDOMStorageItems') {
-      const origin = params.storageId?.securityOrigin;
-      const store = localStores.get(origin) ?? new Map();
+      const key = params.storageId?.storageKey ?? params.storageId?.securityOrigin ?? '';
+      const store = localStores.get(key) ?? new Map();
       return { entries: [...store.entries()].map(([k, v]) => [k, v]) };
     }
     if (method === 'IndexedDB.requestDatabaseNames') {
@@ -306,10 +313,19 @@ export function credentialGuard(browser, options = {}) {
         )
           throw new Error(refusal);
       }
+      if (method === 'DOMStorage.getDOMStorageItems' && !mutants.leakDomStorage) {
+        const storageId = params.storageId ?? {};
+        if (
+          urlCredential(storageId.securityOrigin) ||
+          (storageId.storageKey && matcher.storageKey(storageId.storageKey))
+        )
+          throw new Error(refusal);
+      }
       if (
-        method === 'DOMStorage.getDOMStorageItems' &&
-        !mutants.leakDomStorage &&
-        urlCredential(params.storageId?.securityOrigin)
+        method === 'DOMStorage.setDOMStorageItem' &&
+        !mutants.allowSetCookie &&
+        params.storageId?.storageKey &&
+        matcher.storageKey(params.storageId.storageKey)
       )
         throw new Error(refusal);
       if (

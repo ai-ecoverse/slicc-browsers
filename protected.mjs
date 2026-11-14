@@ -146,9 +146,11 @@ export function credentialOrigins(rules) {
 
   const storageKey = (key) => {
     const [first, ...rest] = String(key ?? '').split('^');
-    return [first, ...rest.filter((p) => p.startsWith('0')).map((p) => p.slice(1))].some((text) =>
-      hostMatch(text)
-    );
+    if (hostMatch(first)) return true;
+    return rest
+      .filter((p) => p.startsWith('0'))
+      .map((p) => p.slice(1))
+      .some((text) => topLevelSite(text));
   };
 
   return {

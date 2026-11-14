@@ -19,26 +19,62 @@ test('C7 prefix enumerates the credential-export row', () => {
   assert.equal(vector.trigger[0].credentialExport, true);
   assert.ok(vector.notes.some((note) => /response bodies are not redacted/i.test(note)));
   assert.ok(vector.notes.some((note) => /Authorization headers/i.test(note)));
+  assert.ok(vector.notes.some((note) => /auth\.services\.adobe\.com/i.test(note)));
+  assert.ok(vector.notes.some((note) => /adobeid-na1\.services\.adobe\.com/i.test(note)));
+  assert.ok(vector.notes.some((note) => /Domain=\.adobe\.com is not covered/i.test(note)));
+  assert.ok(vector.notes.some((note) => /Domain=\.adobe\.com cookie stays exportable/i.test(note)));
+  assert.ok(vector.notes.some((note) => /storageKey \^0 site part/i.test(note)));
+  assert.equal(
+    vector.observe.adobeComCookiesExportable.check.path,
+    'result.adobeComCookiesExportable'
+  );
+  assert.equal(vector.expected.adobeComCookiesExportable, true);
+  assert.equal(
+    vector.observe.partitionedStorageKeyFiltered.check.path,
+    'result.partitionedStorageKeyFiltered'
+  );
+  assert.equal(vector.expected.partitionedStorageKeyFiltered, true);
+  assert.equal(
+    vector.observe.adobeComStorageKeyExportable.check.path,
+    'result.adobeComStorageKeyExportable'
+  );
+  assert.equal(vector.expected.adobeComStorageKeyExportable, true);
   assert.equal(vector.observe.getResponseBody, undefined);
   assert.equal(vector.expected.residualEvaluateCookie, undefined);
 });
 
 test('credentialOrigins matcher is exact-host and covers cookie domains / topLevelSite', () => {
   const m = credentialOrigins(catalog.credentialOrigins);
+  assert.deepEqual(catalog.credentialOrigins.origins, [
+    'https://ims-na1.adobelogin.com',
+    'https://ims-na1-stg1.adobelogin.com',
+  ]);
   assert.equal(m.url('https://ims-na1.adobelogin.com/ims/authorize/v2'), true);
   assert.equal(m.url('http://ims-na1.adobelogin.com:9/'), true);
+  assert.equal(m.url('https://auth.services.adobe.com/'), false);
+  assert.equal(m.url('https://adobeid-na1.services.adobe.com/'), false);
   assert.equal(m.url('https://x.ims-na1.adobelogin.com/'), false);
   assert.equal(m.cookieDomain('.adobelogin.com'), true);
   assert.equal(m.cookieDomain('ims-na1.adobelogin.com'), true);
   assert.equal(m.cookieDomain('x.ims-na1.adobelogin.com'), false);
+  assert.equal(m.cookieDomain('.adobe.com'), false);
+  assert.equal(m.cookieDomain('.services.adobe.com'), false);
+  assert.equal(m.cookieDomain('auth.services.adobe.com'), false);
   assert.equal(m.topLevelSite('https://adobelogin.com'), true);
+  assert.equal(m.topLevelSite('https://adobe.com'), false);
+  assert.equal(m.storageKey('https://ims-na1.adobelogin.com'), true);
   assert.equal(m.storageKey('https://ims-na1.adobelogin.com^0https://adobelogin.com'), true);
+  assert.equal(m.storageKey('https://ordinary.example.test/^0https://adobelogin.com'), true);
+  assert.equal(m.storageKey('https://ordinary.example.test/^0https://adobe.com'), false);
   assert.equal(m.storageKey('https://x.ims-na1.adobelogin.com'), false);
+  assert.equal(m.storageKey('https://x.ims-na1.adobelogin.com/^0https://adobelogin.com'), true);
   assert.equal(m.url('https://seven.sliccy.ai/'), false);
+  assert.equal(m.url('https://ordinary.example.test/'), false);
+  assert.equal(m.cookieDomain('ordinary.example.test'), false);
   const page = protectedOrigins(catalog.protectedOrigins);
   assert.equal(page.url('https://ims-na1.adobelogin.com/'), false);
+  assert.equal(page.url('https://auth.services.adobe.com/'), false);
 });
-
 async function rows(mutants = {}) {
   const fixture = await fixtureServer();
   try {
@@ -168,6 +204,9 @@ test('judge fails when credential cookies leak', () => {
       indexedDBRefused: true,
       cacheStorageRefused: true,
       ordinaryCookiesExportable: true,
+      adobeComCookiesExportable: true,
+      partitionedStorageKeyFiltered: true,
+      adobeComStorageKeyExportable: true,
       pageDrivable: true,
       evaluateOk: true,
       subHostNotCredential: true,

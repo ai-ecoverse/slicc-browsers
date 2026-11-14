@@ -22,12 +22,23 @@ function pageFake({
   protectedHosts = ['seven.sliccy.ai', 'vault.sliccy.ai'],
   oopifGrandchildTargets = false,
   omitLiveGrandchild = false,
+  blockLiveMid = false,
 } = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const sessionConn = new Map();
+  const networkSessions = new Set();
+  const touched = new Set();
+  const connRole = new WeakMap();
   const connections = [];
   let next = 0;
+  const shouldBlockLive = (tab) => {
+    if (!blockLiveMid || !tab) return false;
+    if (touched.has(tab.targetId)) return true;
+    if (tab.midTargetId && touched.has(tab.midTargetId)) return true;
+    if (tab.parentId && touched.has(tab.parentId)) return true;
+    return false;
+  };
   const infoOf = (tab) => ({
     targetId: tab.targetId,
     type: tab.type,
@@ -235,6 +246,32 @@ function pageFake({
       }
     }
   };
+  const emitBlockedMid = (conn, sessionId, midUrl) => {
+    if (!networkSessions.has(sessionId) || !midUrl) return;
+    const requestId = `R${++next}`;
+    emit(
+      conn,
+      'Network.requestWillBeSent',
+      {
+        requestId,
+        type: 'Document',
+        request: { url: midUrl, method: 'GET' },
+        frameId: `F${next}`,
+      },
+      sessionId
+    );
+    emit(
+      conn,
+      'Network.loadingFailed',
+      {
+        requestId,
+        errorText: 'net::ERR_BLOCKED_BY_CLIENT',
+        blockedReason: 'inspector',
+        type: 'Document',
+      },
+      sessionId
+    );
+  };
   const emitFrameLife = (conn, sessionId, tab) => {
     if (!tab?.frameTree) return;
     if (tab.type === 'iframe') {
@@ -335,6 +372,11 @@ function pageFake({
     if (method === 'Target.attachToTarget') {
       const tab = tabs.get(params.targetId);
       if (!tab) throw new Error('No target with given id');
+      if (connRole.get(conn) === 'client') {
+        touched.add(tab.targetId);
+        if (tab.midTargetId) touched.add(tab.midTargetId);
+        if (tab.parentId) touched.add(tab.parentId);
+      }
       const id = `S${++next}`;
       sessions.set(id, tab.targetId);
       sessionConn.set(id, conn);
@@ -394,102 +436,132 @@ function pageFake({
       if (tab) emitContexts(conn, sessionId, tab);
       return {};
     }
-    if (method === 'Network.enable' || method === 'Page.navigate') {
-      if (method === 'Page.navigate') {
-        const tab = tabs.get(sessions.get(sessionId));
-        if (tab && /\/oopif-nest\?/.test(params.url ?? '')) {
-          tab.url = params.url;
-          tab.frame.url = params.url;
-          const page = new URL(params.url);
-          const skipChild = omitLiveGrandchild && page.searchParams.get('live') === '1';
-          buildNest(tab, page.searchParams.get('mid') ?? tab.midUrl, { skipChild });
-          for (const [otherSession, targetId] of sessions) {
-            if (targetId !== tab.targetId) continue;
-            const other = sessionConn.get(otherSession);
-            if (!other) continue;
-            emitFrameLife(other, otherSession, tab);
-            emitContexts(other, otherSession, tab);
+    if (method === 'Network.enable') {
+      if (sessionId) networkSessions.add(sessionId);
+      return {};
+    }
+    if (method === 'Page.navigate') {
+      const tab = tabs.get(sessions.get(sessionId));
+      if (tab && /\/oopif-nest\?/.test(params.url ?? '')) {
+        tab.url = params.url;
+        tab.frame.url = params.url;
+        const page = new URL(params.url);
+        const live = page.searchParams.get('live') === '1';
+        const mid = page.searchParams.get('mid') ?? tab.midUrl;
+        if (live && shouldBlockLive(tab)) {
+          if (tab.childTargetId) tabs.delete(tab.childTargetId);
+          if (tab.midTargetId) {
+            const midTab = tabs.get(tab.midTargetId);
+            if (midTab?.children?.length) {
+              for (const childId of midTab.children) tabs.delete(childId);
+              midTab.children = [];
+            }
+            if (midTab) midTab.frameTree = { frame: midTab.frame, childFrames: [] };
           }
-        } else if (tab?.type === 'iframe' && /\/oopif-(mid|srcdoc)/.test(params.url ?? '')) {
+          tab.childTargetId = undefined;
+          tab.childFrameId = undefined;
+          tab.childUrl = undefined;
+          if (tab.frameTree?.childFrames?.[0]) tab.frameTree.childFrames[0].childFrames = [];
+          emitBlockedMid(conn, sessionId, mid);
+          return { frameId: tab.frame.id };
+        }
+        const skipChild = omitLiveGrandchild && live;
+        buildNest(tab, mid, { skipChild });
+        for (const [otherSession, targetId] of sessions) {
+          if (targetId !== tab.targetId) continue;
+          const other = sessionConn.get(otherSession);
+          if (!other) continue;
+          emitFrameLife(other, otherSession, tab);
+          emitContexts(other, otherSession, tab);
+        }
+      } else if (tab?.type === 'iframe' && /\/oopif-(mid|srcdoc)/.test(params.url ?? '')) {
+        if (shouldBlockLive(tab)) {
           if (tab.children?.length) {
             for (const childId of tab.children) tabs.delete(childId);
             tab.children = [];
           }
-          tab.url = params.url;
-          tab.frame = { id: tab.frame?.id ?? `F${++next}`, url: params.url };
-          const skipChild = omitLiveGrandchild;
-          let childUrl = 'about:blank';
-          let midMarker = '';
-          try {
-            const mid = new URL(params.url);
-            midMarker = mid.searchParams.get('n') ?? '';
-            if (mid.pathname.includes('oopif-srcdoc')) childUrl = 'about:srcdoc';
-            else childUrl = mid.searchParams.get('inner') ?? childUrl;
-          } catch {
-            childUrl = 'about:blank';
-          }
-          tab.midMarker = midMarker;
-          const childFrameId = `F${++next}`;
-          const childOrigin = originOf(childUrl);
-          const oopifChild = Boolean(
-            oopifGrandchildTargets && childUrl !== 'about:srcdoc' && childOrigin
-          );
-          const srcdocChild = childUrl === 'about:srcdoc';
-          if (!skipChild && (oopifChild || srcdocChild)) {
-            const childTab = {
-              targetId: `T${++next}`,
-              type: 'iframe',
+          tab.frameTree = { frame: tab.frame, childFrames: [] };
+          emitBlockedMid(conn, sessionId, params.url);
+          return { frameId: tab.frame?.id };
+        }
+        if (tab.children?.length) {
+          for (const childId of tab.children) tabs.delete(childId);
+          tab.children = [];
+        }
+        tab.url = params.url;
+        tab.frame = { id: tab.frame?.id ?? `F${++next}`, url: params.url };
+        const skipChild = omitLiveGrandchild;
+        let childUrl = 'about:blank';
+        let midMarker = '';
+        try {
+          const mid = new URL(params.url);
+          midMarker = mid.searchParams.get('n') ?? '';
+          if (mid.pathname.includes('oopif-srcdoc')) childUrl = 'about:srcdoc';
+          else childUrl = mid.searchParams.get('inner') ?? childUrl;
+        } catch {
+          childUrl = 'about:blank';
+        }
+        tab.midMarker = midMarker;
+        const childFrameId = `F${++next}`;
+        const childOrigin = originOf(childUrl);
+        const oopifChild = Boolean(
+          oopifGrandchildTargets && childUrl !== 'about:srcdoc' && childOrigin
+        );
+        const srcdocChild = childUrl === 'about:srcdoc';
+        if (!skipChild && (oopifChild || srcdocChild)) {
+          const childTab = {
+            targetId: `T${++next}`,
+            type: 'iframe',
+            url: childUrl,
+            title: childUrl,
+            parentId: tab.targetId,
+            frame: {
+              id: childFrameId,
               url: childUrl,
-              title: childUrl,
-              parentId: tab.targetId,
+              ...(srcdocChild ? { parentId: tab.frame.id } : {}),
+            },
+            frameTree: {
               frame: {
                 id: childFrameId,
                 url: childUrl,
                 ...(srcdocChild ? { parentId: tab.frame.id } : {}),
               },
-              frameTree: {
-                frame: {
-                  id: childFrameId,
-                  url: childUrl,
-                  ...(srcdocChild ? { parentId: tab.frame.id } : {}),
-                },
-                childFrames: [],
-              },
-              contexts: [
-                {
-                  id: ++next,
-                  origin: srcdocChild ? '://' : childOrigin || '://',
-                  auxData: { frameId: childFrameId, isDefault: true },
-                },
-              ],
-              children: [],
-              ...(srcdocChild ? { bodyText: `ordinary srcdoc ${midMarker}` } : {}),
-            };
-            tabs.set(childTab.targetId, childTab);
-            tab.children = [childTab.targetId];
-            tab.frameTree = { frame: tab.frame, childFrames: [] };
-          } else if (!skipChild) {
-            tab.frameTree = {
-              frame: tab.frame,
-              childFrames: [{ frame: { id: childFrameId, url: childUrl, parentId: tab.frame.id } }],
-            };
-          } else {
-            tab.frameTree = { frame: tab.frame, childFrames: [] };
-          }
-          tab.contexts = [
-            {
-              id: ++next,
-              origin: originOf(tab.url) || '://',
-              auxData: { frameId: tab.frame.id, isDefault: true },
+              childFrames: [],
             },
-          ];
-          for (const [otherSession, targetId] of sessions) {
-            if (targetId !== tab.targetId) continue;
-            const other = sessionConn.get(otherSession);
-            if (!other) continue;
-            emitFrameLife(other, otherSession, tab);
-            emitContexts(other, otherSession, tab);
-          }
+            contexts: [
+              {
+                id: ++next,
+                origin: srcdocChild ? '://' : childOrigin || '://',
+                auxData: { frameId: childFrameId, isDefault: true },
+              },
+            ],
+            children: [],
+            ...(srcdocChild ? { bodyText: `ordinary srcdoc ${midMarker}` } : {}),
+          };
+          tabs.set(childTab.targetId, childTab);
+          tab.children = [childTab.targetId];
+          tab.frameTree = { frame: tab.frame, childFrames: [] };
+        } else if (!skipChild) {
+          tab.frameTree = {
+            frame: tab.frame,
+            childFrames: [{ frame: { id: childFrameId, url: childUrl, parentId: tab.frame.id } }],
+          };
+        } else {
+          tab.frameTree = { frame: tab.frame, childFrames: [] };
+        }
+        tab.contexts = [
+          {
+            id: ++next,
+            origin: originOf(tab.url) || '://',
+            auxData: { frameId: tab.frame.id, isDefault: true },
+          },
+        ];
+        for (const [otherSession, targetId] of sessions) {
+          if (targetId !== tab.targetId) continue;
+          const other = sessionConn.get(otherSession);
+          if (!other) continue;
+          emitFrameLife(other, otherSession, tab);
+          emitContexts(other, otherSession, tab);
         }
       }
       return {};
@@ -552,16 +624,17 @@ function pageFake({
     }
     return {};
   }
-  const connect = () => {
+  const connect = (role = 'client') => {
     const conn = { events: [], discover: false, close: async () => {} };
+    connRole.set(conn, role);
     conn.send = (method, params, sessionId) => handle(conn, method, params, sessionId);
     connections.push(conn);
     return conn;
   };
   return {
     connect,
-    client: connect(),
-    unguarded: connect(),
+    client: connect('client'),
+    unguarded: connect('reader'),
     isProtected,
   };
 }
@@ -635,10 +708,13 @@ test('judge fails a grandchild frameTree leak on the page row', () => {
   assert.equal(judge(vector, 'guarded', { ...ok, midFrameAttached: true }).pass, true);
 });
 
-async function runMode(mode, { only = ids, oopifGrandchildTargets = false } = {}) {
+async function runMode(
+  mode,
+  { only = ids, oopifGrandchildTargets = false, blockLiveMid = false } = {}
+) {
   const fixture = await fixtureServer();
   try {
-    const browser = pageFake({ oopifGrandchildTargets });
+    const browser = pageFake({ oopifGrandchildTargets, blockLiveMid });
     const origin = (host) => `http://${host}:${fixture.port}`;
     const targets = {
       ordinary: origin('ordinary.example.test'),
@@ -1011,6 +1087,121 @@ test('missing live grandchild after post-attach navigation is incomplete', async
     assert.ok(
       notes.some((note) => note.includes('protected-parent.page-targets-after')),
       notes.join('\n')
+    );
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('guard-blocked live mid document completes with live channels protected', async () => {
+  const execution = await runMode(
+    {},
+    {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: true,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations?.guarded?.resourceTree, false, describe(row));
+  assert.equal(row.observations?.guarded?.frameEvents, false, describe(row));
+  assert.equal(row.observations?.guarded?.contextEvaluate, false, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+});
+
+test('guard-blocked live mid still fails when pre-existing grandchild context leaks', async () => {
+  const execution = await runMode(
+    { leakProtectedFrameContexts: true },
+    {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: false,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+});
+
+test('local-mid shape with blocked live mid completes without midTargetId', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const ordinary = origin('ordinary.example.test');
+    const browser = pageFake({
+      oopifGrandchildTargets: false,
+      blockLiveMid: true,
+      protectedHosts: ['ordinary.example.test'],
+    });
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: browser.connect(),
+      reader: browser.unguarded,
+      protectedOrigin: ordinary,
+      cross: origin('cross.test'),
+      ordinary,
+      mode: 'page-nested',
+      tag: 'local-mid-blocked',
+      notes,
+      budget: 2000,
+    });
+    assert.equal(result.incomplete, undefined, JSON.stringify({ result, notes }));
+    assert.equal(result.resourceTree, false, JSON.stringify({ result, notes }));
+    assert.ok(
+      notes.some((entry) => entry.includes('protected-parent.page-live-blocked')),
+      notes.join('\n')
+    );
+    assert.ok(
+      notes.some(
+        (entry) =>
+          entry.includes('protected-parent.page-targets-before') &&
+          entry.includes('"midTargetId":null')
+      ),
+      notes.join('\n')
+    );
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('local-mid same-site host mapping without blocked evidence names the mapping', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const ordinary = origin('ordinary.example.test');
+    const browser = pageFake({
+      oopifGrandchildTargets: false,
+      omitLiveGrandchild: true,
+      protectedHosts: ['ordinary.example.test'],
+    });
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: browser.connect(),
+      reader: browser.unguarded,
+      protectedOrigin: ordinary,
+      cross: origin('cross.test'),
+      ordinary,
+      mode: 'page-nested',
+      tag: 'local-mid-missing',
+      notes,
+      budget: 800,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(
+      String(result.incomplete),
+      /same-site with \{ordinary\}.*cross-site from \{ordinary\} like \{cross\}/
     );
   } finally {
     await fixture.close();

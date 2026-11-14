@@ -4,6 +4,7 @@ export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
 import { closeProtectedShape } from './close-protected-shape.mjs';
+import { credentialExport } from './credential-export.mjs';
 import { extensionFrame } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
@@ -903,6 +904,7 @@ class Execution {
       'errorPage',
       'closeProtectedShape',
       'protectedParentIframes',
+      'credentialExport',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -915,6 +917,7 @@ class Execution {
         'errorPage',
         'closeProtectedShape',
         'protectedParentIframes',
+        'credentialExport',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1020,6 +1023,7 @@ class Execution {
       step.errorPage ||
       step.closeProtectedShape ||
       step.protectedParentIframes ||
+      step.credentialExport ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1168,6 +1172,7 @@ class Execution {
     if (step.redirectSecret || step.errorPage) return this.originProbe(step, session);
     if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
     if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
+    if (step.credentialExport) return this.runCredentialExport(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1252,6 +1257,25 @@ class Execution {
     );
     if (out.ok && out.result?.pageId) this.targets.push(out.result.pageId);
     return out;
+  }
+
+  runCredentialExport(step) {
+    return outcome(
+      credentialExport({
+        client: this.client,
+        reader: this.reader,
+        credentialOrigin: this.vars.idp ?? this.options.targets?.idp ?? this.vars.target,
+        ordinary: this.vars.plain ?? this.vars.ordinary,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(8000),
+        refusalPrefix:
+          this.options.credentialOrigins?.refusal ??
+          this.options.catalog?.credentialOrigins?.refusal ??
+          'slicc: refused:',
+      })
+    );
   }
 
   spawnWorkerKind() {
@@ -2246,7 +2270,8 @@ const needsObserver = (vector) =>
       step.observer ||
       step.spawnWorker ||
       step.closeProtectedShape ||
-      step.protectedParentIframes
+      step.protectedParentIframes ||
+      step.credentialExport
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
@@ -2347,6 +2372,7 @@ function variables(targets, target, side, slot, index) {
   vars.protectedTarget = targets[target];
   vars.target = side === 'control' ? vars.plain : targets[target];
   vars.targetHost = new URL(vars.target).hostname;
+  vars.idp = targets.idp ?? targets[target];
   vars.responseOrigin = vars.target === vars.ordinary ? '*' : vars.ordinary;
   vars.own ??= vars.client;
   vars.beacon = beacon(vars.log, tag);

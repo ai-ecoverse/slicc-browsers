@@ -54,6 +54,10 @@
     "ordinary-same-site": {
       "description": "an unprotected origin same-site with the target"
     },
+    "idp": {
+      "host": "ims-na1.adobelogin.com",
+      "description": "Adobe IMS IdP credential origin"
+    },
     "chrome-newtab": {
       "url": "chrome://newtab/",
       "description": "Chrome's ordinary new tab page, including its internal frames"
@@ -119,6 +123,7 @@
     "own": "the own target's origin, which is {client}",
     "ordinary": "the ordinary origin the run starts from",
     "ordinary-same-site": "the ordinary-same-site origin",
+    "idp": "the Adobe IMS IdP credential origin",
     "network-error": "the ordinary failing-network URL, unchanged on the control",
     "client": "the client page's origin, which the runner maps",
     "cross": "another ordinary origin, cross-site with {ordinary}",
@@ -32222,6 +32227,259 @@
         "targetEvents": "either"
       },
       "designDependent": ["targetInfo", "childAttach", "targetEvents"]
+    },
+    {
+      "id": "C7.credential-export",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "credentialExport": true,
+          "as": "probe"
+        }
+      ],
+      "targets": ["idp"],
+      "observe": {
+        "live": {
+          "means": "unguarded reader planted IdP cookies and storage and could read them back",
+          "check": {
+            "result": "probe",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "getCookiesFiltered": {
+          "means": "Network.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.getCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "getAllCookiesFiltered": {
+          "means": "Network.getAllCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.getAllCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageGetCookiesFiltered": {
+          "means": "Storage.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.storageGetCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageGetCookiesFiltered": {
+          "means": "Page.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.pageGetCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "setCookieRefused": {
+          "means": "Network.setCookie for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.setCookieRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "setCookiesRefused": {
+          "means": "Network.setCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.setCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "deleteCookiesRefused": {
+          "means": "Network.deleteCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.deleteCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageDeleteCookieRefused": {
+          "means": "Page.deleteCookie for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.pageDeleteCookieRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageSetCookiesRefused": {
+          "means": "Storage.setCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.storageSetCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "headersStripped": {
+          "means": "Cookie and Set-Cookie headers for credential-origin traffic are stripped from ExtraInfo events",
+          "check": {
+            "result": "probe",
+            "path": "result.headersStripped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "associatedCookiesStripped": {
+          "means": "associatedCookies for credential-origin ExtraInfo events are stripped",
+          "check": {
+            "result": "probe",
+            "path": "result.associatedCookiesStripped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domStorageRefused": {
+          "means": "DOMStorage.getDOMStorageItems for a credential origin is refused or empty of planted keys",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "indexedDBRefused": {
+          "means": "IndexedDB.requestDatabaseNames for a credential origin is refused or omits the planted DB",
+          "check": {
+            "result": "probe",
+            "path": "result.indexedDBRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cacheStorageRefused": {
+          "means": "CacheStorage.requestCacheNames for a credential origin is refused or omits the planted cache",
+          "check": {
+            "result": "probe",
+            "path": "result.cacheStorageRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryCookiesExportable": {
+          "means": "ordinary-origin cookies remain exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.ordinaryCookiesExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageDrivable": {
+          "means": "the IdP page stays attachable and fillable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.pageDrivable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateOk": {
+          "means": "Runtime.evaluate of a harmless expression on the IdP page succeeds",
+          "check": {
+            "result": "probe",
+            "path": "result.evaluateOk",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "subHostNotCredential": {
+          "means": "a sub-host of an entry host is not treated as credential by the catalog matcher contract",
+          "check": {
+            "result": "probe",
+            "path": "result.subHostNotCredential",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded reader planted IdP cookies and storage and read them back",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "live": true,
+          "ordinaryCookiesExportable": true,
+          "pageDrivable": true,
+          "evaluateOk": true,
+          "getCookiesFiltered": true,
+          "getAllCookiesFiltered": true,
+          "storageGetCookiesFiltered": true,
+          "pageGetCookiesFiltered": true,
+          "setCookieRefused": true,
+          "setCookiesRefused": true,
+          "deleteCookiesRefused": true,
+          "pageDeleteCookieRefused": true,
+          "storageSetCookiesRefused": true,
+          "headersStripped": true,
+          "associatedCookiesStripped": true,
+          "domStorageRefused": true,
+          "indexedDBRefused": true,
+          "cacheStorageRefused": true,
+          "subHostNotCredential": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "getCookiesFiltered": true,
+        "getAllCookiesFiltered": true,
+        "storageGetCookiesFiltered": true,
+        "pageGetCookiesFiltered": true,
+        "setCookieRefused": true,
+        "setCookiesRefused": true,
+        "deleteCookiesRefused": true,
+        "pageDeleteCookieRefused": true,
+        "storageSetCookiesRefused": true,
+        "headersStripped": true,
+        "associatedCookiesStripped": true,
+        "domStorageRefused": true,
+        "indexedDBRefused": true,
+        "cacheStorageRefused": true,
+        "ordinaryCookiesExportable": true,
+        "pageDrivable": true,
+        "evaluateOk": true,
+        "subHostNotCredential": true
+      },
+      "notes": [
+        "residual only (not a fail): on a drivable IdP page Runtime.evaluate can read document.cookie (non-HttpOnly) and localStorage",
+        "residual only (not a fail): response bodies are not redacted; Network.getResponseBody is refused only for protected URLs as today, not for credential origins",
+        "residual only (not a fail): OAuth codes/tokens in URLs and Authorization headers on drivable IdP pages are not withheld",
+        "Network.loadNetworkResource is not measured in this row",
+        "federated corporate SSO hosts are not covered"
+      ]
     }
   ]
 }

@@ -12,9 +12,17 @@ pub struct Catalog {
     pub discovery: Discovery,
     pub seven: Seven,
     pub protected_origins: ProtectedOrigins,
+    pub credential_origins: CredentialOrigins,
     pub profiles: Profiles,
     pub launch: Launch,
     pub platforms: Platforms,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialOrigins {
+    pub origins: Vec<String>,
+    pub refusal: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

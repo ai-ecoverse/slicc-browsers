@@ -6,6 +6,7 @@ pub const TARGET_VAULT: &str = "vault";
 pub const TARGET_VAULT_X: &str = "vault-x";
 pub const TARGET_APEX: &str = "apex";
 pub const TARGET_OWN: &str = "own";
+pub const TARGET_IDP: &str = "idp";
 pub const TARGET_CHROME_NEWTAB: &str = "chrome-newtab";
 pub const TARGET_CHROME_NEW_TAB_PAGE: &str = "chrome-new-tab-page";
 pub const TARGET_CHROME_SETTINGS: &str = "chrome-settings";
@@ -113,6 +114,8 @@ pub struct Vector {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub design_dependent: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observable: Option<Observable>,
     #[serde(default, rename = "appliesTo", skip_serializing_if = "Vec::is_empty")]
@@ -220,6 +223,12 @@ pub struct Step {
         skip_serializing_if = "Option::is_none"
     )]
     pub protected_parent_iframes: Option<String>,
+    #[serde(
+        default,
+        rename = "credentialExport",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub credential_export: bool,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

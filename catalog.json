@@ -771,6 +771,10 @@
     },
     "refusal": "slicc: refused: target is on seven's origin"
   },
+  "credentialOrigins": {
+    "origins": ["https://ims-na1.adobelogin.com", "https://ims-na1-stg1.adobelogin.com"],
+    "refusal": "slicc: refused: this origin holds sign-in credentials"
+  },
   "profiles": {
     "root": ["slicc", "seven-profiles"],
     "snapRoot": ["slicc", "seven-profiles"],

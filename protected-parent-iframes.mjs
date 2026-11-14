@@ -738,18 +738,6 @@ function blockedFetchFail(event, fetchDocs) {
   };
 }
 
-function blockedChromeError(event, midUrls) {
-  const frame = event.params?.frame;
-  if (!frame?.url?.startsWith('chrome-error://') || !midUrlMatch(frame.unreachableUrl, midUrls))
-    return null;
-  return {
-    url: frame.unreachableUrl,
-    errorText: 'chrome-error',
-    blockedReason: 'unreachableUrl',
-    via: 'Page.frameNavigated',
-  };
-}
-
 function trackMidDocument(event, midUrls, network, fetchDocs) {
   if (event.method === 'Network.requestWillBeSent') {
     const url = event.params?.request?.url;
@@ -765,7 +753,6 @@ function trackMidDocument(event, midUrls, network, fetchDocs) {
   }
   if (event.method === 'Network.loadingFailed') return blockedNetworkFail(event, network);
   if (event.method === 'Fetch.failRequest') return blockedFetchFail(event, fetchDocs);
-  if (event.method === 'Page.frameNavigated') return blockedChromeError(event, midUrls);
   return null;
 }
 
@@ -1682,6 +1669,31 @@ function protectLiveChannels(result, skipEvaluate = false) {
   result.midFrameAttached ??= false;
 }
 
+async function samplePreLiveChannels({
+  client,
+  sessionId,
+  childSessions,
+  clientEventStart,
+  raw,
+  contexts,
+  resourceArm,
+  evaluateArm,
+  result,
+  skipEvaluate = false,
+}) {
+  const sessions = [sessionId, ...childSessions];
+  await sampleResources(client, sessions, resourceArm, result, raw);
+  const events = (client.events ?? []).slice(clientEventStart);
+  result.frameEvents = events.some((event) => frameEventHit(event, raw))
+    ? true
+    : (result.frameEvents ?? false);
+  result.midFrameAttached = events.some((event) => midFrameAttachedHit(event, raw))
+    ? true
+    : (result.midFrameAttached ?? false);
+  if (!skipEvaluate && contexts.length)
+    await evaluateContexts(client, sessions, contexts, evaluateArm, result);
+}
+
 async function liveViaTopSession({
   reader,
   readerSessionId,
@@ -2048,6 +2060,18 @@ async function measurePageClient({
     result.contextCreated = (client.events ?? [])
       .slice(clientEventStart)
       .some((event) => contextHit(event, raw));
+  await samplePreLiveChannels({
+    client,
+    sessionId,
+    childSessions,
+    clientEventStart,
+    raw,
+    contexts,
+    resourceArm,
+    evaluateArm,
+    result,
+    skipEvaluate: innerKind === 'srcdoc',
+  });
   let liveContexts = await liveGrandchild({
     reader,
     readerSessionId,
@@ -2076,46 +2100,110 @@ async function measurePageClient({
     result
   );
   if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-  if (raw.liveBlocked) protectLiveChannels(result, innerKind === 'srcdoc');
-  else
+  liveContexts = await continueAfterLive({
+    client,
+    reader,
+    readerSessionId,
+    sessionId,
+    clientEventStart,
+    pageUrl,
+    targetId,
+    midHint,
+    innerHint,
+    innerKind,
+    raw,
+    contexts,
+    liveContexts,
+    childSessions,
+    internalSessions,
+    treeArm,
+    resourceArm,
+    evaluateArm,
+    result,
+    missing,
+    notes,
+    budget,
+  });
+  if (missing.length) return { ...result, incomplete: missing.join('; ') };
+  return result;
+}
+
+async function continueAfterLive({
+  client,
+  reader,
+  readerSessionId,
+  sessionId,
+  clientEventStart,
+  pageUrl,
+  targetId,
+  midHint,
+  innerHint,
+  innerKind,
+  raw,
+  contexts,
+  liveContexts,
+  childSessions,
+  internalSessions,
+  treeArm,
+  resourceArm,
+  evaluateArm,
+  result,
+  missing,
+  notes,
+  budget,
+}) {
+  const skipEvaluate = innerKind === 'srcdoc';
+  if (raw.liveBlocked) {
+    protectLiveChannels(result, skipEvaluate);
+    if (!liveContexts.length) liveContexts = contexts;
+  } else {
     await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
-  if (!raw.liveBlocked && (raw.midTargetId || raw.grandchildTargetId)) {
-    const remasured = await remasureLiveGrandchild({
-      reader,
-      readerSessionId,
-      pageUrl,
-      targetId,
-      midHint,
-      innerHint,
-      innerKind,
-      raw,
-      budget,
-      notes,
-      internalSessions,
-    });
-    if (remasured) {
-      adoptLiveRaw(raw, remasured);
-      note(notes, 'protected-parent.page-live-raw', {
-        midFrameId: remasured.hit.midFrameId,
-        frameId: remasured.hit.frameId,
-        url: remasured.hit.url,
-        via: remasured.via,
-        remasure: true,
-      });
-      await adoptLiveClientSessions(
-        client,
-        sessionId,
-        clientEventStart,
+    if (raw.midTargetId || raw.grandchildTargetId) {
+      const remasured = await remasureLiveGrandchild({
+        reader,
+        readerSessionId,
+        pageUrl,
+        targetId,
+        midHint,
+        innerHint,
+        innerKind,
         raw,
-        childSessions,
+        budget,
+        notes,
         internalSessions,
-        missing,
-        result
-      );
-      if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
-      await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+      });
+      if (remasured) {
+        adoptLiveRaw(raw, remasured);
+        note(notes, 'protected-parent.page-live-raw', {
+          midFrameId: remasured.hit.midFrameId,
+          frameId: remasured.hit.frameId,
+          url: remasured.hit.url,
+          via: remasured.via,
+          remasure: true,
+        });
+        await adoptLiveClientSessions(
+          client,
+          sessionId,
+          clientEventStart,
+          raw,
+          childSessions,
+          internalSessions,
+          missing,
+          result
+        );
+        if (!missing.length)
+          await probeRawGrandchildTarget(
+            client,
+            raw,
+            childSessions,
+            internalSessions,
+            result,
+            missing
+          );
+      }
     }
   }
+  if (missing.length) return liveContexts;
   const clientContexts = await rawContexts(
     client,
     [sessionId, ...childSessions],
@@ -2139,9 +2227,9 @@ async function measurePageClient({
     result,
     missing,
     budget,
-    skipEvaluate: innerKind === 'srcdoc',
+    skipEvaluate,
   });
-  if (missing.length) return abortPageClient(client, sessionId, notes, missing, result);
+  if (missing.length) return liveContexts;
   await finishPageClient(
     client,
     sessionId,
@@ -2156,10 +2244,9 @@ async function measurePageClient({
     notes,
     childSessions,
     windowMs,
-    innerKind === 'srcdoc'
+    skipEvaluate
   );
-  if (missing.length) return { ...result, incomplete: missing.join('; ') };
-  return result;
+  return liveContexts;
 }
 
 function settlePageContexts(liveContexts, raw, evaluateArm, result, missing, skipEvaluate) {

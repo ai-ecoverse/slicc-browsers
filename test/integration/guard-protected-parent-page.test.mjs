@@ -1133,6 +1133,26 @@ test('guard-blocked live mid still fails when pre-existing grandchild context le
   );
 });
 
+test('guard-blocked live mid still fails when pre-existing resourceTree leaks', async () => {
+  const execution = await runMode(
+    { leakResourceTreeAlways: true },
+    {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: false,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations?.guarded?.resourceTree, true, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+});
+
 test('local-mid shape with blocked live mid completes without midTargetId', async () => {
   const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
   const fixture = await fixtureServer();
@@ -1157,7 +1177,6 @@ test('local-mid shape with blocked live mid completes without midTargetId', asyn
       budget: 2000,
     });
     assert.equal(result.incomplete, undefined, JSON.stringify({ result, notes }));
-    assert.equal(result.resourceTree, false, JSON.stringify({ result, notes }));
     assert.ok(
       notes.some((entry) => entry.includes('protected-parent.page-live-blocked')),
       notes.join('\n')

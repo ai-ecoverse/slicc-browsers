@@ -1168,6 +1168,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
   const sessions = [...new Set((sessionIds ?? []).filter(Boolean))];
   let anyUnanswered = false;
   let unansweredId;
+  let unansweredText = '';
   for (const context of contexts) {
     const ordered = [
       context.sessionId,
@@ -1188,6 +1189,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
       if (!answered(evaluated) && !gone) {
         anyUnanswered = true;
         unansweredId ??= context.id;
+        unansweredText ??= errorText(evaluated);
         continue;
       }
       takeFirst(
@@ -1207,6 +1209,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
   if (result.contextEvaluate !== true && anyUnanswered) {
     evaluateArm.unanswered = true;
     evaluateArm.unansweredId ??= unansweredId;
+    evaluateArm.unansweredText ??= unansweredText;
     evaluateArm.out ??= { ok: false };
   }
 }
@@ -1246,7 +1249,7 @@ function recordChildEnable(out, label, child, childSessions, missing, result) {
     return 'refused';
   }
   if (!answered(out)) {
-    missing.push(`${label} unanswered`);
+    missing.push(`${label} unanswered${errorText(out)}`);
     return 'missing';
   }
   missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
@@ -1461,8 +1464,13 @@ async function pollPageClient({
   return windowMs;
 }
 
+function errorText(out) {
+  const text = String(out?.error?.message ?? out?.error ?? '').slice(0, 160);
+  return text ? `: ${text}` : '';
+}
+
 function enableFailure(out, label, missing) {
-  if (!answered(out)) missing.push(`${label} unanswered`);
+  if (!answered(out)) missing.push(`${label} unanswered${errorText(out)}`);
   else if (!out.ok) missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
 }
 
@@ -2024,7 +2032,7 @@ function finishPageClient(
         'contextEvaluate',
         evaluateArm.unanswered,
         evaluateArm.unansweredId
-          ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
+          ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId}${evaluateArm.unansweredText ?? ''})`
           : 'Runtime.evaluate unanswered',
         missing,
         { contextEvaluate: false }

@@ -887,7 +887,7 @@ test('unanswered child Page.enable is incomplete, not a guarded pass', async () 
       budget: 2000,
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
-    assert.match(String(result.incomplete), /Page\.enable unanswered/);
+    assert.match(String(result.incomplete), /Page\.enable unanswered: timeout: no answer/);
     assert.equal(result.frameEvents, undefined);
     assert.equal(result.contextCreated, undefined);
   } finally {

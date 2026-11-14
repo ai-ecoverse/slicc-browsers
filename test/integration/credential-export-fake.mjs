@@ -117,6 +117,13 @@ export function credentialBrowser() {
   const evaluate = (tab, expression) => {
     const origin = tab.frame?.securityOrigin ?? originOf(tab.url);
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
+    if (expression.includes('location.href') && expression.includes('document.readyState'))
+      return {
+        result: {
+          type: 'object',
+          value: { href: tab.url, ready: 'complete', title: tab.title },
+        },
+      };
     if (expression.includes('localStorage.setItem') || expression.includes('indexedDB.open')) {
       const store = localStores.get(origin) ?? new Map();
       const lsMatch = /localStorage\.setItem\((['"])(.*?)\1,\s*(['"])(.*?)\3\)/.exec(expression);
@@ -130,10 +137,16 @@ export function credentialBrowser() {
         list.add(cacheMatch[2]);
         caches.set(origin, list);
       }
+      const cacheValue =
+        /new Response\((['"])(.*?)\1\)/.exec(expression)?.[2] ??
+        /new Response\(([^)]+)\)/.exec(expression)?.[1]?.replace(/^JSON\.stringify\((.*)\)$/, '$1');
+      const tag =
+        lsMatch?.[4] ??
+        (typeof cacheValue === 'string' ? cacheValue.replace(/^["']|["']$/g, '') : '1');
       return {
         result: {
           type: 'object',
-          value: { localStorage: true, idb: true, cache: true },
+          value: { localStorage: true, idb: true, cache: tag },
         },
       };
     }

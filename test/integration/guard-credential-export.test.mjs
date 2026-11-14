@@ -16,6 +16,8 @@ test('C7 prefix enumerates the credential-export row', () => {
   assert.deepEqual(ids, ['C7.credential-export']);
   const vector = vectors[0];
   assert.equal(vector.targets[0], 'idp');
+  assert.equal(vector.control.via, 'unguarded');
+  assert.equal(vector.control.expected.getCookiesFiltered, undefined);
   assert.equal(vector.trigger[0].credentialExport, true);
   assert.ok(vector.notes.some((note) => /response bodies are not redacted/i.test(note)));
   assert.ok(vector.notes.some((note) => /Authorization headers/i.test(note)));

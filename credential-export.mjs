@@ -44,6 +44,28 @@ async function openPage(reader, url, notes, internalSessions) {
       await reader.send('Page.enable', {}, sessionId);
       await reader.send('Runtime.enable', {}, sessionId);
       await reader.send('Network.enable', {}, sessionId);
+      const ready = await waitFor(async () => {
+        const ev = await outcome(
+          reader.send(
+            'Runtime.evaluate',
+            {
+              expression: `({href:location.href,ready:document.readyState,title:document.title})`,
+              returnByValue: true,
+            },
+            sessionId
+          )
+        );
+        const value = ev.result?.result?.value;
+        return (
+          ev.ok &&
+          value?.ready &&
+          value.ready !== 'loading' &&
+          typeof value.href === 'string' &&
+          value.href.includes('/credential') &&
+          value.title === 'credential'
+        );
+      }, 5000);
+      if (!ready) throw new Error('credential page did not become ready');
       return { targetId: created.targetId, sessionId };
     })
   );
@@ -56,22 +78,30 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
   const httpOnly = `cred-http-${tag}`;
   const open = `cred-open-${tag}`;
   const setHttp = await outcome(
-    reader.send('Network.setCookie', {
-      name: httpOnly,
-      value: tag,
-      url: `${origin}/`,
-      httpOnly: true,
-      path: '/',
-    })
+    reader.send(
+      'Network.setCookie',
+      {
+        name: httpOnly,
+        value: tag,
+        url: `${origin}/`,
+        httpOnly: true,
+        path: '/',
+      },
+      sessionId
+    )
   );
   const setOpen = await outcome(
-    reader.send('Network.setCookie', {
-      name: open,
-      value: tag,
-      url: `${origin}/`,
-      httpOnly: false,
-      path: '/',
-    })
+    reader.send(
+      'Network.setCookie',
+      {
+        name: open,
+        value: tag,
+        url: `${origin}/`,
+        httpOnly: false,
+        path: '/',
+      },
+      sessionId
+    )
   );
   if (!setHttp.ok || setHttp.result?.success === false)
     return {
@@ -79,11 +109,15 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
     };
   if (!setOpen.ok || setOpen.result?.success === false)
     return { incomplete: `plant open cookie failed: ${setOpen.error?.message ?? 'no success'}` };
+  const lsKey = `cred-ls-${tag}`;
+  const dbName = `cred-db-${tag}`;
+  const cacheName = `cred-cache-${tag}`;
+  const cacheUrl = `${origin}/cred-cache-${tag}`;
   const planted = await outcome(
     reader.send(
       'Runtime.evaluate',
       {
-        expression: `({localStorage:(()=>{try{localStorage.setItem(${JSON.stringify(`cred-ls-${tag}`)},${JSON.stringify(tag)});return localStorage.getItem(${JSON.stringify(`cred-ls-${tag}`)})===${JSON.stringify(tag)};}catch(e){return 'err:'+e.message;}})(),idb:(async()=>{try{const open=indexedDB.open('cred-db-${tag}',1);const db=await new Promise((ok,err)=>{open.onupgradeneeded=()=>open.result.createObjectStore('s');open.onsuccess=()=>ok(open.result);open.onerror=()=>err(open.error);});const tx=db.transaction('s','readwrite');tx.objectStore('s').put(${JSON.stringify(tag)},'k');await new Promise((ok,err)=>{tx.oncomplete=()=>ok(true);tx.onerror=()=>err(tx.error);});db.close();return true;}catch(e){return 'err:'+e.message;}})(),cache:(async()=>{try{const c=await caches.open('cred-cache-${tag}');await c.put(${JSON.stringify(`${origin}/cred-cache-${tag}`)},new Response(${JSON.stringify(tag)}));const m=await c.match(${JSON.stringify(`${origin}/cred-cache-${tag}`)});return m?await m.text():false;}catch(e){return 'err:'+e.message;}})()})`,
+        expression: `(async()=>{const localStorageOk=(()=>{try{localStorage.setItem(${JSON.stringify(lsKey)},${JSON.stringify(tag)});return localStorage.getItem(${JSON.stringify(lsKey)})===${JSON.stringify(tag)};}catch(e){return 'err:'+e.message;}})();let idb=false;try{const open=indexedDB.open(${JSON.stringify(dbName)},1);const db=await new Promise((ok,err)=>{open.onupgradeneeded=()=>open.result.createObjectStore('s');open.onsuccess=()=>ok(open.result);open.onerror=()=>err(open.error);});const tx=db.transaction('s','readwrite');tx.objectStore('s').put(${JSON.stringify(tag)},'k');await new Promise((ok,err)=>{tx.oncomplete=()=>ok(true);tx.onerror=()=>err(tx.error);});db.close();idb=true;}catch(e){idb='err:'+e.message;}let cache=false;try{const c=await caches.open(${JSON.stringify(cacheName)});await c.put(${JSON.stringify(cacheUrl)},new Response(${JSON.stringify(tag)}));const m=await c.match(${JSON.stringify(cacheUrl)});cache=m?await m.text():false;}catch(e){cache='err:'+e.message;}return {localStorage:localStorageOk,idb,cache};})()`,
         awaitPromise: true,
         returnByValue: true,
       },
@@ -91,11 +125,17 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
     )
   );
   const value = planted.result?.result?.value;
-  if (!planted.ok || !value || value.localStorage !== true)
+  if (
+    !planted.ok ||
+    !value ||
+    value.localStorage !== true ||
+    value.idb !== true ||
+    value.cache !== tag
+  )
     return {
       incomplete: `plant storage failed: ${planted.error?.message ?? JSON.stringify(value)}`,
     };
-  const all = await outcome(reader.send('Network.getAllCookies', {}));
+  const all = await outcome(reader.send('Network.getAllCookies', {}, sessionId));
   if (!all.ok)
     return { incomplete: `unguarded getAllCookies failed: ${all.error?.message ?? 'unknown'}` };
   if (!cookieHit(all.result?.cookies, { name: httpOnly, host, value: tag }))
@@ -105,10 +145,10 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
   return {
     httpOnly,
     open,
-    lsKey: `cred-ls-${tag}`,
-    dbName: `cred-db-${tag}`,
-    cacheName: `cred-cache-${tag}`,
-    cacheUrl: `${origin}/cred-cache-${tag}`,
+    lsKey,
+    dbName,
+    cacheName,
+    cacheUrl,
   };
 }
 
@@ -147,7 +187,7 @@ function emptyCredentialResult() {
     adobeComStorageKeyExportable: false,
     pageDrivable: false,
     evaluateOk: false,
-    subHostNotCredential: true,
+    subHostNotCredential: false,
     residualEvaluateCookie: false,
     skips: [],
   };
@@ -258,8 +298,16 @@ function markAdobeComExportable(result, cookies, adobeComCookie, tag) {
 
 function applyFilteredCookieRead(result, key, out, planted, host, tag) {
   const cookies = cookiesFrom(out);
-  result[key] = refused(out) || !credentialCookieLeaked(cookies, planted, host, tag);
+  if (refused(out)) result[key] = true;
+  else if (out.ok) result[key] = !credentialCookieLeaked(cookies, planted, host, tag);
+  else result[key] = false;
   return cookies;
+}
+
+function storageRefused(out, leaked) {
+  if (refused(out)) return true;
+  if (!out.ok) return false;
+  return !leaked;
 }
 
 async function measureCookieReads(
@@ -388,7 +436,7 @@ async function measurePartitionedStorageKeys(
   else {
     const entries = adobelogin.out.result?.entries ?? [];
     const leaked = entries.some((entry) => entry?.[0] === lsKey && entry?.[1] === tag);
-    result.partitionedStorageKeyFiltered = refused(adobelogin.out) || !leaked;
+    result.partitionedStorageKeyFiltered = storageRefused(adobelogin.out, leaked);
   }
 
   const adobeCom = await read(adobeComKey);
@@ -458,7 +506,7 @@ async function measureStorageReads(client, clientSession, { origin, tag, planted
   else {
     const entries = dom.out.result?.entries ?? [];
     const leaked = entries.some((entry) => entry?.[0] === planted.lsKey && entry?.[1] === tag);
-    result.domStorageRefused = refused(dom.out) || !leaked;
+    result.domStorageRefused = storageRefused(dom.out, leaked);
   }
 
   const idbNames = await tryMethod(
@@ -470,7 +518,7 @@ async function measureStorageReads(client, clientSession, { origin, tag, planted
   if (idbNames.skip) result.skips.push(idbNames.skip);
   else {
     const names = idbNames.out.result?.databaseNames ?? [];
-    result.indexedDBRefused = refused(idbNames.out) || !names.includes(planted.dbName);
+    result.indexedDBRefused = storageRefused(idbNames.out, names.includes(planted.dbName));
   }
 
   const caches = await tryMethod(
@@ -482,8 +530,43 @@ async function measureStorageReads(client, clientSession, { origin, tag, planted
   if (caches.skip) result.skips.push(caches.skip);
   else {
     const names = caches.out.result?.caches?.map((cache) => cache.cacheName ?? cache) ?? [];
-    result.cacheStorageRefused = refused(caches.out) || !names.includes(planted.cacheName);
+    result.cacheStorageRefused = storageRefused(caches.out, names.includes(planted.cacheName));
   }
+}
+
+async function measureSubHost(client, clientSession, { origin, host, tag, result }) {
+  const base = parseURL(origin);
+  if (!base) return;
+  const subHost = `x.${host}`;
+  const subOrigin = `${base.protocol}//${subHost}${base.port ? `:${base.port}` : ''}`;
+  const name = `sub-${tag}`;
+  const set = await tryMethod(
+    client,
+    'Network.setCookie',
+    { name, value: tag, url: `${subOrigin}/`, path: '/' },
+    clientSession
+  );
+  if (set.skip) {
+    result.skips.push(set.skip);
+    return;
+  }
+  if (refused(set.out)) return;
+  const get = await tryMethod(
+    client,
+    'Network.getCookies',
+    { urls: [`${subOrigin}/`] },
+    clientSession
+  );
+  if (get.skip) {
+    result.skips.push(get.skip);
+    return;
+  }
+  if (refused(get.out) || !get.out.ok) return;
+  result.subHostNotCredential = cookieHit(cookiesFrom(get.out), {
+    name,
+    host: subHost,
+    value: tag,
+  });
 }
 
 async function probeCredentialClient(ctx) {
@@ -530,6 +613,7 @@ async function probeCredentialClient(ctx) {
   await measureCookieWrites(client, clientSession, { origin, tag, planted, result });
   await measureStorageReads(client, clientSession, { origin, tag, planted, result });
   await measurePartitionedStorageKeys(client, clientSession, { ordinaryOrigin, tag, result });
+  await measureSubHost(client, clientSession, { origin, host, tag, result });
 }
 
 export async function credentialExport({
@@ -578,33 +662,45 @@ export async function credentialExport({
 
   const ordinaryCookie = `plain-${tag}`;
   await outcome(
-    reader.send('Network.setCookie', {
-      name: ordinaryCookie,
-      value: tag,
-      url: `${ordinaryOrigin}/`,
-      path: '/',
-    })
+    reader.send(
+      'Network.setCookie',
+      {
+        name: ordinaryCookie,
+        value: tag,
+        url: `${ordinaryOrigin}/`,
+        path: '/',
+      },
+      sessionId
+    )
   );
   const adobeComCookie = `adobecom-${tag}`;
   await outcome(
-    reader.send('Network.setCookie', {
-      name: adobeComCookie,
-      value: tag,
-      domain: '.adobe.com',
-      path: '/',
-    })
+    reader.send(
+      'Network.setCookie',
+      {
+        name: adobeComCookie,
+        value: tag,
+        domain: '.adobe.com',
+        path: '/',
+      },
+      sessionId
+    )
   );
   const lsKey = `cred-part-${tag}`;
   for (const site of ['https://adobelogin.com', 'https://adobe.com']) {
     await outcome(
-      reader.send('DOMStorage.setDOMStorageItem', {
-        storageId: {
-          storageKey: `${ordinaryOrigin}/^0${site}`,
-          isLocalStorage: true,
+      reader.send(
+        'DOMStorage.setDOMStorageItem',
+        {
+          storageId: {
+            storageKey: `${ordinaryOrigin}/^0${site}`,
+            isLocalStorage: true,
+          },
+          key: lsKey,
+          value: tag,
         },
-        key: lsKey,
-        value: tag,
-      })
+        sessionId
+      )
     );
   }
 

@@ -24,6 +24,7 @@ export const partitions = {
     'network-error',
     'chrome-extension-page',
     'file-root',
+    'idp',
   ],
 };
 

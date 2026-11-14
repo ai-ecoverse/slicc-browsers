@@ -920,22 +920,108 @@ async function driveCast(client, page, frameMs) {
   const start = await outcome(
     client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
   );
-  const cursor = client.events?.length ?? 0;
+  const acked = new Set();
+  let leakFrom;
+  let pumping = start.ok;
+  let stopped = false;
+  const ackFrames = async () => {
+    for (const event of client.events ?? []) {
+      if (event.method !== 'Page.screencastFrame' || event.sessionId !== page) continue;
+      const id = event.params?.sessionId;
+      if (typeof id !== 'number' || acked.has(id)) continue;
+      acked.add(id);
+      await outcome(client.send('Page.screencastFrameAck', { sessionId: id }, page));
+    }
+  };
+  const halt = async () => {
+    pumping = false;
+    await pump;
+    if (start.ok && !stopped) {
+      stopped = true;
+      await outcome(client.send('Page.stopScreencast', {}, page));
+    }
+  };
+  const pump =
+    start.ok && frameMs > 0
+      ? (async () => {
+          while (pumping) {
+            await ackFrames();
+            await pause(25);
+          }
+        })()
+      : Promise.resolve();
   return {
     castBefore: start.ok,
     castBeforeRefusal: presentish(start),
-    async afterEmbed() {
+    async markInserted() {
+      await ackFrames();
+      leakFrom = client.events?.length ?? 0;
+    },
+    async afterEmbed({ inserted }) {
+      pumping = false;
+      await pump;
+      if (!start.ok) {
+        return { castLeak: false, castFramesAfter: 0, castInserted: Boolean(inserted) };
+      }
+      if (!inserted) {
+        await halt();
+        return { castLeak: false, castFramesAfter: 0, castInserted: false };
+      }
+      if (leakFrom == null) {
+        await ackFrames();
+        leakFrom = client.events?.length ?? 0;
+      }
       await pause(Math.max(frameMs, 200));
+      await ackFrames();
       const frames = (client.events ?? [])
-        .slice(cursor)
+        .slice(leakFrom)
         .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
-      if (start.ok) await outcome(client.send('Page.stopScreencast', {}, page));
+      await halt();
       return {
         castLeak: frames.length > 0,
         castFramesAfter: frames.length,
+        castInserted: true,
       };
     },
+    stop: halt,
   };
+}
+
+async function beginCast(client, session, targetId, frameMs) {
+  const attachEarly = await outcome(
+    client.send('Target.attachToTarget', { targetId, flatten: true })
+  );
+  const page = attachEarly.ok ? attachEarly.result.sessionId : session;
+  if (attachEarly.ok) {
+    await outcome(client.send('DOM.enable', {}, page));
+    await outcome(client.send('Accessibility.enable', {}, page));
+  }
+  return {
+    page,
+    pageAttached: attachEarly.ok,
+    castDrive: await driveCast(client, page, frameMs),
+  };
+}
+
+async function noteCastInsertion(castDrive, embedded, missing) {
+  if (!castDrive) return;
+  if (embedded) await castDrive.markInserted();
+  else missing.push('extension frame insertion was not confirmed');
+}
+
+function finishCast(castDrive, embedded) {
+  if (!castDrive) return null;
+  return castDrive.afterEmbed({ inserted: Boolean(embedded) });
+}
+
+function applyCastResult(result, castDrive, castAfter, side, missing) {
+  if (!castDrive) return;
+  result.castBefore = castDrive.castBefore;
+  result.castBeforeRefusal = castDrive.castBeforeRefusal;
+  result.castLeak = castAfter.castLeak;
+  result.castFramesAfter = castAfter.castFramesAfter;
+  if (side === 'control' && castDrive.castBefore && castAfter.castInserted && !castAfter.castLeak)
+    missing.push('control screencast produced no frames after the extension frame appeared');
 }
 
 function classifyRevealOverlap(
@@ -1101,6 +1187,7 @@ export async function extensionFrame({
   const frameURL = `chrome-extension://${extensionId}/frame.html`;
   let page;
   let pageAttached = false;
+  let castDrive;
   const discovery = hasCapability(capabilities, 'discovery')
     ? await outcome(client.send('Target.setDiscoverTargets', { discover: true }))
     : { ok: false };
@@ -1108,18 +1195,14 @@ export async function extensionFrame({
     await reader.send('Runtime.enable', {}, observer);
     await reader.send('DOM.enable', {}, observer);
     await reader.send('Accessibility.enable', {}, observer);
-    let castDrive;
     if (mode === 'cast') {
-      const attachEarly = await outcome(
-        client.send('Target.attachToTarget', { targetId, flatten: true })
-      );
-      page = attachEarly.ok ? attachEarly.result.sessionId : session;
-      pageAttached = attachEarly.ok;
-      await outcome(client.send('DOM.enable', {}, page));
-      await outcome(client.send('Accessibility.enable', {}, page));
-      castDrive = await driveCast(client, page, frameMs);
+      const started = await beginCast(client, session, targetId, frameMs);
+      page = started.page;
+      pageAttached = started.pageAttached;
+      castDrive = started.castDrive;
     }
-    await embed(reader, observer, mode, frameURL);
+    const embedded = await embed(reader, observer, mode, frameURL);
+    await noteCastInsertion(castDrive, embedded, missing);
     const want = mode === 'focused' ? 1 : 2;
     const frames = await frameTargets(
       reader,
@@ -1132,7 +1215,7 @@ export async function extensionFrame({
     const frame = frames[0];
     await paintMarker(reader, frame, mode === 'focused');
     await painted(reader, observer, frameMs);
-    const castAfter = castDrive ? await castDrive.afterEmbed() : null;
+    const castAfter = await finishCast(castDrive, embedded);
     if (!page) {
       const attach = await outcome(
         client.send('Target.attachToTarget', { targetId, flatten: true })
@@ -1179,14 +1262,7 @@ export async function extensionFrame({
       input,
       captures,
     });
-    if (castDrive) {
-      result.castBefore = castDrive.castBefore;
-      result.castBeforeRefusal = castDrive.castBeforeRefusal;
-      result.castLeak = castAfter.castLeak;
-      result.castFramesAfter = castAfter.castFramesAfter;
-      if (side === 'control' && castDrive.castBefore && !castAfter.castLeak)
-        missing.push('control screencast produced no frames after the extension frame appeared');
-    }
+    applyCastResult(result, castDrive, castAfter, side, missing);
     if (mode === 'revealed')
       Object.assign(
         result,
@@ -1226,6 +1302,7 @@ export async function extensionFrame({
     result.alive = alive.ok && alive.result.result?.value === origin && !carries(alive.result);
     return missing.length ? { ...result, incomplete: missing.join('; ') } : result;
   } finally {
+    if (castDrive) await castDrive.stop();
     if (pageAttached) await outcome(client.send('Target.detachFromTarget', { sessionId: page }));
     if (discovery.ok) await outcome(client.send('Target.setDiscoverTargets', { discover: false }));
     await outcome(reader.send('Target.detachFromTarget', { sessionId: observer }));

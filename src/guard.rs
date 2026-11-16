@@ -38,6 +38,7 @@ pub const CAP_FORWARD_AUDIT: &str = "forwardAudit";
 pub const CAP_STOCK_SETUP: &str = "stockSetup";
 pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
+pub const CAP_SIGN_IN_HOLD: &str = "signInHold";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";
@@ -220,6 +221,8 @@ pub struct Step {
         skip_serializing_if = "Option::is_none"
     )]
     pub protected_parent_iframes: Option<String>,
+    #[serde(rename = "signInHold", skip_serializing_if = "Option::is_none")]
+    pub sign_in_hold: Option<String>,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

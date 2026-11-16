@@ -31785,6 +31785,7 @@
         }
       ],
       "targets": ["seven", "vault"],
+      "requires": ["autoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -31947,6 +31948,7 @@
         }
       ],
       "targets": ["seven"],
+      "requires": ["autoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-srcdoc.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -32097,6 +32099,7 @@
         }
       ],
       "targets": ["seven"],
+      "requires": ["autoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.ordinary-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",

@@ -32781,6 +32781,276 @@
         "contentRead": false,
         "connectCompletes": true
       }
+    },
+    {
+      "id": "C7.sign-in-hold.ordinary-popup",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "an ordinary page opens an ordinary popup with no sign-in marker; through the guard the popup must still be listed in /json/list and Target.getTargets, appear in discovery events, attach and yield its title/body — a guard that hides or refuses it fails as protection by over-blocking"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "ordinary-popup",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.ordinary-popup: /json/list through the client shows the ordinary tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.ordinary-popup: Target.getTargets through the client shows the ordinary tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.ordinary-popup: a discovery event carries the ordinary tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.ordinary-popup: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.ordinary-popup: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.ordinary-popup: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.ordinary-popup: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.ordinary-popup: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the ordinary popup and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": true,
+        "targetsListed": true,
+        "eventsSeen": true,
+        "idAnnounced": false,
+        "attachSession": true,
+        "attachRefused": false,
+        "contentRead": true,
+        "connectCompletes": true
+      }
+    },
+    {
+      "id": "C7.sign-in-hold.ordinary-authorize",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "requires": ["signInHold", "browserSession"],
+      "setup": [
+        {
+          "text": "a tab at an authorize-like URL with client_id=other and redirect_uri naming an ordinary callback (no seven callback) must still be listed, attachable and readable through the guard — a guard that hides or refuses it fails as protection by over-blocking"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "signInHold": "ordinary-authorize",
+          "as": "probe",
+          "requires": ["signInHold", "browserSession"]
+        }
+      ],
+      "targets": ["seven"],
+      "observe": {
+        "jsonListed": {
+          "means": "C7.sign-in-hold.ordinary-authorize: /json/list through the client shows the ordinary tab by id, URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.jsonListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "targetsListed": {
+          "means": "C7.sign-in-hold.ordinary-authorize: Target.getTargets through the client shows the ordinary tab with a non-empty URL or title",
+          "check": {
+            "result": "probe",
+            "path": "result.targetsListed",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "eventsSeen": {
+          "means": "C7.sign-in-hold.ordinary-authorize: a discovery event carries the ordinary tab with a non-empty URL or title",
+          "requires": ["discovery"],
+          "check": {
+            "result": "probe",
+            "path": "result.eventsSeen",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "idAnnounced": {
+          "means": "C7.sign-in-hold.ordinary-authorize: the client learned the tab's target id with empty URL and title (announce-only)",
+          "check": {
+            "result": "probe",
+            "path": "result.idAnnounced",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "attachSession": {
+          "means": "C7.sign-in-hold.ordinary-authorize: Target.attachToTarget on the raw tab id returned a session",
+          "check": {
+            "result": "probe",
+            "path": "result.attachSession",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "C7.sign-in-hold.ordinary-authorize: Target.attachToTarget on the raw tab id was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.attachRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "contentRead": {
+          "means": "C7.sign-in-hold.ordinary-authorize: the client read the tab's title or body mark through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.contentRead",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "connectCompletes": {
+          "means": "C7.sign-in-hold.ordinary-authorize: a Puppeteer-style Browser.getVersion plus Target.getTargets connect through the guard completed",
+          "check": {
+            "result": "probe",
+            "path": "result.connectCompletes",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded observer opened the ordinary authorize tab and read its body mark",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "jsonListed": true,
+          "targetsListed": true,
+          "eventsSeen": true,
+          "idAnnounced": false,
+          "attachSession": true,
+          "attachRefused": false,
+          "contentRead": true,
+          "connectCompletes": true
+        }
+      },
+      "expected": {
+        "jsonListed": true,
+        "targetsListed": true,
+        "eventsSeen": true,
+        "idAnnounced": false,
+        "attachSession": true,
+        "attachRefused": false,
+        "contentRead": true,
+        "connectCompletes": true
+      }
     }
   ]
 }

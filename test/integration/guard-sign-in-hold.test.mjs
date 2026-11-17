@@ -10,13 +10,17 @@ import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
-const ids = [
+const attackIds = [
   'C7.sign-in-hold.held-popup',
   'C7.sign-in-hold.callback',
   'C7.sign-in-hold.callback-encoded',
   'C7.sign-in-hold.callback-origin',
 ];
+const positiveIds = ['C7.sign-in-hold.ordinary-popup', 'C7.sign-in-hold.ordinary-authorize'];
+const ids = [...attackIds, ...positiveIds];
 const vectors = set.vectors.filter((v) => ids.includes(v.id));
+const attackVectors = vectors.filter((v) => attackIds.includes(v.id));
+const positiveVectors = vectors.filter((v) => positiveIds.includes(v.id));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
@@ -265,28 +269,43 @@ async function rows(options = {}) {
 
 test('signInHold capability is declared and rows require it', () => {
   assert.match(set.capabilities.signInHold, /sign-in hold/);
-  assert.equal(vectors.length, 4);
+  assert.equal(attackVectors.length, 4);
+  assert.equal(positiveVectors.length, 2);
+  assert.equal(vectors.length, 6);
   for (const vector of vectors) {
-    assert.equal(drivable.has(vector.id), false, vector.id);
     assert.deepEqual(vector.requires, ['signInHold', 'browserSession'], vector.id);
     assert.equal(vector.control.via, 'unguarded', vector.id);
+    assert.equal(vector.control.expected.jsonListed, true, vector.id);
+    assert.equal(vector.control.expected.attachSession, true, vector.id);
+    assert.equal(vector.control.expected.contentRead, true, vector.id);
+    assert.equal(vector.expected.connectCompletes, true, vector.id);
+    assert.deepEqual(vector.observe.eventsSeen.requires, ['discovery'], vector.id);
+    assert.ok(sweepCaps.signInHold === true || sweepCaps.signInHold === undefined);
+  }
+  for (const vector of attackVectors) {
+    assert.equal(drivable.has(vector.id), false, vector.id);
     assert.equal(vector.expected.jsonListed, false, vector.id);
     assert.equal(vector.expected.targetsListed, false, vector.id);
     assert.equal(vector.expected.attachSession, false, vector.id);
     assert.equal(vector.expected.attachRefused, true, vector.id);
     assert.equal(vector.expected.contentRead, false, vector.id);
-    assert.equal(vector.expected.connectCompletes, true, vector.id);
     assert.equal(vector.expected.idAnnounced, 'either', vector.id);
     assert.deepEqual(vector.designDependent, ['idAnnounced'], vector.id);
     if (vector.id === 'C7.sign-in-hold.held-popup') {
       assert.equal(vector.expected.held, true, vector.id);
       assert.equal(vector.control.expected.held, false, vector.id);
     }
-    assert.equal(vector.control.expected.jsonListed, true, vector.id);
-    assert.equal(vector.control.expected.attachSession, true, vector.id);
-    assert.equal(vector.control.expected.contentRead, true, vector.id);
-    assert.deepEqual(vector.observe.eventsSeen.requires, ['discovery'], vector.id);
-    assert.ok(sweepCaps.signInHold === true || sweepCaps.signInHold === undefined);
+  }
+  for (const vector of positiveVectors) {
+    assert.equal(drivable.has(vector.id), true, vector.id);
+    assert.equal(vector.expected.jsonListed, true, vector.id);
+    assert.equal(vector.expected.targetsListed, true, vector.id);
+    assert.equal(vector.expected.eventsSeen, true, vector.id);
+    assert.equal(vector.expected.attachSession, true, vector.id);
+    assert.equal(vector.expected.attachRefused, false, vector.id);
+    assert.equal(vector.expected.contentRead, true, vector.id);
+    assert.equal(vector.expected.idAnnounced, false, vector.id);
+    assert.equal(vector.trigger[0].signInHold.startsWith('ordinary-'), true, vector.id);
   }
 });
 
@@ -350,6 +369,35 @@ test('a correct signInHold guard passes every row', async () => {
     assert.equal(row.control, 'pass', `${id} control ${JSON.stringify(row)}`);
     assert.equal(row.guarded, 'pass', `${id} guarded ${JSON.stringify(row)}`);
     assert.equal(row.live, 'pass', `${id} live ${JSON.stringify(row)}`);
+  }
+});
+
+test('hold-everything guard fails ordinary positives as over-blocking', async () => {
+  const out = await rows({ holdEverything: true });
+  for (const id of positiveIds) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.ok(row, id);
+    assert.equal(row.control, 'pass', `${id} control ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'fail', `${id} guarded ${JSON.stringify(row)}`);
+  }
+  for (const id of attackIds) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.ok(row, id);
+    assert.equal(row.guarded, 'pass', `${id} attack still held ${JSON.stringify(row)}`);
+  }
+});
+
+test('hold-nothing guard fails the protection side and still passes ordinary positives', async () => {
+  const out = await rows({ holdMissing: true, holdAnswer: 'timeout' });
+  for (const id of attackIds) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.ok(row, id);
+    assert.notEqual(row.guarded, 'pass', `${id} ${JSON.stringify(row)}`);
+  }
+  for (const id of positiveIds) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.ok(row, id);
+    assert.equal(row.guarded, 'pass', `${id} ${JSON.stringify(row)}`);
   }
 });
 

@@ -31888,6 +31888,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-iframes.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-iframes.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-iframes.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -31910,7 +31944,10 @@
           "childEnableRefused": false,
           "targetInfo": false,
           "childAttach": false,
-          "targetEvents": false
+          "targetEvents": false,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -31923,9 +31960,17 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
-      "designDependent": ["midFrameAttached", "childEnableRefused"]
+      "designDependent": [
+        "midFrameAttached",
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
+      ]
     },
     {
       "id": "C3.protected-parent-srcdoc.page",
@@ -32041,6 +32086,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-srcdoc.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -32062,7 +32141,10 @@
           "childEnableRefused": false,
           "targetInfo": true,
           "childAttach": true,
-          "targetEvents": true
+          "targetEvents": true,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -32074,9 +32156,17 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
-      "designDependent": ["midFrameAttached", "childEnableRefused"]
+      "designDependent": [
+        "midFrameAttached",
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
+      ]
     },
     {
       "id": "C3.ordinary-parent-iframes.page",

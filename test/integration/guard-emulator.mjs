@@ -1108,7 +1108,8 @@ function emulatedGuardPlain(browser, options = {}) {
         (await decision(params.targetId)) ||
         (underParent &&
           !options.allowProtectedParentAttach &&
-          !(options.protectedParentPages && options.refuseChildEnableAllowAttach))
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach) &&
+          !options.leakProtectedIframeAttach)
       )
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
@@ -1135,10 +1136,14 @@ function emulatedGuardPlain(browser, options = {}) {
                 catalog.url(top.securityOrigin) &&
                 !allowExtension(top.securityOrigin)));
           if (topProtected) throw refusal('protected frame');
-          targetBlocked.set(
-            params.targetId,
-            collectProtectedDescendantIds(frameTree, catalog, options)
-          );
+          const blocked = collectProtectedDescendantIds(frameTree, catalog, options);
+          targetBlocked.set(params.targetId, blocked);
+          if (
+            options.refuseTopPageAttach &&
+            targetInfo.type === 'page' &&
+            (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0)
+          )
+            throw new Error("slicc: refused: target is on seven's origin");
         } else if (protectedFrame(frameTree)) throw refusal('protected frame');
         const start = unguarded.events.length;
         await unguarded.send(
@@ -1167,6 +1172,12 @@ function emulatedGuardPlain(browser, options = {}) {
             if (info.targetId) blocked.ids.add(info.targetId);
           }
           targetBlocked.set(params.targetId, blocked);
+          if (
+            options.refuseTopPageAttach &&
+            targetInfo.type === 'page' &&
+            (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0)
+          )
+            throw new Error("slicc: refused: target is on seven's origin");
         } else if (
           frames.some(
             (event) =>
@@ -1330,12 +1341,26 @@ function emulatedGuardPlain(browser, options = {}) {
           throw refusal('protected frame');
       }
     }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      options.refuseTopPageEnable &&
+      sessionId &&
+      (method === 'Page.enable' || method === 'Runtime.enable')
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && pages.has(owner)) {
+        const blocked = targetBlocked.get(owner) ?? sessionBlocked.get(sessionId);
+        if (blocked && (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0))
+          throw refusal('protected tab');
+      }
+    }
     if (method === 'Target.getTargetInfo' && catalog) {
       const info = result.targetInfo;
       if (
         info &&
         (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)) &&
-        options.redactIframeUrlKeepId
+        (options.redactIframeUrlKeepId || options.leakProtectedIframeTargetInfo)
       )
         return { ...result, targetInfo: rewriteIframeInfo(info, options) };
       if (info && (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
@@ -1354,8 +1379,10 @@ function emulatedGuardPlain(browser, options = {}) {
         const underParent = catalog
           ? await iframeAncestorProtected(unguarded, catalog, info, options, decisions)
           : false;
-        if (underParent && options.redactIframeUrlKeepId) {
-          visible.push(rewriteIframeInfo(info, options));
+        if (underParent && (options.redactIframeUrlKeepId || options.leakProtectedIframeTargets)) {
+          visible.push(
+            options.leakProtectedIframeTargets ? info : rewriteIframeInfo(info, options)
+          );
           continue;
         }
         if (underParent) continue;

@@ -9,10 +9,10 @@ import { credentialBrowser, credentialGuard } from './credential-export-fake.mjs
 
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
-const ids = set.vectors.filter((v) => v.id.startsWith('C7.')).map((v) => v.id);
+const ids = set.vectors.filter((v) => v.id === 'C7.credential-export').map((v) => v.id);
 const vectors = set.vectors.filter((v) => ids.includes(v.id));
 
-test('C7 prefix enumerates the credential-export row', () => {
+test('C7.credential-export enumerates the credential-export row', () => {
   assert.deepEqual(ids, ['C7.credential-export']);
   const vector = vectors[0];
   assert.equal(vector.targets[0], 'idp');

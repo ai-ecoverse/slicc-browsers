@@ -181,7 +181,7 @@ guard.target({ url: 'about:blank', opener: 'protected' });
 
 It also offers `storageKey(key)` and `unparseable(text)`. A Go or Rust implementation needs a WHATWG URL parser, not `net/url`, and must pass every vector in `protected.json`.
 
-Credential origins (`catalog.credentialOrigins`, IMS IdP hosts) withhold cookie/storage export and refuse writes; pages stay drivable. Not covered: auth.services.adobe.com, adobeid-na1.services.adobe.com, federated SSO/MFA/consent (drivable; cookies/storage exportable). Domain=.adobe.com not covered; .adobelogin.com is. storageKey ^0 like topLevelSite; before ^0 exact. `protected.mjs` exports `credentialOrigins(rules)`.
+Credential origins (`catalog.credentialOrigins`) withhold cookie/storage export and refuse writes; pages stay drivable. IdP fixtures are HTTPS. Not covered: auth.services.adobe.com, adobeid-na1.services.adobe.com, federated SSO. Domain=.adobe.com exportable; .adobelogin.com covered. storageKey ^0 like topLevelSite.
 
 ## Guard vectors
 

@@ -1817,11 +1817,24 @@ class Execution {
     if (name === 'workerReachable' && this.probeStep())
       return this.observeProbeReachable(want, check);
     if (check?.forwarded) return this.forwardedCheck(name, check, want);
-    if (
-      check?.result &&
-      (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))
-    )
+    if (!check?.result) return undefined;
+    const out = this.calls[check.result];
+    const value = at(out, check.path);
+    if (value === 'not-supported') return 'not-supported';
+    if (value === 'incomplete' || this.unmeasured(check)) {
+      const skips = out?.result?.skips ?? [];
+      const hint =
+        skips.find(
+          (entry) =>
+            typeof entry === 'string' &&
+            (entry === name || entry.startsWith(`${name}:`) || entry.includes(name))
+        ) ??
+        skips.find((entry) => typeof entry === 'string') ??
+        'raw leg could not prove this observation';
+      if (!this.incomplete.some((reason) => reason.startsWith(`${name}:`)))
+        this.incomplete.push(`${name}: ${hint}`);
       return 'incomplete';
+    }
     return undefined;
   }
 

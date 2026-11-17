@@ -18,6 +18,7 @@ export const knownOrigins = [
   'plain',
   'cross',
   'log',
+  'idp',
 ];
 
 export const beacon = (log, tag) =>
@@ -203,7 +204,9 @@ export function judge(vector, side, observed) {
       (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const incomplete = Object.keys(want).filter(
-    (k) => !skipped.includes(k) && observed?.[`${k}.either`] === 'incomplete'
+    (k) =>
+      !skipped.includes(k) &&
+      (observed?.[k] === 'incomplete' || observed?.[`${k}.either`] === 'incomplete')
   );
   const mismatches = Object.entries(want)
     .filter(

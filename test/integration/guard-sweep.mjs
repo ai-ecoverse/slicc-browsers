@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash, X509Certificate } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
@@ -14,6 +15,7 @@ export const partitions = {
   vault: ['vault'],
   'vault-x': ['vault-x'],
   apex: ['apex'],
+  idp: ['idp'],
   others: [
     'own',
     'chrome-newtab',
@@ -24,7 +26,6 @@ export const partitions = {
     'network-error',
     'chrome-extension-page',
     'file-root',
-    'idp',
   ],
 };
 
@@ -218,11 +219,11 @@ function record(client) {
   return client;
 }
 
-async function factory(fixture, browsers, timeouts) {
+async function factory(fixture, browsers, timeouts, spki) {
   let shared;
   const clientFactory = async ({ slot, vector }) => {
     const browser = vector.requires?.includes('siteIsolationOff')
-      ? await (shared ??= launch(fixture, { isolation: false }))
+      ? await (shared ??= launch(fixture, { isolation: false, ...(spki ? { spki } : {}) }))
       : browsers[slot];
     const attachHttp = (client) => {
       if (!client.ws && browser.ws) client.ws = browser.ws;
@@ -259,12 +260,14 @@ async function factory(fixture, browsers, timeouts) {
   return { clientFactory, shared: () => shared?.catch(() => undefined) };
 }
 
-async function once(name, fixture) {
+async function once(name, fixture, spki) {
   const set = selection(published, name);
   const width = name === 'ordinary' ? 2 : 6;
-  const browsers = await Promise.all(Array.from({ length: width }, () => launch(fixture)));
+  const browsers = await Promise.all(
+    Array.from({ length: width }, () => launch(fixture, spki ? { spki } : {}))
+  );
   const timeouts = [];
-  const made = await factory(fixture, browsers, timeouts);
+  const made = await factory(fixture, browsers, timeouts, spki);
   try {
     const execution = await run(set, {
       clientFactory: made.clientFactory,
@@ -282,9 +285,9 @@ async function once(name, fixture) {
   }
 }
 
-async function target(name, repeat, fixture) {
+async function target(name, repeat, fixture, spki) {
   const begun = Date.now();
-  const { set, execution, timeouts } = await once(name, fixture);
+  const { set, execution, timeouts } = await once(name, fixture, spki);
   const { results } = execution;
   const summary = execution.summary({ guard: 'reference' });
   const problems = [
@@ -306,10 +309,22 @@ export async function sweep(partition) {
   const runs = [];
   try {
     for (const name of partitions[partition]) {
-      const fixture = await fixtureServer();
+      const tls =
+        name === 'idp'
+          ? {
+              key: await readFile(new URL('./fixtures/tls-key.pem', import.meta.url)),
+              cert: await readFile(new URL('./fixtures/tls-cert.pem', import.meta.url)),
+            }
+          : undefined;
+      const spki = tls
+        ? createHash('sha256')
+            .update(new X509Certificate(tls.cert).publicKey.export({ type: 'spki', format: 'der' }))
+            .digest('base64')
+        : undefined;
+      const fixture = await fixtureServer(tls ? { tls } : {});
       try {
         for (let repeat = 0; repeat < repeats; repeat++)
-          runs.push(await target(name, repeat, fixture));
+          runs.push(await target(name, repeat, fixture, spki));
       } finally {
         await fixture.close();
       }

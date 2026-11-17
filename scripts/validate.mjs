@@ -323,6 +323,7 @@ for (const v of guard.vectors ?? []) {
       st.errorPage ||
       st.closeProtectedShape ||
       st.protectedParentIframes ||
+      st.signInHold ||
       st.spawnWorker ||
       st.redirectSecret ||
       st.frameRead ||
@@ -383,6 +384,11 @@ for (const v of guard.vectors ?? []) {
     if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
       want.push('browserContexts');
     if (st.client === 'exit') needs.add('clientExit');
+    if (
+      typeof st.protectedParentIframes === 'string' &&
+      st.protectedParentIframes.startsWith('page')
+    )
+      needs.add('autoAttach');
     if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
       if (c === 'autoAttach' && (st.requires ?? []).includes('syntheticAutoAttach')) continue;

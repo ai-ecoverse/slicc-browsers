@@ -289,9 +289,22 @@ export async function connect(url, { inbound, outbound } = {}) {
     }
     waiters.clear();
   });
+  const http =
+    typeof url === 'string'
+      ? (() => {
+          try {
+            const parsed = new URL(url);
+            return `${parsed.protocol === 'wss:' ? 'https:' : 'http:'}//${parsed.host}`;
+          } catch {
+            return undefined;
+          }
+        })()
+      : undefined;
   return {
     events,
     messages,
+    ws: url,
+    ...(http ? { devtoolsHttp: http } : {}),
     send: (method, params = {}, sessionId) =>
       new Promise((resolve, reject) => {
         const seq = ++id;

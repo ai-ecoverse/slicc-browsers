@@ -154,6 +154,10 @@
         "closeProtected": {
           "type": "string",
           "minLength": 1
+        },
+        "signInHold": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -192,7 +196,8 @@
         "forwardAudit",
         "stockSetup",
         "syntheticAutoAttach",
-        "closeProtected"
+        "closeProtected",
+        "signInHold"
       ]
     },
     "requires": {
@@ -604,6 +609,28 @@
             },
             "as": {
               "$ref": "#/$defs/name"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["signInHold", "as"],
+          "properties": {
+            "signInHold": {
+              "enum": [
+                "held-popup",
+                "callback",
+                "callback-encoded",
+                "callback-origin",
+                "ordinary-popup"
+              ]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             }
           }
         },

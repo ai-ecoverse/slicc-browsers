@@ -44,6 +44,7 @@ import {
   workerTypeForKind,
 } from './protected-worker.mjs';
 import { redirectSecret } from './redirect-secret.mjs';
+import { signInHold } from './sign-in-hold.mjs';
 import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
@@ -905,6 +906,7 @@ class Execution {
       'closeProtectedShape',
       'protectedParentIframes',
       'credentialExport',
+      'signInHold',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -918,6 +920,7 @@ class Execution {
         'closeProtectedShape',
         'protectedParentIframes',
         'credentialExport',
+        'signInHold',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1024,6 +1027,7 @@ class Execution {
       step.closeProtectedShape ||
       step.protectedParentIframes ||
       step.credentialExport ||
+      step.signInHold ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1173,6 +1177,7 @@ class Execution {
     if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
     if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
     if (step.credentialExport) return this.runCredentialExport(step);
+    if (step.signInHold) return this.runSignInHold(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1276,6 +1281,29 @@ class Execution {
           'slicc: refused:',
       })
     );
+  }
+
+  async runSignInHold(step) {
+    const out = await outcome(
+      signInHold({
+        client: this.client,
+        reader: this.reader,
+        mode: step.signInHold,
+        openerOrigin: this.vars.target,
+        ordinary: this.vars.ordinary,
+        cross: this.options.targets?.cross,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        discovery: supported(['discovery'], this.options.capabilities),
+        eventStart: this.eventStart,
+        control: this.side === 'control',
+      })
+    );
+    if (out.ok && out.result?.openerId) this.targets.push(out.result.openerId);
+    if (out.ok && out.result?.targetId) this.targets.push(out.result.targetId);
+    return out;
   }
 
   spawnWorkerKind() {
@@ -2271,7 +2299,8 @@ const needsObserver = (vector) =>
       step.spawnWorker ||
       step.closeProtectedShape ||
       step.protectedParentIframes ||
-      step.credentialExport
+      step.credentialExport ||
+      step.signInHold
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||

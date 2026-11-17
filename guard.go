@@ -53,6 +53,7 @@ const (
 	GuardCapStockSetup       = "stockSetup"
 	GuardCapSyntheticAttach  = "syntheticAutoAttach"
 	GuardCapCloseProtected   = "closeProtected"
+	GuardCapSignInHold       = "signInHold"
 	GuardObserverWatch       = "watch"
 	GuardObserverFail        = "fail"
 	GuardClientExit          = "exit"
@@ -186,6 +187,7 @@ type GuardStep struct {
 	CloseProtectedShape    string          `json:"closeProtectedShape,omitempty"`
 	ProtectedParentIframes string          `json:"protectedParentIframes,omitempty"`
 	CredentialExport       bool            `json:"credentialExport,omitempty"`
+	SignInHold             string          `json:"signInHold,omitempty"`
 	SpawnWorker            string          `json:"spawnWorker,omitempty"`
 	Frame                  string          `json:"frame,omitempty"`
 	ProbeSessions          json.RawMessage `json:"probeSessions,omitempty"`

@@ -37,6 +37,7 @@ test('protected-parent page rows hide the ordinary grandchild on the top page se
         fixture,
         capabilities: {
           discovery: true,
+          autoAttach: true,
           browserSession: true,
           browserContexts: true,
         },

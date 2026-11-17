@@ -122,6 +122,17 @@ function route(req, url, send, html, redirects) {
         `<p>oopif-srcdoc ${escape(marker)}</p><iframe sandbox="allow-scripts allow-forms" srcdoc="${escape(`<!doctype html><title>srcdoc</title><p>ordinary srcdoc ${marker}</p>`)}"></iframe>`
       );
     },
+    '/held': () =>
+      html(
+        'SIGN-IN-HOLD-BODY-title',
+        `<p>SIGN-IN-HOLD-BODY</p><p>held ${escape(p.get('n') ?? '')}</p>`
+      ),
+    '/ims/authorize/v2': () =>
+      html(
+        'SIGN-IN-HOLD-BODY-title',
+        `<h1>SIGN-IN-HOLD-BODY</h1><p>authorize ${escape(p.get('client_id') ?? '')}</p>`
+      ),
+    '/cb': () => html('cb', `<p>callback ${escape(p.get('n') ?? '')}</p>`),
     '/bfcache': () => {
       const marker = JSON.stringify(`bfcache-marker-${p.get('n') ?? ''}`).replaceAll(
         '<',

@@ -32793,7 +32793,7 @@
       "requires": ["requestInterception"],
       "setup": [
         {
-          "text": "an ordinary request paused on Fetch or legacy Network interception is answered with Set-Cookie Domain=.<protected host> (seven, vault); the raw leg proves Chrome stores it (unguarded Storage.getCookies / Network.getAllCookies); a guarded client must not plant it via Fetch.fulfillRequest (array, object, lower-case, Set-Cookie2, newline-joined, binaryResponseHeaders), Fetch.continueResponse, Network.continueInterceptedRequest (headers, rawResponse), or 3xx+Location+Set-Cookie; ordinary Set-Cookie, sid=; Max-Age=0 deletion, and Domain=.adobe.com stay allowed; credential-domain Domain=.adobelogin.com is a follow-up after catalog.credentialOrigins"
+          "text": "a top-level navigation paused on Fetch or legacy Network interception is answered with Set-Cookie Domain=.<protected host> (seven, vault); the raw leg proves Chrome stores it (unguarded Storage.getCookies / Network.getAllCookies); a guarded client must not plant it via Fetch.fulfillRequest (array, object, lower-case, Set-Cookie2, newline-joined, binaryResponseHeaders), Fetch.continueResponse, Network.continueInterceptedRequest (rawResponse variants), or 3xx+Location+Set-Cookie; ordinary Set-Cookie, sid=; Max-Age=0 deletion, and Domain=.adobe.com stay allowed; credential-domain Domain=.adobelogin.com is a follow-up after catalog.credentialOrigins"
         },
         {
           "page": "tab",
@@ -33058,7 +33058,7 @@
           "requires": ["fetchInterception"]
         },
         "legacyHeadersPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the legacyHeaders Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: unguarded jar holds the legacyHeaders rawResponse Domain=.<protected host> plant",
           "check": {
             "result": "probe",
             "path": "result.legacyHeadersPlanted",

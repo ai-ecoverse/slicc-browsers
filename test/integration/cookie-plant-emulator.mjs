@@ -78,7 +78,13 @@ function isDeletion(line) {
 function pathKind(method, params) {
   if (method === 'Fetch.continueResponse') return 'continueResponse';
   if (method === 'Network.continueInterceptedRequest') {
-    if (params?.rawResponse) return 'legacyRaw';
+    if (params?.rawResponse) {
+      const raw = decodeRawResponse(params.rawResponse);
+      const lines = cookieLines(raw);
+      if (lines.some((line) => /(?:^|;\s*)cplant=lh-/i.test(line) || /^cplant=lh-/.test(line)))
+        return 'legacyHeaders';
+      return 'legacyRaw';
+    }
     return 'legacyHeaders';
   }
   if (method !== 'Fetch.fulfillRequest') return null;
@@ -146,25 +152,27 @@ export function applyCookiePlant(client, options = {}) {
     send: async (method, params, sessionId) => {
       const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options);
       if (blocked) {
-        if (
-          (method === 'Fetch.fulfillRequest' || method === 'Fetch.continueResponse') &&
-          params?.requestId
-        )
-          await client
-            .send(
-              'Fetch.failRequest',
-              { requestId: params.requestId, errorReason: 'Aborted' },
-              sessionId
-            )
-            .catch(() => {});
-        if (method === 'Network.continueInterceptedRequest' && params?.interceptionId)
-          await client
-            .send(
-              'Network.continueInterceptedRequest',
-              { interceptionId: params.interceptionId, errorReason: 'Aborted' },
-              sessionId
-            )
-            .catch(() => {});
+        if (!options.refuseWithoutFail) {
+          if (
+            (method === 'Fetch.fulfillRequest' || method === 'Fetch.continueResponse') &&
+            params?.requestId
+          )
+            await client
+              .send(
+                'Fetch.failRequest',
+                { requestId: params.requestId, errorReason: 'Aborted' },
+                sessionId
+              )
+              .catch(() => {});
+          if (method === 'Network.continueInterceptedRequest' && params?.interceptionId)
+            await client
+              .send(
+                'Network.continueInterceptedRequest',
+                { interceptionId: params.interceptionId, errorReason: 'Aborted' },
+                sessionId
+              )
+              .catch(() => {});
+        }
         throw refusal(blocked);
       }
       return client.send(method, params, sessionId);

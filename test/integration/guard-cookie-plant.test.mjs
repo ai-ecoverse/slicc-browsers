@@ -186,6 +186,64 @@ test('refuse-all interception fails the controls', async () => {
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
+test('refuseWithoutFail still finishes and protects', async () => {
+  const out = await rows({ refuseWithoutFail: true });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.live, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+});
+
+test('unreadable jar after a plant is incomplete, not a false pass', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = cookiePlantFake({ rejectCplantJarAfterFirst: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+      cookiePlant: true,
+      allowPlantPaths: ['fulfillArray'],
+    });
+    try {
+      const out = await run(
+        { ...set, vectors, variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: caps,
+          targets: {
+            ordinary: origin('ordinary.example.test'),
+            seven: origin('seven.sliccy.ai'),
+            vault: origin('vault.sliccy.ai'),
+            own: origin('client.example.test'),
+            client: origin('client.example.test'),
+            log: origin('log.example.test'),
+          },
+        }
+      );
+      const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+      assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+    } finally {
+      await guard.stop?.();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('requestInterception alone still judges fetch attack observations', async () => {
+  const out = await rows({
+    capabilities: { requestInterception: true },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.notEqual(row.observations.guarded.fulfillArrayPlanted, 'not-supported');
+});
+
 test('fetch-only transport skips legacy observations', async () => {
   const out = await rows({
     capabilities: { ...caps, legacyInterception: false },

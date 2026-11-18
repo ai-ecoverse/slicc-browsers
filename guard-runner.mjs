@@ -97,6 +97,20 @@ const declared = (capability, capabilities) =>
 const gatedOut = (observation, capabilities) =>
   !supported(observation?.requires, capabilities) ||
   (observation?.unless ?? []).some((capability) => declared(capability, capabilities));
+const withCookiePlantCaps = (capabilities, probe) => {
+  if (!probe || typeof probe !== 'object') return capabilities;
+  const asObject = Array.isArray(capabilities)
+    ? Object.fromEntries(capabilities.map((name) => [name, true]))
+    : { ...capabilities };
+  if (!declared('requestInterception', asObject)) return capabilities;
+  if (probe.fetch === true && asObject.fetchInterception !== false)
+    asObject.fetchInterception = true;
+  if (probe.legacy === true && asObject.legacyInterception !== false)
+    asObject.legacyInterception = true;
+  return Array.isArray(capabilities)
+    ? Object.keys(asObject).filter((name) => asObject[name] === true)
+    : asObject;
+};
 const matches = (value, predicate) => {
   if (predicate === null || typeof predicate !== 'object') return value === predicate;
   return Object.entries(predicate).every(([key, want]) => {
@@ -2109,8 +2123,9 @@ class Execution {
   async observeAll(unseen) {
     const observed = { ...this.refused };
     const incomplete = [];
+    const capabilities = withCookiePlantCaps(this.options.capabilities, this.calls.probe?.result);
     for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
-      if (gatedOut(observation, this.options.capabilities)) {
+      if (gatedOut(observation, capabilities)) {
         observed[name] = 'not-supported';
         continue;
       }

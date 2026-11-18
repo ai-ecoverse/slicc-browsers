@@ -91,6 +91,19 @@ function hostOf(url) {
   }
 }
 
+function siteOf(host) {
+  const parts = host.toLowerCase().split('.').filter(Boolean);
+  if (parts.length < 2) return host.toLowerCase();
+  return parts.slice(-2).join('.');
+}
+
+function sameSite(pageUrl, requestUrl) {
+  const pageHost = hostOf(pageUrl);
+  const requestHost = hostOf(requestUrl);
+  if (!pageHost || !requestHost) return false;
+  return siteOf(pageHost) === siteOf(requestHost);
+}
+
 function domainAllowed(requestHost, domain) {
   if (!domain) return true;
   const d = domain.replace(/^\./, '').toLowerCase();
@@ -98,13 +111,15 @@ function domainAllowed(requestHost, domain) {
   return h === d || h.endsWith(`.${d}`);
 }
 
-export function cookiePlantFake() {
+export function cookiePlantFake(options = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const cookies = [];
   const connections = [];
   let next = 0;
   const paused = new Map();
+  let sawCplantJar = false;
+  const rejectCplantJarAfterFirst = options.rejectCplantJarAfterFirst === true;
 
   const infoOf = (tab) => ({
     targetId: tab.targetId,
@@ -118,8 +133,9 @@ export function cookiePlantFake() {
     conn.events.push({ method, params, ...(sessionId ? { sessionId } : {}) });
   };
 
-  const plantFromHeaders = (requestUrl, headers) => {
+  const plantFromHeaders = (tab, requestUrl, headers, topLevel) => {
     const requestHost = hostOf(requestUrl);
+    if (!topLevel && !sameSite(tab?.url ?? '', requestUrl)) return;
     for (const line of cookieLines(headers)) {
       const parsed = parseSetCookie(line);
       if (!parsed.name) continue;
@@ -145,6 +161,45 @@ export function cookiePlantFake() {
       if (existing >= 0) cookies[existing] = entry;
       else cookies.push(entry);
     }
+  };
+
+  const emitPause = (conn, tab, sessionId, url, topLevel) => {
+    const requestId = `R${++next}`;
+    const interceptionId = `I${++next}`;
+    if (tab.legacy && !tab.fetch) {
+      paused.set(interceptionId, { url, sessionId, kind: 'legacy', topLevel, tab });
+      emit(
+        conn,
+        'Network.requestIntercepted',
+        {
+          interceptionId,
+          request: { url, method: 'GET' },
+          resourceType: topLevel ? 'Document' : 'XHR',
+        },
+        sessionId
+      );
+      return new Promise((resolve) => {
+        paused.get(interceptionId).resolve = resolve;
+      });
+    }
+    if (tab.fetch) {
+      paused.set(requestId, { url, sessionId, kind: 'fetch', topLevel, tab });
+      emit(
+        conn,
+        'Fetch.requestPaused',
+        {
+          requestId,
+          request: { url, method: 'GET' },
+          resourceType: topLevel ? 'Document' : 'XHR',
+          networkId: requestId,
+        },
+        sessionId
+      );
+      return new Promise((resolve) => {
+        paused.get(requestId).resolve = resolve;
+      });
+    }
+    return Promise.resolve(topLevel ? '200 ok' : '200 ok');
   };
 
   async function handle(conn, method, params = {}, sessionId) {
@@ -244,19 +299,28 @@ export function cookiePlantFake() {
       }
       return {};
     }
-    if (method === 'Storage.getCookies' || method === 'Network.getAllCookies')
+    if (
+      method === 'Storage.getCookies' ||
+      method === 'Network.getAllCookies' ||
+      method === 'Network.getCookies'
+    ) {
+      const hasCplant = cookies.some((cookie) => cookie.name === 'cplant');
+      if (rejectCplantJarAfterFirst && hasCplant && sawCplantJar)
+        throw new Error('jar read rejected');
+      if (hasCplant) sawCplantJar = true;
+      if (method === 'Network.getCookies') {
+        const hosts = (params.urls ?? []).map(hostOf);
+        return {
+          cookies: cookies.filter((cookie) =>
+            hosts.some(
+              (host) =>
+                cookie.domain.replace(/^\./, '') === host ||
+                host.endsWith(`.${cookie.domain.replace(/^\./, '')}`)
+            )
+          ),
+        };
+      }
       return { cookies: [...cookies] };
-    if (method === 'Network.getCookies') {
-      const hosts = (params.urls ?? []).map(hostOf);
-      return {
-        cookies: cookies.filter((cookie) =>
-          hosts.some(
-            (host) =>
-              cookie.domain.replace(/^\./, '') === host ||
-              host.endsWith(`.${cookie.domain.replace(/^\./, '')}`)
-          )
-        ),
-      };
     }
     if (method === 'Storage.setCookies') {
       cookies.length = 0;
@@ -265,67 +329,48 @@ export function cookiePlantFake() {
     }
     if (method === 'Page.navigate') {
       const tab = tabs.get(sessions.get(sessionId));
-      if (tab) {
+      if (!tab) return { frameId: sessions.get(sessionId) };
+      if (tab.fetch || tab.legacy) {
+        const settled = await emitPause(conn, tab, sessionId, params.url, true);
+        if (String(settled).startsWith('error:')) return { frameId: sessions.get(sessionId) };
         tab.url = params.url;
         tab.title = params.url;
+        return { frameId: sessions.get(sessionId) };
       }
+      tab.url = params.url;
+      tab.title = params.url;
       return { frameId: sessions.get(sessionId) };
     }
     if (method === 'Runtime.evaluate') {
       const expression = params.expression ?? '';
       if (expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
+      const assign = /location\.assign\(("([^"]+)"|'([^']+)')\)/.exec(expression);
+      if (assign) {
+        const url = assign[2] ?? assign[3];
+        const tab = tabs.get(sessions.get(sessionId));
+        if (!url || !tab) return { result: { type: 'string', value: 'error' } };
+        if (tab.fetch || tab.legacy) {
+          void emitPause(conn, tab, sessionId, url, true).then((settled) => {
+            if (!String(settled).startsWith('error:') && tab) {
+              tab.url = url;
+              tab.title = url;
+            }
+          });
+          return { result: { type: 'undefined' } };
+        }
+        tab.url = url;
+        tab.title = url;
+        return { result: { type: 'undefined' } };
+      }
       if (expression.includes('fetch(')) {
         const match = /fetch\(("([^"]+)"|'([^']+)')/.exec(expression);
         const url = match?.[2] ?? match?.[3];
         const tab = tabs.get(sessions.get(sessionId));
         if (!url || !tab) return { result: { type: 'string', value: 'error' } };
-        const requestId = `R${++next}`;
-        const interceptionId = `I${++next}`;
-        if (tab.legacy && !tab.fetch) {
-          paused.set(interceptionId, { url, sessionId, kind: 'legacy' });
-          emit(
-            conn,
-            'Network.requestIntercepted',
-            {
-              interceptionId,
-              request: { url, method: 'GET' },
-              resourceType: 'XHR',
-            },
-            sessionId
-          );
-          return {
-            result: {
-              type: 'string',
-              value: await new Promise((resolve) => {
-                paused.get(interceptionId).resolve = resolve;
-                setTimeout(() => resolve('timeout'), 500);
-              }),
-            },
-          };
-        }
-        if (tab.fetch) {
-          paused.set(requestId, { url, sessionId, kind: 'fetch' });
-          emit(
-            conn,
-            'Fetch.requestPaused',
-            {
-              requestId,
-              request: { url, method: 'GET' },
-              resourceType: 'XHR',
-              networkId: requestId,
-            },
-            sessionId
-          );
-          return {
-            result: {
-              type: 'string',
-              value: await new Promise((resolve) => {
-                paused.get(requestId).resolve = resolve;
-                setTimeout(() => resolve('timeout'), 500);
-              }),
-            },
-          };
+        if (tab.fetch || tab.legacy) {
+          const settled = await emitPause(conn, tab, sessionId, url, false);
+          return { result: { type: 'string', value: settled } };
         }
         return { result: { type: 'string', value: '200 ok' } };
       }
@@ -345,7 +390,11 @@ export function cookiePlantFake() {
       const headers = params.binaryResponseHeaders
         ? decodeBinaryHeaders(params.binaryResponseHeaders)
         : headerPairs(params.responseHeaders);
-      plantFromHeaders(entry.url, headers);
+      plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
+      if (entry.topLevel && entry.tab) {
+        entry.tab.url = entry.url;
+        entry.tab.title = entry.url;
+      }
       entry.resolve?.(`${params.responseCode ?? 200} ok`);
       paused.delete(params.requestId);
       return {};
@@ -361,7 +410,7 @@ export function cookiePlantFake() {
           request: { url: entry.url, method: 'GET' },
           responseStatusCode: 200,
           responseHeaders: [{ name: 'content-type', value: 'text/plain' }],
-          resourceType: 'XHR',
+          resourceType: entry.topLevel ? 'Document' : 'XHR',
         },
         sessionId
       );
@@ -375,10 +424,14 @@ export function cookiePlantFake() {
         paused.delete(params.interceptionId);
         return {};
       }
-      const headers = params.rawResponse
-        ? decodeRawHeaders(params.rawResponse)
-        : headerPairs(params.headers);
-      plantFromHeaders(entry.url, headers);
+      if (params.rawResponse) {
+        const headers = decodeRawHeaders(params.rawResponse);
+        plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
+        if (entry.topLevel && entry.tab) {
+          entry.tab.url = entry.url;
+          entry.tab.title = entry.url;
+        }
+      }
       entry.resolve?.('200 ok');
       paused.delete(params.interceptionId);
       return {};

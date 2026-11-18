@@ -239,9 +239,9 @@ You supply:
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
-| `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
+| `closeProtected` | close a protected tab (not live vault/seven-UI disguises) |
 | `signInHold` | hold seven sign-in popups; hide callback-only authorize tabs |
-| `requestInterception` | Fetch or legacy Network interception |
+| `requestInterception` / `fetchInterception` / `legacyInterception` | Fetch or legacy interception |
 
 ### Reading the result
 
@@ -251,7 +251,7 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes and none is missing. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it can't overstate what was tested.
+The run passes only when every row passes. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it cannot overstate the result.
 
 To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 

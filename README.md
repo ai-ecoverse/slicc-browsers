@@ -229,6 +229,7 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
+| `iframeAutoAttach` | auto-attach OOP iframe children under a page |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |
@@ -240,8 +241,8 @@ You supply:
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab (not live vault/seven-UI disguises) |
-| `signInHold` | hold seven sign-in popups; hide callback-only authorize tabs |
-| `requestInterception` / `fetchInterception` / `legacyInterception` | Fetch or legacy interception |
+| `signInHold` | hold seven sign-in popups; hide callback-only authorize |
+| `requestInterception` / `fetchInterception` / `legacyInterception` | Fetch or legacy |
 
 ### Reading the result
 
@@ -251,7 +252,7 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it cannot overstate the result.
+The run passes only when every row passes. Skipped and incomplete rows are counted, so the line cannot overstate the result.
 
 To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 

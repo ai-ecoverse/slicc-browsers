@@ -53,6 +53,7 @@ const (
 	GuardCapSyntheticAttach     = "syntheticAutoAttach"
 	GuardCapCloseProtected      = "closeProtected"
 	GuardCapSignInHold          = "signInHold"
+	GuardCapIframeAutoAttach    = "iframeAutoAttach"
 	GuardCapRequestInterception = "requestInterception"
 	GuardCapFetchInterception   = "fetchInterception"
 	GuardCapLegacyInterception  = "legacyInterception"

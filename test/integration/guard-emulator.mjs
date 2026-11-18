@@ -510,22 +510,25 @@ function emulatedGuardPlain(browser, options = {}) {
     await unguarded.send('Page.enable', {}, sessionId);
     const { frameTree } = await unguarded.send('Page.getFrameTree', {}, sessionId);
     frames.set(targetId, frameTree.frame);
-    await unguarded.send(
-      'Fetch.enable',
-      {
-        patterns: [
-          {
-            urlPattern: '*',
-            ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
-            requestStage: 'Request',
-          },
-        ],
-      },
-      sessionId
-    );
+    if (!options.cookiePlant) {
+      await unguarded.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            {
+              urlPattern: '*',
+              ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
+              requestStage: 'Request',
+            },
+          ],
+        },
+        sessionId
+      );
+    }
     if (waiting) await unguarded.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
   };
   const decide = async (event) => {
+    if (options.cookiePlant) return;
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
@@ -1700,22 +1703,25 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
     await unguarded.send('Page.enable', {}, sessionId);
     const { frameTree } = await unguarded.send('Page.getFrameTree', {}, sessionId);
     frames.set(targetId, frameTree.frame);
-    await unguarded.send(
-      'Fetch.enable',
-      {
-        patterns: [
-          {
-            urlPattern: '*',
-            ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
-            requestStage: 'Request',
-          },
-        ],
-      },
-      sessionId
-    );
+    if (!options.cookiePlant) {
+      await unguarded.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            {
+              urlPattern: '*',
+              ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
+              requestStage: 'Request',
+            },
+          ],
+        },
+        sessionId
+      );
+    }
     if (waiting) await unguarded.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
   };
   const decide = async (event) => {
+    if (options.cookiePlant) return;
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;

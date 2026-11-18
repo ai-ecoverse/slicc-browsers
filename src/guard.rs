@@ -39,6 +39,7 @@ pub const CAP_STOCK_SETUP: &str = "stockSetup";
 pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
 pub const CAP_SIGN_IN_HOLD: &str = "signInHold";
+pub const CAP_IFRAME_AUTO_ATTACH: &str = "iframeAutoAttach";
 pub const CAP_REQUEST_INTERCEPTION: &str = "requestInterception";
 pub const CAP_FETCH_INTERCEPTION: &str = "fetchInterception";
 pub const CAP_LEGACY_INTERCEPTION: &str = "legacyInterception";

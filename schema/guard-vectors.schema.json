@@ -159,6 +159,10 @@
           "type": "string",
           "minLength": 1
         },
+        "iframeAutoAttach": {
+          "type": "string",
+          "minLength": 1
+        },
         "requestInterception": {
           "type": "string",
           "minLength": 1
@@ -210,6 +214,7 @@
         "syntheticAutoAttach",
         "closeProtected",
         "signInHold",
+        "iframeAutoAttach",
         "requestInterception",
         "fetchInterception",
         "legacyInterception"

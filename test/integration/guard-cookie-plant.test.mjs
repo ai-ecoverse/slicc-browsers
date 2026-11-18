@@ -70,8 +70,10 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.deepEqual(vector.requires, ['requestInterception']);
   assert.equal(vector.control.via, 'guard');
   assert.equal(vector.expected.fulfillArrayPlanted, false);
+  assert.equal(vector.control.expected.fulfillArrayPlanted, true);
   assert.equal(vector.expected.ordinaryPlanted, true);
   assert.equal(vector.expected.deletionRefused, false);
+  assert.equal(vector.expected.deletionCleared, true);
   assert.equal(vector.expected.adobeRefused, false);
   assert.ok(sweepCaps.requestInterception === true || sweepCaps.requestInterception === undefined);
 });

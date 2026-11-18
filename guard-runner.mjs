@@ -98,14 +98,15 @@ const gatedOut = (observation, capabilities) =>
   !supported(observation?.requires, capabilities) ||
   (observation?.unless ?? []).some((capability) => declared(capability, capabilities));
 const withCookiePlantCaps = (capabilities, probe) => {
-  if (!probe || typeof probe !== 'object') return capabilities;
   const asObject = Array.isArray(capabilities)
     ? Object.fromEntries(capabilities.map((name) => [name, true]))
     : { ...capabilities };
   if (!declared('requestInterception', asObject)) return capabilities;
-  if (probe.fetch === true && asObject.fetchInterception !== false)
-    asObject.fetchInterception = true;
-  if (probe.legacy === true && asObject.legacyInterception !== false)
+  if (asObject.fetchInterception !== false) asObject.fetchInterception = true;
+  if (
+    (probe?.legacy === true || asObject.legacyInterception === true) &&
+    asObject.legacyInterception !== false
+  )
     asObject.legacyInterception = true;
   return Array.isArray(capabilities)
     ? Object.keys(asObject).filter((name) => asObject[name] === true)

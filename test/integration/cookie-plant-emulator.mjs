@@ -81,8 +81,7 @@ function pathKind(method, params) {
     if (params?.rawResponse) {
       const raw = decodeRawResponse(params.rawResponse);
       const lines = cookieLines(raw);
-      if (lines.some((line) => /(?:^|;\s*)cplant=lh-/i.test(line) || /^cplant=lh-/.test(line)))
-        return 'legacyHeaders';
+      if (lines.some((line) => /=lh-/.test(line))) return 'legacyHeaders';
       return 'legacyRaw';
     }
     return 'legacyHeaders';
@@ -90,8 +89,9 @@ function pathKind(method, params) {
   if (method !== 'Fetch.fulfillRequest') return null;
   if (params?.binaryResponseHeaders) return 'fulfillBinary';
   const headers = params?.responseHeaders;
-  if (headers && !Array.isArray(headers) && typeof headers === 'object') return 'fulfillObject';
   const pairs = headerPairs(headers);
+  const lines = cookieLines(pairs);
+  if (lines.some((line) => /=obj-/.test(line))) return 'fulfillObject';
   if (pairs.some((h) => h.name === 'set-cookie')) return 'fulfillLower';
   if (pairs.some((h) => h.name === 'Set-Cookie2')) return 'fulfillSetCookie2';
   if (pairs.some((h) => h.name === 'Set-Cookie' && String(h.value).includes('\n')))

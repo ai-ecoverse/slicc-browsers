@@ -1820,6 +1820,7 @@ class Execution {
     if (!check?.result) return undefined;
     const out = this.calls[check.result];
     const value = at(out, check.path);
+    if (value === 'not-supported') return 'not-supported';
     if (value === 'incomplete') {
       const skips = out?.result?.skips ?? [];
       const hint = skips.find(

@@ -29,7 +29,11 @@ const partitionSite = (cookie) => {
   return typeof key === 'string' ? key : (key?.topLevelSite ?? null);
 };
 
-export function credentialBrowser({ secure = true } = {}) {
+export function credentialBrowser({
+  secure = true,
+  collidePartitionKeys = false,
+  hstsUpgrade = [],
+} = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const cookies = [];
@@ -38,6 +42,19 @@ export function credentialBrowser({ secure = true } = {}) {
   const caches = new Map();
   const connections = [];
   let next = 0;
+  const upgradeHsts = (url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:') return url;
+      const host = parsed.hostname.toLowerCase();
+      if (!hstsUpgrade.some((name) => host === name || host.endsWith(`.${name}`) || name === host))
+        return url;
+      parsed.protocol = 'https:';
+      return parsed.href;
+    } catch {
+      return url;
+    }
+  };
 
   const info = (tab) => ({
     targetId: tab.targetId,
@@ -98,6 +115,7 @@ export function credentialBrowser({ secure = true } = {}) {
   const storageKeyOf = (tab) => tab.storageKey ?? tab.frame?.securityOrigin ?? originOf(tab.url);
 
   const commit = (tab, url) => {
+    url = upgradeHsts(url);
     const origin = originOf(url) ?? '://';
     tab.url = url;
     tab.title = url.includes('/credential') ? 'credential' : 'doc';
@@ -147,7 +165,8 @@ export function credentialBrowser({ secure = true } = {}) {
     tabs.set(child.targetId, child);
     discovered('Target.targetCreated', child);
     commit(child, src);
-    child.storageKey = `${originOf(src)}/^0${siteOf(parent.url)}^31`;
+    const topSite = collidePartitionKeys ? 'http://adobelogin.com' : siteOf(parent.url);
+    child.storageKey = `${originOf(src)}/^0${topSite}^31`;
   };
 
   const evaluate = (tab, expression) => {
@@ -404,6 +423,12 @@ export function credentialGuard(browser, options = {}) {
     if (mutants.leakPartitionedStorageKey) return false;
     return Boolean(storageId.storageKey && matcher.storageKey(storageId.storageKey));
   };
+  const adobeComStorageKey = (storageId = {}) =>
+    Boolean(
+      storageId.storageKey &&
+        /adobe\.com/.test(storageId.storageKey) &&
+        !matcher.storageKey(storageId.storageKey)
+    );
   const cacheCredential = (cacheId) => {
     const text = String(cacheId ?? '');
     return urlCredential(text.slice(0, text.lastIndexOf('::')));
@@ -426,6 +451,8 @@ export function credentialGuard(browser, options = {}) {
     events: raw.events,
     send: async (method, params = {}, sessionId) => {
       if (!matcher || mutants.disabled) return raw.send(method, params, sessionId);
+      if ((mutants.unsupportedCookieReads ?? []).includes(method))
+        throw new Error(`Method not found: ${method}`);
 
       if (
         ['Network.setCookie', 'Network.setCookies', 'Storage.setCookies'].includes(method) &&
@@ -457,6 +484,12 @@ export function credentialGuard(browser, options = {}) {
         method === 'Storage.clearDataForOrigin' &&
         !mutants.allowClearDataForOrigin &&
         urlCredential(params.origin)
+      )
+        throw new Error(refusal);
+      if (
+        method === 'DOMStorage.getDOMStorageItems' &&
+        mutants.refuseAdobeComStorageKey &&
+        adobeComStorageKey(params.storageId)
       )
         throw new Error(refusal);
       if (

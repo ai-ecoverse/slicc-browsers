@@ -13,6 +13,24 @@ const capabilities = {
   browserContexts: true,
   chromeUrlsAttach: true,
 };
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const browserUiIds = ['C8.browser-ui-listed', 'C8.browser-ui-attach'];
+
+async function hasBrowserUi(browser) {
+  const { targetInfos } = await browser.unguarded.send('Target.getTargets');
+  return targetInfos.some((info) => info.type === 'browser_ui');
+}
+
+async function provokeBrowserUi(browser) {
+  if (await hasBrowserUi(browser)) return true;
+  await browser.unguarded.send('Target.createTarget', { url: 'chrome://settings/' });
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (await hasBrowserUi(browser)) return true;
+    await pause(100);
+  }
+  return false;
+}
 test('new tab pages stay attachable and navigable with the catalog, but fail with 1.8.1 rules', {
   timeout: 120000,
 }, async () => {
@@ -288,11 +306,7 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
   const fixture = await fixtureServer();
   const browser = await launch(fixture);
   try {
-    const { targetInfos } = await browser.unguarded.send('Target.getTargets');
-    assert.ok(
-      targetInfos.some((info) => info.type === 'browser_ui'),
-      'this Chrome has no browser_ui target'
-    );
+    const uiPresent = await provokeBrowserUi(browser);
     const { protectedOrigins } = JSON.parse(
       await readFile(new URL('../../catalog.json', import.meta.url))
     );
@@ -308,10 +322,27 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
         !v.id.startsWith('C8.close-protected.')
     );
     assert.equal(vectors.length, 6);
+    const runnable = uiPresent
+      ? vectors
+      : vectors.filter((vector) => !browserUiIds.includes(vector.id));
+    if (!uiPresent) {
+      assert.equal(
+        uiPresent,
+        false,
+        'this Chrome has no browser_ui target even after opening chrome://settings; C8.browser-ui-listed and C8.browser-ui-attach are not run'
+      );
+      assert.equal(runnable.length, 4);
+      assert.deepEqual(runnable.map((vector) => vector.id).sort(), [
+        'C8.chrome-search',
+        'C8.create',
+        'C8.navigate',
+        'C8.view-source',
+      ]);
+    } else assert.equal(runnable.length, 6);
     const rows = async (client) =>
       (
         await run(
-          { ...data, vectors, variants: { prompt: 0 } },
+          { ...data, vectors: runnable, variants: { prompt: 0 } },
           { client, unguarded: browser.unguarded, targets: origins(fixture), fixture, capabilities }
         )
       ).results;
@@ -336,7 +367,7 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
       const execution = await run(
         {
           ...data,
-          vectors: vectors.filter((vector) => vector.id === 'C8.chrome-search'),
+          vectors: runnable.filter((vector) => vector.id === 'C8.chrome-search'),
           variants: { prompt: 0 },
         },
         {

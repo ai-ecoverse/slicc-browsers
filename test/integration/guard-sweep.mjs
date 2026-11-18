@@ -42,6 +42,9 @@ export const capabilities = {
   forwardAudit: true,
   closeProtected: true,
   signInHold: true,
+  requestInterception: true,
+  fetchInterception: true,
+  legacyInterception: true,
 };
 
 export const drivable = new Set([

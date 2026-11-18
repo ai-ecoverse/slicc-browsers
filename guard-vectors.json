@@ -107,7 +107,10 @@
     "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
     "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
     "closeProtected": "the guard lets Target.closeTarget close a protected tab",
-    "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable"
+    "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable",
+    "requestInterception": "the transport admits Fetch.enable with Fetch.fulfillRequest / Fetch.continueResponse, or Network.setRequestInterception with Network.continueInterceptedRequest",
+    "fetchInterception": "Fetch.enable and response-writing Fetch.fulfillRequest / Fetch.continueResponse",
+    "legacyInterception": "Network.setRequestInterception and Network.continueInterceptedRequest (headers or rawResponse)"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -32780,6 +32783,495 @@
         "attachRefused": true,
         "contentRead": false,
         "connectCompletes": true
+      }
+    },
+    {
+      "id": "C10.cookie-plant",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "requires": ["requestInterception"],
+      "setup": [
+        {
+          "text": "an ordinary request paused on Fetch or legacy Network interception is answered with Set-Cookie Domain=.<protected host> (seven, vault); the raw leg proves Chrome stores it (unguarded Storage.getCookies / Network.getAllCookies); a guarded client must not plant it via Fetch.fulfillRequest (array, object, lower-case, Set-Cookie2, newline-joined, binaryResponseHeaders), Fetch.continueResponse, Network.continueInterceptedRequest (headers, rawResponse), or 3xx+Location+Set-Cookie; ordinary Set-Cookie, sid=; Max-Age=0 deletion, and Domain=.adobe.com stay allowed; credential-domain Domain=.adobelogin.com is a follow-up after catalog.credentialOrigins"
+        },
+        {
+          "page": "tab",
+          "url": "{ordinary}/doc?n=start-{tag}"
+        }
+      ],
+      "trigger": [
+        {
+          "cookiePlant": "set-cookie",
+          "as": "probe",
+          "requires": ["requestInterception"]
+        }
+      ],
+      "targets": ["seven", "vault"],
+      "observe": {
+        "fulfillArrayPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillArray Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillArrayPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillArrayAnswered": {
+          "means": "C10.cookie-plant: the fulfillArray interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillArrayAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillArrayRefused": {
+          "means": "C10.cookie-plant: the fulfillArray interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillArrayRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillObjectPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillObject Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillObjectPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillObjectAnswered": {
+          "means": "C10.cookie-plant: the fulfillObject interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillObjectAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillObjectRefused": {
+          "means": "C10.cookie-plant: the fulfillObject interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillObjectRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillLowerPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillLower Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillLowerPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillLowerAnswered": {
+          "means": "C10.cookie-plant: the fulfillLower interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillLowerAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillLowerRefused": {
+          "means": "C10.cookie-plant: the fulfillLower interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillLowerRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillSetCookie2Planted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillSetCookie2 Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillSetCookie2Planted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillSetCookie2Answered": {
+          "means": "C10.cookie-plant: the fulfillSetCookie2 interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillSetCookie2Answered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillSetCookie2Refused": {
+          "means": "C10.cookie-plant: the fulfillSetCookie2 interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillSetCookie2Refused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillNewlinePlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillNewline Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillNewlinePlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillNewlineAnswered": {
+          "means": "C10.cookie-plant: the fulfillNewline interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillNewlineAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillNewlineRefused": {
+          "means": "C10.cookie-plant: the fulfillNewline interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillNewlineRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillBinaryPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the fulfillBinary Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillBinaryPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "fulfillBinaryAnswered": {
+          "means": "C10.cookie-plant: the fulfillBinary interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillBinaryAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "fulfillBinaryRefused": {
+          "means": "C10.cookie-plant: the fulfillBinary interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.fulfillBinaryRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "continueResponsePlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the continueResponse Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.continueResponsePlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "continueResponseAnswered": {
+          "means": "C10.cookie-plant: the continueResponse interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.continueResponseAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "continueResponseRefused": {
+          "means": "C10.cookie-plant: the continueResponse interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.continueResponseRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "redirect3xxPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the redirect3xx Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.redirect3xxPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"],
+          "absencePoll": true
+        },
+        "redirect3xxAnswered": {
+          "means": "C10.cookie-plant: the redirect3xx interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.redirect3xxAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "redirect3xxRefused": {
+          "means": "C10.cookie-plant: the redirect3xx interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.redirect3xxRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["fetchInterception"]
+        },
+        "legacyHeadersPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the legacyHeaders Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyHeadersPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"],
+          "absencePoll": true
+        },
+        "legacyHeadersAnswered": {
+          "means": "C10.cookie-plant: the legacyHeaders interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyHeadersAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"]
+        },
+        "legacyHeadersRefused": {
+          "means": "C10.cookie-plant: the legacyHeaders interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyHeadersRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"]
+        },
+        "legacyRawPlanted": {
+          "means": "C10.cookie-plant: unguarded jar holds the legacyRaw Domain=.<protected host> plant",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyRawPlanted",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"],
+          "absencePoll": true
+        },
+        "legacyRawAnswered": {
+          "means": "C10.cookie-plant: the legacyRaw interception command was answered (ok or slicc refusal)",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyRawAnswered",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"]
+        },
+        "legacyRawRefused": {
+          "means": "C10.cookie-plant: the legacyRaw interception command was refused with a slicc refusal",
+          "check": {
+            "result": "probe",
+            "path": "result.legacyRawRefused",
+            "equals": true,
+            "observer": "client"
+          },
+          "requires": ["legacyInterception"]
+        },
+        "ordinaryPlanted": {
+          "means": "C10.cookie-plant: ordinary Set-Cookie through Fetch.fulfillRequest landed in the jar",
+          "check": {
+            "result": "probe",
+            "path": "result.ordinaryPlanted",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryAnswered": {
+          "means": "C10.cookie-plant: ordinary Set-Cookie through Fetch.fulfillRequest was answered",
+          "check": {
+            "result": "probe",
+            "path": "result.ordinaryAnswered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "deletionAnswered": {
+          "means": "C10.cookie-plant: deletion Set-Cookie sid=; Max-Age=0 was answered",
+          "check": {
+            "result": "probe",
+            "path": "result.deletionAnswered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "deletionRefused": {
+          "means": "C10.cookie-plant: deletion Set-Cookie was refused",
+          "check": {
+            "result": "probe",
+            "path": "result.deletionRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeAnswered": {
+          "means": "C10.cookie-plant: Domain=.adobe.com Set-Cookie through interception was answered",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeAnswered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeRefused": {
+          "means": "C10.cookie-plant: Domain=.adobe.com Set-Cookie was refused",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded reader planted Domain=.<protected host> through interception and read it back from the jar",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "designDependent": [
+        "fulfillArrayRefused",
+        "fulfillObjectRefused",
+        "fulfillLowerRefused",
+        "fulfillSetCookie2Refused",
+        "fulfillNewlineRefused",
+        "fulfillBinaryRefused",
+        "continueResponseRefused",
+        "redirect3xxRefused",
+        "legacyHeadersRefused",
+        "legacyRawRefused"
+      ],
+      "control": {
+        "origin": "ordinary",
+        "via": "guard",
+        "expected": {
+          "fulfillArrayPlanted": false,
+          "fulfillArrayAnswered": true,
+          "fulfillArrayRefused": "either",
+          "fulfillObjectPlanted": false,
+          "fulfillObjectAnswered": true,
+          "fulfillObjectRefused": "either",
+          "fulfillLowerPlanted": false,
+          "fulfillLowerAnswered": true,
+          "fulfillLowerRefused": "either",
+          "fulfillSetCookie2Planted": false,
+          "fulfillSetCookie2Answered": true,
+          "fulfillSetCookie2Refused": "either",
+          "fulfillNewlinePlanted": false,
+          "fulfillNewlineAnswered": true,
+          "fulfillNewlineRefused": "either",
+          "fulfillBinaryPlanted": false,
+          "fulfillBinaryAnswered": true,
+          "fulfillBinaryRefused": "either",
+          "continueResponsePlanted": false,
+          "continueResponseAnswered": true,
+          "continueResponseRefused": "either",
+          "redirect3xxPlanted": false,
+          "redirect3xxAnswered": true,
+          "redirect3xxRefused": "either",
+          "legacyHeadersPlanted": false,
+          "legacyHeadersAnswered": true,
+          "legacyHeadersRefused": "either",
+          "legacyRawPlanted": false,
+          "legacyRawAnswered": true,
+          "legacyRawRefused": "either",
+          "ordinaryPlanted": true,
+          "ordinaryAnswered": true,
+          "deletionAnswered": true,
+          "deletionRefused": false,
+          "adobeAnswered": true,
+          "adobeRefused": false
+        }
+      },
+      "expected": {
+        "fulfillArrayPlanted": false,
+        "fulfillArrayAnswered": true,
+        "fulfillArrayRefused": "either",
+        "fulfillObjectPlanted": false,
+        "fulfillObjectAnswered": true,
+        "fulfillObjectRefused": "either",
+        "fulfillLowerPlanted": false,
+        "fulfillLowerAnswered": true,
+        "fulfillLowerRefused": "either",
+        "fulfillSetCookie2Planted": false,
+        "fulfillSetCookie2Answered": true,
+        "fulfillSetCookie2Refused": "either",
+        "fulfillNewlinePlanted": false,
+        "fulfillNewlineAnswered": true,
+        "fulfillNewlineRefused": "either",
+        "fulfillBinaryPlanted": false,
+        "fulfillBinaryAnswered": true,
+        "fulfillBinaryRefused": "either",
+        "continueResponsePlanted": false,
+        "continueResponseAnswered": true,
+        "continueResponseRefused": "either",
+        "redirect3xxPlanted": false,
+        "redirect3xxAnswered": true,
+        "redirect3xxRefused": "either",
+        "legacyHeadersPlanted": false,
+        "legacyHeadersAnswered": true,
+        "legacyHeadersRefused": "either",
+        "legacyRawPlanted": false,
+        "legacyRawAnswered": true,
+        "legacyRawRefused": "either",
+        "ordinaryPlanted": true,
+        "ordinaryAnswered": true,
+        "deletionAnswered": true,
+        "deletionRefused": false,
+        "adobeAnswered": true,
+        "adobeRefused": false
       }
     }
   ]

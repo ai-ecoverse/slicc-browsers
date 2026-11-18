@@ -37,30 +37,33 @@ const (
 	GuardControl                   = "control"
 	GuardGuarded                   = "guarded"
 
-	GuardCapAutoAttach       = "autoAttach"
-	GuardCapBrowserSession   = "browserSession"
-	GuardCapBrowserContexts  = "browserContexts"
-	GuardCapChromeURLsAttach = "chromeUrlsAttach"
-	GuardCapExtensionWorld   = "extensionWorld"
-	GuardCapExtensionFrame   = "extensionFrame"
-	GuardCapDiscovery        = "discovery"
-	GuardCapClientExit       = "clientExit"
-	GuardCapSiteIsolationOff = "siteIsolationOff"
-	GuardCapInboundDelay     = "inboundDelay"
-	GuardCapSecureOrigin     = "secureOrigin"
-	GuardCapForwardAudit     = "forwardAudit"
-	GuardCapStockSetup       = "stockSetup"
-	GuardCapSyntheticAttach  = "syntheticAutoAttach"
-	GuardCapCloseProtected   = "closeProtected"
-	GuardCapSignInHold       = "signInHold"
-	GuardObserverWatch       = "watch"
-	GuardObserverFail        = "fail"
-	GuardClientExit          = "exit"
-	GuardPageScript          = "script"
-	GuardSessionPage         = "page"
-	GuardSessionBrowser      = "browser"
-	GuardSessionEither       = "page-or-browser"
-	GuardSessionChild        = "child"
+	GuardCapAutoAttach          = "autoAttach"
+	GuardCapBrowserSession      = "browserSession"
+	GuardCapBrowserContexts     = "browserContexts"
+	GuardCapChromeURLsAttach    = "chromeUrlsAttach"
+	GuardCapExtensionWorld      = "extensionWorld"
+	GuardCapExtensionFrame      = "extensionFrame"
+	GuardCapDiscovery           = "discovery"
+	GuardCapClientExit          = "clientExit"
+	GuardCapSiteIsolationOff    = "siteIsolationOff"
+	GuardCapInboundDelay        = "inboundDelay"
+	GuardCapSecureOrigin        = "secureOrigin"
+	GuardCapForwardAudit        = "forwardAudit"
+	GuardCapStockSetup          = "stockSetup"
+	GuardCapSyntheticAttach     = "syntheticAutoAttach"
+	GuardCapCloseProtected      = "closeProtected"
+	GuardCapSignInHold          = "signInHold"
+	GuardCapRequestInterception = "requestInterception"
+	GuardCapFetchInterception   = "fetchInterception"
+	GuardCapLegacyInterception  = "legacyInterception"
+	GuardObserverWatch          = "watch"
+	GuardObserverFail           = "fail"
+	GuardClientExit             = "exit"
+	GuardPageScript             = "script"
+	GuardSessionPage            = "page"
+	GuardSessionBrowser         = "browser"
+	GuardSessionEither          = "page-or-browser"
+	GuardSessionChild           = "child"
 )
 
 type GuardVectors struct {
@@ -185,6 +188,7 @@ type GuardStep struct {
 	CloseProtectedShape    string          `json:"closeProtectedShape,omitempty"`
 	ProtectedParentIframes string          `json:"protectedParentIframes,omitempty"`
 	SignInHold             string          `json:"signInHold,omitempty"`
+	CookiePlant            string          `json:"cookiePlant,omitempty"`
 	SpawnWorker            string          `json:"spawnWorker,omitempty"`
 	Frame                  string          `json:"frame,omitempty"`
 	ProbeSessions          json.RawMessage `json:"probeSessions,omitempty"`

@@ -39,6 +39,9 @@ pub const CAP_STOCK_SETUP: &str = "stockSetup";
 pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
 pub const CAP_SIGN_IN_HOLD: &str = "signInHold";
+pub const CAP_REQUEST_INTERCEPTION: &str = "requestInterception";
+pub const CAP_FETCH_INTERCEPTION: &str = "fetchInterception";
+pub const CAP_LEGACY_INTERCEPTION: &str = "legacyInterception";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";
@@ -223,6 +226,8 @@ pub struct Step {
     pub protected_parent_iframes: Option<String>,
     #[serde(rename = "signInHold", skip_serializing_if = "Option::is_none")]
     pub sign_in_hold: Option<String>,
+    #[serde(rename = "cookiePlant", skip_serializing_if = "Option::is_none")]
+    pub cookie_plant: Option<String>,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -304,6 +304,7 @@ for (const v of guard.vectors ?? []) {
       st.closeProtectedShape ||
       st.protectedParentIframes ||
       st.signInHold ||
+      st.cookiePlant ||
       st.spawnWorker ||
       st.redirectSecret ||
       st.frameRead ||

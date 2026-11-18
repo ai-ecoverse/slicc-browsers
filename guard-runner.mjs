@@ -4,6 +4,7 @@ export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
 import { closeProtectedShape } from './close-protected-shape.mjs';
+import { cookiePlant } from './cookie-plant.mjs';
 import { extensionFrame } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
@@ -905,6 +906,7 @@ class Execution {
       'closeProtectedShape',
       'protectedParentIframes',
       'signInHold',
+      'cookiePlant',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -918,6 +920,7 @@ class Execution {
         'closeProtectedShape',
         'protectedParentIframes',
         'signInHold',
+        'cookiePlant',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1024,6 +1027,7 @@ class Execution {
       step.closeProtectedShape ||
       step.protectedParentIframes ||
       step.signInHold ||
+      step.cookiePlant ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1173,6 +1177,7 @@ class Execution {
     if (step.closeProtectedShape) return this.runCloseProtectedShape(step);
     if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
     if (step.signInHold) return this.runSignInHold(step);
+    if (step.cookiePlant) return this.runCookiePlant(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1280,6 +1285,23 @@ class Execution {
     if (out.ok && out.result?.openerId) this.targets.push(out.result.openerId);
     if (out.ok && out.result?.targetId) this.targets.push(out.result.targetId);
     return out;
+  }
+
+  async runCookiePlant(step) {
+    return outcome(
+      cookiePlant({
+        client: this.client,
+        reader: this.reader,
+        protectedOrigin: this.vars.protectedTarget,
+        ordinary: this.vars.ordinary,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        control: this.side === 'control',
+        mode: step.cookiePlant,
+      })
+    );
   }
 
   spawnWorkerKind() {
@@ -2275,7 +2297,8 @@ const needsObserver = (vector) =>
       step.spawnWorker ||
       step.closeProtectedShape ||
       step.protectedParentIframes ||
-      step.signInHold
+      step.signInHold ||
+      step.cookiePlant
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||

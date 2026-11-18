@@ -2,6 +2,7 @@ import { unclosableShape } from '../../close-protected-shape.mjs';
 import { outcome, parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 import { redactProtectedURLs } from '../../redirect-redaction.mjs';
+import { applyCookiePlant } from './cookie-plant-emulator.mjs';
 import { applySignInHold } from './sign-in-hold-emulator.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2606,11 +2607,11 @@ export function emulatedGuard(browser, options = {}) {
   const guard = options.workerRules
     ? emulatedGuardWithWorkerRules(browser, options)
     : emulatedGuardPlain(browser, options);
-  if (!options.signInHold) return guard;
-  return {
-    ...guard,
-    client: applySignInHold(guard.client, browser, options),
-  };
+  let client = guard.client;
+  if (options.signInHold) client = applySignInHold(client, browser, options);
+  if (options.cookiePlant) client = applyCookiePlant(client, options);
+  if (client === guard.client) return guard;
+  return { ...guard, client };
 }
 
 export function withPausedSharedWorkerStall(client) {

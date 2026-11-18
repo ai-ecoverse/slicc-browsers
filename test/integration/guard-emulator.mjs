@@ -1270,6 +1270,27 @@ function emulatedGuardPlain(browser, options = {}) {
     }
     forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });
     const result = await client.send(method, forward, sessionId);
+    if (
+      options.leakAttachedToTarget &&
+      catalog &&
+      method === 'Target.setAutoAttach' &&
+      params?.autoAttach
+    ) {
+      const listed = await unguarded.send('Target.getTargets').catch(() => null);
+      for (const info of listed?.targetInfos ?? []) {
+        if (info.type !== 'iframe') continue;
+        if (!(await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
+          continue;
+        events.push({
+          method: 'Target.attachedToTarget',
+          params: {
+            sessionId: `leak-${info.targetId}`,
+            targetInfo: rewriteIframeInfo(info, options),
+            waitingForDebugger: false,
+          },
+        });
+      }
+    }
     if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
     if (method === 'Page.stopScreencast' && sessionId) {
       casting.delete(sessionId);

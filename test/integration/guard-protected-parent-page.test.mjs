@@ -953,6 +953,103 @@ test('refuseTopPageAttach plus leakProtectedIframeTargets fails', async () => {
   assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
 });
 
+test('refuseTopPageAttach plus leakAttachedToTarget fails via discovery events', async () => {
+  const execution = await runMode(
+    { refuseTopPageAttach: true, leakAttachedToTarget: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
+  assert.equal(row.observations.guarded.targetEvents, true, describe(row));
+});
+
+test('unanswered top Page.getFrameTree after top enable refusal stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+    refuseTopPageEnable: true,
+  });
+  try {
+    let topSession;
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Target.attachToTarget') {
+        const attached = await send(method, params, sessionId);
+        topSession ??= attached?.sessionId;
+        return attached;
+      }
+      if (method === 'Page.getFrameTree' && sessionId && sessionId === topSession)
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'top-tree-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.getFrameTree unanswered/);
+    assert.match(String(result.topEnableRefused?.error ?? ''), /^slicc: refused:/);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
+test('unanswered Runtime.evaluate after top enable refusal stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+    refuseTopPageEnable: true,
+  });
+  try {
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Runtime.evaluate' && params?.expression === 'location.href')
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'top-evaluate-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Runtime\.evaluate unanswered/);
+    assert.match(String(result.topEnableRefused?.error ?? ''), /^slicc: refused:/);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
 test('a guard without autoAttach skips all three page rows as not-supported:autoAttach', async () => {
   const fixture = await fixtureServer();
   const browser = pageFake({ oopifGrandchildTargets: true });

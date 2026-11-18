@@ -1217,13 +1217,16 @@ async function rawContexts(reader, sessionIds, raw, eventStart, budget, notes) {
 }
 
 function applyTreeSample(arm, sample, result, key, mentions) {
-  takeFirst(arm, sample, (entry) => {
-    if (entry.unanswered) return;
-    if (entry.out.ok) {
-      if (mentions(entry.out.result)) result[key] = true;
-      else if (result[key] !== true) result[key] = false;
-    } else if (result[key] !== true) result[key] = false;
-  });
+  if (!arm.out) arm.out = sample.out;
+  if (sample.unanswered) {
+    if (result[key] === undefined) arm.unanswered = true;
+    return;
+  }
+  arm.unanswered = false;
+  if (sample.out.ok) {
+    if (mentions(sample.out.result)) result[key] = true;
+    else if (result[key] !== true) result[key] = false;
+  } else if (result[key] !== true) result[key] = false;
 }
 
 async function attachOrdinaryTop(client, targetId, notes, internalSessions) {
@@ -1303,12 +1306,15 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
       const message = String(evaluated.error?.message ?? evaluated.error ?? '');
       const gone =
         !evaluated.ok &&
-        /Cannot find context|No context|Invalid context|Session with given id/i.test(message);
-      if (!answered(evaluated) && !gone) {
+        /Cannot find context|No context|Invalid context|Session with given id|No session with given id|Target closed/i.test(
+          message
+        );
+      if (!answered(evaluated) && !gone && !refused(evaluated)) {
         anyUnanswered = true;
         unansweredId ??= context.id;
         continue;
       }
+      if (gone) continue;
       takeFirst(
         evaluateArm,
         { out: evaluated, unanswered: false, unansweredId: context.id },
@@ -1342,17 +1348,21 @@ function collectAutoSessions(events, from) {
 }
 
 async function sampleTrees(client, sessionIds, treeArm, result, raw) {
-  for (const sessionId of sessionIds) {
+  let topUnanswered = false;
+  for (let i = 0; i < sessionIds.length; i++) {
+    const sessionId = sessionIds[i];
     const treeAgain = await outcome(client.send('Page.getFrameTree', {}, sessionId));
-    applyTreeSample(
-      treeArm,
-      { out: treeAgain, unanswered: !answered(treeAgain) },
-      result,
-      'frameTree',
-      (payload) => treeMentions(payload?.frameTree, raw)
+    const unanswered = !answered(treeAgain);
+    if (i === 0 && unanswered) topUnanswered = true;
+    applyTreeSample(treeArm, { out: treeAgain, unanswered }, result, 'frameTree', (payload) =>
+      treeMentions(payload?.frameTree, raw)
     );
-    if (result.frameTree === true) return;
+    if (result.frameTree === true) {
+      if (topUnanswered) treeArm.unanswered = true;
+      return;
+    }
   }
+  if (topUnanswered) treeArm.unanswered = true;
 }
 
 function recordChildEnable(out, label, child, childSessions, missing, result) {
@@ -1671,26 +1681,68 @@ async function inlineOrdinaryNestControl(client, ordinary, tag, notes, budget, i
       return { overBlocked: true, step: call, error: refusalError(out) };
     }
   }
-  const tree = await outcome(client.send('Page.getFrameTree', {}, sessionId));
-  if (!answered(tree)) {
+  const auto = await outcome(
+    client.send(
+      'Target.setAutoAttach',
+      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+      sessionId
+    )
+  );
+  if (!answered(auto)) {
     await cleanup();
-    return { incomplete: 'inline ordinary control: Page.getFrameTree unanswered' };
+    return { incomplete: 'inline ordinary control: Target.setAutoAttach unanswered' };
   }
-  const frames = walkFrames(tree.result?.frameTree);
-  if (!tree.ok || frames.length < 2) {
+  if (!auto.ok) {
+    note(notes, 'protected-parent.inline-ordinary-control', {
+      overBlocked: true,
+      step: 'Target.setAutoAttach',
+      error: refusalError(auto),
+    });
+    notes.push('protection by over-blocking');
+    await cleanup();
+    return { overBlocked: true, step: 'Target.setAutoAttach', error: refusalError(auto) };
+  }
+  const needle = `ctrl-inner-${tag}`;
+  let unansweredTree = false;
+  let lastFrames = 0;
+  let lastError = '';
+  const ready = await until(
+    async () => {
+      const tree = await outcome(client.send('Page.getFrameTree', {}, sessionId));
+      if (!answered(tree)) {
+        unansweredTree = true;
+        return null;
+      }
+      if (!tree.ok) {
+        lastError = refusalError(tree);
+        return null;
+      }
+      const frames = walkFrames(tree.result?.frameTree);
+      lastFrames = frames.length;
+      if (frames.length >= 3 && frames.some((frame) => (frame.url ?? '').includes(needle)))
+        return tree;
+      return null;
+    },
+    Math.max(budget, 500)
+  );
+  if (!ready) {
+    if (unansweredTree) {
+      await cleanup();
+      return { incomplete: 'inline ordinary control: Page.getFrameTree unanswered' };
+    }
     note(notes, 'protected-parent.inline-ordinary-control', {
       overBlocked: true,
       step: 'Page.getFrameTree',
-      frames: frames.length,
-      error: refusalError(tree),
+      frames: lastFrames,
+      error: lastError,
     });
     notes.push('protection by over-blocking');
     await cleanup();
     return {
       overBlocked: true,
       step: 'Page.getFrameTree',
-      frames: frames.length,
-      error: refusalError(tree),
+      frames: lastFrames,
+      error: lastError,
     };
   }
   const evaluated = await outcome(
@@ -1745,15 +1797,25 @@ async function applyInlineOrdinaryControl(
 
 async function probeBrowserOnlyChannels(client, raw, internalSessions, result, missing, notes) {
   const childSessions = new Set();
-  await outcome(client.send('Target.setDiscoverTargets', { discover: true }));
-  await outcome(
+  const eventStart = client.events?.length ?? 0;
+  const discover = await outcome(client.send('Target.setDiscoverTargets', { discover: true }));
+  const auto = await outcome(
     client.send('Target.setAutoAttach', {
       autoAttach: true,
       waitForDebuggerOnStart: false,
       flatten: true,
     })
   );
-  const eventStart = client.events?.length ?? 0;
+  if (!answered(discover)) missing.push('Target.setDiscoverTargets unanswered');
+  else if (!discover.ok && sliccRefused(discover)) {
+    result.overBlocked = true;
+    notes.push('protection by over-blocking');
+  }
+  if (!answered(auto)) missing.push('Target.setAutoAttach unanswered');
+  else if (!auto.ok && sliccRefused(auto)) {
+    result.overBlocked = true;
+    notes.push('protection by over-blocking');
+  }
   await pause(50);
   result.targetEvents = (client.events ?? [])
     .slice(eventStart)
@@ -2642,7 +2704,17 @@ function finishPageClient(
     ? true
     : (result.targetEvents ?? false);
   settleTopDefaults(result);
-  settleTopLockedArms(result, treeArm, resourceArm, evaluateArm, missing);
+  settleArm(result, 'frameTree', treeArm.unanswered, 'Page.getFrameTree unanswered', missing, {
+    frameTree: false,
+  });
+  settleArm(
+    result,
+    'resourceTree',
+    resourceArm.unanswered,
+    'Page.getResourceTree unanswered',
+    missing,
+    { resourceTree: false }
+  );
   result.frameEvents ??= false;
   result.midFrameAttached ??= false;
   result.targetInfo ??= false;
@@ -2664,27 +2736,6 @@ function finishPageClient(
     })
   );
   return outcome(client.send('Target.detachFromTarget', { sessionId }));
-}
-
-function settleTopLockedArms(result, treeArm, resourceArm, evaluateArm, missing) {
-  const topLocked = Boolean(result.topEnableRefused) || Boolean(result.topAttachRefused);
-  settleArm(
-    result,
-    'frameTree',
-    treeArm.unanswered && !(topLocked && result.frameTree !== undefined),
-    'Page.getFrameTree unanswered',
-    missing,
-    { frameTree: false }
-  );
-  settleArm(
-    result,
-    'resourceTree',
-    resourceArm.unanswered && !(topLocked && result.resourceTree !== undefined),
-    'Page.getResourceTree unanswered',
-    missing,
-    { resourceTree: false }
-  );
-  if (topLocked && result.contextEvaluate !== undefined) evaluateArm.unanswered = false;
 }
 
 async function pageNested({

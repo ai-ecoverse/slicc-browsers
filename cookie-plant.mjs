@@ -366,6 +366,38 @@ async function releasePause(client, paused) {
   }
 }
 
+async function drainPauses(client, from = 0) {
+  const seen = new Set();
+  for (const event of client.events.slice(from)) {
+    if (event.method === 'Fetch.requestPaused' && event.params?.requestId) {
+      const key = `fetch:${event.params.requestId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await releasePause(client, event);
+    }
+    if (event.method === 'Network.requestIntercepted' && event.params?.interceptionId) {
+      const key = `legacy:${event.params.interceptionId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      await releasePause(client, event);
+    }
+  }
+}
+
+async function withPathBudget(promise, ms, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`path timeout: ${label}`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function attemptRecord(out, planted) {
   if (!answered(out))
     return {
@@ -462,23 +494,7 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
   }
 }
 
-async function finishPlant({
-  client,
-  reader,
-  readerSession,
-  pageSession,
-  homeUrl,
-  transport,
-  triggerPromise,
-  paused,
-  out,
-  cookie,
-  budget,
-  notes,
-  label,
-}) {
-  if (refused(out) || !out.ok) await releasePause(client, paused);
-  await settleTrigger(triggerPromise, budget);
+async function finishPlant({ reader, readerSession, out, cookie, notes, label }) {
   const jar = await readJar(reader, readerSession, cookie);
   const planted = plantedOf(jar);
   const evidence = {
@@ -493,7 +509,6 @@ async function finishPlant({
   else if (planted === true && CHROME_NO_STORE.has(label))
     evidence.note = 'raw leg stored it: plant path';
   note(notes, `cookie-plant.${label}`, evidence);
-  await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
   return attemptRecord(out, planted);
 }
 
@@ -513,80 +528,71 @@ async function runPlant({
   homeUrl,
   topLevel = true,
 }) {
-  await clearCookie(reader, readerSession, cookie);
+  let paused = null;
+  let triggerPromise = Promise.resolve();
   const from = client.events.length;
-  const methods =
-    transport.kind === 'legacy'
-      ? ['Network.requestIntercepted']
-      : stage === 'Response'
-        ? ['Fetch.requestPaused']
-        : ['Fetch.requestPaused'];
-  const triggerPromise = topLevel
-    ? triggerNavigate(client, pageSession, url)
-    : triggerFetch(client, pageSession, url);
-  const paused = await waitPause(client, from, url, methods, budget);
-  if (!paused) {
-    await settleTrigger(triggerPromise, budget);
-    await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
-    note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
-    return attemptRecord({ ok: false, error: { message: 'timeout: no pause' } }, 'incomplete');
-  }
-  if (
-    transport.kind === 'fetch' &&
-    stage === 'Response' &&
-    paused.params?.responseStatusCode === undefined &&
-    paused.params?.responseErrorReason === undefined
-  ) {
-    const responseFrom = client.events.length;
-    await outcome(
-      client.send('Fetch.continueRequest', { requestId: paused.params.requestId }, paused.sessionId)
+  try {
+    return await withPathBudget(
+      (async () => {
+        await clearCookie(reader, readerSession, cookie);
+        const methods =
+          transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+        triggerPromise = topLevel
+          ? triggerNavigate(client, pageSession, url)
+          : triggerFetch(client, pageSession, url);
+        paused = await waitPause(client, from, url, methods, budget);
+        if (!paused) {
+          note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
+          return attemptRecord(
+            { ok: false, error: { message: 'timeout: no pause' } },
+            'incomplete'
+          );
+        }
+        if (
+          transport.kind === 'fetch' &&
+          stage === 'Response' &&
+          paused.params?.responseStatusCode === undefined &&
+          paused.params?.responseErrorReason === undefined
+        ) {
+          const responseFrom = client.events.length;
+          await outcome(
+            client.send(
+              'Fetch.continueRequest',
+              { requestId: paused.params.requestId },
+              paused.sessionId
+            )
+          );
+          const again = await waitPause(client, responseFrom, url, methods, budget);
+          if (!again) {
+            note(notes, `cookie-plant.${label}`, { incomplete: 'no response pause', url });
+            return attemptRecord(
+              { ok: false, error: { message: 'timeout: no response pause' } },
+              'incomplete'
+            );
+          }
+          paused = again;
+        }
+        const built = build(paused);
+        const out = await built.send(client, paused);
+        return finishPlant({ reader, readerSession, out, cookie, notes, label });
+      })(),
+      Math.max(budget * 2, 8000),
+      label
     );
-    const again = await waitPause(client, responseFrom, url, methods, budget);
-    if (!again) {
-      await releasePause(client, paused);
-      await settleTrigger(triggerPromise, budget);
-      await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
-      note(notes, `cookie-plant.${label}`, { incomplete: 'no response pause', url });
-      return attemptRecord(
-        { ok: false, error: { message: 'timeout: no response pause' } },
-        'incomplete'
-      );
-    }
-    const built = build(again);
-    const out = await built.send(client, again);
-    return finishPlant({
-      client,
-      reader,
-      readerSession,
-      pageSession,
-      homeUrl,
-      transport,
-      triggerPromise,
-      paused: again,
-      out,
-      cookie,
-      budget,
-      notes,
-      label,
+  } catch (error) {
+    note(notes, `cookie-plant.${label}`, {
+      incomplete: String(error?.message ?? error),
     });
+    return attemptRecord(
+      { ok: false, error: { message: String(error?.message ?? error) } },
+      'incomplete'
+    );
+  } finally {
+    await releasePause(client, paused);
+    await drainPauses(client, from);
+    await settleTrigger(triggerPromise, Math.min(budget, 1000));
+    await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
   }
-  const built = build(paused);
-  const out = await built.send(client, paused);
-  return finishPlant({
-    client,
-    reader,
-    readerSession,
-    pageSession,
-    homeUrl,
-    transport,
-    triggerPromise,
-    paused,
-    out,
-    cookie,
-    budget,
-    notes,
-    label,
-  });
 }
 
 function fetchFulfill(params) {
@@ -779,9 +785,16 @@ const CHROME_NO_STORE = new Set([
   'binaryLf',
   'binaryObsFold',
   'domainQuoted',
+  'domainUpper',
+  'domainTrailDot',
+  'domainRepeated',
+  'domainWs',
   'headerPadded',
+  'setCookieSecond',
   'responsePhrase',
   'continueAtRequest',
+  'hostOnly',
+  'domainCover',
 ]);
 
 function incompletePaths() {
@@ -1142,44 +1155,63 @@ async function allowedHeaderAttempt({
   homeUrl,
   topLevel = false,
 }) {
+  let paused = null;
+  let triggerPromise = Promise.resolve();
   const from = client.events.length;
-  const methods =
-    transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
-  const triggerPromise = topLevel
-    ? triggerNavigate(client, pageSession, url)
-    : triggerFetch(client, pageSession, url);
-  const paused = await waitPause(client, from, url, methods, budget);
-  if (!paused) {
-    await settleTrigger(triggerPromise, budget);
+  try {
+    return await withPathBudget(
+      (async () => {
+        const methods =
+          transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+        triggerPromise = topLevel
+          ? triggerNavigate(client, pageSession, url)
+          : triggerFetch(client, pageSession, url);
+        paused = await waitPause(client, from, url, methods, budget);
+        if (!paused) {
+          note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
+          return attemptRecord(
+            { ok: false, error: { message: 'timeout: no pause' } },
+            'incomplete'
+          );
+        }
+        const out = fetchReady
+          ? await fetchFulfill({
+              responseHeaders: [
+                { name: 'content-type', value: 'text/plain' },
+                { name: 'Set-Cookie', value: header },
+              ],
+              body: b64text('ok'),
+            }).send(client, paused)
+          : await legacyContinue({
+              rawResponse: rawHttpResponse({
+                code: 200,
+                phrase: 'OK',
+                headers: [{ name: 'Set-Cookie', value: header }],
+                body: 'ok',
+              }),
+            }).send(client, paused);
+        note(notes, `cookie-plant.${label}`, { answered: answered(out), refused: refused(out) });
+        return {
+          answered: answered(out) ? true : 'incomplete',
+          refused: answered(out) ? refused(out) : 'incomplete',
+          planted: false,
+        };
+      })(),
+      Math.max(budget * 2, 8000),
+      label
+    );
+  } catch (error) {
+    note(notes, `cookie-plant.${label}`, { incomplete: String(error?.message ?? error) });
+    return attemptRecord(
+      { ok: false, error: { message: String(error?.message ?? error) } },
+      'incomplete'
+    );
+  } finally {
+    await releasePause(client, paused);
+    await drainPauses(client, from);
+    await settleTrigger(triggerPromise, Math.min(budget, 1000));
     await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
-    note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
-    return attemptRecord({ ok: false, error: { message: 'timeout: no pause' } }, 'incomplete');
   }
-  const out = fetchReady
-    ? await fetchFulfill({
-        responseHeaders: [
-          { name: 'content-type', value: 'text/plain' },
-          { name: 'Set-Cookie', value: header },
-        ],
-        body: b64text('ok'),
-      }).send(client, paused)
-    : await legacyContinue({
-        rawResponse: rawHttpResponse({
-          code: 200,
-          phrase: 'OK',
-          headers: [{ name: 'Set-Cookie', value: header }],
-          body: 'ok',
-        }),
-      }).send(client, paused);
-  if (refused(out) || !out.ok) await releasePause(client, paused);
-  await settleTrigger(triggerPromise, budget);
-  await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
-  note(notes, `cookie-plant.${label}`, { answered: answered(out), refused: refused(out) });
-  return {
-    answered: answered(out) ? true : 'incomplete',
-    refused: answered(out) ? refused(out) : 'incomplete',
-    planted: false,
-  };
 }
 
 async function seedCookie(reader, sessionId, cookie) {
@@ -1320,10 +1352,19 @@ function controlAttacks(ctx) {
   };
 }
 
-async function runAttempts(groups) {
+async function runAttempts(groups, budget = 5000) {
   const results = {};
   for (const group of groups) {
-    for (const [name, run] of Object.entries(group ?? {})) results[name] = await run();
+    for (const [name, run] of Object.entries(group ?? {})) {
+      try {
+        results[name] = await withPathBudget(run(), Math.max(budget * 3, 12000), name);
+      } catch (error) {
+        results[name] = attemptRecord(
+          { ok: false, error: { message: String(error?.message ?? error) } },
+          'incomplete'
+        );
+      }
+    }
   }
   for (const name of ALL_PATH_NAMES) if (!results[name]) results[name] = EMPTY_ATTEMPT;
   return results;
@@ -1638,12 +1679,15 @@ export async function cookiePlant({
     credentialSiteDomain,
   });
 
-  const results = await runAttempts([
-    fetchAttacks(ctx),
-    legacyAttacks(ctx, enabled.legacyReady),
-    credential ? credentialAttacks(ctx) : null,
-    controlAttacks(ctx),
-  ]);
+  const results = await runAttempts(
+    [
+      fetchAttacks(ctx),
+      legacyAttacks(ctx, enabled.legacyReady),
+      credential ? credentialAttacks(ctx) : null,
+      controlAttacks(ctx),
+    ],
+    budget
+  );
 
   await disableInterception(client, pageSession, enabled.transport);
   await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));

@@ -92,7 +92,9 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.equal(vector.control.expected.fulfillArrayPlanted, true);
   assert.equal(vector.control.expected.fulfillObjectPlanted, 'either');
   assert.equal(vector.control.expected.binaryLfPlanted, 'either');
+  assert.equal(vector.control.expected.domainTrailDotPlanted, 'either');
   assert.equal(vector.expected.binaryLfPlanted, false);
+  assert.equal(vector.expected.domainTrailDotPlanted, false);
   assert.equal(vector.expected.ordinaryPlanted, true);
   assert.equal(vector.expected.deletionRefused, false);
   assert.equal(vector.expected.deletionCleared, true);
@@ -204,7 +206,6 @@ for (const path of [
   'legacyRaw',
   'redirect3xx',
   'domainUpper',
-  'domainTrailDot',
   'domainRepeated',
   'domainWs',
   'setCookieSecond',

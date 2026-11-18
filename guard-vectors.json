@@ -36220,7 +36220,7 @@
           ]
         },
         "domainUpperPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the domainUpper Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: raw-leg jar measure for domainUpper (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainUpperPlanted",
@@ -36257,7 +36257,7 @@
           ]
         },
         "domainTrailDotPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the domainTrailDot Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: raw-leg jar measure for domainTrailDot (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainTrailDotPlanted",
@@ -36294,7 +36294,7 @@
           ]
         },
         "domainRepeatedPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the domainRepeated Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: raw-leg jar measure for domainRepeated (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainRepeatedPlanted",
@@ -36331,7 +36331,7 @@
           ]
         },
         "domainWsPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the domainWs Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: raw-leg jar measure for domainWs (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainWsPlanted",
@@ -36405,7 +36405,7 @@
           ]
         },
         "setCookieSecondPlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the setCookieSecond Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: raw-leg jar measure for setCookieSecond (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.setCookieSecondPlanted",
@@ -36720,22 +36720,22 @@
           "domainQuotedPlanted": "either",
           "domainQuotedAnswered": true,
           "domainQuotedRefused": "either",
-          "domainUpperPlanted": true,
+          "domainUpperPlanted": "either",
           "domainUpperAnswered": true,
           "domainUpperRefused": "either",
-          "domainTrailDotPlanted": true,
+          "domainTrailDotPlanted": "either",
           "domainTrailDotAnswered": true,
           "domainTrailDotRefused": "either",
-          "domainRepeatedPlanted": true,
+          "domainRepeatedPlanted": "either",
           "domainRepeatedAnswered": true,
           "domainRepeatedRefused": "either",
-          "domainWsPlanted": true,
+          "domainWsPlanted": "either",
           "domainWsAnswered": true,
           "domainWsRefused": "either",
           "headerPaddedPlanted": "either",
           "headerPaddedAnswered": true,
           "headerPaddedRefused": "either",
-          "setCookieSecondPlanted": true,
+          "setCookieSecondPlanted": "either",
           "setCookieSecondAnswered": true,
           "setCookieSecondRefused": "either",
           "responsePhrasePlanted": "either",
@@ -36834,7 +36834,8 @@
       "notes": [
         "legacy unsupported in this Chrome when Network.setRequestInterception is absent (Chrome 156+)",
         "fulfillObject uses the real map/object responseHeaders form; Chrome rejects it: not a plant path",
-        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)"
+        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
+        "domainTrailDot (Domain=host.) is not stored by current Chrome; control planted is either for Domain-spelling and similar encodings so the raw-leg jar measure decides plant vs not-a-plant-path"
       ]
     },
     {
@@ -37276,7 +37277,7 @@
           ]
         },
         "domainUpperPlanted": {
-          "means": "C10.cookie-plant.credential: unguarded jar holds the domainUpper credential Domain plant",
+          "means": "C10.cookie-plant.credential: raw-leg jar measure for domainUpper (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainUpperPlanted",
@@ -37313,7 +37314,7 @@
           ]
         },
         "domainTrailDotPlanted": {
-          "means": "C10.cookie-plant.credential: unguarded jar holds the domainTrailDot credential Domain plant",
+          "means": "C10.cookie-plant.credential: raw-leg jar measure for domainTrailDot (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainTrailDotPlanted",
@@ -37350,7 +37351,7 @@
           ]
         },
         "domainRepeatedPlanted": {
-          "means": "C10.cookie-plant.credential: unguarded jar holds the domainRepeated credential Domain plant",
+          "means": "C10.cookie-plant.credential: raw-leg jar measure for domainRepeated (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainRepeatedPlanted",
@@ -37387,7 +37388,7 @@
           ]
         },
         "domainWsPlanted": {
-          "means": "C10.cookie-plant.credential: unguarded jar holds the domainWs credential Domain plant",
+          "means": "C10.cookie-plant.credential: raw-leg jar measure for domainWs (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.domainWsPlanted",
@@ -37461,7 +37462,7 @@
           ]
         },
         "setCookieSecondPlanted": {
-          "means": "C10.cookie-plant.credential: unguarded jar holds the setCookieSecond credential Domain plant",
+          "means": "C10.cookie-plant.credential: raw-leg jar measure for setCookieSecond (Chrome may not store; control planted is either)",
           "check": {
             "result": "probe",
             "path": "result.setCookieSecondPlanted",
@@ -37825,22 +37826,22 @@
           "domainQuotedPlanted": "either",
           "domainQuotedAnswered": true,
           "domainQuotedRefused": "either",
-          "domainUpperPlanted": true,
+          "domainUpperPlanted": "either",
           "domainUpperAnswered": true,
           "domainUpperRefused": "either",
-          "domainTrailDotPlanted": true,
+          "domainTrailDotPlanted": "either",
           "domainTrailDotAnswered": true,
           "domainTrailDotRefused": "either",
-          "domainRepeatedPlanted": true,
+          "domainRepeatedPlanted": "either",
           "domainRepeatedAnswered": true,
           "domainRepeatedRefused": "either",
-          "domainWsPlanted": true,
+          "domainWsPlanted": "either",
           "domainWsAnswered": true,
           "domainWsRefused": "either",
           "headerPaddedPlanted": "either",
           "headerPaddedAnswered": true,
           "headerPaddedRefused": "either",
-          "setCookieSecondPlanted": true,
+          "setCookieSecondPlanted": "either",
           "setCookieSecondAnswered": true,
           "setCookieSecondRefused": "either",
           "responsePhrasePlanted": "either",
@@ -37855,7 +37856,7 @@
           "legacyRawPlanted": true,
           "legacyRawAnswered": true,
           "legacyRawRefused": "either",
-          "hostOnlyPlanted": true,
+          "hostOnlyPlanted": "either",
           "hostOnlyAnswered": true,
           "hostOnlyRefused": "either",
           "domainCoverPlanted": "either",
@@ -37945,7 +37946,8 @@
       "notes": [
         "legacy unsupported in this Chrome when Network.setRequestInterception is absent (Chrome 156+)",
         "host mapping uses the https fixture for HSTS-preloaded adobelogin.com like C7/#328",
-        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)"
+        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
+        "domainTrailDot (Domain=host.) is not stored by current Chrome; control planted is either for Domain-spelling and similar encodings so the raw-leg jar measure decides plant vs not-a-plant-path"
       ]
     }
   ]

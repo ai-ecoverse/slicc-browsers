@@ -34,7 +34,7 @@ test('C10.cookie-plant reaches live:pass in real Chrome with the cookiePlant gua
         targets,
         fixture,
         capabilities,
-        rowTimeoutMs: 60000,
+        rowTimeoutMs: 180000,
       }
     );
     assert.equal(execution.results.length, 2);

@@ -79,7 +79,7 @@ function parseSetCookie(line) {
   for (const attr of attrs) {
     const match = /^Domain\s*=\s*(.*)$/i.exec(attr);
     if (match) {
-      let next = match[1].trim();
+      const next = match[1].trim();
       if (
         (next.startsWith('"') && next.endsWith('"')) ||
         (next.startsWith("'") && next.endsWith("'"))
@@ -87,7 +87,10 @@ function parseSetCookie(line) {
         reject = true;
         continue;
       }
-      if (next.endsWith('.')) next = next.slice(0, -1);
+      if (next.endsWith('.')) {
+        reject = true;
+        continue;
+      }
       domain = next;
     }
     const age = /^Max-Age\s*=\s*(.*)$/i.exec(attr);

@@ -105,7 +105,7 @@ The catalog is `"schema": 1`. Minor releases only add fields; changing or removi
 
 ## Discovery
 
-A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a probe of ports 9222 to 9229, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) describes that output. Seven's tabs are reported by origin only, never with a path, query or title.
+A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a port probe, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) describes that output. Seven's tabs are reported by origin only, never with a path, query or title.
 
 ### The process source
 
@@ -244,11 +244,11 @@ You supply:
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
 | `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
-| `requestInterception` | Fetch fulfill/continueResponse or legacy Network interception |
+| `requestInterception` | Fetch fulfill/continueResponse or legacy |
 | `fetchInterception` | Fetch response-writing fulfill/continueResponse |
-| `legacyInterception` | Network.setRequestInterception / continueInterceptedRequest |
+| `legacyInterception` | setRequestInterception / continueInterceptedRequest |
 
-Interception caps are derived; Fetch fulfill/continueResponse needs `requestInterception`. Legacy absence notes `legacy unsupported in this Chrome`. C10 (+ credential) blocks interception plants. Current Chrome does not store LF-in-binary, obs-fold, quoted Domain, padded names, phrase injection, or continueResponse/at-request — refusing those (bios #1633/#1634, slicc-cdp #847/#849, slicc-cli #768) is fail-closed hardening, not an exploitable plant; NO_STORE is a measurement note only, never permission to relax. A raw-leg store still scores a plant path.
+Derived; Fetch writing needs `requestInterception`. NO_STORE is jar-measure only, never permission to relax.
 
 ### Reading the result
 

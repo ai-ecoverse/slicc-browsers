@@ -101,11 +101,7 @@ test('observation-only capabilities skip explicitly unavailable fields, not miss
   assert.equal(judge(vector, 'guarded', { ...observed, cookieRefused: false }).pass, false);
   assert.equal(
     judge(vector, 'guarded', { ...observed, cookieRefused: 'not-supported' }).pass,
-    true
-  );
-  assert.deepEqual(
-    judge(vector, 'guarded', { ...observed, cookieRefused: 'not-supported' }).skipped.sort(),
-    ['cookieRefused', 'listed']
+    false
   );
 });
 

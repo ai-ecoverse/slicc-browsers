@@ -136,6 +136,8 @@ pub struct Observation {
     pub requires: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unless: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub optional: bool,
     #[serde(
         default,
         rename = "eitherWhen",

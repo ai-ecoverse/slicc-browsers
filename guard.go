@@ -117,6 +117,7 @@ type GuardObservation struct {
 	DependsOn   []string        `json:"dependsOn,omitzero"`
 	Requires    []string        `json:"requires,omitempty"`
 	Unless      []string        `json:"unless,omitempty"`
+	Optional    bool            `json:"optional,omitempty"`
 	EitherWhen  json.RawMessage `json:"eitherWhen,omitempty"`
 	AbsencePoll bool            `json:"absencePoll,omitempty"`
 }

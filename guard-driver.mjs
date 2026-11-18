@@ -199,7 +199,10 @@ export function judge(vector, side, observed) {
   }
   const skipped = Object.keys(want).filter(
     (k) =>
-      observed?.[k] === 'not-supported' ||
+      (observed?.[k] === 'not-supported' &&
+        ((vector.observe?.[k]?.requires?.length ?? 0) > 0 ||
+          (vector.observe?.[k]?.unless?.length ?? 0) > 0 ||
+          vector.observe?.[k]?.optional === true)) ||
       (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const incomplete = Object.keys(want).filter(

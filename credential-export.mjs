@@ -27,10 +27,32 @@ const siteHost = (host) => {
   return parts.length >= 2 ? parts.slice(-2).join('.') : host;
 };
 
+const hstsPreloaded = (host) => {
+  const name = String(host ?? '')
+    .toLowerCase()
+    .replace(/\.$/, '');
+  return (
+    name === 'adobe.com' ||
+    name.endsWith('.adobe.com') ||
+    name === 'adobelogin.com' ||
+    name.endsWith('.adobelogin.com')
+  );
+};
+
 function siteOf(url) {
   const parsed = parseURL(url);
   if (!parsed?.hostname) return null;
   return `${parsed.protocol}//${siteHost(hostOf(parsed))}`;
+}
+
+function fixtureOriginFor(templateUrl, host, { insecurePreloaded = false } = {}) {
+  const parsed = parseURL(templateUrl);
+  if (!parsed?.hostname && !host) return null;
+  const name = host ?? hostOf(parsed);
+  const port = parsed?.port ? `:${parsed.port}` : '';
+  const scheme =
+    !insecurePreloaded && hstsPreloaded(name) ? 'https:' : (parsed?.protocol ?? 'http:');
+  return `${scheme}//${name}${port}`;
 }
 
 const partitionSite = (cookie) => {
@@ -1158,7 +1180,10 @@ async function plantInLocalFrame(reader, topSession, topId, frameId, { lsKey, ta
   };
 }
 
-async function plantPartitionedInTop(reader, { topUrl, iframeOrigin, lsKey, tag, label, until }) {
+async function plantPartitionedInTop(
+  reader,
+  { topUrl, iframeOrigin, lsKey, tag, marker, frameId, until }
+) {
   await outcome(reader.send('Target.setDiscoverTargets', { discover: true }));
   const created = await outcome(reader.send('Target.createTarget', { url: topUrl }));
   const topId = created.result?.targetId;
@@ -1171,35 +1196,39 @@ async function plantPartitionedInTop(reader, { topUrl, iframeOrigin, lsKey, tag,
   await outcome(reader.send('Page.enable', {}, topSession));
   await outcome(reader.send('Runtime.enable', {}, topSession));
   const topOrigin = new URL(topUrl).origin;
-  await until(() => pageReady(reader, topSession, (value) => value.href.startsWith(topOrigin)));
-  const marker = `cred-frame=${encodeURIComponent(tag)}-${encodeURIComponent(label)}`;
-  const frameId = `cred-part-frame-${label}`;
-  const src = `${iframeOrigin}/blank?${marker}`;
-  const before = reader.events?.length ?? 0;
-  await outcome(
-    reader.send(
-      'Runtime.evaluate',
-      {
-        expression: `(()=>{const id=${JSON.stringify(frameId)};let f=document.getElementById(id);if(f)f.remove();f=document.createElement('iframe');f.id=id;f.src=${JSON.stringify(src)};document.body.appendChild(f);return true;})()`,
-        returnByValue: true,
-      },
-      topSession
-    )
+  const ready = await until(() =>
+    pageReady(reader, topSession, (value) => value.href.startsWith(topOrigin))
   );
+  const before = reader.events?.length ?? 0;
   let found = null;
-  await until(async () => {
-    const target = await iframeTarget(reader, before, topId, marker);
-    if (target) found = { target };
-    else {
-      const tree = await outcome(reader.send('Page.getFrameTree', {}, topSession));
-      const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
-        String(entry.frame?.url ?? '').includes(marker)
-      );
-      if (child?.frame?.id) found = { frameId: child.frame.id };
-    }
-    return found !== null;
-  });
   let plant = { planted: false };
+  if (!ready) {
+    found = { target: await iframeTarget(reader, 0, topId, marker) };
+  } else {
+    const src = `${iframeOrigin}/blank?${marker}`;
+    await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        {
+          expression: `(()=>{const id=${JSON.stringify(frameId)};let f=document.getElementById(id);if(f)f.remove();f=document.createElement('iframe');f.id=id;f.src=${JSON.stringify(src)};document.body.appendChild(f);return true;})()`,
+          returnByValue: true,
+        },
+        topSession
+      )
+    );
+    await until(async () => {
+      const target = await iframeTarget(reader, before, topId, marker);
+      if (target) found = { target };
+      else {
+        const tree = await outcome(reader.send('Page.getFrameTree', {}, topSession));
+        const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
+          String(entry.frame?.url ?? '').includes(marker)
+        );
+        if (child?.frame?.id) found = { frameId: child.frame.id };
+      }
+      return found !== null;
+    });
+  }
   if (found?.target)
     plant = await plantInChildTarget(reader, found.target, { lsKey, tag, marker, until });
   else if (found?.frameId) {
@@ -1244,23 +1273,34 @@ async function plantPartitionedDirect(reader, sessions, { iframeOrigin, topSite,
   return { ok: false };
 }
 
-async function plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrigin, tag }) {
+async function plantPartitionedStorage(
+  reader,
+  sessionId,
+  { origin, ordinaryOrigin, tag, insecurePreloadedTops = false }
+) {
   const lsKey = `cred-part-${tag}`;
   const until = (check) => waitFor(check, 5000);
-  const base = parseURL(ordinaryOrigin);
-  const adobeOrigin = `${base.protocol}//adobe.com${base.port ? `:${base.port}` : ''}`;
+  const credentialTop = fixtureOriginFor(origin, hostOf(origin));
+  const adobeOrigin = fixtureOriginFor(ordinaryOrigin, 'adobe.com', {
+    insecurePreloaded: insecurePreloadedTops,
+  });
   const proven = { partitionedKey: lsKey, cleanup: [] };
   for (const [name, topUrl] of [
-    ['adobelogin', `${origin}/credential?n=${encodeURIComponent(tag)}&part=1`],
+    ['adobelogin', `${credentialTop}/credential?n=${encodeURIComponent(tag)}&part=1`],
     ['adobeCom', `${adobeOrigin}/blank?n=${encodeURIComponent(tag)}`],
   ]) {
     const value = `${tag}-${name}`;
+    const marker = insecurePreloadedTops
+      ? `cred-frame=${encodeURIComponent(tag)}`
+      : `cred-frame=${encodeURIComponent(tag)}-${encodeURIComponent(name)}`;
+    const frameId = insecurePreloadedTops ? 'cred-part-frame' : `cred-part-frame-${name}`;
     let planted = await plantPartitionedInTop(reader, {
       topUrl,
       iframeOrigin: ordinaryOrigin,
       lsKey,
       tag: value,
-      label: name,
+      marker,
+      frameId,
       until,
     });
     if (planted.topId) proven.cleanup.push(planted.topId);
@@ -1351,15 +1391,16 @@ export async function credentialExport({
   notes = [],
   budget = 8000,
   refusalPrefix = 'slicc: refused:',
+  insecurePreloadedTops = false,
 }) {
   const until = (check) => waitFor(check, budget);
   const result = emptyCredentialResult();
   const note = (label, evidence) => notes.push(`${label}: ${JSON.stringify(evidence)}`);
   if (!reader) return { ...result, incomplete: 'missing unguarded reader' };
-  const origin = originOf(credentialOrigin);
   const host = hostOf(credentialOrigin);
-  const ordinaryOrigin = originOf(ordinary);
   const ordinaryHost = hostOf(ordinary);
+  const origin = fixtureOriginFor(credentialOrigin, host);
+  const ordinaryOrigin = originOf(ordinary);
   if (!origin || !host || !ordinaryOrigin)
     return { ...result, incomplete: 'credentialOrigin or ordinary is not a URL' };
 
@@ -1407,7 +1448,12 @@ export async function credentialExport({
   );
   Object.assign(
     planted,
-    await plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrigin, tag })
+    await plantPartitionedStorage(reader, sessionId, {
+      origin,
+      ordinaryOrigin,
+      tag,
+      insecurePreloadedTops,
+    })
   );
   note('partitioned', {
     partitionedCredentialProven: planted.partitionedCredentialProven,

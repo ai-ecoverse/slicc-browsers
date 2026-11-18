@@ -29,7 +29,11 @@ const partitionSite = (cookie) => {
   return typeof key === 'string' ? key : (key?.topLevelSite ?? null);
 };
 
-export function credentialBrowser({ secure = true, collidePartitionKeys = false } = {}) {
+export function credentialBrowser({
+  secure = true,
+  collidePartitionKeys = false,
+  hstsUpgrade = [],
+} = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const cookies = [];
@@ -38,6 +42,19 @@ export function credentialBrowser({ secure = true, collidePartitionKeys = false 
   const caches = new Map();
   const connections = [];
   let next = 0;
+  const upgradeHsts = (url) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol !== 'http:') return url;
+      const host = parsed.hostname.toLowerCase();
+      if (!hstsUpgrade.some((name) => host === name || host.endsWith(`.${name}`) || name === host))
+        return url;
+      parsed.protocol = 'https:';
+      return parsed.href;
+    } catch {
+      return url;
+    }
+  };
 
   const info = (tab) => ({
     targetId: tab.targetId,
@@ -98,6 +115,7 @@ export function credentialBrowser({ secure = true, collidePartitionKeys = false 
   const storageKeyOf = (tab) => tab.storageKey ?? tab.frame?.securityOrigin ?? originOf(tab.url);
 
   const commit = (tab, url) => {
+    url = upgradeHsts(url);
     const origin = originOf(url) ?? '://';
     tab.url = url;
     tab.title = url.includes('/credential') ? 'credential' : 'doc';

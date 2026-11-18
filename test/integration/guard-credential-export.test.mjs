@@ -259,7 +259,7 @@ test('judge fails when credential cookies leak', () => {
   );
 });
 
-async function probe(browser, mutants = {}) {
+async function probe(browser, mutants = {}, exportOpts = {}) {
   const { client, unguarded } = credentialGuard(browser, {
     credentialOrigins: catalog.credentialOrigins,
     mutants,
@@ -272,6 +272,7 @@ async function probe(browser, mutants = {}) {
     ordinary: 'http://ordinary.example.test:1',
     tag: 'probe',
     notes,
+    ...exportOpts,
   });
   const partitioned = JSON.parse(
     notes.find((entry) => entry.startsWith('partitioned: ')).slice('partitioned: '.length)
@@ -284,11 +285,11 @@ test('the partitioned storageKey is the frame-reported key, proven by read-back'
   assert.equal(partitioned.adobeloginPartitionProven, true);
   assert.equal(
     partitioned.adobeloginReportedKey,
-    'http://ordinary.example.test:1/^0http://adobelogin.com^31'
+    'http://ordinary.example.test:1/^0https://adobelogin.com^31'
   );
   assert.equal(
     partitioned.adobeComReportedKey,
-    'http://ordinary.example.test:1/^0http://adobe.com^31'
+    'http://ordinary.example.test:1/^0https://adobe.com^31'
   );
   assert.equal(partitioned.adobeloginStorageKey, partitioned.adobeloginReportedKey);
   assert.equal(partitioned.adobeComStorageKey, partitioned.adobeComReportedKey);
@@ -302,6 +303,21 @@ test('the partitioned storageKey is the frame-reported key, proven by read-back'
   assert.equal(result.storageClearCookiesSurvived, true);
   assert.equal(result.clearDataForOriginSurvived, true);
   assert.deepEqual(result.skips, []);
+});
+
+test('HSTS upgrade of http adobe.com tops collides; https preloaded tops stay distinct', async () => {
+  const legacy = await probe(
+    credentialBrowser({ hstsUpgrade: ['adobe.com'] }),
+    {},
+    { insecurePreloadedTops: true }
+  );
+  assert.equal(legacy.result.partitionedStorageKeyFiltered, 'incomplete');
+  assert.equal(legacy.result.adobeComStorageKeyExportable, 'incomplete');
+  const fixed = await probe(credentialBrowser({ hstsUpgrade: ['adobe.com'] }));
+  assert.notEqual(fixed.partitioned.adobeloginStorageKey, fixed.partitioned.adobeComStorageKey);
+  assert.match(fixed.partitioned.adobeComStorageKey, /\/\^0https:\/\/adobe\.com/);
+  assert.equal(fixed.result.adobeComStorageKeyExportable, true);
+  assert.equal(fixed.result.partitionedStorageKeyFiltered, true);
 });
 
 test('unsupported Page.getCookies is skipped when other cookie reads filter', async () => {

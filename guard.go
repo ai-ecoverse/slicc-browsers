@@ -19,6 +19,8 @@ const (
 	GuardTargetVaultX              = "vault-x"
 	GuardTargetApex                = "apex"
 	GuardTargetOwn                 = "own"
+	GuardTargetIdp                 = "idp"
+	GuardTargetIdpStg              = "idp-stg"
 	GuardTargetChromeNewtab        = "chrome-newtab"
 	GuardTargetChromeNewTabPage    = "chrome-new-tab-page"
 	GuardTargetChromeSettings      = "chrome-settings"
@@ -104,6 +106,7 @@ type GuardVector struct {
 	Skip            *GuardSkip                  `json:"skip,omitempty"`
 	DefaultContext  bool                        `json:"defaultContext,omitempty"`
 	DesignDependent []string                    `json:"designDependent,omitempty"`
+	Notes           []string                    `json:"notes,omitempty"`
 	Observable      *GuardObservable            `json:"observable,omitempty"`
 	AppliesTo       []string                    `json:"appliesTo,omitempty"`
 }
@@ -185,6 +188,7 @@ type GuardStep struct {
 	ErrorPage              string          `json:"errorPage,omitempty"`
 	CloseProtectedShape    string          `json:"closeProtectedShape,omitempty"`
 	ProtectedParentIframes string          `json:"protectedParentIframes,omitempty"`
+	CredentialExport       bool            `json:"credentialExport,omitempty"`
 	SignInHold             string          `json:"signInHold,omitempty"`
 	SpawnWorker            string          `json:"spawnWorker,omitempty"`
 	Frame                  string          `json:"frame,omitempty"`

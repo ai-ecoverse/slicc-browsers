@@ -13,6 +13,7 @@
     "discovery",
     "seven",
     "protectedOrigins",
+    "credentialOrigins",
     "profiles",
     "launch",
     "platforms"
@@ -255,6 +256,27 @@
           }
         },
         "refusal": { "$ref": "#/$defs/name" }
+      }
+    },
+    "credentialOrigins": {
+      "description": "Identity-provider origins whose cookies and web storage are withheld from CDP export and whose cookie/storage writes are refused. Pages on these origins stay drivable. Not used for page protection (judge_url, attach, navigate, redaction hosts). Each entry is an absolute https origin (scheme+host, no path, port, trailing slash, leading dot, or wildcard). Matching: url/securityOrigin by exact entry host with http or https (port ignored); storageKey origin part (before ^) by exact entry host EQUALS; storageKey ^0 site part and partitionKey.topLevelSite by under(entryHost, siteHost); cookie domain by under(entryHost, domain).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origins", "refusal"],
+      "properties": {
+        "origins": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
+          }
+        },
+        "refusal": {
+          "type": "string",
+          "pattern": "^slicc: refused: "
+        }
       }
     },
     "profiles": {

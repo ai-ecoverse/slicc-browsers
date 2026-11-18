@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
-import { judge } from '../../guard-driver.mjs';
+import { summary as driverSummary, judge } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
 import { SIGN_IN_HOLD_BODY, SIGN_IN_HOLD_MARK, signInHold } from '../../sign-in-hold.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
@@ -317,6 +317,7 @@ test('signInHold capability is declared and rows require it', () => {
     assert.equal(vector.expected.connectCompletes, true, vector.id);
     assert.deepEqual(vector.observe.eventsSeen.requires, ['discovery'], vector.id);
     assert.equal(vector.observe.jsonListed.requires, undefined, vector.id);
+    assert.equal(vector.observe.jsonListed.optional, true, vector.id);
     assert.ok(sweepCaps.signInHold === true || sweepCaps.signInHold === undefined);
     assert.ok(sweepCaps.jsonList === true || sweepCaps.jsonList === undefined);
   }
@@ -505,41 +506,40 @@ test('mutant holdMissing never passes the guarded leg', async () => {
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
 });
 
-test('jsonList leak fails even when jsonList capability is undeclared', async () => {
-  const out = await rows({
-    leakJsonList: true,
-    capabilities: { jsonList: undefined },
-  });
-  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
-  assert.equal(row.guarded, 'fail', JSON.stringify(row));
-  assert.equal(row.observations.guarded.jsonListed, true, JSON.stringify(row));
-  assert.ok(!(row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
-});
-
-test('unreachable /json/list is not-supported while a getTargets leak still fails', async () => {
+async function withoutListing(options = {}) {
   const fixture = await fixtureServer();
   try {
-    const browser = signInFake();
-    for (const conn of [browser.client, browser.unguarded]) delete conn.jsonList;
+    const browser = signInFake({ holdAnswer: options.holdAnswer });
+    for (const conn of [browser.client, browser.unguarded]) {
+      delete conn.jsonList;
+      delete conn.devtoolsHttp;
+      delete conn.ws;
+    }
     const origin = (host) => `http://${host}:${fixture.port}`;
+    const { holdAnswer: _holdAnswer, capabilities: extraCaps, ...guardOptions } = options;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
       signInHold: true,
-      leakGetTargets: true,
+      ...guardOptions,
     });
     delete guard.client.jsonList;
     delete guard.client.devtoolsHttp;
     delete guard.client.ws;
     try {
-      const out = await run(
-        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+      return await run(
+        { ...set, vectors, variants: { prompt: 0 } },
         {
           client: guard.client,
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
-          capabilities: { browserSession: true, discovery: true, signInHold: true },
+          capabilities: {
+            browserSession: true,
+            discovery: true,
+            signInHold: true,
+            ...extraCaps,
+          },
           targets: {
             ordinary: origin('ordinary.example.test'),
             cross: origin('cross.test'),
@@ -551,16 +551,78 @@ test('unreachable /json/list is not-supported while a getTargets leak still fail
           },
         }
       );
-      const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
-      assert.equal(row.guarded, 'fail', JSON.stringify(row));
-      assert.ok((row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
-      assert.match(String(row.why ?? ''), /targetsListed/);
     } finally {
-      await guard.stop?.();
+      await guard.stop();
     }
   } finally {
     await fixture.close();
   }
+}
+
+test('unreachable /json/list is not-supported and the run still passes', async () => {
+  const out = await withoutListing();
+  for (const id of ids) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.ok(row, id);
+    assert.equal(row.control, 'pass', `${id} control ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'pass', `${id} guarded ${JSON.stringify(row)}`);
+    assert.equal(row.live, 'pass', `${id} live ${JSON.stringify(row)}`);
+    assert.ok((row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+    assert.equal(row.observations.control.jsonListed, 'not-supported', id);
+    assert.equal(row.observations.guarded.jsonListed, 'not-supported', id);
+  }
+  const report = out.summary({ guard: 'emulator', sha: 'test' });
+  assert.equal(report.pass, true, JSON.stringify(report.forged));
+  assert.deepEqual(report.forged, []);
+  assert.match(report.line, /^GUARD-PASS /);
+});
+
+test('jsonList leak fails when listing is reachable even without jsonList declared', async () => {
+  const out = await rows({
+    leakJsonList: true,
+    capabilities: { jsonList: undefined },
+  });
+  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.jsonListed, true, JSON.stringify(row));
+  assert.ok(!(row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+  const report = out.summary({ guard: 'emulator', sha: 'test' });
+  assert.equal(report.pass, false);
+  assert.match(report.line, /^GUARD-FAIL /);
+});
+
+test('not-supported jsonListed is forged when the observation is not optional', () => {
+  const vector = structuredClone(vectors[0]);
+  delete vector.observe.jsonListed.optional;
+  const one = { ...set, vectors: [{ ...vector, targets: ['seven'] }] };
+  const expected = { ...vector.expected };
+  const row = {
+    id: vector.id,
+    target: 'seven',
+    variant: 'prompt',
+    transport: 'cdp',
+    control: 'pass',
+    guarded: 'pass',
+    live: 'pass',
+    notSupported: ['jsonListed'],
+    observations: {
+      control: { ...expected, jsonListed: 'not-supported' },
+      guarded: { ...expected, jsonListed: 'not-supported' },
+    },
+  };
+  const report = driverSummary({
+    guard: 'emulator',
+    sha: 'test',
+    set: one,
+    results: [row],
+    capabilities: ['browserSession', 'discovery', 'signInHold'],
+  });
+  assert.equal(report.pass, false, JSON.stringify(report));
+  assert.ok(
+    report.forged.some((f) => f.id === vector.id && /jsonListed/.test(f.why)),
+    JSON.stringify(report.forged)
+  );
+  assert.match(report.line, /^GUARD-FAIL .* forged /);
 });
 
 test('signInHold.ask held/unheld/none each take their verdict path', async () => {

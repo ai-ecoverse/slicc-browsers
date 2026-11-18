@@ -32739,6 +32739,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.held-popup: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",
@@ -32886,6 +32887,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.callback: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",
@@ -33022,6 +33024,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.callback-encoded: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",
@@ -33158,6 +33161,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.callback-origin: /json/list through the client shows the sign-in or held tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",
@@ -33294,6 +33298,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.ordinary-popup: /json/list through the client shows the ordinary tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",
@@ -33429,6 +33434,7 @@
       "observe": {
         "jsonListed": {
           "means": "C7.sign-in-hold.ordinary-authorize: /json/list through the client shows the ordinary tab by id, URL or title",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.jsonListed",

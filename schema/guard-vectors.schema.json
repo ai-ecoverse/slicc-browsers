@@ -241,6 +241,9 @@
         "unless": {
           "$ref": "#/$defs/requires"
         },
+        "optional": {
+          "type": "boolean"
+        },
         "check": {
           "$ref": "#/$defs/check"
         },

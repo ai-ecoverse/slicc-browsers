@@ -248,7 +248,7 @@ You supply:
 | `fetchInterception` | Fetch response-writing fulfill/continueResponse |
 | `legacyInterception` | Network.setRequestInterception / continueInterceptedRequest |
 
-Derived from the transport: Fetch fulfill/continueResponse requires declaring `requestInterception` (else plant rows skip). Legacy removal notes `legacy unsupported in this Chrome`, not a silent pass. C10.cookie-plant (+ credential) blocks planting protected/credential cookies via interception; Chrome-no-store encodings are recorded as not plant paths.
+Interception caps are derived; Fetch fulfill/continueResponse needs `requestInterception`. Legacy absence notes `legacy unsupported in this Chrome`. C10 (+ credential) blocks interception plants. Current Chrome does not store LF-in-binary, obs-fold, quoted Domain, padded names, phrase injection, or continueResponse/at-request — refusing those (bios #1633/#1634, slicc-cdp #847/#849, slicc-cli #768) is fail-closed hardening, not an exploitable plant; NO_STORE is a measurement note only, never permission to relax. A raw-leg store still scores a plant path.
 
 ### Reading the result
 

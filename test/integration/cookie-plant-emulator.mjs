@@ -57,10 +57,18 @@ function cookieLines(headers) {
   const lines = [];
   for (const { name, value } of headers) {
     const key = String(name).trim().toLowerCase();
-    if (key !== 'set-cookie' && key !== 'set-cookie2') continue;
-    for (const part of String(value).split(/\n/)) {
-      const trimmed = part.trim();
-      if (trimmed) lines.push(trimmed);
+    const text = String(value ?? '');
+    if (key === 'set-cookie' || key === 'set-cookie2') {
+      for (const part of text.split(/\n/)) {
+        const trimmed = part.trim();
+        if (trimmed) lines.push(trimmed);
+      }
+      continue;
+    }
+    if (!/[\r\n]/.test(text)) continue;
+    for (const part of text.split(/\r?\n/)) {
+      const match = /^\s*Set-Cookie2?:\s*(.*)$/i.exec(part);
+      if (match?.[1]?.trim()) lines.push(match[1].trim());
     }
   }
   return lines;

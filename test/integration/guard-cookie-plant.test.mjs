@@ -44,9 +44,9 @@ function targetsOf(fixture, origin) {
 async function rows(options = {}, subset = protectedVectors) {
   const fixture = await fixtureServer();
   try {
-    const browser = cookiePlantFake();
+    const { capabilities: extraCaps, fake: fakeOptions, ...guardOptions } = options;
+    const browser = cookiePlantFake(fakeOptions ?? {});
     const origin = (host) => `http://${host}:${fixture.port}`;
-    const { capabilities: extraCaps, ...guardOptions } = options;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       credentialOrigins: catalog.credentialOrigins,
@@ -90,7 +90,9 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.equal(vector.control.via, 'guard');
   assert.equal(vector.expected.fulfillArrayPlanted, false);
   assert.equal(vector.control.expected.fulfillArrayPlanted, true);
-  assert.equal(vector.control.expected.fulfillObjectPlanted, false);
+  assert.equal(vector.control.expected.fulfillObjectPlanted, 'either');
+  assert.equal(vector.control.expected.binaryLfPlanted, 'either');
+  assert.equal(vector.expected.binaryLfPlanted, false);
   assert.equal(vector.expected.ordinaryPlanted, true);
   assert.equal(vector.expected.deletionRefused, false);
   assert.equal(vector.expected.deletionCleared, true);
@@ -231,6 +233,42 @@ test('mutant allowPlantPaths=hostOnly fails the credential row', async () => {
   const out = await rows({ allowPlantPaths: ['hostOnly'] }, credentialVectors);
   const row = out.results.find((r) => r.id === 'C10.cookie-plant.credential' && r.target === 'idp');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('binaryLf not stored is recorded as not-a-plant-path, not required', async () => {
+  const out = await rows();
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.control.binaryLfPlanted, false, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) =>
+      /cookie-plant\.binaryLf:.*"Chrome does not store it: not a plant path"/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('binaryLf stored by the transport is a plant path; a leak fails', async () => {
+  const ok = await rows({ fake: { storeBinaryLf: true } });
+  const pass = ok.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(pass.control, 'pass', JSON.stringify(pass));
+  assert.equal(pass.guarded, 'pass', JSON.stringify(pass));
+  assert.equal(pass.observations.control.binaryLfPlanted, true, JSON.stringify(pass));
+  assert.equal(pass.observations.guarded.binaryLfPlanted, false, JSON.stringify(pass));
+  assert.ok(
+    (pass.notes ?? []).some((n) =>
+      /cookie-plant\.binaryLf:.*"raw leg stored it: plant path"/.test(n)
+    ),
+    JSON.stringify(pass.notes)
+  );
+  const leak = await rows({
+    fake: { storeBinaryLf: true },
+    allowPlantPaths: ['binaryLf'],
+  });
+  const row = leak.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.binaryLfPlanted, true, JSON.stringify(row));
 });
 
 test('refuse-all interception fails the controls', async () => {

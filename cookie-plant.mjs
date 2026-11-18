@@ -488,8 +488,10 @@ async function finishPlant({
     via: jar?.via,
     jarIncomplete: jar?.incomplete,
   };
-  if (planted === false && CHROME_NO_STORE.has(label))
+  if (planted === false && answered(out) && !refused(out) && CHROME_NO_STORE.has(label))
     evidence.note = 'Chrome does not store it: not a plant path';
+  else if (planted === true && CHROME_NO_STORE.has(label))
+    evidence.note = 'raw leg stored it: plant path';
   note(notes, `cookie-plant.${label}`, evidence);
   await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
   return attemptRecord(out, planted);

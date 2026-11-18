@@ -466,8 +466,23 @@ export function cookiePlantFake(options = {}) {
       const smuggled = headers.some(
         (h) => /[\r\n]/.test(String(h.name)) || /[\r\n]/.test(String(h.value))
       );
-      if (method === 'Fetch.fulfillRequest' && !smuggled)
-        plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
+      if (method === 'Fetch.fulfillRequest') {
+        if (!smuggled) plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
+        else if (options.storeBinaryLf) {
+          const expanded = [];
+          for (const { name, value } of headers) {
+            if (!/[\r\n]/.test(String(value))) {
+              expanded.push({ name, value });
+              continue;
+            }
+            for (const part of String(value).split(/\r?\n/)) {
+              const match = /^\s*Set-Cookie:\s*(.*)$/i.exec(part);
+              if (match) expanded.push({ name: 'Set-Cookie', value: match[1] });
+            }
+          }
+          plantFromHeaders(entry.tab, entry.url, expanded, entry.topLevel);
+        }
+      }
       if (entry.topLevel && entry.tab) {
         entry.tab.url = entry.url;
         entry.tab.title = entry.url;

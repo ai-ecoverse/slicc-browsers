@@ -388,7 +388,7 @@ for (const v of guard.vectors ?? []) {
       typeof st.protectedParentIframes === 'string' &&
       st.protectedParentIframes.startsWith('page')
     )
-      needs.add('autoAttach');
+      needs.add('iframeAutoAttach');
     if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
       if (c === 'autoAttach' && (st.requires ?? []).includes('syntheticAutoAttach')) continue;

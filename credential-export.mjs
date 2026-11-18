@@ -141,7 +141,13 @@ async function plantState(reader, { origin, host, tag, sessionId }) {
     reader.send(
       'Runtime.evaluate',
       {
-        expression: `(async()=>{const secure=self.isSecureContext===true;const localStorageOk=(()=>{try{localStorage.setItem(${q(lsKey)},${q(tag)});return localStorage.getItem(${q(lsKey)})===${q(tag)};}catch(e){return 'err:'+e.message;}})();let idb=false;try{const open=indexedDB.open(${q(dbName)},1);const db=await new Promise((ok,err)=>{open.onupgradeneeded=()=>open.result.createObjectStore('s');open.onsuccess=()=>ok(open.result);open.onerror=()=>err(open.error);});const tx=db.transaction('s','readwrite');tx.objectStore('s').put(${q(tag)},'k');await new Promise((ok,err)=>{tx.oncomplete=()=>ok(true);tx.onerror=()=>err(tx.error);tx.onabort=()=>err(tx.error);});db.close();idb=true;}catch(e){idb='err:'+e.message;}let cache='insecure-context';if(secure){try{const c=await caches.open(${q(cacheName)});await c.put(${q(cacheUrl)},new Response(${q(tag)}));const m=await c.match(${q(cacheUrl)});cache=m?await m.text():false;}catch(e){cache='err:'+e.message;}}return {secure,localStorage:localStorageOk,idb,cache};})()`,
+        expression: `(async()=>{
+const secure=self.isSecureContext===true;
+const localStorageOk=(()=>{try{localStorage.setItem(${q(lsKey)},${q(tag)});return localStorage.getItem(${q(lsKey)})===${q(tag)};}catch(e){return 'err:'+e.message;}})();
+const idb=await (async()=>{try{const open=indexedDB.open(${q(dbName)},1);const db=await new Promise((ok,err)=>{open.onupgradeneeded=()=>open.result.createObjectStore('s');open.onsuccess=()=>ok(open.result);open.onerror=()=>err(open.error);});const tx=db.transaction('s','readwrite');tx.objectStore('s').put(${q(tag)},'k');await new Promise((ok,err)=>{tx.oncomplete=()=>ok(true);tx.onerror=()=>err(tx.error);tx.onabort=()=>err(tx.error);});db.close();return true;}catch(e){return 'err:'+e.message;}})();
+const cache=await (async()=>{if(!secure)return 'insecure-context';try{const c=await caches.open(${q(cacheName)});await c.put(${q(cacheUrl)},new Response(${q(tag)}));const m=await c.match(${q(cacheUrl)});return m?await m.text():false;}catch(e){return 'err:'+e.message;}})();
+return {secure,localStorage:localStorageOk,idb,cache};
+})()`,
         awaitPromise: true,
         returnByValue: true,
       },
@@ -315,6 +321,7 @@ function emptyCredentialResult() {
     storageSetCookiesRefused: false,
     clearBrowserCookiesSurvived: false,
     storageClearCookiesSurvived: false,
+    clearDataForOriginSurvived: false,
     headersStripped: false,
     associatedCookiesStripped: false,
     domStorageRefused: false,
@@ -925,6 +932,66 @@ async function measureGlobalClears(ctx) {
   }
 }
 
+async function measureClearDataForOrigin(ctx) {
+  const { client, reader, readerSession, origin, host, tag, planted, result } = ctx;
+  const replanted = await setCookies(
+    reader,
+    readerSession,
+    credentialCookieParams(planted, origin, tag)
+  );
+  if (replanted) {
+    unmeasurable(ctx, 'clearDataForOriginSurvived', `re-plant cookies before clear: ${replanted}`);
+    return;
+  }
+  const store = await outcome(
+    reader.send(
+      'Runtime.evaluate',
+      {
+        expression: `(async()=>{try{localStorage.setItem(${JSON.stringify(planted.lsKey)},${JSON.stringify(tag)});const open=indexedDB.open(${JSON.stringify(planted.dbName)},1);const db=await new Promise((ok,err)=>{open.onupgradeneeded=()=>open.result.createObjectStore('s');open.onsuccess=()=>ok(open.result);open.onerror=()=>err(open.error);});const tx=db.transaction('s','readwrite');tx.objectStore('s').put(${JSON.stringify(tag)},'k');await new Promise((ok,err)=>{tx.oncomplete=()=>ok(true);tx.onerror=()=>err(tx.error);});db.close();return true;}catch(e){return 'err:'+e.message;}})()`,
+        awaitPromise: true,
+        returnByValue: true,
+      },
+      readerSession
+    )
+  );
+  if (!store.ok || store.result?.result?.value !== true) {
+    unmeasurable(
+      ctx,
+      'clearDataForOriginSurvived',
+      `re-plant storage before clear: ${store.error?.message ?? JSON.stringify(store.result?.result?.value)}`
+    );
+    return;
+  }
+  const cleared = await tryMethod(
+    client,
+    'Storage.clearDataForOrigin',
+    {
+      origin,
+      storageTypes: 'cookies,local_storage,indexeddb,cache_storage',
+    },
+    undefined
+  );
+  if (cleared.skip) {
+    unmeasurable(ctx, 'clearDataForOriginSurvived', cleared.skip);
+    return;
+  }
+  if (refused(cleared.out)) {
+    result.clearDataForOriginSurvived = true;
+    return;
+  }
+  const all = await outcome(reader.send('Network.getAllCookies', {}, readerSession));
+  const cookiesOk = all.ok && survivingCookies(all.result?.cookies, planted, host, tag);
+  const lsOk = hasEntry(
+    await readerEntries(reader, [readerSession], {
+      securityOrigin: origin,
+      isLocalStorage: true,
+    }),
+    planted.lsKey
+  );
+  const idbOk = (await readerDatabases(reader, readerSession, origin))?.includes(planted.dbName);
+  result.clearDataForOriginSurvived = Boolean(cookiesOk && lsOk && idbOk);
+}
+
 async function readPartitionedKey(reader, sessions, storageKey, lsKey, tag) {
   return hasEntry(
     await readerEntries(reader, sessions, { storageKey, isLocalStorage: true }),
@@ -1161,6 +1228,7 @@ async function probeCredentialClient(ctx) {
   if (ctx.control) return;
   await measureStorageMutations(ctx);
   await measureGlobalClears(ctx);
+  await measureClearDataForOrigin(ctx);
 }
 
 async function closeAll(reader, targetIds) {
@@ -1283,6 +1351,7 @@ export async function credentialExport({
     adobeComStorageKeyExportable: result.adobeComStorageKeyExportable,
     clearBrowserCookiesSurvived: result.clearBrowserCookiesSurvived,
     storageClearCookiesSurvived: result.storageClearCookiesSurvived,
+    clearDataForOriginSurvived: result.clearDataForOriginSurvived,
     pageDrivable: result.pageDrivable,
     skips: result.skips,
   });

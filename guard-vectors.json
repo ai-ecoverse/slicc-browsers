@@ -32373,6 +32373,15 @@
             "observer": "client"
           }
         },
+        "clearDataForOriginSurvived": {
+          "means": "after Storage.clearDataForOrigin on the guarded client the unguarded reader still sees planted credential-origin cookies and storage",
+          "check": {
+            "result": "probe",
+            "path": "result.clearDataForOriginSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "headersStripped": {
           "means": "Cookie and Set-Cookie headers for credential-origin traffic are stripped from ExtraInfo events",
           "check": {
@@ -32562,6 +32571,7 @@
         "storageSetCookiesRefused": true,
         "clearBrowserCookiesSurvived": true,
         "storageClearCookiesSurvived": true,
+        "clearDataForOriginSurvived": true,
         "headersStripped": true,
         "associatedCookiesStripped": true,
         "domStorageRefused": true,

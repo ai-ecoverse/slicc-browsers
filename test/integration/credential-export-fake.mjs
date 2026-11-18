@@ -178,6 +178,8 @@ export function credentialBrowser({ secure = true } = {}) {
         list.add(cacheMatch[2]);
         caches.set(origin, list);
       }
+      if (!expression.includes('localStorageOk'))
+        return { result: { type: 'boolean', value: true } };
       const cacheValue = /new Response\((['"])(.*?)\1\)/.exec(expression)?.[2];
       return {
         result: {
@@ -313,6 +315,17 @@ export function credentialBrowser({ secure = true } = {}) {
       cookies.length = 0;
       return {};
     }
+    if (method === 'Storage.clearDataForOrigin') {
+      const origin = params.origin;
+      const url = `${origin}/`;
+      for (let i = cookies.length - 1; i >= 0; i--)
+        if (matchCookie(cookies[i], url) || originOf(cookies[i].url) === origin)
+          cookies.splice(i, 1);
+      localStores.delete(origin);
+      for (const key of [...idb.keys()]) if (key.startsWith(`${origin}::`)) idb.delete(key);
+      caches.delete(origin);
+      return {};
+    }
     if (method === 'DOMStorage.setDOMStorageItem') {
       const key = storeKey(params.storageId);
       const store = localStores.get(key) ?? new Map();
@@ -441,6 +454,12 @@ export function credentialGuard(browser, options = {}) {
       )
         throw new Error(refusal);
       if (
+        method === 'Storage.clearDataForOrigin' &&
+        !mutants.allowClearDataForOrigin &&
+        urlCredential(params.origin)
+      )
+        throw new Error(refusal);
+      if (
         method === 'DOMStorage.getDOMStorageItems' &&
         storageCredential(params.storageId) &&
         !mutants.leakDomStorage
@@ -534,7 +553,7 @@ export function credentialGuard(browser, options = {}) {
       if (mutants.redactValuesKeepEntry) {
         const headers = { ...(event.params?.headers ?? {}) };
         for (const key of Object.keys(headers))
-          if (['cookie', 'set-cookie'].includes(key.toLowerCase())) headers[key] = '';
+          if (['cookie', 'set-cookie'].includes(key.toLowerCase())) delete headers[key];
         const associated = (event.params?.associatedCookies ?? []).map((entry) => {
           const cookie = entry.cookie ?? entry;
           return {

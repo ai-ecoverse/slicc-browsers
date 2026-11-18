@@ -47,6 +47,7 @@ test('C7.credential-export enumerates the credential-export row', () => {
     'partitionedCookieFiltered',
     'clearBrowserCookiesSurvived',
     'storageClearCookiesSurvived',
+    'clearDataForOriginSurvived',
     'domStorageSetRefused',
     'domStorageRemoveRefused',
     'indexedDBDeleteRefused',
@@ -189,6 +190,7 @@ const mutants = [
   ['leakHeaders', { leakHeaders: true }],
   ['allowStorageMutation', { allowStorageMutation: true }],
   ['allowClear', { allowClear: true }],
+  ['allowClearDataForOrigin', { allowClearDataForOrigin: true }],
   ['redactValuesKeepEntry', { redactValuesKeepEntry: true }],
   ['leakPartitionedCookie', { leakPartitionedCookie: true }],
   ['leakPartitionedStorageKey', { leakPartitionedStorageKey: true }],
@@ -228,6 +230,7 @@ test('judge fails when credential cookies leak', () => {
       partitionedCookieFiltered: true,
       clearBrowserCookiesSurvived: true,
       storageClearCookiesSurvived: true,
+      clearDataForOriginSurvived: true,
       domStorageSetRefused: true,
       domStorageRemoveRefused: true,
       indexedDBDeleteRefused: true,
@@ -291,7 +294,22 @@ test('the partitioned storageKey is the frame-reported key, proven by read-back'
   assert.equal(result.adobeComPartitionedCookieExportable, true);
   assert.equal(result.clearBrowserCookiesSurvived, true);
   assert.equal(result.storageClearCookiesSurvived, true);
+  assert.equal(result.clearDataForOriginSurvived, true);
   assert.deepEqual(result.skips, []);
+});
+
+test('allowClearDataForOrigin fails clearDataForOriginSurvived', async () => {
+  const { result } = await probe(credentialBrowser(), { allowClearDataForOrigin: true });
+  assert.equal(result.clearDataForOriginSurvived, false);
+});
+
+test('redactValuesKeepEntry fails cookie and DOMStorage filters while headers stay stripped', async () => {
+  const { result } = await probe(credentialBrowser(), { redactValuesKeepEntry: true });
+  assert.equal(result.headersStripped, true);
+  assert.equal(result.getCookiesFiltered, false);
+  assert.equal(result.getAllCookiesFiltered, false);
+  assert.equal(result.domStorageRefused, false);
+  assert.equal(result.partitionedCookieFiltered, false);
 });
 
 test('an insecure context leaves the Cache API unplanted and its observations unmeasured', async () => {

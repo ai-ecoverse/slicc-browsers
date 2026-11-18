@@ -1820,21 +1820,16 @@ class Execution {
     if (!check?.result) return undefined;
     const out = this.calls[check.result];
     const value = at(out, check.path);
-    if (value === 'not-supported') return 'not-supported';
-    if (value === 'incomplete' || this.unmeasured(check)) {
+    if (value === 'incomplete') {
       const skips = out?.result?.skips ?? [];
-      const hint =
-        skips.find(
-          (entry) =>
-            typeof entry === 'string' &&
-            (entry === name || entry.startsWith(`${name}:`) || entry.includes(name))
-        ) ??
-        skips.find((entry) => typeof entry === 'string') ??
-        'raw leg could not prove this observation';
-      if (!this.incomplete.some((reason) => reason.startsWith(`${name}:`)))
-        this.incomplete.push(`${name}: ${hint}`);
+      const hint = skips.find(
+        (entry) => typeof entry === 'string' && (entry === name || entry.startsWith(`${name}:`))
+      );
+      if (hint && !this.incomplete.some((reason) => reason.startsWith(`${name}:`)))
+        this.incomplete.push(hint.includes(': ') ? hint : `${name}: ${hint}`);
       return 'incomplete';
     }
+    if (this.unmeasured(check)) return 'incomplete';
     return undefined;
   }
 

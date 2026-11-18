@@ -485,12 +485,40 @@ async function readPartitionedKey(reader, sessionId, storageKey, lsKey, tag) {
   return Boolean(read.ok && entries.some((entry) => entry?.[0] === lsKey && entry?.[1] === tag));
 }
 
-async function plantPartitionedViaFrame(
-  reader,
-  sessionId,
-  { topUrl, iframeOrigin, lsKey, tag, until }
-) {
-  await outcome(reader.send('Page.navigate', { url: topUrl }, sessionId));
+async function plantLocalStorage(reader, sessionId, lsKey, tag, contextId) {
+  const set = await outcome(
+    reader.send(
+      'Runtime.evaluate',
+      {
+        expression: `(()=>{try{localStorage.setItem(${JSON.stringify(lsKey)},${JSON.stringify(tag)});return localStorage.getItem(${JSON.stringify(lsKey)})===${JSON.stringify(tag)};}catch(e){return 'err:'+e.message;}})()`,
+        returnByValue: true,
+        ...(contextId ? { contextId } : {}),
+      },
+      sessionId
+    )
+  );
+  return set.result?.result?.value === true;
+}
+
+async function storageKeyForFrame(reader, sessionId, frameId) {
+  const out = await outcome(reader.send('Storage.getStorageKeyForFrame', { frameId }, sessionId));
+  return typeof out.result?.storageKey === 'string' ? out.result.storageKey : null;
+}
+
+async function plantPartitionedInTop(reader, { topUrl, iframeOrigin, lsKey, tag, until }) {
+  const created = await outcome(reader.send('Target.createTarget', { url: topUrl }));
+  const topId = created.result?.targetId;
+  if (!topId) return { ok: false };
+  const attach = await outcome(
+    reader.send('Target.attachToTarget', { targetId: topId, flatten: true })
+  );
+  const topSession = attach.result?.sessionId;
+  if (!topSession) {
+    await outcome(reader.send('Target.closeTarget', { targetId: topId }));
+    return { ok: false };
+  }
+  await outcome(reader.send('Page.enable', {}, topSession));
+  await outcome(reader.send('Runtime.enable', {}, topSession));
   await until(async () => {
     const ev = await outcome(
       reader.send(
@@ -499,7 +527,7 @@ async function plantPartitionedViaFrame(
           expression: `({href:location.href,ready:document.readyState})`,
           returnByValue: true,
         },
-        sessionId
+        topSession
       )
     );
     const value = ev.result?.result?.value;
@@ -511,6 +539,7 @@ async function plantPartitionedViaFrame(
       value.href.startsWith(new URL(topUrl).origin)
     );
   });
+  const before = reader.events?.length ?? 0;
   await outcome(
     reader.send(
       'Runtime.evaluate',
@@ -518,50 +547,100 @@ async function plantPartitionedViaFrame(
         expression: `(()=>{const id='cred-part-frame';let f=document.getElementById(id);if(f)f.remove();f=document.createElement('iframe');f.id=id;f.src=${JSON.stringify(`${iframeOrigin}/blank`)};document.body.appendChild(f);return true;})()`,
         returnByValue: true,
       },
-      sessionId
+      topSession
     )
   );
-  const frameId = await until(async () => {
-    const tree = await outcome(reader.send('Page.getFrameTree', {}, sessionId));
-    const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
-      String(entry.frame?.url ?? '').startsWith(iframeOrigin)
+  const oopif = await until(async () => {
+    const fromEvents = (reader.events ?? [])
+      .slice(before)
+      .map((event) => event.params?.targetInfo)
+      .find(
+        (info) =>
+          info &&
+          info.targetId !== topId &&
+          typeof info.url === 'string' &&
+          info.url.startsWith(iframeOrigin)
+      );
+    if (fromEvents) return fromEvents;
+    const listed = await outcome(reader.send('Target.getTargets', {}));
+    return (listed.result?.targetInfos ?? []).find(
+      (info) =>
+        info.targetId !== topId && typeof info.url === 'string' && info.url.startsWith(iframeOrigin)
     );
-    return child?.frame?.id ?? null;
   });
-  if (!frameId) return false;
-  const world = await outcome(
-    reader.send(
-      'Page.createIsolatedWorld',
-      { frameId, worldName: `cred-part-${tag}`, grantUniveralAccess: true },
-      sessionId
-    )
-  );
-  const contextId = world.result?.executionContextId;
-  if (!contextId) return false;
-  const set = await outcome(
-    reader.send(
-      'Runtime.evaluate',
-      {
-        expression: `(()=>{try{localStorage.setItem(${JSON.stringify(lsKey)},${JSON.stringify(tag)});return localStorage.getItem(${JSON.stringify(lsKey)})===${JSON.stringify(tag)};}catch(e){return 'err:'+e.message;}})()`,
-        returnByValue: true,
-        contextId,
-      },
-      sessionId
-    )
-  );
-  return set.result?.result?.value === true;
+  let storageKey = null;
+  let planted = false;
+  if (oopif?.targetId) {
+    const childAttach = await outcome(
+      reader.send('Target.attachToTarget', { targetId: oopif.targetId, flatten: true })
+    );
+    const childSession = childAttach.result?.sessionId;
+    if (childSession) {
+      await outcome(reader.send('Page.enable', {}, childSession));
+      await outcome(reader.send('Runtime.enable', {}, childSession));
+      planted = await plantLocalStorage(reader, childSession, lsKey, tag);
+      const tree = await outcome(reader.send('Page.getFrameTree', {}, childSession));
+      const frameId = tree.result?.frameTree?.frame?.id;
+      if (frameId) storageKey = await storageKeyForFrame(reader, childSession, frameId);
+    }
+  } else {
+    const frameId = await until(async () => {
+      const tree = await outcome(reader.send('Page.getFrameTree', {}, topSession));
+      const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
+        String(entry.frame?.url ?? '').startsWith(iframeOrigin)
+      );
+      return child?.frame?.id ?? null;
+    });
+    if (frameId) {
+      const world = await outcome(
+        reader.send(
+          'Page.createIsolatedWorld',
+          { frameId, worldName: `cred-part-${tag}`, grantUniveralAccess: true },
+          topSession
+        )
+      );
+      const contextId = world.result?.executionContextId;
+      if (contextId) planted = await plantLocalStorage(reader, topSession, lsKey, tag, contextId);
+      storageKey = await storageKeyForFrame(reader, topSession, frameId);
+    }
+  }
+  if (planted && !storageKey) {
+    const topSite = siteOf(topUrl);
+    if (topSite) storageKey = `${iframeOrigin}/^0${topSite}`;
+  }
+  if (planted && storageKey)
+    planted = await readPartitionedKey(reader, topSession, storageKey, lsKey, tag);
+  await outcome(reader.send('Target.closeTarget', { targetId: topId }));
+  return { ok: Boolean(planted && storageKey), storageKey };
+}
+
+function siteOf(url) {
+  const parsed = parseURL(url);
+  if (!parsed?.hostname) return null;
+  const host = hostOf(parsed);
+  const parts = host.split('.');
+  const site = parts.length >= 2 ? parts.slice(-2).join('.') : host;
+  return `${parsed.protocol}//${site}`;
 }
 
 async function plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrigin, tag }) {
   const lsKey = `cred-part-${tag}`;
-  const sites = [
-    { site: 'https://adobelogin.com', field: 'adobeloginPartitionProven', top: origin },
-    { site: 'https://adobe.com', field: 'adobeComPartitionProven', top: null },
-  ];
-  const proven = { partitionedKey: lsKey };
+  const fallback = {
+    adobelogin: `${ordinaryOrigin}/^0https://adobelogin.com`,
+    adobeCom: `${ordinaryOrigin}/^0https://adobe.com`,
+  };
+  const proven = {
+    partitionedKey: lsKey,
+    adobeloginStorageKey: fallback.adobelogin,
+    adobeComStorageKey: fallback.adobeCom,
+    adobeloginPartitionProven: false,
+    adobeComPartitionProven: false,
+  };
   const until = (check) => waitFor(check, 5000);
-  for (const entry of sites) {
-    const storageKey = `${ordinaryOrigin}/^0${entry.site}`;
+  for (const [field, storageKey] of [
+    ['adobeloginPartitionProven', fallback.adobelogin],
+    ['adobeComPartitionProven', fallback.adobeCom],
+  ]) {
     await outcome(
       reader.send(
         'DOMStorage.setDOMStorageItem',
@@ -573,57 +652,34 @@ async function plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrig
         sessionId
       )
     );
-    let ok = await readPartitionedKey(reader, sessionId, storageKey, lsKey, tag);
-    if (!ok && entry.top) {
-      ok =
-        (await plantPartitionedViaFrame(reader, sessionId, {
-          topUrl: `${entry.top}/credential?n=${encodeURIComponent(tag)}&part=1`,
-          iframeOrigin: ordinaryOrigin,
-          lsKey,
-          tag,
-          until,
-        })) && (await readPartitionedKey(reader, sessionId, storageKey, lsKey, tag));
-    }
-    if (!ok && entry.site === 'https://adobe.com') {
-      const base = parseURL(ordinaryOrigin);
-      if (base) {
-        const adobeOrigin = `${base.protocol}//adobe.com${base.port ? `:${base.port}` : ''}`;
-        const created = await outcome(
-          reader.send('Target.createTarget', {
-            url: `${adobeOrigin}/blank?n=${encodeURIComponent(tag)}`,
-          })
-        );
-        const adobeTarget = created.result?.targetId;
-        if (adobeTarget) {
-          const attach = await outcome(
-            reader.send('Target.attachToTarget', { targetId: adobeTarget, flatten: true })
-          );
-          const adobeSession = attach.result?.sessionId;
-          if (adobeSession) {
-            await outcome(reader.send('Page.enable', {}, adobeSession));
-            await outcome(reader.send('Runtime.enable', {}, adobeSession));
-            ok =
-              (await plantPartitionedViaFrame(reader, adobeSession, {
-                topUrl: `${adobeOrigin}/blank?n=${encodeURIComponent(tag)}`,
-                iframeOrigin: ordinaryOrigin,
-                lsKey,
-                tag,
-                until,
-              })) && (await readPartitionedKey(reader, adobeSession, storageKey, lsKey, tag));
-          }
-          await outcome(reader.send('Target.closeTarget', { targetId: adobeTarget }));
-        }
-      }
-    }
-    proven[entry.field] = ok;
+    if (await readPartitionedKey(reader, sessionId, storageKey, lsKey, tag)) proven[field] = true;
   }
-  await outcome(
-    reader.send(
-      'Page.navigate',
-      { url: `${origin}/credential?n=${encodeURIComponent(tag)}` },
-      sessionId
-    )
-  );
+  if (!proven.adobeloginPartitionProven) {
+    const planted = await plantPartitionedInTop(reader, {
+      topUrl: `${origin}/credential?n=${encodeURIComponent(tag)}&part=1`,
+      iframeOrigin: ordinaryOrigin,
+      lsKey,
+      tag,
+      until,
+    });
+    proven.adobeloginPartitionProven = planted.ok;
+    if (planted.storageKey) proven.adobeloginStorageKey = planted.storageKey;
+  }
+  if (!proven.adobeComPartitionProven) {
+    const base = parseURL(ordinaryOrigin);
+    if (base) {
+      const adobeOrigin = `${base.protocol}//adobe.com${base.port ? `:${base.port}` : ''}`;
+      const planted = await plantPartitionedInTop(reader, {
+        topUrl: `${adobeOrigin}/blank?n=${encodeURIComponent(tag)}`,
+        iframeOrigin: ordinaryOrigin,
+        lsKey,
+        tag,
+        until,
+      });
+      proven.adobeComPartitionProven = planted.ok;
+      if (planted.storageKey) proven.adobeComStorageKey = planted.storageKey;
+    }
+  }
   return proven;
 }
 
@@ -633,8 +689,9 @@ async function measurePartitionedStorageKeys(
   { ordinaryOrigin, tag, planted, result }
 ) {
   const lsKey = planted.partitionedKey ?? `cred-part-${tag}`;
-  const adobeloginKey = `${ordinaryOrigin}/^0https://adobelogin.com`;
-  const adobeComKey = `${ordinaryOrigin}/^0https://adobe.com`;
+  const adobeloginKey =
+    planted.adobeloginStorageKey ?? `${ordinaryOrigin}/^0https://adobelogin.com`;
+  const adobeComKey = planted.adobeComStorageKey ?? `${ordinaryOrigin}/^0https://adobe.com`;
 
   const read = async (storageKey) =>
     tryMethod(

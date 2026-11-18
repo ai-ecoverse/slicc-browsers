@@ -34542,6 +34542,7 @@
         },
         "getCookiesFiltered": {
           "means": "Network.getCookies drops or refuses credential-origin cookies",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.getCookiesFiltered",
@@ -34551,6 +34552,7 @@
         },
         "getAllCookiesFiltered": {
           "means": "Network.getAllCookies drops or refuses credential-origin cookies",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.getAllCookiesFiltered",
@@ -34560,6 +34562,7 @@
         },
         "storageGetCookiesFiltered": {
           "means": "Storage.getCookies drops or refuses credential-origin cookies",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.storageGetCookiesFiltered",
@@ -34569,6 +34572,7 @@
         },
         "pageGetCookiesFiltered": {
           "means": "Page.getCookies drops or refuses credential-origin cookies",
+          "optional": true,
           "check": {
             "result": "probe",
             "path": "result.pageGetCookiesFiltered",

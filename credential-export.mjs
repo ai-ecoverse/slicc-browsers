@@ -27,10 +27,32 @@ const siteHost = (host) => {
   return parts.length >= 2 ? parts.slice(-2).join('.') : host;
 };
 
+const hstsPreloaded = (host) => {
+  const name = String(host ?? '')
+    .toLowerCase()
+    .replace(/\.$/, '');
+  return (
+    name === 'adobe.com' ||
+    name.endsWith('.adobe.com') ||
+    name === 'adobelogin.com' ||
+    name.endsWith('.adobelogin.com')
+  );
+};
+
 function siteOf(url) {
   const parsed = parseURL(url);
   if (!parsed?.hostname) return null;
   return `${parsed.protocol}//${siteHost(hostOf(parsed))}`;
+}
+
+function fixtureOriginFor(templateUrl, host, { insecurePreloaded = false } = {}) {
+  const parsed = parseURL(templateUrl);
+  if (!parsed?.hostname && !host) return null;
+  const name = host ?? hostOf(parsed);
+  const port = parsed?.port ? `:${parsed.port}` : '';
+  const scheme =
+    !insecurePreloaded && hstsPreloaded(name) ? 'https:' : (parsed?.protocol ?? 'http:');
+  return `${scheme}//${name}${port}`;
 }
 
 const partitionSite = (cookie) => {
@@ -353,6 +375,18 @@ function unmeasurable(ctx, key, reason, controlWants = false) {
   ctx.result.skips.push(`${key}: ${reason}`);
 }
 
+function unsupportedRead(ctx, key, reason) {
+  ctx.result[key] = 'not-supported';
+  ctx.result.skips.push(`${key}: ${reason}`);
+}
+
+const cookieFilterKeys = [
+  'getCookiesFiltered',
+  'getAllCookiesFiltered',
+  'storageGetCookiesFiltered',
+  'pageGetCookiesFiltered',
+];
+
 async function measureDrivability(ctx) {
   const { client, clientSession, planted, tag, result, note } = ctx;
   await outcome(client.send('Page.enable', {}, clientSession));
@@ -467,9 +501,26 @@ function storageRefused(out, leaked) {
   return !leaked;
 }
 
+function markNoCookieReads(ctx) {
+  for (const key of cookieFilterKeys) unmeasurable(ctx, key, 'no cookie read was supported');
+  unmeasurable(ctx, 'ordinaryCookiesExportable', 'no cookie read was supported', true);
+  unmeasurable(ctx, 'adobeComCookiesExportable', 'no cookie read was supported', true);
+  unmeasurable(ctx, 'partitionedCookieFiltered', 'no cookie read was supported');
+  unmeasurable(ctx, 'adobeComPartitionedCookieExportable', 'no cookie read was supported', true);
+}
+
+async function readCookieFilter(ctx, key, method, params, session, onCookies) {
+  const attempt = await tryMethod(ctx.client, method, params, session);
+  if (attempt.skip) {
+    unsupportedRead(ctx, key, attempt.skip);
+    return;
+  }
+  onCookies(applyFilteredCookieRead(ctx, key, attempt.out));
+  return attempt;
+}
+
 async function measureCookieReads(ctx) {
   const {
-    client,
     clientSession,
     origin,
     ordinaryOrigin,
@@ -504,37 +555,49 @@ async function measureCookieReads(ctx) {
       result.adobeComCookiesExportable = true;
   };
 
-  const getCookies = await tryMethod(
-    client,
+  const getCookies = await readCookieFilter(
+    ctx,
+    'getCookiesFiltered',
     'Network.getCookies',
     { urls: [`${origin}/`, `${ordinaryOrigin}/`, 'https://www.adobe.com/'] },
-    clientSession
+    clientSession,
+    markControls
   );
-  if (getCookies.skip) result.skips.push(getCookies.skip);
-  else {
-    markControls(applyFilteredCookieRead(ctx, 'getCookiesFiltered', getCookies.out));
-    if (
-      refused(getCookies.out) &&
-      !String(getCookies.out.error?.message ?? '').startsWith(refusalPrefix)
-    )
-      note('getCookies-refusal', getCookies.out.error?.message);
-  }
+  if (
+    getCookies &&
+    refused(getCookies.out) &&
+    !String(getCookies.out.error?.message ?? '').startsWith(refusalPrefix)
+  )
+    note('getCookies-refusal', getCookies.out.error?.message);
 
-  const getAll = await tryMethod(client, 'Network.getAllCookies', {}, clientSession);
-  if (getAll.skip) result.skips.push(getAll.skip);
-  else markControls(applyFilteredCookieRead(ctx, 'getAllCookiesFiltered', getAll.out));
-
-  const storageGet = await tryMethod(client, 'Storage.getCookies', {}, undefined);
-  if (storageGet.skip) result.skips.push(storageGet.skip);
-  else markControls(applyFilteredCookieRead(ctx, 'storageGetCookiesFiltered', storageGet.out));
-
-  const pageGet = await tryMethod(client, 'Page.getCookies', {}, clientSession);
-  if (pageGet.skip) result.skips.push(pageGet.skip);
-  else track(applyFilteredCookieRead(ctx, 'pageGetCookiesFiltered', pageGet.out));
+  await readCookieFilter(
+    ctx,
+    'getAllCookiesFiltered',
+    'Network.getAllCookies',
+    {},
+    clientSession,
+    markControls
+  );
+  await readCookieFilter(
+    ctx,
+    'storageGetCookiesFiltered',
+    'Storage.getCookies',
+    {},
+    undefined,
+    markControls
+  );
+  await readCookieFilter(
+    ctx,
+    'pageGetCookiesFiltered',
+    'Page.getCookies',
+    {},
+    clientSession,
+    track
+  );
 
   if (!result.ordinaryCookiesExportable) {
     const plainOnly = await tryMethod(
-      client,
+      ctx.client,
       'Network.getCookies',
       { urls: [`${ordinaryOrigin}/`] },
       clientSession
@@ -543,12 +606,17 @@ async function measureCookieReads(ctx) {
   }
   if (!result.adobeComCookiesExportable) {
     const adobeOnly = await tryMethod(
-      client,
+      ctx.client,
       'Network.getCookies',
       { urls: ['https://www.adobe.com/'] },
       clientSession
     );
     if (!adobeOnly.skip && adobeOnly.out.ok) markControls(cookiesFrom(adobeOnly.out));
+  }
+
+  if (!cookieFilterKeys.some((key) => typeof result[key] === 'boolean')) {
+    markNoCookieReads(ctx);
+    return;
   }
 
   if (!planted.partitionedCredentialProven)
@@ -697,14 +765,26 @@ async function partitionSend(ctx, frameTarget, method, params) {
 }
 
 async function measurePartitionedStorageKeys(ctx) {
-  const { tag, planted, result } = ctx;
+  const { planted, result } = ctx;
   const lsKey = planted.partitionedKey;
   const read = (storageKey, frameTarget) =>
     partitionSend(ctx, frameTarget, 'DOMStorage.getDOMStorageItems', {
       storageId: { storageKey, isLocalStorage: true },
     });
 
-  if (!planted.adobeloginPartitionProven)
+  if (planted.partitionKeyCollision)
+    unmeasurable(
+      ctx,
+      'partitionedStorageKeyFiltered',
+      `partition plants produced identical storageKeys: ${planted.partitionKeyCollision}`
+    );
+  else if (planted.partitionReadbackFailed)
+    unmeasurable(
+      ctx,
+      'partitionedStorageKeyFiltered',
+      'partition plants did not read back distinct values on the raw leg'
+    );
+  else if (!planted.adobeloginPartitionProven)
     unmeasurable(
       ctx,
       'partitionedStorageKeyFiltered',
@@ -720,7 +800,21 @@ async function measurePartitionedStorageKeys(ctx) {
       );
   }
 
-  if (!planted.adobeComPartitionProven)
+  if (planted.partitionKeyCollision)
+    unmeasurable(
+      ctx,
+      'adobeComStorageKeyExportable',
+      `partition plants produced identical storageKeys: ${planted.partitionKeyCollision}`,
+      true
+    );
+  else if (planted.partitionReadbackFailed)
+    unmeasurable(
+      ctx,
+      'adobeComStorageKeyExportable',
+      'partition plants did not read back distinct values on the raw leg',
+      true
+    );
+  else if (!planted.adobeComPartitionProven)
     unmeasurable(
       ctx,
       'adobeComStorageKeyExportable',
@@ -732,7 +826,7 @@ async function measurePartitionedStorageKeys(ctx) {
     if (adobeCom.skip) unmeasurable(ctx, 'adobeComStorageKeyExportable', adobeCom.skip, true);
     else
       result.adobeComStorageKeyExportable =
-        adobeCom.out.ok && hasEntry(adobeCom.out.result?.entries, lsKey, tag);
+        adobeCom.out.ok && hasEntry(adobeCom.out.result?.entries, lsKey, planted.adobeComValue);
   }
 }
 
@@ -750,7 +844,7 @@ async function measureSubHost(ctx) {
     clientSession
   );
   if (set.skip) {
-    result.skips.push(set.skip);
+    unmeasurable(ctx, 'subHostNotCredential', set.skip, true);
     return;
   }
   if (refused(set.out)) return;
@@ -761,7 +855,7 @@ async function measureSubHost(ctx) {
     clientSession
   );
   if (get.skip) {
-    result.skips.push(get.skip);
+    unmeasurable(ctx, 'subHostNotCredential', get.skip, true);
     return;
   }
   if (refused(get.out) || !get.out.ok) return;
@@ -851,7 +945,7 @@ async function measureDomStorageMutations(ctx) {
       removeRefused =
         !keyRemove.skip &&
         (await mutationRefused(keyRemove, async () =>
-          hasEntry(await partitioned.entries(), planted.partitionedKey, tag)
+          hasEntry(await partitioned.entries(), planted.partitionedKey, planted.adobeloginValue)
         ));
     }
     result.domStorageRemoveRefused = removeRefused;
@@ -1086,7 +1180,10 @@ async function plantInLocalFrame(reader, topSession, topId, frameId, { lsKey, ta
   };
 }
 
-async function plantPartitionedInTop(reader, { topUrl, iframeOrigin, lsKey, tag, until }) {
+async function plantPartitionedInTop(
+  reader,
+  { topUrl, iframeOrigin, lsKey, tag, marker, frameId, until }
+) {
   await outcome(reader.send('Target.setDiscoverTargets', { discover: true }));
   const created = await outcome(reader.send('Target.createTarget', { url: topUrl }));
   const topId = created.result?.targetId;
@@ -1099,34 +1196,39 @@ async function plantPartitionedInTop(reader, { topUrl, iframeOrigin, lsKey, tag,
   await outcome(reader.send('Page.enable', {}, topSession));
   await outcome(reader.send('Runtime.enable', {}, topSession));
   const topOrigin = new URL(topUrl).origin;
-  await until(() => pageReady(reader, topSession, (value) => value.href.startsWith(topOrigin)));
-  const marker = `cred-frame=${encodeURIComponent(tag)}`;
-  const src = `${iframeOrigin}/blank?${marker}`;
-  const before = reader.events?.length ?? 0;
-  await outcome(
-    reader.send(
-      'Runtime.evaluate',
-      {
-        expression: `(()=>{const id='cred-part-frame';let f=document.getElementById(id);if(f)f.remove();f=document.createElement('iframe');f.id=id;f.src=${JSON.stringify(src)};document.body.appendChild(f);return true;})()`,
-        returnByValue: true,
-      },
-      topSession
-    )
+  const ready = await until(() =>
+    pageReady(reader, topSession, (value) => value.href.startsWith(topOrigin))
   );
+  const before = reader.events?.length ?? 0;
   let found = null;
-  await until(async () => {
-    const target = await iframeTarget(reader, before, topId, marker);
-    if (target) found = { target };
-    else {
-      const tree = await outcome(reader.send('Page.getFrameTree', {}, topSession));
-      const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
-        String(entry.frame?.url ?? '').includes(marker)
-      );
-      if (child?.frame?.id) found = { frameId: child.frame.id };
-    }
-    return found !== null;
-  });
   let plant = { planted: false };
+  if (!ready) {
+    found = { target: await iframeTarget(reader, 0, topId, marker) };
+  } else {
+    const src = `${iframeOrigin}/blank?${marker}`;
+    await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        {
+          expression: `(()=>{const id=${JSON.stringify(frameId)};let f=document.getElementById(id);if(f)f.remove();f=document.createElement('iframe');f.id=id;f.src=${JSON.stringify(src)};document.body.appendChild(f);return true;})()`,
+          returnByValue: true,
+        },
+        topSession
+      )
+    );
+    await until(async () => {
+      const target = await iframeTarget(reader, before, topId, marker);
+      if (target) found = { target };
+      else {
+        const tree = await outcome(reader.send('Page.getFrameTree', {}, topSession));
+        const child = (tree.result?.frameTree?.childFrames ?? []).find((entry) =>
+          String(entry.frame?.url ?? '').includes(marker)
+        );
+        if (child?.frame?.id) found = { frameId: child.frame.id };
+      }
+      return found !== null;
+    });
+  }
   if (found?.target)
     plant = await plantInChildTarget(reader, found.target, { lsKey, tag, marker, until });
   else if (found?.frameId) {
@@ -1171,21 +1273,34 @@ async function plantPartitionedDirect(reader, sessions, { iframeOrigin, topSite,
   return { ok: false };
 }
 
-async function plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrigin, tag }) {
+async function plantPartitionedStorage(
+  reader,
+  sessionId,
+  { origin, ordinaryOrigin, tag, insecurePreloadedTops = false }
+) {
   const lsKey = `cred-part-${tag}`;
   const until = (check) => waitFor(check, 5000);
-  const base = parseURL(ordinaryOrigin);
-  const adobeOrigin = `${base.protocol}//adobe.com${base.port ? `:${base.port}` : ''}`;
+  const credentialTop = fixtureOriginFor(origin, hostOf(origin));
+  const adobeOrigin = fixtureOriginFor(ordinaryOrigin, 'adobe.com', {
+    insecurePreloaded: insecurePreloadedTops,
+  });
   const proven = { partitionedKey: lsKey, cleanup: [] };
   for (const [name, topUrl] of [
-    ['adobelogin', `${origin}/credential?n=${encodeURIComponent(tag)}&part=1`],
+    ['adobelogin', `${credentialTop}/credential?n=${encodeURIComponent(tag)}&part=1`],
     ['adobeCom', `${adobeOrigin}/blank?n=${encodeURIComponent(tag)}`],
   ]) {
+    const value = `${tag}-${name}`;
+    const marker = insecurePreloadedTops
+      ? `cred-frame=${encodeURIComponent(tag)}`
+      : `cred-frame=${encodeURIComponent(tag)}-${encodeURIComponent(name)}`;
+    const frameId = insecurePreloadedTops ? 'cred-part-frame' : `cred-part-frame-${name}`;
     let planted = await plantPartitionedInTop(reader, {
       topUrl,
       iframeOrigin: ordinaryOrigin,
       lsKey,
-      tag,
+      tag: value,
+      marker,
+      frameId,
       until,
     });
     if (planted.topId) proven.cleanup.push(planted.topId);
@@ -1194,15 +1309,46 @@ async function plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrig
         iframeOrigin: ordinaryOrigin,
         topSite: siteOf(topUrl),
         lsKey,
-        tag,
+        tag: value,
       });
       if (direct.ok) planted = { ...direct, reportedKey: planted.reportedKey, frameTarget: null };
     }
+    proven[`${name}Value`] = value;
     proven[`${name}PartitionProven`] = planted.ok === true;
     proven[`${name}StorageKey`] = planted.ok ? planted.storageKey : null;
     proven[`${name}ReportedKey`] = planted.reportedKey ?? null;
     proven[`${name}FrameTarget`] = planted.ok ? (planted.frameTarget ?? null) : null;
     proven[`${name}ReadSessions`] = planted.ok ? planted.sessions : [];
+  }
+  if (
+    proven.adobeloginPartitionProven &&
+    proven.adobeComPartitionProven &&
+    proven.adobeloginStorageKey === proven.adobeComStorageKey
+  ) {
+    proven.adobeloginPartitionProven = false;
+    proven.adobeComPartitionProven = false;
+    proven.partitionKeyCollision = proven.adobeloginStorageKey;
+  } else if (
+    proven.adobeloginPartitionProven &&
+    proven.adobeComPartitionProven &&
+    (!(await readPartitionedKey(
+      reader,
+      proven.adobeloginReadSessions,
+      proven.adobeloginStorageKey,
+      lsKey,
+      proven.adobeloginValue
+    )) ||
+      !(await readPartitionedKey(
+        reader,
+        proven.adobeComReadSessions,
+        proven.adobeComStorageKey,
+        lsKey,
+        proven.adobeComValue
+      )))
+  ) {
+    proven.adobeloginPartitionProven = false;
+    proven.adobeComPartitionProven = false;
+    proven.partitionReadbackFailed = true;
   }
   return proven;
 }
@@ -1245,15 +1391,16 @@ export async function credentialExport({
   notes = [],
   budget = 8000,
   refusalPrefix = 'slicc: refused:',
+  insecurePreloadedTops = false,
 }) {
   const until = (check) => waitFor(check, budget);
   const result = emptyCredentialResult();
   const note = (label, evidence) => notes.push(`${label}: ${JSON.stringify(evidence)}`);
   if (!reader) return { ...result, incomplete: 'missing unguarded reader' };
-  const origin = originOf(credentialOrigin);
   const host = hostOf(credentialOrigin);
-  const ordinaryOrigin = originOf(ordinary);
   const ordinaryHost = hostOf(ordinary);
+  const origin = fixtureOriginFor(credentialOrigin, host);
+  const ordinaryOrigin = originOf(ordinary);
   if (!origin || !host || !ordinaryOrigin)
     return { ...result, incomplete: 'credentialOrigin or ordinary is not a URL' };
 
@@ -1301,7 +1448,12 @@ export async function credentialExport({
   );
   Object.assign(
     planted,
-    await plantPartitionedStorage(reader, sessionId, { origin, ordinaryOrigin, tag })
+    await plantPartitionedStorage(reader, sessionId, {
+      origin,
+      ordinaryOrigin,
+      tag,
+      insecurePreloadedTops,
+    })
   );
   note('partitioned', {
     partitionedCredentialProven: planted.partitionedCredentialProven,

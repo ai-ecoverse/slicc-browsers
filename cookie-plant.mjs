@@ -1012,6 +1012,7 @@ async function allowedHeaderAttempt({
   if (!paused) {
     await settleTrigger(triggerPromise, budget);
     await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
+    note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
     return attemptRecord({ ok: false, error: { message: 'timeout: no pause' } }, 'incomplete');
   }
   const out = fetchReady
@@ -1126,6 +1127,22 @@ function controlAttacks(ctx) {
                 }),
               }),
       }),
+    adobe: () =>
+      allowedHeaderAttempt({
+        client: ctx.client,
+        pageSession: ctx.pageSession,
+        reader: ctx.reader,
+        readerSession: ctx.readerSession,
+        url: ordinaryUrl,
+        transport: controlTransport,
+        budget: ctx.budget,
+        notes: ctx.notes,
+        label: 'adobe',
+        header: cookieHeader(ctx.names.adobe, `a-${ctx.tag}`, '.adobe.com'),
+        fetchReady,
+        homeUrl: ctx.homeUrl,
+        topLevel: true,
+      }),
     deletion: async () => {
       const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteCookie);
       if (plantedOf(seeded) !== true) {
@@ -1160,22 +1177,6 @@ function controlAttacks(ctx) {
       note(ctx.notes, 'cookie-plant.deletion.cleared', { cleared, via: after?.via });
       return { ...attempt, cleared };
     },
-    adobe: () =>
-      allowedHeaderAttempt({
-        client: ctx.client,
-        pageSession: ctx.pageSession,
-        reader: ctx.reader,
-        readerSession: ctx.readerSession,
-        url: ordinaryUrl,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
-        label: 'adobe',
-        header: cookieHeader(ctx.names.adobe, `a-${ctx.tag}`, '.adobe.com'),
-        fetchReady,
-        homeUrl: ctx.homeUrl,
-        topLevel: false,
-      }),
   };
 }
 
@@ -1229,9 +1230,26 @@ async function enableClientTransport(client, pageSession, notes) {
   }
   let legacyReady = transport.legacy;
   if (!legacyReady && transport.fetch) {
+    await outcome(client.send('Fetch.disable', {}, pageSession));
     const legacy = await enableLegacy(client, pageSession);
     legacyReady = legacy.ok;
-    if (legacyReady) transport.legacy = true;
+    if (legacyReady) {
+      transport.legacy = true;
+      await outcome(client.send('Network.setRequestInterception', { patterns: [] }, pageSession));
+    }
+    await outcome(
+      client.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            { urlPattern: '*', requestStage: 'Request' },
+            { urlPattern: '*', requestStage: 'Response' },
+          ],
+        },
+        pageSession
+      )
+    );
+    note(notes, 'cookie-plant.legacyProbe', { ready: legacyReady });
   }
   return { transport, legacyReady };
 }

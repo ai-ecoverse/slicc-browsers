@@ -102,12 +102,13 @@ const withCookiePlantCaps = (capabilities, probe) => {
     ? Object.fromEntries(capabilities.map((name) => [name, true]))
     : { ...capabilities };
   if (!declared('requestInterception', asObject)) return capabilities;
-  if (asObject.fetchInterception !== false) asObject.fetchInterception = true;
-  if (
-    (probe?.legacy === true || asObject.legacyInterception === true) &&
-    asObject.legacyInterception !== false
-  )
+  if (!probe) return capabilities;
+  if (probe.fetch === true && asObject.fetchInterception !== false)
+    asObject.fetchInterception = true;
+  else delete asObject.fetchInterception;
+  if (probe.legacy === true && asObject.legacyInterception !== false)
     asObject.legacyInterception = true;
+  else delete asObject.legacyInterception;
   return Array.isArray(capabilities)
     ? Object.keys(asObject).filter((name) => asObject[name] === true)
     : asObject;

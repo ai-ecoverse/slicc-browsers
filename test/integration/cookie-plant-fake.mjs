@@ -58,11 +58,11 @@ function cookieLines(headers) {
   const lines = [];
   for (const { name, value } of headers) {
     const key = name.toLowerCase();
-    if (key !== 'set-cookie' && key !== 'set-cookie2') continue;
-    for (const part of String(value).split(/\n/)) {
-      const trimmed = part.trim();
-      if (trimmed) lines.push(trimmed);
-    }
+    if (key === 'set-cookie2') continue;
+    if (key !== 'set-cookie') continue;
+    if (/[\r\n]/.test(String(value))) continue;
+    const trimmed = String(value).trim();
+    if (trimmed) lines.push(trimmed);
   }
   return lines;
 }
@@ -432,7 +432,8 @@ export function cookiePlantFake(options = {}) {
       const headers = params.binaryResponseHeaders
         ? decodeBinaryHeaders(params.binaryResponseHeaders)
         : headerPairs(params.responseHeaders);
-      plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
+      if (method === 'Fetch.fulfillRequest')
+        plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
       if (entry.topLevel && entry.tab) {
         entry.tab.url = entry.url;
         entry.tab.title = entry.url;

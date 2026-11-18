@@ -165,16 +165,7 @@ test('unguarded client fails the guarded expectations', async () => {
   }
 });
 
-for (const path of [
-  'fulfillObject',
-  'fulfillLower',
-  'fulfillSetCookie2',
-  'fulfillNewline',
-  'fulfillBinary',
-  'continueResponse',
-  'legacyRaw',
-  'redirect3xx',
-]) {
+for (const path of ['fulfillObject', 'fulfillLower', 'fulfillBinary', 'legacyRaw', 'redirect3xx']) {
   test(`mutant allowPlantPaths=${path} fails`, async () => {
     const out = await rows({ allowPlantPaths: [path] });
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');

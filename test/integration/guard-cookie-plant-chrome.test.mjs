@@ -12,7 +12,6 @@ const vectors = data.vectors.filter((v) => v.id === 'C10.cookie-plant');
 const capabilities = {
   requestInterception: true,
   fetchInterception: true,
-  legacyInterception: true,
 };
 
 test('C10.cookie-plant reaches live:pass in real Chrome with the cookiePlant guard', {

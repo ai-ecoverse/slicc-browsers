@@ -536,10 +536,17 @@ function emulatedGuardPlain(browser, options = {}) {
     const failDocument = (options.failDocumentOrigins ?? []).some((origin) =>
       request.url.startsWith(`${origin}/`)
     );
+    const ordinaryLiveMid =
+      options.blockOrdinaryLiveMid &&
+      event.params.resourceType === 'Document' &&
+      /\/oopif-(mid|srcdoc)/.test(request.url ?? '') &&
+      !hosts.includes(parseURL(request.url)?.host) &&
+      !catalog?.url(request.url);
     const blocked =
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
-      failDocument;
+      failDocument ||
+      ordinaryLiveMid;
     if (
       options.closeProtected &&
       event.params.resourceType === 'Document' &&
@@ -1806,10 +1813,17 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
     const failDocument = (options.failDocumentOrigins ?? []).some((origin) =>
       request.url.startsWith(`${origin}/`)
     );
+    const ordinaryLiveMid =
+      options.blockOrdinaryLiveMid &&
+      event.params.resourceType === 'Document' &&
+      /\/oopif-(mid|srcdoc)/.test(request.url ?? '') &&
+      !hosts.includes(parseURL(request.url)?.host) &&
+      !catalog?.url(request.url);
     const blocked =
       hosts.includes(parseURL(request.url)?.host) ||
       Boolean(catalog?.url(request.url)) ||
-      failDocument;
+      failDocument ||
+      ordinaryLiveMid;
     if (
       options.closeProtected &&
       event.params.resourceType === 'Document' &&

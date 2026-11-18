@@ -680,6 +680,10 @@ test('protected-parent page rows require iframeAutoAttach and the ordinary contr
     true
   );
   assert.equal(
+    vectors.find((v) => v.id === 'C3.ordinary-parent-iframes.page').expected.overBlocked,
+    false
+  );
+  assert.equal(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').trigger[0]
       .protectedParentIframes,
     'page-nested'
@@ -871,6 +875,41 @@ test('overblockOrdinaryFrames fails the ordinary-parent page control', async () 
   assert.ok(row);
   assert.equal(row.control, 'pass', describe(row));
   assert.equal(row.guarded, 'fail', describe(row));
+});
+
+test('blocking the ordinary mid after attach fails the ordinary-parent page control', async () => {
+  const execution = await runMode(
+    { blockOrdinaryLiveMid: true },
+    {
+      only: ['C3.ordinary-parent-iframes.page'],
+      oopifGrandchildTargets: false,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.ordinary-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, true, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protection by over-blocking')),
+    describe(row)
+  );
+});
+
+test('a guard that blocks nothing still passes the ordinary-parent page control', async () => {
+  const execution = await runMode(
+    {},
+    { only: ['C3.ordinary-parent-iframes.page'], oopifGrandchildTargets: false }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.ordinary-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
 });
 
 test('refuseTopPageEnable with a clean lock and inline ordinary control passes', async () => {
@@ -1666,6 +1705,31 @@ test('guard-blocked live mid document completes with live channels protected', a
   assert.equal(row.observations?.guarded?.resourceTree, false, describe(row));
   assert.equal(row.observations?.guarded?.frameEvents, false, describe(row));
   assert.equal(row.observations?.guarded?.contextEvaluate, false, describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+  assert.equal(
+    (row.notes ?? []).some((entry) => String(entry).includes('protection by over-blocking')),
+    false,
+    describe(row)
+  );
+});
+
+test('blockOrdinaryLiveMid leaves protected blocked-mid verdicts unchanged', async () => {
+  const execution = await runMode(
+    { blockOrdinaryLiveMid: true },
+    {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: true,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
   assert.ok(
     (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
     describe(row)

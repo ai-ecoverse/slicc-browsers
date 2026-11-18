@@ -4,7 +4,7 @@ import test from 'node:test';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { judge } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
-import { SIGN_IN_HOLD_BODY, SIGN_IN_HOLD_MARK } from '../../sign-in-hold.mjs';
+import { SIGN_IN_HOLD_BODY, SIGN_IN_HOLD_MARK, signInHold } from '../../sign-in-hold.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
 
@@ -24,7 +24,7 @@ const positiveVectors = vectors.filter((v) => positiveIds.includes(v.id));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
-function signInFake({ holdAnswer = 'held' } = {}) {
+function signInFake({ holdAnswer = 'held', markReadyMs = 0, markNever = false } = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const connections = [];
@@ -44,11 +44,25 @@ function signInFake({ holdAnswer = 'held' } = {}) {
     for (const conn of connections)
       if (conn.discover) emit(conn, method, { targetInfo: infoOf(tab) });
   };
+  const markReady = (tab) => {
+    if (!tab) return false;
+    if (tab.markNever) return false;
+    const delay = tab.markReadyMs ?? 0;
+    if (!delay) return true;
+    return Date.now() - (tab.createdAt ?? 0) >= delay;
+  };
+  const authorizeLike = (url) => Boolean(url?.includes('/held') || url?.includes('/ims/authorize'));
   const addTab = (tab) => {
-    tabs.set(tab.targetId, tab);
-    discover('Target.targetCreated', tab);
-    discover('Target.targetInfoChanged', tab);
-    return tab;
+    const stamped = {
+      createdAt: Date.now(),
+      markReadyMs,
+      markNever,
+      ...tab,
+    };
+    tabs.set(stamped.targetId, stamped);
+    discover('Target.targetCreated', stamped);
+    discover('Target.targetInfoChanged', stamped);
+    return stamped;
   };
   const markerOf = (expression) => {
     const match = /slicc-sign-in-' \+ marker|slicc-sign-in-\$\{|#slicc-sign-in-/.exec(expression);
@@ -79,10 +93,7 @@ function signInFake({ holdAnswer = 'held' } = {}) {
         targetId: `T${++next}`,
         type: 'page',
         url,
-        title:
-          url.includes('/held') || url.includes('/ims/authorize')
-            ? `${SIGN_IN_HOLD_BODY}-title`
-            : url,
+        title: authorizeLike(url) ? `${SIGN_IN_HOLD_BODY}-title` : url,
       });
       return { targetId: tab.targetId };
     }
@@ -136,26 +147,33 @@ function signInFake({ holdAnswer = 'held' } = {}) {
       const tab = tabs.get(targetId);
       if (tab) {
         tab.url = params.url;
-        tab.title =
-          params.url.includes('/held') || params.url.includes('/ims/authorize')
-            ? `${SIGN_IN_HOLD_BODY}-title`
-            : params.url;
+        tab.title = authorizeLike(params.url) ? `${SIGN_IN_HOLD_BODY}-title` : params.url;
         discover('Target.targetInfoChanged', tab);
       }
       return { frameId: targetId };
     }
     if (method === 'Runtime.evaluate') {
       const expression = params.expression ?? '';
-      if (expression === 'document.readyState')
-        return { result: { type: 'string', value: 'complete' } };
+      if (expression === 'document.readyState') {
+        const targetId = sessions.get(sessionId);
+        const tab = tabs.get(targetId);
+        if (!authorizeLike(tab?.url) || tab?.markNever)
+          return { result: { type: 'string', value: 'complete' } };
+        return {
+          result: { type: 'string', value: markReady(tab) ? 'complete' : 'loading' },
+        };
+      }
       if (expression.includes('document.title')) {
         const targetId = sessions.get(sessionId);
         const tab = tabs.get(targetId);
-        const title = tab?.title ?? '';
-        const body =
-          tab?.url?.includes('/held') || tab?.url?.includes('/ims/authorize')
-            ? SIGN_IN_HOLD_BODY
-            : 'ordinary';
+        const ready = markReady(tab);
+        const title =
+          authorizeLike(tab?.url) && ready
+            ? `${SIGN_IN_HOLD_BODY}-title`
+            : authorizeLike(tab?.url)
+              ? ''
+              : (tab?.title ?? '');
+        const body = authorizeLike(tab?.url) ? (ready ? SIGN_IN_HOLD_BODY : '') : 'ordinary';
         return { result: { type: 'string', value: `${title} ${body}` } };
       }
       if (expression.includes('window.open')) {
@@ -529,4 +547,33 @@ test('judge treats idAnnounced either as design-dependent', () => {
   assert.equal(judge(vector, 'guarded', { ...vector.expected, idAnnounced: true }).pass, true);
   assert.equal(judge(vector, 'guarded', { ...vector.expected, idAnnounced: false }).pass, true);
   assert.equal(judge(vector, 'guarded', { ...vector.expected, contentRead: true }).pass, false);
+});
+
+async function callbackRaw(options = {}) {
+  const browser = signInFake(options);
+  const notes = [];
+  const out = await signInHold({
+    client: browser.client,
+    reader: browser.unguarded,
+    mode: 'ordinary-authorize',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    tag: 'late-mark',
+    notes,
+    budget: options.budget ?? 500,
+    control: true,
+  });
+  return { out, notes };
+}
+
+test('callback raw leg waits for a late document mark and stays live', async () => {
+  const { out } = await callbackRaw({ markReadyMs: 80, budget: 500 });
+  assert.equal(out.live, true, JSON.stringify(out));
+  assert.equal(out.incomplete, undefined, JSON.stringify(out));
+});
+
+test('callback raw leg stays incomplete when the mark never appears', async () => {
+  const { out } = await callbackRaw({ markNever: true, budget: 120 });
+  assert.equal(out.live, false, JSON.stringify(out));
+  assert.match(String(out.incomplete ?? ''), /callback tab mark/);
 });

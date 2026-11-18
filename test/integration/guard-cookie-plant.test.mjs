@@ -75,7 +75,9 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.equal(vector.expected.deletionRefused, false);
   assert.equal(vector.expected.deletionCleared, true);
   assert.equal(vector.expected.adobeRefused, false);
-  assert.ok(sweepCaps.requestInterception === true || sweepCaps.requestInterception === undefined);
+  assert.equal(sweepCaps.requestInterception, true);
+  assert.equal(sweepCaps.fetchInterception, true);
+  assert.equal(sweepCaps.legacyInterception, undefined);
 });
 
 test('rows use the C10.cookie-plant prefix, not C8. or C6.', () => {
@@ -244,4 +246,17 @@ test('fetch-only transport skips legacy observations', async () => {
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.equal(row.observations.guarded.legacyRawPlanted, 'not-supported');
+});
+
+test('sweep caps omit legacyInterception so Chrome-unavailable legacy is not forged', async () => {
+  const out = await rows({
+    capabilities: {
+      requestInterception: true,
+      fetchInterception: true,
+    },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.deepEqual(out.summary({ guard: 'cookie-plant', sha: 'test' }).forged, []);
 });

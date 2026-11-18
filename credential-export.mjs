@@ -385,13 +385,13 @@ async function measureDrivability(ctx) {
   });
 }
 
-function credentialCookieLeaked(cookies, planted, host, tag) {
+function credentialCookieLeaked(cookies, planted, host) {
   return (
-    cookieHit(cookies, { name: planted.httpOnly, host, value: tag }) ||
-    cookieHit(cookies, { name: planted.open, host, value: tag }) ||
-    cookieHit(cookies, { name: planted.parent, host, value: tag }) ||
+    cookieHit(cookies, { name: planted.httpOnly, host }) ||
+    cookieHit(cookies, { name: planted.open, host }) ||
+    cookieHit(cookies, { name: planted.parent, host }) ||
     (planted.partitionedCredentialProven === true &&
-      cookieHit(cookies, { name: planted.partitionedCredential, value: tag }))
+      cookieHit(cookies, { name: planted.partitionedCredential }))
   );
 }
 
@@ -428,7 +428,7 @@ async function measureHeaders(ctx) {
   });
   const associatedLeak = events.some((event) =>
     (event.params?.associatedCookies ?? []).some((entry) =>
-      credentialCookieLeaked([entry.cookie ?? entry], planted, host, tag)
+      credentialCookieLeaked([entry.cookie ?? entry], planted, host)
     )
   );
   const sawExtra = events.some((event) =>
@@ -446,10 +446,10 @@ async function measureHeaders(ctx) {
 }
 
 function applyFilteredCookieRead(ctx, key, out) {
-  const { result, planted, host, tag } = ctx;
+  const { result, planted, host } = ctx;
   const cookies = cookiesFrom(out);
   if (refused(out)) result[key] = true;
-  else if (out.ok) result[key] = !credentialCookieLeaked(cookies, planted, host, tag);
+  else if (out.ok) result[key] = !credentialCookieLeaked(cookies, planted, host);
   else result[key] = false;
   return out.ok ? cookies : [];
 }
@@ -480,7 +480,7 @@ async function measureCookieReads(ctx) {
     seen.measured += 1;
     if (
       planted.partitionedCredentialProven &&
-      cookieHit(cookies, { name: planted.partitionedCredential, value: tag })
+      cookieHit(cookies, { name: planted.partitionedCredential })
     )
       seen.credential = true;
     if (
@@ -619,7 +619,7 @@ async function measureCookieWrites(ctx) {
 }
 
 async function measureStorageReads(ctx) {
-  const { client, clientSession, origin, tag, planted, result } = ctx;
+  const { client, clientSession, origin, planted, result } = ctx;
   const dom = await tryMethod(
     client,
     'DOMStorage.getDOMStorageItems',
@@ -630,7 +630,7 @@ async function measureStorageReads(ctx) {
   else
     result.domStorageRefused = storageRefused(
       dom.out,
-      hasEntry(dom.out.result?.entries, planted.lsKey, tag)
+      hasEntry(dom.out.result?.entries, planted.lsKey)
     );
 
   const idbNames = await tryMethod(
@@ -709,7 +709,7 @@ async function measurePartitionedStorageKeys(ctx) {
     else
       result.partitionedStorageKeyFiltered = storageRefused(
         adobelogin.out,
-        hasEntry(adobelogin.out.result?.entries, lsKey, tag)
+        hasEntry(adobelogin.out.result?.entries, lsKey)
       );
   }
 

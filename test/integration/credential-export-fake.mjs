@@ -375,21 +375,38 @@ export function credentialGuard(browser, options = {}) {
     options.credentialOrigins?.refusal ?? 'slicc: refused: this origin holds sign-in credentials';
   const mutants = options.mutants ?? {};
 
+  const ignorePartition = Boolean(mutants.leakPartitionedCookie || mutants.forgedTopLevelSite);
   const cookieCredential = (cookie) => {
     if (!matcher) return false;
     if (cookie.domain && matcher.cookieDomain(cookie.domain)) return true;
     if (cookie.url && matcher.url(cookie.url)) return true;
+    if (ignorePartition) return false;
     const site = partitionSite(cookie);
     if (site && matcher.topLevelSite(site)) return true;
     return false;
   };
   const urlCredential = (url) => matcher?.url(url);
-  const storageCredential = (storageId = {}) =>
-    urlCredential(storageId.securityOrigin) ||
-    Boolean(storageId.storageKey && matcher.storageKey(storageId.storageKey));
+  const storageCredential = (storageId = {}) => {
+    if (urlCredential(storageId.securityOrigin)) return true;
+    if (mutants.leakPartitionedStorageKey) return false;
+    return Boolean(storageId.storageKey && matcher.storageKey(storageId.storageKey));
+  };
   const cacheCredential = (cacheId) => {
     const text = String(cacheId ?? '');
     return urlCredential(text.slice(0, text.lastIndexOf('::')));
+  };
+  const forgeCookie = (cookie) => {
+    const site = partitionSite(cookie);
+    if (site && matcher.topLevelSite(site))
+      return {
+        ...cookie,
+        partitionKey: { topLevelSite: 'https://adobelogin.com.forged.test' },
+      };
+    return cookie;
+  };
+  const partitionCredential = (cookie) => {
+    const site = partitionSite(cookie);
+    return Boolean(site && matcher.topLevelSite(site));
   };
 
   const client = {
@@ -425,10 +442,18 @@ export function credentialGuard(browser, options = {}) {
         throw new Error(refusal);
       if (
         method === 'DOMStorage.getDOMStorageItems' &&
-        !mutants.leakDomStorage &&
-        storageCredential(params.storageId)
-      )
+        storageCredential(params.storageId) &&
+        !mutants.leakDomStorage
+      ) {
+        if (mutants.redactValuesKeepEntry) {
+          const out = await raw.send(method, params, sessionId);
+          return {
+            ...out,
+            entries: (out.entries ?? []).map((entry) => [entry?.[0], '']),
+          };
+        }
         throw new Error(refusal);
+      }
       if (
         ['DOMStorage.setDOMStorageItem', 'DOMStorage.removeDOMStorageItem'].includes(method) &&
         !mutants.allowStorageMutation &&
@@ -471,9 +496,26 @@ export function credentialGuard(browser, options = {}) {
         ].includes(method) &&
         !mutants.leakCookies
       ) {
+        if (
+          mutants.leakBrowserStorageGetCookies &&
+          method === 'Storage.getCookies' &&
+          sessionId === undefined
+        )
+          return out;
+        let cookies = out.cookies ?? [];
+        if (mutants.forgedTopLevelSite) cookies = cookies.map(forgeCookie);
+        if (mutants.redactValuesKeepEntry)
+          return {
+            ...out,
+            cookies: cookies.map((cookie) =>
+              cookieCredential(cookie) || partitionCredential(cookie)
+                ? { ...cookie, value: '' }
+                : cookie
+            ),
+          };
         return {
           ...out,
-          cookies: (out.cookies ?? []).filter((cookie) => !cookieCredential(cookie)),
+          cookies: cookies.filter((cookie) => !cookieCredential(cookie)),
         };
       }
       return out;
@@ -489,6 +531,26 @@ export function credentialGuard(browser, options = {}) {
         )
       )
         return event;
+      if (mutants.redactValuesKeepEntry) {
+        const headers = { ...(event.params?.headers ?? {}) };
+        for (const key of Object.keys(headers))
+          if (['cookie', 'set-cookie'].includes(key.toLowerCase())) headers[key] = '';
+        const associated = (event.params?.associatedCookies ?? []).map((entry) => {
+          const cookie = entry.cookie ?? entry;
+          return {
+            ...entry,
+            cookie: cookieCredential(cookie)
+              ? { ...cookie, value: '' }
+              : mutants.forgedTopLevelSite
+                ? forgeCookie(cookie)
+                : cookie,
+          };
+        });
+        return {
+          ...event,
+          params: { ...event.params, headers, associatedCookies: associated },
+        };
+      }
       const headers = { ...(event.params?.headers ?? {}) };
       for (const key of Object.keys(headers))
         if (['cookie', 'set-cookie'].includes(key.toLowerCase())) delete headers[key];

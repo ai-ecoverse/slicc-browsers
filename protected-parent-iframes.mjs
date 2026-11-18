@@ -2580,6 +2580,7 @@ async function measurePageClient({
     midHint,
     innerHint,
     innerKind,
+    preferMidLive,
     raw,
     contexts,
     liveContexts,
@@ -2598,6 +2599,11 @@ async function measurePageClient({
   return result;
 }
 
+function failOrdinaryLiveBlocked(result, notes) {
+  result.overBlocked = true;
+  notes.push('protection by over-blocking');
+}
+
 async function continueAfterLive({
   client,
   reader,
@@ -2609,6 +2615,7 @@ async function continueAfterLive({
   midHint,
   innerHint,
   innerKind,
+  preferMidLive,
   raw,
   contexts,
   liveContexts,
@@ -2624,7 +2631,8 @@ async function continueAfterLive({
 }) {
   const skipEvaluate = innerKind === 'srcdoc';
   if (raw.liveBlocked) {
-    protectLiveChannels(result, skipEvaluate);
+    if (preferMidLive) protectLiveChannels(result, skipEvaluate);
+    else failOrdinaryLiveBlocked(result, notes);
     if (!liveContexts.length) liveContexts = contexts;
   } else {
     await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);

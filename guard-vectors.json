@@ -32281,6 +32281,16 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.ordinary-parent-iframes.page: the ordinary mid document was BlockedByClient after attach during the live nest rebuild (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -32302,7 +32312,8 @@
           "midFrameAttached": true,
           "targetInfo": "either",
           "childAttach": "either",
-          "targetEvents": "either"
+          "targetEvents": "either",
+          "overBlocked": false
         }
       },
       "expected": {
@@ -32314,7 +32325,8 @@
         "midFrameAttached": true,
         "targetInfo": "either",
         "childAttach": "either",
-        "targetEvents": "either"
+        "targetEvents": "either",
+        "overBlocked": false
       },
       "designDependent": ["targetInfo", "childAttach", "targetEvents"]
     },

@@ -256,6 +256,7 @@ function emulatedGuardPlain(browser, options = {}) {
   const shields = new Map();
   const readyShields = new Map();
   const sessions = new Map();
+  const leakedSessions = new Set();
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
@@ -1281,11 +1282,22 @@ function emulatedGuardPlain(browser, options = {}) {
         if (info.type !== 'iframe') continue;
         if (!(await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
           continue;
+        const attached = await unguarded
+          .send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
+          .catch(() => null);
+        const sessionId = attached?.sessionId ?? `leak-${info.targetId}`;
+        if (attached?.sessionId) {
+          sessions.set(sessionId, info.targetId);
+          leakedSessions.add(sessionId);
+        }
+        let targetInfo = rewriteIframeInfo(info, options);
+        if (options.syntheticLeakedAttachTargetId)
+          targetInfo = { ...targetInfo, targetId: `synthetic-${info.targetId}` };
         events.push({
           method: 'Target.attachedToTarget',
           params: {
-            sessionId: `leak-${info.targetId}`,
-            targetInfo: rewriteIframeInfo(info, options),
+            sessionId,
+            targetInfo,
             waitingForDebugger: false,
           },
         });
@@ -1376,6 +1388,22 @@ function emulatedGuardPlain(browser, options = {}) {
           throw refusal('protected tab');
       }
     }
+    if (
+      options.refuseOrdinaryPageAutoAttach &&
+      method === 'Target.setAutoAttach' &&
+      params?.autoAttach &&
+      sessionId
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && pages.has(owner)) {
+        const blocked = targetBlocked.get(owner) ?? sessionBlocked.get(sessionId);
+        if (
+          !blocked ||
+          (blocked.ids.size === 0 && blocked.urls.size === 0 && blocked.midIds.size === 0)
+        )
+          throw refusal('ordinary page auto-attach');
+      }
+    }
     if (method === 'Target.getTargetInfo' && catalog) {
       const info = result.targetInfo;
       if (
@@ -1445,6 +1473,7 @@ function emulatedGuardPlain(browser, options = {}) {
         for (const child of node.childFrames ?? []) learn(child, node.frame.id);
       };
       learn(result.frameTree, undefined);
+      if (sessionId && leakedSessions.has(sessionId)) return result;
       return {
         ...result,
         frameTree: scrubProtectedDescendantTree(result.frameTree, catalog, options),
@@ -1524,6 +1553,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const shields = new Map();
   const readyShields = new Map();
   const sessions = new Map();
+  const leakedSessions = new Set();
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();

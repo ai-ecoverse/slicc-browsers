@@ -1219,14 +1219,15 @@ async function rawContexts(reader, sessionIds, raw, eventStart, budget, notes) {
 function applyTreeSample(arm, sample, result, key, mentions) {
   if (!arm.out) arm.out = sample.out;
   if (sample.unanswered) {
-    if (result[key] === undefined) arm.unanswered = true;
+    arm.unanswered = true;
     return;
   }
-  arm.unanswered = false;
-  if (sample.out.ok) {
-    if (mentions(sample.out.result)) result[key] = true;
-    else if (result[key] !== true) result[key] = false;
-  } else if (result[key] !== true) result[key] = false;
+  if (sample.out.ok && mentions(sample.out.result)) {
+    result[key] = true;
+    arm.unanswered = false;
+    return;
+  }
+  if (result[key] !== true) result[key] = false;
 }
 
 async function attachOrdinaryTop(client, targetId, notes, internalSessions) {
@@ -1290,6 +1291,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
   const sessions = [...new Set((sessionIds ?? []).filter(Boolean))];
   let anyUnanswered = false;
   let unansweredId;
+  let unansweredText;
   for (const context of contexts) {
     const ordered = [
       context.sessionId,
@@ -1312,6 +1314,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
       if (!answered(evaluated) && !gone && !refused(evaluated)) {
         anyUnanswered = true;
         unansweredId ??= context.id;
+        unansweredText ??= errorText(evaluated);
         continue;
       }
       if (gone) continue;
@@ -1332,6 +1335,7 @@ async function evaluateContexts(client, sessionIds, contexts, evaluateArm, resul
   if (result.contextEvaluate !== true && anyUnanswered) {
     evaluateArm.unanswered = true;
     evaluateArm.unansweredId ??= unansweredId;
+    evaluateArm.unansweredText ??= unansweredText;
     evaluateArm.out ??= { ok: false };
   }
 }
@@ -1348,21 +1352,17 @@ function collectAutoSessions(events, from) {
 }
 
 async function sampleTrees(client, sessionIds, treeArm, result, raw) {
-  let topUnanswered = false;
-  for (let i = 0; i < sessionIds.length; i++) {
-    const sessionId = sessionIds[i];
+  for (const sessionId of sessionIds) {
     const treeAgain = await outcome(client.send('Page.getFrameTree', {}, sessionId));
-    const unanswered = !answered(treeAgain);
-    if (i === 0 && unanswered) topUnanswered = true;
-    applyTreeSample(treeArm, { out: treeAgain, unanswered }, result, 'frameTree', (payload) =>
-      treeMentions(payload?.frameTree, raw)
+    applyTreeSample(
+      treeArm,
+      { out: treeAgain, unanswered: !answered(treeAgain) && !refused(treeAgain) },
+      result,
+      'frameTree',
+      (payload) => treeMentions(payload?.frameTree, raw)
     );
-    if (result.frameTree === true) {
-      if (topUnanswered) treeArm.unanswered = true;
-      return;
-    }
+    if (result.frameTree === true) return;
   }
-  if (topUnanswered) treeArm.unanswered = true;
 }
 
 function recordChildEnable(out, label, child, childSessions, missing, result) {
@@ -1375,7 +1375,7 @@ function recordChildEnable(out, label, child, childSessions, missing, result) {
     return 'refused';
   }
   if (!answered(out)) {
-    missing.push(`${label} unanswered`);
+    missing.push(`${label} unanswered${errorText(out)}`);
     return 'missing';
   }
   missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
@@ -1590,8 +1590,13 @@ async function pollPageClient({
   return windowMs;
 }
 
+function errorText(out) {
+  const text = String(out?.error?.message ?? out?.error ?? '').slice(0, 160);
+  return text ? `: ${text}` : '';
+}
+
 function enableFailure(out, label, missing) {
-  if (!answered(out)) missing.push(`${label} unanswered`);
+  if (!answered(out)) missing.push(`${label} unanswered${errorText(out)}`);
   else if (!out.ok) missing.push(`${label} failed: ${out.error?.message ?? out.error}`);
 }
 
@@ -1626,88 +1631,32 @@ function settleLeakDefaults(result) {
   result.targetEvents ??= false;
 }
 
-async function inlineOrdinaryNestControl(client, ordinary, tag, notes, budget, internalSessions) {
-  const inner = `${ordinary}/doc?n=ctrl-inner-${tag}`;
-  const mid = `${ordinary}/oopif-mid?inner=${encodeURIComponent(inner)}&n=ctrl-mid-${tag}`;
-  const page = `${ordinary}/oopif-nest?mid=${encodeURIComponent(mid)}&n=ctrl-host-${tag}`;
-  note(notes, 'protected-parent.inline-ordinary-control', { page });
-  const created = await outcome(client.send('Target.createTarget', { url: page }));
-  if (!answered(created))
-    return { incomplete: 'inline ordinary control: Target.createTarget unanswered' };
-  if (!created.ok || !created.result?.targetId) {
-    note(notes, 'protected-parent.inline-ordinary-control', {
-      overBlocked: true,
-      step: 'Target.createTarget',
-      error: refusalError(created),
-    });
-    notes.push('protection by over-blocking');
-    return { overBlocked: true, step: 'Target.createTarget', error: refusalError(created) };
+function inlineOverBlocked(notes, step, extra = {}) {
+  note(notes, 'protected-parent.inline-ordinary-control', { overBlocked: true, step, ...extra });
+  notes.push('protection by over-blocking');
+  return { overBlocked: true, step, ...extra };
+}
+
+async function inlineCall(client, method, params, sessionId, notes, cleanup, label = method) {
+  const out = await outcome(client.send(method, params, sessionId));
+  if (!answered(out)) {
+    await cleanup?.();
+    return { incomplete: `inline ordinary control: ${label} unanswered` };
   }
-  const targetId = created.result.targetId;
-  const cleanup = async () => {
-    await outcome(client.send('Target.closeTarget', { targetId }));
-  };
-  const attached = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
-  if (!answered(attached)) {
-    await cleanup();
-    return { incomplete: 'inline ordinary control: Target.attachToTarget unanswered' };
+  if (!out.ok) {
+    await cleanup?.();
+    return inlineOverBlocked(notes, label, { error: refusalError(out), session: sessionId });
   }
-  if (!attached.ok || !attached.result?.sessionId) {
-    note(notes, 'protected-parent.inline-ordinary-control', {
-      overBlocked: true,
-      step: 'Target.attachToTarget',
-      error: refusalError(attached),
-    });
-    notes.push('protection by over-blocking');
-    await cleanup();
-    return { overBlocked: true, step: 'Target.attachToTarget', error: refusalError(attached) };
-  }
-  const sessionId = attached.result.sessionId;
-  internalSessions.add(sessionId);
-  for (const call of ['Page.enable', 'Runtime.enable']) {
-    const out = await outcome(client.send(call, {}, sessionId));
-    if (!answered(out)) {
-      await cleanup();
-      return { incomplete: `inline ordinary control: ${call} unanswered` };
-    }
-    if (!out.ok) {
-      note(notes, 'protected-parent.inline-ordinary-control', {
-        overBlocked: true,
-        step: call,
-        error: refusalError(out),
-      });
-      notes.push('protection by over-blocking');
-      await cleanup();
-      return { overBlocked: true, step: call, error: refusalError(out) };
-    }
-  }
-  const auto = await outcome(
-    client.send(
-      'Target.setAutoAttach',
-      { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
-      sessionId
-    )
-  );
-  if (!answered(auto)) {
-    await cleanup();
-    return { incomplete: 'inline ordinary control: Target.setAutoAttach unanswered' };
-  }
-  if (!auto.ok) {
-    note(notes, 'protected-parent.inline-ordinary-control', {
-      overBlocked: true,
-      step: 'Target.setAutoAttach',
-      error: refusalError(auto),
-    });
-    notes.push('protection by over-blocking');
-    await cleanup();
-    return { overBlocked: true, step: 'Target.setAutoAttach', error: refusalError(auto) };
-  }
-  const needle = `ctrl-inner-${tag}`;
+  return { out };
+}
+
+async function waitInlineOrdinaryTree(client, sessionId, needle, budget, autoStart, childSessions) {
   let unansweredTree = false;
   let lastFrames = 0;
   let lastError = '';
   const ready = await until(
     async () => {
+      pullAutoSessions(client, autoStart, childSessions);
       const tree = await outcome(client.send('Page.getFrameTree', {}, sessionId));
       if (!answered(tree)) {
         unansweredTree = true;
@@ -1725,43 +1674,120 @@ async function inlineOrdinaryNestControl(client, ordinary, tag, notes, budget, i
     },
     Math.max(budget, 500)
   );
-  if (!ready) {
-    if (unansweredTree) {
+  pullAutoSessions(client, autoStart, childSessions);
+  return { ready, unansweredTree, lastFrames, lastError };
+}
+
+async function exerciseInlineChildSessions(
+  client,
+  childSessions,
+  internalSessions,
+  notes,
+  cleanup
+) {
+  for (const child of childSessions) {
+    internalSessions.add(child);
+    for (const call of ['Page.enable', 'Runtime.enable']) {
+      const step = await inlineCall(client, call, {}, child, notes, cleanup);
+      if (step.incomplete || step.overBlocked) return step;
+    }
+    const childTree = await inlineCall(
+      client,
+      'Page.getFrameTree',
+      {},
+      child,
+      notes,
+      cleanup,
+      'Page.getFrameTree'
+    );
+    if (childTree.incomplete) {
+      return { incomplete: 'inline ordinary control: child Page.getFrameTree unanswered' };
+    }
+    if (childTree.overBlocked) return childTree;
+  }
+  return null;
+}
+
+async function inlineOrdinaryNestControl(client, ordinary, tag, notes, budget, internalSessions) {
+  const inner = `${ordinary}/doc?n=ctrl-inner-${tag}`;
+  const mid = `${ordinary}/oopif-mid?inner=${encodeURIComponent(inner)}&n=ctrl-mid-${tag}`;
+  const page = `${ordinary}/oopif-nest?mid=${encodeURIComponent(mid)}&n=ctrl-host-${tag}`;
+  note(notes, 'protected-parent.inline-ordinary-control', { page });
+  const created = await outcome(client.send('Target.createTarget', { url: page }));
+  if (!answered(created))
+    return { incomplete: 'inline ordinary control: Target.createTarget unanswered' };
+  if (!created.ok || !created.result?.targetId)
+    return inlineOverBlocked(notes, 'Target.createTarget', { error: refusalError(created) });
+  const targetId = created.result.targetId;
+  const cleanup = async () => {
+    await outcome(client.send('Target.closeTarget', { targetId }));
+  };
+  const attached = await inlineCall(
+    client,
+    'Target.attachToTarget',
+    { targetId, flatten: true },
+    undefined,
+    notes,
+    cleanup
+  );
+  if (attached.incomplete || attached.overBlocked) return attached;
+  const sessionId = attached.out.result?.sessionId;
+  if (!sessionId) {
+    await cleanup();
+    return inlineOverBlocked(notes, 'Target.attachToTarget', { error: 'missing sessionId' });
+  }
+  internalSessions.add(sessionId);
+  for (const call of ['Page.enable', 'Runtime.enable']) {
+    const step = await inlineCall(client, call, {}, sessionId, notes, cleanup);
+    if (step.incomplete || step.overBlocked) return step;
+  }
+  const autoStart = client.events?.length ?? 0;
+  const auto = await inlineCall(
+    client,
+    'Target.setAutoAttach',
+    { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+    sessionId,
+    notes,
+    cleanup
+  );
+  if (auto.incomplete || auto.overBlocked) return auto;
+  const childSessions = new Set();
+  const tree = await waitInlineOrdinaryTree(
+    client,
+    sessionId,
+    `ctrl-inner-${tag}`,
+    budget,
+    autoStart,
+    childSessions
+  );
+  if (!tree.ready) {
+    if (tree.unansweredTree) {
       await cleanup();
       return { incomplete: 'inline ordinary control: Page.getFrameTree unanswered' };
     }
-    note(notes, 'protected-parent.inline-ordinary-control', {
-      overBlocked: true,
-      step: 'Page.getFrameTree',
-      frames: lastFrames,
-      error: lastError,
-    });
-    notes.push('protection by over-blocking');
     await cleanup();
-    return {
-      overBlocked: true,
-      step: 'Page.getFrameTree',
-      frames: lastFrames,
-      error: lastError,
-    };
+    return inlineOverBlocked(notes, 'Page.getFrameTree', {
+      frames: tree.lastFrames,
+      error: tree.lastError,
+    });
   }
-  const evaluated = await outcome(
-    client.send('Runtime.evaluate', { expression: '1+1', returnByValue: true }, sessionId)
+  const children = await exerciseInlineChildSessions(
+    client,
+    childSessions,
+    internalSessions,
+    notes,
+    cleanup
   );
-  if (!answered(evaluated)) {
-    await cleanup();
-    return { incomplete: 'inline ordinary control: Runtime.evaluate unanswered' };
-  }
-  if (!evaluated.ok) {
-    note(notes, 'protected-parent.inline-ordinary-control', {
-      overBlocked: true,
-      step: 'Runtime.evaluate',
-      error: refusalError(evaluated),
-    });
-    notes.push('protection by over-blocking');
-    await cleanup();
-    return { overBlocked: true, step: 'Runtime.evaluate', error: refusalError(evaluated) };
-  }
+  if (children) return children;
+  const evaluated = await inlineCall(
+    client,
+    'Runtime.evaluate',
+    { expression: '1+1', returnByValue: true },
+    sessionId,
+    notes,
+    cleanup
+  );
+  if (evaluated.incomplete || evaluated.overBlocked) return evaluated;
   await cleanup();
   return { overBlocked: false };
 }
@@ -1795,6 +1821,34 @@ async function applyInlineOrdinaryControl(
   return {};
 }
 
+async function probeAutoAttachedSessions(client, childSessions, raw, result, missing) {
+  for (const child of [...childSessions]) {
+    const tree = await outcome(client.send('Page.getFrameTree', {}, child));
+    if (!answered(tree) && !refused(tree)) {
+      missing.push(`Page.getFrameTree unanswered (${child})`);
+      continue;
+    }
+    if (tree.ok && treeMentions(tree.result?.frameTree, raw)) {
+      result.frameTree = true;
+      result.childAttach = true;
+    }
+    const evaluated = await outcome(
+      client.send('Runtime.evaluate', { expression: 'location.href', returnByValue: true }, child)
+    );
+    if (!answered(evaluated) && !refused(evaluated)) {
+      missing.push(`Runtime.evaluate unanswered (${child})`);
+      continue;
+    }
+    if (evaluated.ok) {
+      const href = String(evaluated.result?.result?.value ?? '');
+      if ([...raw.urls].some((entry) => entry && (href === entry || href.includes(entry)))) {
+        result.contextEvaluate = true;
+        result.childAttach = true;
+      }
+    }
+  }
+}
+
 async function probeBrowserOnlyChannels(client, raw, internalSessions, result, missing, notes) {
   const childSessions = new Set();
   const eventStart = client.events?.length ?? 0;
@@ -1817,13 +1871,17 @@ async function probeBrowserOnlyChannels(client, raw, internalSessions, result, m
     notes.push('protection by over-blocking');
   }
   await pause(50);
+  pullAutoSessions(client, eventStart, childSessions);
   result.targetEvents = (client.events ?? [])
     .slice(eventStart)
     .some((event) => targetEventHit(event, raw))
     ? true
     : (result.targetEvents ?? false);
+  await probeAutoAttachedSessions(client, childSessions, raw, result, missing);
   await probeListedGrandchildren(client, raw, childSessions, internalSessions, result, missing);
   await probeRawGrandchildTarget(client, raw, childSessions, internalSessions, result, missing);
+  pullAutoSessions(client, eventStart, childSessions);
+  await probeAutoAttachedSessions(client, childSessions, raw, result, missing);
   result.targetEvents = (client.events ?? [])
     .slice(eventStart)
     .some((event) => targetEventHit(event, raw))
@@ -1860,10 +1918,13 @@ async function sampleResources(client, sessionIds, resourceArm, result, raw) {
   for (const sessionId of sessionIds) {
     if (result.resourceTree === true) return;
     const resourceOut = await outcome(client.send('Page.getResourceTree', {}, sessionId));
-    if (!resourceOut.ok && refused(resourceOut)) continue;
+    if (!resourceOut.ok && answered(resourceOut) && refused(resourceOut)) continue;
     applyTreeSample(
       resourceArm,
-      { out: resourceOut, unanswered: !answered(resourceOut) },
+      {
+        out: resourceOut,
+        unanswered: !answered(resourceOut) && !refused(resourceOut),
+      },
       result,
       'resourceTree',
       (payload) => resourceMentions(payload, raw)
@@ -2675,7 +2736,7 @@ function settlePageContexts(liveContexts, raw, evaluateArm, result, missing, ski
     'contextEvaluate',
     evaluateArm.unanswered,
     evaluateArm.unansweredId
-      ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId})`
+      ? `Runtime.evaluate unanswered (${evaluateArm.unansweredId}${evaluateArm.unansweredText ?? ''})`
       : 'Runtime.evaluate unanswered',
     missing,
     { contextEvaluate: false }

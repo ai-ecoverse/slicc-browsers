@@ -37,6 +37,12 @@ export function createSignInHoldState(options = {}) {
 export function noteSignInHoldTarget(state, info) {
   if (!state || !info?.targetId) return;
   if (state.options.holdMissing) return;
+  if (state.options.holdEverything) {
+    const url = info.url ?? '';
+    if (info.openerId || url.includes('/ims/authorize') || url.includes('/held'))
+      state.held.add(info.targetId);
+    return;
+  }
   if (signInHoldUrl(info.url) || state.held.has(info.targetId)) state.held.add(info.targetId);
 }
 

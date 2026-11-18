@@ -65,6 +65,8 @@ export const drivable = new Set([
   'C3.tab-worker-leak',
   'C3.tab-service-worker-leak',
   'C3.ordinary-parent-iframes.page',
+  'C7.sign-in-hold.ordinary-popup',
+  'C7.sign-in-hold.ordinary-authorize',
 ]);
 
 const every = ['seven', 'vault', 'vault-x', 'apex'];

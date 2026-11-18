@@ -239,10 +239,10 @@ You supply:
 | `clientExit` | close the guarded client mid-row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
-| `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
-| `closeProtected` | close a protected tab (not live vault/seven-UI disguises) |
-| `signInHold` | hold seven sign-in popups; hide callback-only authorize |
-| `requestInterception` / `fetchInterception` / `legacyInterception` | Fetch or legacy |
+| `stockSetup`, `syntheticAutoAttach` | admit stock setup; synthesize auto-attach |
+| `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
+| `signInHold` | hold seven sign-in popups; hide callback-only authorize; keep ordinary popups |
+| `requestInterception` / `fetchInterception` / `legacyInterception` | Fetch/legacy |
 
 ### Reading the result
 

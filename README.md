@@ -197,7 +197,7 @@ For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stoc
 - `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` on the whole string without the multiline flag (no code), with any `worldName` or `runImmediately`, and its removal;
 - exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
 - `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
-- `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe (including ordinary-URL children of a protected parent) or worker may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
+- `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe (including ordinary-URL children of a protected parent) or worker may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`; A top-page `slicc: refused:` protects when ordinary tabs still work.
 
 The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Admitted display overrides and no-code init scripts must not remain in effect on a protected document — refuse that navigation, or clear them before it runs. Undeclared, they skip, never pass.
 
@@ -231,7 +231,7 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
-| `iframeAutoAttach` | auto-attach OOP iframe children under a page |
+| `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |
@@ -241,10 +241,14 @@ You supply:
 | `clientExit` | close the guarded client mid-row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
-| `stockSetup`, `syntheticAutoAttach` | admit stock setup; synthesize auto-attach |
+| `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven sign-in popups; hide callback-only authorize; keep ordinary popups |
-| `requestInterception` / `fetchInterception` | Fetch; `legacyInterception` only when the probe enables it |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
+| `requestInterception` | Fetch fulfill/continueResponse or legacy Network interception |
+| `fetchInterception` | Fetch response-writing fulfill/continueResponse |
+| `legacyInterception` | Network.setRequestInterception / continueInterceptedRequest |
+
+Derived from the transport: Fetch fulfill/continueResponse requires declaring `requestInterception` (else plant rows skip). Legacy removal notes `legacy unsupported in this Chrome`, not a silent pass. C10.cookie-plant (+ credential) blocks planting protected/credential cookies via interception; Chrome-no-store encodings are recorded as not plant paths.
 
 ### Reading the result
 
@@ -254,7 +258,7 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes. Skipped and incomplete rows are counted, so the line cannot overstate the result.
+The run passes only when every row passes and none is missing. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it can't overstate what was tested.
 
 To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 

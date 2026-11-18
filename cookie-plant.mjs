@@ -31,7 +31,11 @@ function answered(out) {
   if (out.ok) return true;
   const err = out.error;
   if (err && typeof err.code === 'number') return true;
-  return /^slicc: refused:/.test(String(err?.message ?? err ?? ''));
+  const message = String(err?.message ?? err ?? '');
+  if (/^slicc: refused:/.test(message)) return true;
+  if (/Invalid (parameters|Params)|Invalid request id|continueResponse at Request/i.test(message))
+    return true;
+  return false;
 }
 
 function refused(out) {
@@ -51,12 +55,45 @@ function hostOf(origin) {
   }
 }
 
-function cookieHeader(name, value, domain, extra = '') {
+function cookieHeader(name, value, domain, extra = '', domainAttr = null) {
   const parts = [`${name}=${value}`];
-  if (domain) parts.push(`Domain=${domain}`);
+  if (domainAttr) parts.push(domainAttr);
+  else if (domain) parts.push(`Domain=${domain}`);
   parts.push('Path=/');
   if (extra) parts.push(extra);
   return parts.join('; ');
+}
+
+const hstsPreloaded = (host) => {
+  const name = String(host ?? '')
+    .toLowerCase()
+    .replace(/\.$/, '');
+  return (
+    name === 'adobe.com' ||
+    name.endsWith('.adobe.com') ||
+    name === 'adobelogin.com' ||
+    name.endsWith('.adobelogin.com')
+  );
+};
+
+function fixtureOriginFor(templateUrl, host) {
+  try {
+    const parsed = new URL(templateUrl);
+    const name = host ?? parsed.hostname;
+    const port = parsed.port ? `:${parsed.port}` : '';
+    const scheme = hstsPreloaded(name) ? 'https:' : parsed.protocol;
+    return `${scheme}//${name}${port}`;
+  } catch {
+    return null;
+  }
+}
+
+function siteHost(host) {
+  const parts = String(host ?? '')
+    .toLowerCase()
+    .split('.')
+    .filter(Boolean);
+  return parts.length >= 2 ? parts.slice(-2).join('.') : String(host ?? '').toLowerCase();
 }
 
 function binaryHeaders(pairs) {
@@ -444,13 +481,16 @@ async function finishPlant({
   await settleTrigger(triggerPromise, budget);
   const jar = await readJar(reader, readerSession, cookie);
   const planted = plantedOf(jar);
-  note(notes, `cookie-plant.${label}`, {
+  const evidence = {
     answered: answered(out),
     refused: refused(out),
     planted,
     via: jar?.via,
     jarIncomplete: jar?.incomplete,
-  });
+  };
+  if (planted === false && CHROME_NO_STORE.has(label))
+    evidence.note = 'Chrome does not store it: not a plant path';
+  note(notes, `cookie-plant.${label}`, evidence);
   await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
   return attemptRecord(out, planted);
 }
@@ -704,16 +744,43 @@ const FETCH_PATH_NAMES = [
   'fulfillBinary',
   'continueResponse',
   'redirect3xx',
+  'binaryLf',
+  'binaryObsFold',
+  'domainQuoted',
+  'domainUpper',
+  'domainTrailDot',
+  'domainRepeated',
+  'domainWs',
+  'headerPadded',
+  'setCookieSecond',
+  'responsePhrase',
+  'continueAtRequest',
 ];
+
+const CREDENTIAL_PATH_NAMES = ['hostOnly', 'domainCover', 'subHost'];
 
 const ALL_PATH_NAMES = [
   ...FETCH_PATH_NAMES,
+  ...CREDENTIAL_PATH_NAMES,
   'legacyHeaders',
   'legacyRaw',
   'ordinary',
   'deletion',
   'adobe',
 ];
+
+const CHROME_NO_STORE = new Set([
+  'fulfillObject',
+  'fulfillSetCookie2',
+  'fulfillNewline',
+  'continueResponse',
+  'binaryLf',
+  'binaryObsFold',
+  'domainQuoted',
+  'headerPadded',
+  'responsePhrase',
+  'continueAtRequest',
+]);
 
 function incompletePaths() {
   return Object.fromEntries(
@@ -725,42 +792,214 @@ function incompletePaths() {
   );
 }
 
-function plantCtx({
-  client,
-  reader,
-  pageSession,
-  readerSession,
-  plantUrl,
-  plantCookie,
-  domain,
-  tag,
-  names,
-  plantOrigin,
-  protectedOrigin,
-  ordinary,
-  homeUrl,
-  transport,
-  budget,
-  notes,
-}) {
-  return {
-    client,
-    reader,
-    pageSession,
-    readerSession,
-    plantUrl,
-    plantCookie,
-    domain,
-    tag,
-    names,
-    plantOrigin,
-    protectedOrigin,
-    ordinary,
-    homeUrl,
-    transport,
-    budget,
-    notes,
-  };
+function plantCtx(fields) {
+  return { ...fields };
+}
+
+function fetchAttackSpecs(ctx, header, bareDomain) {
+  const v = (prefix) => `${prefix}-${ctx.tag}`;
+  const set = (name, value) => [
+    { name: 'content-type', value: 'text/plain' },
+    { name, value },
+  ];
+  return [
+    {
+      label: 'fulfillArray',
+      value: ctx.plantCookie.value,
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie', header(ctx.plantCookie.value)),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'fulfillObject',
+      value: v('obj'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: { 'content-type': 'text/plain', 'Set-Cookie': header(v('obj')) },
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'fulfillLower',
+      value: v('low'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('set-cookie', header(v('low'))),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'fulfillSetCookie2',
+      value: v('sc2'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie2', header(v('sc2'))),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'fulfillNewline',
+      value: v('nl'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set(
+            'Set-Cookie',
+            `${header(v('nl'))}\n${cookieHeader(`${ctx.names.plant}o`, '1', ctx.domain)}`
+          ),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'fulfillBinary',
+      value: v('bin'),
+      build: () =>
+        fetchFulfill({
+          binaryResponseHeaders: binaryHeaders(set('Set-Cookie', header(v('bin')))),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'continueResponse',
+      value: v('cr'),
+      stage: 'Response',
+      build: () =>
+        fetchContinueResponse({
+          responseHeaders: set('Set-Cookie', header(v('cr'))),
+        }),
+    },
+    {
+      label: 'redirect3xx',
+      value: v('rx'),
+      build: () =>
+        fetchFulfill({
+          responseCode: 302,
+          responseHeaders: [
+            { name: 'Location', value: `${ctx.plantOrigin}/doc?n=redir-${ctx.tag}` },
+            { name: 'Set-Cookie', value: header(v('rx')) },
+          ],
+          body: b64text(''),
+        }),
+    },
+    {
+      label: 'binaryLf',
+      value: v('blf'),
+      build: () =>
+        fetchFulfill({
+          binaryResponseHeaders: binaryHeaders([
+            { name: 'X-A', value: `1\nSet-Cookie: ${header(v('blf'))}` },
+            { name: 'content-type', value: 'text/plain' },
+          ]),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'binaryObsFold',
+      value: v('bof'),
+      build: () =>
+        fetchFulfill({
+          binaryResponseHeaders: b64text(
+            `content-type: text/plain\0Set-Cookie: ${ctx.names.plant}=${v('bof')}\r\n Domain=${ctx.domain}; Path=/\0`
+          ),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'domainQuoted',
+      value: v('dq'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie', header(v('dq'), ctx.domain, `Domain="${bareDomain}"`)),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'domainUpper',
+      value: v('du'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie', header(v('du'), ctx.domain, `DOMAIN=${ctx.domain}`)),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'domainTrailDot',
+      value: v('dtd'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie', header(v('dtd'), ctx.domain, `Domain=${bareDomain}.`)),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'domainRepeated',
+      value: v('dr'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set(
+            'Set-Cookie',
+            `${ctx.names.plant}=${v('dr')}; Domain=example.invalid; Domain=${ctx.domain}; Path=/`
+          ),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'domainWs',
+      value: v('dws'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set(
+            'Set-Cookie',
+            header(v('dws'), ctx.domain, `Domain = ${ctx.domain}`)
+          ),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'headerPadded',
+      value: v('hp'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: set('Set-Cookie\t', header(v('hp'))),
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'setCookieSecond',
+      value: v('sc2nd'),
+      build: () =>
+        fetchFulfill({
+          responseHeaders: [
+            { name: 'content-type', value: 'text/plain' },
+            { name: 'X-Other', value: '1' },
+            { name: 'Set-Cookie', value: header(v('sc2nd')) },
+          ],
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'responsePhrase',
+      value: v('rp'),
+      build: () =>
+        fetchFulfill({
+          responseCode: 200,
+          responsePhrase: `OK\r\nSet-Cookie: ${header(v('rp'))}`,
+          responseHeaders: [{ name: 'content-type', value: 'text/plain' }],
+          body: b64text('ok'),
+        }),
+    },
+    {
+      label: 'continueAtRequest',
+      value: v('car'),
+      stage: 'Request',
+      build: () =>
+        fetchContinueResponse({
+          responseCode: 200,
+          responseHeaders: set('Set-Cookie', header(v('car'))),
+        }),
+    },
+  ];
 }
 
 function fetchAttacks(ctx) {
@@ -777,126 +1016,25 @@ function fetchAttacks(ctx) {
     homeUrl: ctx.homeUrl,
     topLevel: true,
   };
-  const cookie = (value) => ({ ...ctx.plantCookie, value });
-  const header = (value) => cookieHeader(ctx.names.plant, value, ctx.domain);
-  return {
-    fulfillArray: () =>
+  const header = (value, domain = ctx.domain, domainAttr = null) =>
+    cookieHeader(ctx.names.plant, value, domain, '', domainAttr);
+  const bareDomain = ctx.domain.replace(/^\./, '');
+  const out = {};
+  for (const spec of fetchAttackSpecs(ctx, header, bareDomain)) {
+    out[spec.label] = () =>
       runPlant({
         ...base,
-        cookie: ctx.plantCookie,
-        label: 'fulfillArray',
-        build: () =>
-          fetchFulfill({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'Set-Cookie', value: header(ctx.plantCookie.value) },
-            ],
-            body: b64text('ok'),
-          }),
-      }),
-    fulfillObject: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`obj-${ctx.tag}`),
-        label: 'fulfillObject',
-        build: () =>
-          fetchFulfill({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'Set-Cookie', value: header(`obj-${ctx.tag}`) },
-            ],
-            body: b64text('ok'),
-          }),
-      }),
-    fulfillLower: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`low-${ctx.tag}`),
-        label: 'fulfillLower',
-        build: () =>
-          fetchFulfill({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'set-cookie', value: header(`low-${ctx.tag}`) },
-            ],
-            body: b64text('ok'),
-          }),
-      }),
-    fulfillSetCookie2: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`sc2-${ctx.tag}`),
-        label: 'fulfillSetCookie2',
-        build: () =>
-          fetchFulfill({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'Set-Cookie2', value: header(`sc2-${ctx.tag}`) },
-            ],
-            body: b64text('ok'),
-          }),
-      }),
-    fulfillNewline: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`nl-${ctx.tag}`),
-        label: 'fulfillNewline',
-        build: () =>
-          fetchFulfill({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              {
-                name: 'Set-Cookie',
-                value: `${header(`nl-${ctx.tag}`)}\n${cookieHeader(`${ctx.names.plant}o`, '1', ctx.domain)}`,
-              },
-            ],
-            body: b64text('ok'),
-          }),
-      }),
-    fulfillBinary: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`bin-${ctx.tag}`),
-        label: 'fulfillBinary',
-        build: () =>
-          fetchFulfill({
-            binaryResponseHeaders: binaryHeaders([
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'Set-Cookie', value: header(`bin-${ctx.tag}`) },
-            ]),
-            body: b64text('ok'),
-          }),
-      }),
-    continueResponse: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`cr-${ctx.tag}`),
-        label: 'continueResponse',
-        stage: 'Response',
-        build: () =>
-          fetchContinueResponse({
-            responseHeaders: [
-              { name: 'content-type', value: 'text/plain' },
-              { name: 'Set-Cookie', value: header(`cr-${ctx.tag}`) },
-            ],
-          }),
-      }),
-    redirect3xx: () =>
-      runPlant({
-        ...base,
-        cookie: cookie(`rx-${ctx.tag}`),
-        label: 'redirect3xx',
-        build: () =>
-          fetchFulfill({
-            responseCode: 302,
-            responseHeaders: [
-              { name: 'Location', value: `${ctx.plantOrigin}/doc?n=redir-${ctx.tag}` },
-              { name: 'Set-Cookie', value: header(`rx-${ctx.tag}`) },
-            ],
-            body: b64text(''),
-          }),
-      }),
-  };
+        cookie: {
+          ...ctx.plantCookie,
+          value: spec.value,
+          ...(spec.label === 'fulfillArray' ? {} : {}),
+        },
+        label: spec.label,
+        stage: spec.stage ?? 'Request',
+        build: spec.build,
+      });
+  }
+  return out;
 }
 
 async function withLegacyOnly(client, pageSession, transport, run) {
@@ -1249,9 +1387,143 @@ async function enableClientTransport(client, pageSession, notes) {
         pageSession
       )
     );
-    note(notes, 'cookie-plant.legacyProbe', { ready: legacyReady });
+    if (legacyReady) note(notes, 'cookie-plant.legacyProbe', { ready: true });
+    else
+      note(notes, 'cookie-plant.legacyProbe', {
+        ready: false,
+        note: 'legacy unsupported in this Chrome',
+      });
   }
   return { transport, legacyReady };
+}
+
+function credentialAttacks(ctx) {
+  if (!ctx.credential) return null;
+  const fetchReady = Boolean(ctx.transport.fetch);
+  const controlTransport = ctx.transport.fetch
+    ? ctx.transport
+    : { kind: 'legacy', fetch: false, legacy: true };
+  const hostOnlyUrl = ctx.plantUrl;
+  const hostOnlyCookie = {
+    name: ctx.names.plant,
+    value: `ho-${ctx.tag}`,
+    domain: hostOf(hostOnlyUrl) || ctx.credentialHost,
+    url: `${ctx.plantOrigin}/`,
+  };
+  const coverCookie = {
+    name: ctx.names.plant,
+    value: `dc-${ctx.tag}`,
+    domain: ctx.credentialSiteDomain,
+    url: `${ctx.plantOrigin}/`,
+  };
+  const subHost = `x.${ctx.credentialHost}`;
+  const subUrl = `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/data?n=sub-${ctx.tag}`;
+  return {
+    hostOnly: () =>
+      runPlant({
+        client: ctx.client,
+        reader: ctx.reader,
+        pageSession: ctx.pageSession,
+        readerSession: ctx.readerSession,
+        url: hostOnlyUrl,
+        cookie: hostOnlyCookie,
+        transport: controlTransport,
+        budget: ctx.budget,
+        notes: ctx.notes,
+        label: 'hostOnly',
+        homeUrl: ctx.homeUrl,
+        topLevel: true,
+        build: () =>
+          fetchReady
+            ? fetchFulfill({
+                responseHeaders: [
+                  { name: 'content-type', value: 'text/plain' },
+                  {
+                    name: 'Set-Cookie',
+                    value: cookieHeader(ctx.names.plant, hostOnlyCookie.value, null),
+                  },
+                ],
+                body: b64text('ok'),
+              })
+            : legacyContinue({
+                rawResponse: rawHttpResponse({
+                  code: 200,
+                  phrase: 'OK',
+                  headers: [
+                    {
+                      name: 'Set-Cookie',
+                      value: cookieHeader(ctx.names.plant, hostOnlyCookie.value, null),
+                    },
+                  ],
+                  body: 'ok',
+                }),
+              }),
+      }),
+    domainCover: () =>
+      runPlant({
+        client: ctx.client,
+        reader: ctx.reader,
+        pageSession: ctx.pageSession,
+        readerSession: ctx.readerSession,
+        url: `${ctx.ordinary}/data?n=cover-${ctx.tag}`,
+        cookie: coverCookie,
+        transport: controlTransport,
+        budget: ctx.budget,
+        notes: ctx.notes,
+        label: 'domainCover',
+        homeUrl: ctx.homeUrl,
+        topLevel: true,
+        build: () =>
+          fetchReady
+            ? fetchFulfill({
+                responseHeaders: [
+                  { name: 'content-type', value: 'text/plain' },
+                  {
+                    name: 'Set-Cookie',
+                    value: cookieHeader(
+                      ctx.names.plant,
+                      coverCookie.value,
+                      ctx.credentialSiteDomain
+                    ),
+                  },
+                ],
+                body: b64text('ok'),
+              })
+            : legacyContinue({
+                rawResponse: rawHttpResponse({
+                  code: 200,
+                  phrase: 'OK',
+                  headers: [
+                    {
+                      name: 'Set-Cookie',
+                      value: cookieHeader(
+                        ctx.names.plant,
+                        coverCookie.value,
+                        ctx.credentialSiteDomain
+                      ),
+                    },
+                  ],
+                  body: 'ok',
+                }),
+              }),
+      }),
+    subHost: () =>
+      allowedHeaderAttempt({
+        client: ctx.client,
+        pageSession: ctx.pageSession,
+        reader: ctx.reader,
+        readerSession: ctx.readerSession,
+        url: subUrl,
+        transport: controlTransport,
+        budget: ctx.budget,
+        notes: ctx.notes,
+        label: 'subHost',
+        header: cookieHeader(ctx.names.ordinary, `sub-${ctx.tag}`, `.${subHost}`),
+        fetchReady,
+        homeUrl: ctx.homeUrl,
+        topLevel: true,
+      }),
+  };
 }
 
 export async function cookiePlant({
@@ -1264,14 +1536,25 @@ export async function cookiePlant({
   notes = [],
   budget = 5000,
   control = false,
+  mode = 'set-cookie',
+  credentialOrigin,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
-  if (!protectedOrigin) return { incomplete: 'missing protected origin' };
+  const credential = mode === 'credential' || mode === 'credential-set-cookie';
+  const sourceOrigin = credential ? (credentialOrigin ?? protectedOrigin) : protectedOrigin;
+  if (!sourceOrigin) return { incomplete: 'missing protected origin' };
   if (!ordinary) return { incomplete: 'missing ordinary origin' };
 
   const names = cookieNames(tag);
-  const plantOrigin = control ? ordinary : protectedOrigin;
-  const domain = `.${hostOf(plantOrigin)}`;
+  const credentialHost = hostOf(sourceOrigin);
+  const mappedOrigin = fixtureOriginFor(ordinary, credentialHost) ?? sourceOrigin;
+  const plantOrigin = control ? ordinary : credential ? mappedOrigin : sourceOrigin;
+  const credentialSiteDomain = `.${siteHost(credentialHost)}`;
+  const domain = credential
+    ? control
+      ? `.${hostOf(ordinary)}`
+      : credentialSiteDomain
+    : `.${hostOf(plantOrigin)}`;
   const homeUrl = `${ordinary}/doc?n=cookie-plant-${tag}`;
   const page = await openPage(reader, homeUrl, notes, internalSessions);
   if (!page.ok) return { incomplete: `open failed: ${page.error?.message ?? page.error}` };
@@ -1287,10 +1570,11 @@ export async function cookiePlant({
       live: false,
     };
 
+  const doorOrigin = credential ? mappedOrigin : sourceOrigin;
   const door = await proveDoor({
     reader,
     sessionId: readerSession,
-    protectedOrigin,
+    protectedOrigin: doorOrigin,
     homeUrl,
     tag,
     budget,
@@ -1341,17 +1625,21 @@ export async function cookiePlant({
     tag,
     names,
     plantOrigin,
-    protectedOrigin,
+    protectedOrigin: sourceOrigin,
     ordinary,
     homeUrl,
     transport: enabled.transport,
     budget,
     notes,
+    credential,
+    credentialHost,
+    credentialSiteDomain,
   });
 
   const results = await runAttempts([
     fetchAttacks(ctx),
     legacyAttacks(ctx, enabled.legacyReady),
+    credential ? credentialAttacks(ctx) : null,
     controlAttacks(ctx),
   ]);
 
@@ -1363,6 +1651,7 @@ export async function cookiePlant({
       control: Boolean(control),
       fetch: enabled.transport.fetch,
       legacy: enabled.legacyReady,
+      credential,
     },
     ...Object.entries(results).map(([name, attempt]) => flattenAttempt(name, attempt))
   );

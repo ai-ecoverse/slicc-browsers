@@ -57,9 +57,10 @@ function decodeRawHeaders(encoded) {
 function cookieLines(headers) {
   const lines = [];
   for (const { name, value } of headers) {
-    const key = name.toLowerCase();
+    const key = String(name).trim().toLowerCase();
     if (key === 'set-cookie2') continue;
     if (key !== 'set-cookie') continue;
+    if (/[\t]/.test(String(name))) continue;
     if (/[\r\n]/.test(String(value))) continue;
     const trimmed = String(value).trim();
     if (trimmed) lines.push(trimmed);
@@ -74,13 +75,25 @@ function parseSetCookie(line) {
   const value = eq < 0 ? '' : pair.slice(eq + 1);
   let domain = null;
   let maxAge = null;
+  let reject = false;
   for (const attr of attrs) {
-    const match = /^Domain=(.*)$/i.exec(attr);
-    if (match) domain = match[1].trim();
-    const age = /^Max-Age=(.*)$/i.exec(attr);
+    const match = /^Domain\s*=\s*(.*)$/i.exec(attr);
+    if (match) {
+      let next = match[1].trim();
+      if (
+        (next.startsWith('"') && next.endsWith('"')) ||
+        (next.startsWith("'") && next.endsWith("'"))
+      ) {
+        reject = true;
+        continue;
+      }
+      if (next.endsWith('.')) next = next.slice(0, -1);
+      domain = next;
+    }
+    const age = /^Max-Age\s*=\s*(.*)$/i.exec(attr);
     if (age) maxAge = Number(age[1]);
   }
-  return { name, value, domain, maxAge };
+  return { name, value, domain, maxAge, reject };
 }
 
 function hostOf(url) {
@@ -138,7 +151,7 @@ export function cookiePlantFake(options = {}) {
     if (!topLevel && !sameSite(tab?.url ?? '', requestUrl)) return;
     for (const line of cookieLines(headers)) {
       const parsed = parseSetCookie(line);
-      if (!parsed.name) continue;
+      if (!parsed.name || parsed.reject) continue;
       const domain = parsed.domain ?? requestHost;
       if (!domainAllowed(requestHost, domain)) continue;
       const normalized = domain.startsWith('.') ? domain : `.${domain.replace(/^\./, '')}`;
@@ -429,10 +442,31 @@ export function cookiePlantFake(options = {}) {
     if (method === 'Fetch.fulfillRequest' || method === 'Fetch.continueResponse') {
       const entry = paused.get(params.requestId);
       if (!entry) throw new Error('Invalid request id');
+      if (
+        method === 'Fetch.fulfillRequest' &&
+        params.responseHeaders &&
+        !Array.isArray(params.responseHeaders)
+      ) {
+        entry.resolve?.('error:InvalidParams');
+        paused.delete(params.requestId);
+        const err = new Error('Invalid parameters');
+        err.code = -32602;
+        throw err;
+      }
+      if (method === 'Fetch.continueResponse' && entry.kind === 'fetch' && !entry.response) {
+        entry.resolve?.('error:InvalidParams');
+        paused.delete(params.requestId);
+        const err = new Error('Invalid parameters: continueResponse at Request stage');
+        err.code = -32602;
+        throw err;
+      }
       const headers = params.binaryResponseHeaders
         ? decodeBinaryHeaders(params.binaryResponseHeaders)
         : headerPairs(params.responseHeaders);
-      if (method === 'Fetch.fulfillRequest')
+      const smuggled = headers.some(
+        (h) => /[\r\n]/.test(String(h.name)) || /[\r\n]/.test(String(h.value))
+      );
+      if (method === 'Fetch.fulfillRequest' && !smuggled)
         plantFromHeaders(entry.tab, entry.url, headers, entry.topLevel);
       if (entry.topLevel && entry.tab) {
         entry.tab.url = entry.url;
@@ -445,6 +479,7 @@ export function cookiePlantFake(options = {}) {
     if (method === 'Fetch.continueRequest') {
       const entry = paused.get(params.requestId);
       if (!entry) throw new Error('Invalid request id');
+      entry.response = true;
       emit(
         conn,
         'Fetch.requestPaused',

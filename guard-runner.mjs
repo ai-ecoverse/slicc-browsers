@@ -1333,6 +1333,7 @@ class Execution {
         client: this.client,
         reader: this.reader,
         protectedOrigin: this.vars.protectedTarget,
+        credentialOrigin: this.vars.idp ?? this.options.targets?.idp ?? this.vars.protectedTarget,
         ordinary: this.vars.ordinary,
         tag: this.vars.tag,
         internalSessions: this.internalSessions,

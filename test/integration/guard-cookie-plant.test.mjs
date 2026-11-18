@@ -17,8 +17,10 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
-const ids = ['C10.cookie-plant'];
+const ids = ['C10.cookie-plant', 'C10.cookie-plant.credential'];
 const vectors = set.vectors.filter((v) => ids.includes(v.id));
+const protectedVectors = set.vectors.filter((v) => v.id === 'C10.cookie-plant');
+const credentialVectors = set.vectors.filter((v) => v.id === 'C10.cookie-plant.credential');
 
 const caps = {
   requestInterception: true,
@@ -26,7 +28,20 @@ const caps = {
   legacyInterception: true,
 };
 
-async function rows(options = {}) {
+function targetsOf(fixture, origin) {
+  return {
+    ordinary: origin('ordinary.example.test'),
+    seven: origin('seven.sliccy.ai'),
+    vault: origin('vault.sliccy.ai'),
+    idp: origin('ims-na1.adobelogin.com'),
+    'idp-stg': origin('ims-na1-stg1.adobelogin.com'),
+    own: origin('client.example.test'),
+    client: origin('client.example.test'),
+    log: origin('log.example.test'),
+  };
+}
+
+async function rows(options = {}, subset = protectedVectors) {
   const fixture = await fixtureServer();
   try {
     const browser = cookiePlantFake();
@@ -34,13 +49,14 @@ async function rows(options = {}) {
     const { capabilities: extraCaps, ...guardOptions } = options;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
+      credentialOrigins: catalog.credentialOrigins,
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
       cookiePlant: true,
       ...guardOptions,
     });
     try {
       return await run(
-        { ...set, vectors, variants: { prompt: 0 } },
+        { ...set, vectors: subset, variants: { prompt: 0 } },
         {
           client: guard.client,
           unguarded: browser.unguarded,
@@ -50,14 +66,9 @@ async function rows(options = {}) {
             ...caps,
             ...extraCaps,
           },
-          targets: {
-            ordinary: origin('ordinary.example.test'),
-            seven: origin('seven.sliccy.ai'),
-            vault: origin('vault.sliccy.ai'),
-            own: origin('client.example.test'),
-            client: origin('client.example.test'),
-            log: origin('log.example.test'),
-          },
+          targets: targetsOf(fixture, origin),
+          catalog,
+          credentialOrigins: catalog.credentialOrigins,
         }
       );
     } finally {
@@ -72,17 +83,19 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.match(set.capabilities.requestInterception, /Fetch\.enable|setRequestInterception/);
   assert.match(set.capabilities.fetchInterception, /Fetch/);
   assert.match(set.capabilities.legacyInterception, /setRequestInterception/);
-  assert.equal(vectors.length, 1);
-  const vector = vectors[0];
+  assert.equal(vectors.length, 2);
+  const vector = protectedVectors[0];
   assert.equal(drivable.has(vector.id), false, vector.id);
   assert.deepEqual(vector.requires, ['requestInterception']);
   assert.equal(vector.control.via, 'guard');
   assert.equal(vector.expected.fulfillArrayPlanted, false);
   assert.equal(vector.control.expected.fulfillArrayPlanted, true);
+  assert.equal(vector.control.expected.fulfillObjectPlanted, false);
   assert.equal(vector.expected.ordinaryPlanted, true);
   assert.equal(vector.expected.deletionRefused, false);
   assert.equal(vector.expected.deletionCleared, true);
   assert.equal(vector.expected.adobeRefused, false);
+  assert.equal(credentialVectors[0].targets.join(','), 'idp,idp-stg');
   assert.equal(sweepCaps.requestInterception, true);
   assert.equal(sweepCaps.fetchInterception, true);
   assert.equal(sweepCaps.legacyInterception, undefined);
@@ -131,21 +144,14 @@ test('without requestInterception the row skips as not-supported', async () => {
     const browser = cookiePlantFake();
     const origin = (host) => `http://${host}:${fixture.port}`;
     const out = await run(
-      { ...set, vectors, variants: { prompt: 0 } },
+      { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
       {
         client: browser.client,
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
         capabilities: { fetchInterception: true, legacyInterception: true },
-        targets: {
-          ordinary: origin('ordinary.example.test'),
-          seven: origin('seven.sliccy.ai'),
-          vault: origin('vault.sliccy.ai'),
-          own: origin('client.example.test'),
-          client: origin('client.example.test'),
-          log: origin('log.example.test'),
-        },
+        targets: targetsOf(fixture, origin),
       }
     );
     const row = out.results.find((r) => r.id === 'C10.cookie-plant');
@@ -173,21 +179,14 @@ test('unguarded client fails the guarded expectations', async () => {
     const browser = cookiePlantFake();
     const origin = (host) => `http://${host}:${fixture.port}`;
     const out = await run(
-      { ...set, vectors, variants: { prompt: 0 } },
+      { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
       {
         client: browser.client,
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
         capabilities: caps,
-        targets: {
-          ordinary: origin('ordinary.example.test'),
-          seven: origin('seven.sliccy.ai'),
-          vault: origin('vault.sliccy.ai'),
-          own: origin('client.example.test'),
-          client: origin('client.example.test'),
-          log: origin('log.example.test'),
-        },
+        targets: targetsOf(fixture, origin),
       }
     );
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
@@ -197,13 +196,42 @@ test('unguarded client fails the guarded expectations', async () => {
   }
 });
 
-for (const path of ['fulfillObject', 'fulfillLower', 'fulfillBinary', 'legacyRaw', 'redirect3xx']) {
+for (const path of [
+  'fulfillLower',
+  'fulfillBinary',
+  'legacyRaw',
+  'redirect3xx',
+  'domainUpper',
+  'domainTrailDot',
+  'domainRepeated',
+  'domainWs',
+  'setCookieSecond',
+]) {
   test(`mutant allowPlantPaths=${path} fails`, async () => {
     const out = await rows({ allowPlantPaths: [path] });
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
     assert.equal(row.guarded, 'fail', JSON.stringify(row));
   });
 }
+
+test('a correct cookiePlant guard passes the credential row', async () => {
+  const out = await rows({}, credentialVectors);
+  for (const target of ['idp', 'idp-stg']) {
+    const row = out.results.find(
+      (r) => r.id === 'C10.cookie-plant.credential' && r.target === target
+    );
+    assert.ok(row, target);
+    assert.equal(row.control, 'pass', `${target} control ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'pass', `${target} guarded ${JSON.stringify(row)}`);
+    assert.equal(row.live, 'pass', `${target} live ${JSON.stringify(row)}`);
+  }
+});
+
+test('mutant allowPlantPaths=hostOnly fails the credential row', async () => {
+  const out = await rows({ allowPlantPaths: ['hostOnly'] }, credentialVectors);
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant.credential' && r.target === 'idp');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
 
 test('refuse-all interception fails the controls', async () => {
   const out = await rows({ refuseAllInterception: true });
@@ -226,27 +254,23 @@ test('unreadable jar after a plant is incomplete, not a false pass', async () =>
     const origin = (host) => `http://${host}:${fixture.port}`;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
+      credentialOrigins: catalog.credentialOrigins,
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
       cookiePlant: true,
       allowPlantPaths: ['fulfillArray'],
     });
     try {
       const out = await run(
-        { ...set, vectors, variants: { prompt: 0 } },
+        { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
         {
           client: guard.client,
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
           capabilities: caps,
-          targets: {
-            ordinary: origin('ordinary.example.test'),
-            seven: origin('seven.sliccy.ai'),
-            vault: origin('vault.sliccy.ai'),
-            own: origin('client.example.test'),
-            client: origin('client.example.test'),
-            log: origin('log.example.test'),
-          },
+          targets: targetsOf(fixture, origin),
+          catalog,
+          credentialOrigins: catalog.credentialOrigins,
         }
       );
       const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');

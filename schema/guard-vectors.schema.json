@@ -662,7 +662,7 @@
           "required": ["cookiePlant", "as"],
           "properties": {
             "cookiePlant": {
-              "enum": ["set-cookie"]
+              "enum": ["set-cookie", "credential"]
             },
             "as": {
               "$ref": "#/$defs/name"

@@ -1,4 +1,4 @@
-import { protectedOrigins } from '../../protected.mjs';
+import { credentialOrigins, protectedOrigins } from '../../protected.mjs';
 
 function headerPairs(value) {
   if (!value) return [];
@@ -56,7 +56,7 @@ function decodeRawResponse(encoded) {
 function cookieLines(headers) {
   const lines = [];
   for (const { name, value } of headers) {
-    const key = name.toLowerCase();
+    const key = String(name).trim().toLowerCase();
     if (key !== 'set-cookie' && key !== 'set-cookie2') continue;
     for (const part of String(value).split(/\n/)) {
       const trimmed = part.trim();
@@ -69,8 +69,8 @@ function cookieLines(headers) {
 function parseDomain(line) {
   let domain = null;
   for (const attr of String(line).split(';').slice(1)) {
-    const match = /^\s*Domain=(.*)$/i.exec(attr);
-    if (match) domain = match[1].trim();
+    const match = /^\s*Domain\s*=\s*(.*)$/i.exec(attr);
+    if (match) domain = match[1].trim().replace(/^"|"$/g, '');
   }
   return domain;
 }
@@ -86,22 +86,58 @@ function isDeletion(line) {
 }
 
 function pathKind(method, params) {
-  if (method === 'Fetch.continueResponse') return 'continueResponse';
+  const tagOf = (lines) => {
+    const joined = lines.join('\n');
+    if (/=car-/.test(joined)) return 'continueAtRequest';
+    if (/=cr-/.test(joined)) return 'continueResponse';
+    if (/=blf-/.test(joined)) return 'binaryLf';
+    if (/=bof-/.test(joined)) return 'binaryObsFold';
+    if (/=dq-/.test(joined)) return 'domainQuoted';
+    if (/=du-/.test(joined)) return 'domainUpper';
+    if (/=dtd-/.test(joined)) return 'domainTrailDot';
+    if (/=dr-/.test(joined)) return 'domainRepeated';
+    if (/=dws-/.test(joined)) return 'domainWs';
+    if (/=hp-/.test(joined)) return 'headerPadded';
+    if (/=sc2nd-/.test(joined)) return 'setCookieSecond';
+    if (/=rp-/.test(joined)) return 'responsePhrase';
+    if (/=ho-/.test(joined)) return 'hostOnly';
+    if (/=dc-/.test(joined)) return 'domainCover';
+    if (/=obj-/.test(joined)) return 'fulfillObject';
+    if (/=low-/.test(joined)) return 'fulfillLower';
+    if (/=sc2-/.test(joined)) return 'fulfillSetCookie2';
+    if (/=nl-/.test(joined)) return 'fulfillNewline';
+    if (/=bin-/.test(joined)) return 'fulfillBinary';
+    if (/=rx-/.test(joined)) return 'redirect3xx';
+    if (/=lh-/.test(joined)) return 'legacyHeaders';
+    if (/=lr-/.test(joined)) return 'legacyRaw';
+    return null;
+  };
+  if (method === 'Fetch.continueResponse') {
+    const pairs = headerPairs(params?.responseHeaders);
+    return tagOf(cookieLines(pairs)) ?? 'continueResponse';
+  }
   if (method === 'Network.continueInterceptedRequest') {
     if (params?.rawResponse) {
       const raw = decodeRawResponse(params.rawResponse);
-      const lines = cookieLines(raw);
-      if (lines.some((line) => /=lh-/.test(line))) return 'legacyHeaders';
-      return 'legacyRaw';
+      return tagOf(cookieLines(raw)) ?? 'legacyRaw';
     }
     return 'legacyHeaders';
   }
   if (method !== 'Fetch.fulfillRequest') return null;
-  if (params?.binaryResponseHeaders) return 'fulfillBinary';
+  if (params?.responsePhrase && /set-cookie/i.test(String(params.responsePhrase)))
+    return 'responsePhrase';
+  if (params?.binaryResponseHeaders) {
+    const text = Buffer.from(params.binaryResponseHeaders, 'base64').toString('utf8');
+    const tagged = tagOf([text]);
+    if (tagged) return tagged;
+    return 'fulfillBinary';
+  }
   const headers = params?.responseHeaders;
+  if (headers && !Array.isArray(headers) && typeof headers === 'object') return 'fulfillObject';
   const pairs = headerPairs(headers);
   const lines = cookieLines(pairs);
-  if (lines.some((line) => /=obj-/.test(line))) return 'fulfillObject';
+  const tagged = tagOf(lines);
+  if (tagged) return tagged;
   if (pairs.some((h) => h.name === 'set-cookie')) return 'fulfillLower';
   if (pairs.some((h) => h.name === 'Set-Cookie2')) return 'fulfillSetCookie2';
   if (pairs.some((h) => h.name === 'Set-Cookie' && String(h.value).includes('\n')))
@@ -127,7 +163,21 @@ function collectHeaders(method, params) {
   return [];
 }
 
-export function cookiePlantBlocked(method, params, catalog, options = {}) {
+function requestUrlOf(client, method, params) {
+  const id = params?.requestId ?? params?.interceptionId;
+  if (!id || !client?.events) return null;
+  for (let i = client.events.length - 1; i >= 0; i -= 1) {
+    const event = client.events[i];
+    if (
+      (event.method === 'Fetch.requestPaused' && event.params?.requestId === id) ||
+      (event.method === 'Network.requestIntercepted' && event.params?.interceptionId === id)
+    )
+      return event.params?.request?.url ?? null;
+  }
+  return null;
+}
+
+export function cookiePlantBlocked(method, params, catalog, options = {}, client = null) {
   if (
     ![
       'Fetch.fulfillRequest',
@@ -143,12 +193,18 @@ export function cookiePlantBlocked(method, params, catalog, options = {}) {
   const kind = pathKind(method, params);
   const allow = options.allowPlantPaths ?? [];
   if (kind && allow.includes(kind)) return null;
+  const cred = options.credentialOrigins ? credentialOrigins(options.credentialOrigins) : null;
+  const requestUrl = requestUrlOf(client, method, params);
   for (const line of lines) {
     if (isDeletion(line)) continue;
     const domain = parseDomain(line);
-    if (!domain) continue;
-    if (domain.toLowerCase() === '.adobe.com' || domain.toLowerCase() === 'adobe.com') continue;
-    if (catalog?.cookieDomain?.(domain)) return 'protected cookie Domain in Set-Cookie';
+    if (domain) {
+      if (domain.toLowerCase() === '.adobe.com' || domain.toLowerCase() === 'adobe.com') continue;
+      if (catalog?.cookieDomain?.(domain)) return 'protected cookie Domain in Set-Cookie';
+      if (cred?.cookieDomain?.(domain)) return 'credential cookie Domain in Set-Cookie';
+      continue;
+    }
+    if (cred && requestUrl && cred.url(requestUrl)) return 'credential host-only Set-Cookie';
   }
   return null;
 }
@@ -160,7 +216,7 @@ export function applyCookiePlant(client, options = {}) {
   return {
     ...client,
     send: async (method, params, sessionId) => {
-      const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options);
+      const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options, client);
       if (blocked) {
         if (!options.refuseWithoutFail) {
           if (

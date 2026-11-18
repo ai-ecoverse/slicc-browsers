@@ -662,6 +662,29 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
         for (const row of execution.results) {
           assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
           const want = expected(row.id);
+          if (want !== undefined && row.guarded !== want) {
+            process.stdout.write(
+              `extension-frame mode mismatch: ${JSON.stringify({
+                mode,
+                id: row.id,
+                want,
+                got: row.guarded,
+                why: row.why,
+                controlCast: {
+                  castBefore: row.observations?.control?.castBefore,
+                  castLeak: row.observations?.control?.castLeak,
+                  cast: row.observations?.control?.cast,
+                  castRefusal: row.observations?.control?.castRefusal,
+                },
+                guardedCast: {
+                  castBefore: row.observations?.guarded?.castBefore,
+                  castLeak: row.observations?.guarded?.castLeak,
+                  cast: row.observations?.guarded?.cast,
+                  castRefusal: row.observations?.guarded?.castRefusal,
+                },
+              })}\n`
+            );
+          }
           if (want !== undefined) assert.equal(row.guarded, want, JSON.stringify({ mode, row }));
           if (row.guarded === 'pass') assert.equal(row.live, 'pass', JSON.stringify({ mode, row }));
           if (mode === 'catalog' && row.guarded === 'pass') {

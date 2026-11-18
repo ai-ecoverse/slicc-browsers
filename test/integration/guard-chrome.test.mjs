@@ -289,9 +289,14 @@ test('a guard that keeps Chrome privileged UI out passes the C8 rows, and no gua
   const browser = await launch(fixture);
   try {
     const { targetInfos } = await browser.unguarded.send('Target.getTargets');
+    const types = [...new Set(targetInfos.map((info) => info.type))].sort();
+    const urls = targetInfos.map((info) => `${info.type}:${info.url ?? ''}`).slice(0, 40);
+    process.stdout.write(
+      `browser_ui probe: count=${targetInfos.length} types=${JSON.stringify(types)} sample=${JSON.stringify(urls)}\n`
+    );
     assert.ok(
       targetInfos.some((info) => info.type === 'browser_ui'),
-      'this Chrome has no browser_ui target'
+      `this Chrome has no browser_ui target; types=${JSON.stringify(types)} sample=${JSON.stringify(urls)}`
     );
     const { protectedOrigins } = JSON.parse(
       await readFile(new URL('../../catalog.json', import.meta.url))

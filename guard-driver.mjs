@@ -199,9 +199,7 @@ export function judge(vector, side, observed) {
   }
   const skipped = Object.keys(want).filter(
     (k) =>
-      (observed?.[k] === 'not-supported' &&
-        ((vector.observe?.[k]?.requires?.length ?? 0) > 0 ||
-          (vector.observe?.[k]?.unless?.length ?? 0) > 0)) ||
+      observed?.[k] === 'not-supported' ||
       (vector.observe?.[k]?.dependsOn ?? []).some((d) => refused.includes(d))
   );
   const incomplete = Object.keys(want).filter(
@@ -399,6 +397,7 @@ function observationWhy(vector, row, declared) {
   return (row.notSupported ?? []).flatMap((name) => {
     const observation = vector?.observe?.[name];
     if (!observation) return [`not-supported observation ${name} the vector lacks`];
+    if (observation.optional === true) return [];
     const missing = (observation.requires ?? []).some((cap) => !declared.includes(cap));
     const unless = (observation.unless ?? []).some((cap) => declared.includes(cap));
     if (missing || unless) return [];

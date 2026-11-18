@@ -316,7 +316,7 @@ test('signInHold capability is declared and rows require it', () => {
     assert.equal(vector.control.expected.contentRead, true, vector.id);
     assert.equal(vector.expected.connectCompletes, true, vector.id);
     assert.deepEqual(vector.observe.eventsSeen.requires, ['discovery'], vector.id);
-    assert.deepEqual(vector.observe.jsonListed.requires, ['jsonList'], vector.id);
+    assert.equal(vector.observe.jsonListed.requires, undefined, vector.id);
     assert.ok(sweepCaps.signInHold === true || sweepCaps.signInHold === undefined);
     assert.ok(sweepCaps.jsonList === true || sweepCaps.jsonList === undefined);
   }
@@ -505,15 +505,62 @@ test('mutant holdMissing never passes the guarded leg', async () => {
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
 });
 
-test('without jsonList the observation is not-supported and a getTargets leak still fails', async () => {
+test('jsonList leak fails even when jsonList capability is undeclared', async () => {
   const out = await rows({
-    leakGetTargets: true,
-    capabilities: { jsonList: false },
+    leakJsonList: true,
+    capabilities: { jsonList: undefined },
   });
   const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
-  assert.ok((row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
-  assert.match(String(row.why ?? ''), /targetsListed/);
+  assert.equal(row.observations.guarded.jsonListed, true, JSON.stringify(row));
+  assert.ok(!(row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+});
+
+test('unreachable /json/list is not-supported while a getTargets leak still fails', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = signInFake();
+    for (const conn of [browser.client, browser.unguarded]) delete conn.jsonList;
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+      signInHold: true,
+      leakGetTargets: true,
+    });
+    delete guard.client.jsonList;
+    delete guard.client.devtoolsHttp;
+    delete guard.client.ws;
+    try {
+      const out = await run(
+        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: { browserSession: true, discovery: true, signInHold: true },
+          targets: {
+            ordinary: origin('ordinary.example.test'),
+            cross: origin('cross.test'),
+            seven: origin('seven.sliccy.ai'),
+            vault: origin('vault.sliccy.ai'),
+            own: origin('client.example.test'),
+            client: origin('client.example.test'),
+            log: origin('log.example.test'),
+          },
+        }
+      );
+      const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+      assert.equal(row.guarded, 'fail', JSON.stringify(row));
+      assert.ok((row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+      assert.match(String(row.why ?? ''), /targetsListed/);
+    } finally {
+      await guard.stop?.();
+    }
+  } finally {
+    await fixture.close();
+  }
 });
 
 test('signInHold.ask held/unheld/none each take their verdict path', async () => {
@@ -533,6 +580,13 @@ test('signInHold.ask held/unheld/none each take their verdict path', async () =>
       assert.equal(row.observations.guarded.held, wantHeld, askAnswer);
     }
   }
+});
+
+test('signInHold.ask method keeps its receiver (this)', async () => {
+  const out = await rows({ askAnswer: 'held' });
+  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.held, true);
 });
 
 test('signInHold.ask reject or timeout is incomplete', async () => {

@@ -255,10 +255,11 @@ export function applySignInHold(guard, browser, options = {}) {
   };
   if (options.askAnswer !== undefined || options.askReject || options.askTimeout) {
     client.signInHold = {
-      ask: async () => {
+      answer: options.askAnswer,
+      ask() {
         if (options.askReject) throw new Error(String(options.askReject));
         if (options.askTimeout) throw new Error('signInHold.ask timed out');
-        return options.askAnswer;
+        return this.answer;
       },
     };
   }

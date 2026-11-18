@@ -479,16 +479,19 @@ function hostLabelOf(origin) {
 }
 
 async function askHold(client, { marker, hostLabel, notes }) {
-  const ask = client?.signInHold?.ask;
-  if (typeof ask !== 'function') return { used: false };
+  const hold = client?.signInHold;
+  if (typeof hold?.ask !== 'function') return { used: false };
   note(notes, 'sign-in-hold.ask', { via: 'signInHold.ask', marker, hostLabel });
+  let timer;
   try {
     const answer = await Promise.race([
-      Promise.resolve(ask({ marker, hostLabel })),
-      pause(6000).then(() => {
-        const error = new Error('signInHold.ask timed out');
-        error.code = 'ask-timeout';
-        throw error;
+      Promise.resolve(hold.ask({ marker, hostLabel })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('signInHold.ask timed out');
+          error.code = 'ask-timeout';
+          reject(error);
+        }, 6000);
       }),
     ]);
     if (!['held', 'unheld', 'none'].includes(answer))
@@ -502,6 +505,8 @@ async function askHold(client, { marker, hostLabel, notes }) {
       used: true,
       incomplete: `signInHold.ask failed: ${error?.message ?? error}`,
     };
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

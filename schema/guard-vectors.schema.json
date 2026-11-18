@@ -158,6 +158,10 @@
         "signInHold": {
           "type": "string",
           "minLength": 1
+        },
+        "jsonList": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -197,7 +201,8 @@
         "stockSetup",
         "syntheticAutoAttach",
         "closeProtected",
-        "signInHold"
+        "signInHold",
+        "jsonList"
       ]
     },
     "requires": {

@@ -1793,6 +1793,8 @@ class Execution {
     if (name === 'workerReachable' && this.probeStep())
       return this.observeProbeReachable(want, check);
     if (check?.forwarded) return this.forwardedCheck(name, check, want);
+    if (check?.result && at(this.calls[check.result], check.path) === 'not-supported')
+      return 'not-supported';
     if (
       check?.result &&
       (at(this.calls[check.result], check.path) === 'incomplete' || this.unmeasured(check))

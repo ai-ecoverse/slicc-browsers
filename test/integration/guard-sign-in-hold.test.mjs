@@ -24,10 +24,11 @@ const positiveVectors = vectors.filter((v) => positiveIds.includes(v.id));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 1));
 
-function signInFake({ holdAnswer = 'held' } = {}) {
+function signInFake({ holdAnswer = 'held', blankReads = 0 } = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const connections = [];
+  const reads = new Map();
   let next = 0;
   const infoOf = (tab) => ({
     targetId: tab.targetId,
@@ -148,6 +149,28 @@ function signInFake({ holdAnswer = 'held' } = {}) {
       const expression = params.expression ?? '';
       if (expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
+      if (expression.includes('readyState') && expression.includes('innerText')) {
+        const targetId = sessions.get(sessionId);
+        const tab = tabs.get(targetId);
+        const count = (reads.get(targetId) ?? 0) + 1;
+        reads.set(targetId, count);
+        const committed = tab?.url?.includes('/held') || tab?.url?.includes('/ims/authorize');
+        const blank = blankReads > 0 && count <= blankReads;
+        const title = blank || !committed ? ' ' : (tab?.title ?? '');
+        const body = blank || !committed ? null : SIGN_IN_HOLD_BODY;
+        const text = blank ? ' null' : `${title} ${body ?? 'ordinary'}`;
+        return {
+          result: {
+            type: 'object',
+            value: {
+              readyState: blank ? 'loading' : 'complete',
+              href: tab?.url ?? '',
+              text,
+              body: blank ? null : true,
+            },
+          },
+        };
+      }
       if (expression.includes('document.title')) {
         const targetId = sessions.get(sessionId);
         const tab = tabs.get(targetId);
@@ -181,6 +204,21 @@ function signInFake({ holdAnswer = 'held' } = {}) {
             result: {
               type: 'object',
               value: { answer: holdAnswer, opened: true },
+            },
+          };
+        }
+        if (expression.includes(SIGN_IN_HOLD_MARK) && marker) {
+          tab = addTab({
+            targetId: `T${++next}`,
+            type: 'page',
+            url: `about:blank#${SIGN_IN_HOLD_MARK}${marker}`,
+            title: 'about:blank',
+            openerId,
+          });
+          return {
+            result: {
+              type: 'object',
+              value: { answer: 'pending', opened: true, marker },
             },
           };
         }
@@ -225,9 +263,17 @@ function signInFake({ holdAnswer = 'held' } = {}) {
 async function rows(options = {}) {
   const fixture = await fixtureServer();
   try {
-    const browser = signInFake({ holdAnswer: options.holdAnswer });
+    const browser = signInFake({
+      holdAnswer: options.holdAnswer,
+      blankReads: options.blankReads,
+    });
     const origin = (host) => `http://${host}:${fixture.port}`;
-    const { holdAnswer: _holdAnswer, capabilities: extraCaps, ...guardOptions } = options;
+    const {
+      holdAnswer: _holdAnswer,
+      blankReads: _blankReads,
+      capabilities: extraCaps,
+      ...guardOptions
+    } = options;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
@@ -246,6 +292,7 @@ async function rows(options = {}) {
             browserSession: true,
             discovery: true,
             signInHold: true,
+            jsonList: true,
             ...extraCaps,
           },
           targets: {
@@ -269,6 +316,8 @@ async function rows(options = {}) {
 
 test('signInHold capability is declared and rows require it', () => {
   assert.match(set.capabilities.signInHold, /sign-in hold/);
+  assert.match(set.capabilities.jsonList, /json\/list/);
+  assert.match(set.capabilities.signInHold, /callback-origin/);
   assert.equal(attackVectors.length, 4);
   assert.equal(positiveVectors.length, 2);
   assert.equal(vectors.length, 6);
@@ -280,7 +329,9 @@ test('signInHold capability is declared and rows require it', () => {
     assert.equal(vector.control.expected.contentRead, true, vector.id);
     assert.equal(vector.expected.connectCompletes, true, vector.id);
     assert.deepEqual(vector.observe.eventsSeen.requires, ['discovery'], vector.id);
+    assert.deepEqual(vector.observe.jsonListed.requires, ['jsonList'], vector.id);
     assert.ok(sweepCaps.signInHold === true || sweepCaps.signInHold === undefined);
+    assert.ok(sweepCaps.jsonList === true || sweepCaps.jsonList === undefined);
   }
   for (const vector of attackVectors) {
     assert.equal(drivable.has(vector.id), false, vector.id);
@@ -413,7 +464,12 @@ test('unguarded client fails the guarded expectations', async () => {
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
-        capabilities: { browserSession: true, discovery: true, signInHold: true },
+        capabilities: {
+          browserSession: true,
+          discovery: true,
+          signInHold: true,
+          jsonList: true,
+        },
         targets: {
           ordinary: origin('ordinary.example.test'),
           cross: origin('cross.test'),
@@ -462,28 +518,85 @@ test('mutant holdMissing never passes the guarded leg', async () => {
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
 });
 
-test('without a measurable /json/list the row is incomplete, not a guarded pass', async () => {
+test('without jsonList the observation is not-supported and a getTargets leak still fails', async () => {
+  const out = await rows({
+    leakGetTargets: true,
+    capabilities: { jsonList: false },
+  });
+  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.ok((row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+  assert.match(String(row.why ?? ''), /targetsListed/);
+});
+
+test('signInHold.ask held/unheld/none each take their verdict path', async () => {
+  for (const [askAnswer, wantHeld] of [
+    ['held', true],
+    ['unheld', false],
+    ['none', false],
+  ]) {
+    const out = await rows({ askAnswer });
+    const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+    assert.ok(row, askAnswer);
+    if (askAnswer === 'held') {
+      assert.equal(row.guarded, 'pass', `${askAnswer} ${JSON.stringify(row)}`);
+      assert.equal(row.observations.guarded.held, true);
+    } else {
+      assert.notEqual(row.guarded, 'pass', `${askAnswer} ${JSON.stringify(row)}`);
+      assert.equal(row.observations.guarded.held, wantHeld, askAnswer);
+    }
+  }
+});
+
+test('signInHold.ask reject or timeout is incomplete', async () => {
+  for (const options of [{ askReject: 'boom' }, { askTimeout: true }]) {
+    const out = await rows(options);
+    const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+    assert.ok(row, JSON.stringify(options));
+    assert.ok(
+      row.guarded === 'incomplete' || row.live === 'incomplete',
+      JSON.stringify({ options, row })
+    );
+    assert.match(String(row.reason ?? row.why ?? ''), /signInHold\.ask/);
+  }
+});
+
+test('rawReadable waits past a blank first evaluate for the mark', async () => {
+  const out = await rows({ blankReads: 1 });
+  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.live, 'pass', JSON.stringify(row));
+});
+
+test('rawReadable that never commits stays incomplete with the named step', async () => {
   const fixture = await fixtureServer();
   try {
-    const browser = signInFake();
-    for (const conn of [browser.client, browser.unguarded]) delete conn.jsonList;
+    const browser = signInFake({ blankReads: 1000 });
     const origin = (host) => `http://${host}:${fixture.port}`;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
       signInHold: true,
-      leakJsonList: true,
     });
-    delete guard.client.jsonList;
     try {
       const out = await run(
-        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+        {
+          ...set,
+          vectors: vectors.filter((v) => v.id === 'C7.sign-in-hold.held-popup'),
+          variants: { prompt: 0 },
+        },
         {
           client: guard.client,
           unguarded: browser.unguarded,
           fixture,
-          settleScale: 0.1,
-          capabilities: { browserSession: true, discovery: true, signInHold: true },
+          settleScale: 0.05,
+          capabilities: {
+            browserSession: true,
+            discovery: true,
+            signInHold: true,
+            jsonList: true,
+          },
           targets: {
             ordinary: origin('ordinary.example.test'),
             cross: origin('cross.test'),
@@ -496,15 +609,10 @@ test('without a measurable /json/list the row is incomplete, not a guarded pass'
         }
       );
       const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
-      assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
-      assert.ok(
-        row.guarded === 'incomplete' ||
-          row.live === 'incomplete' ||
-          String(row.reason ?? '').includes('/json/list'),
-        JSON.stringify(row)
-      );
+      assert.ok(row.live === 'incomplete' || row.guarded === 'incomplete', JSON.stringify(row));
+      assert.match(String(row.reason ?? row.why ?? ''), /mark|readyState|text without the mark/);
     } finally {
-      await guard.stop?.();
+      await guard.stop();
     }
   } finally {
     await fixture.close();

@@ -253,5 +253,14 @@ export function applySignInHold(guard, browser, options = {}) {
       return filterSignInHoldJson(state, tabs);
     },
   };
+  if (options.askAnswer !== undefined || options.askReject || options.askTimeout) {
+    client.signInHold = {
+      ask: async () => {
+        if (options.askReject) throw new Error(String(options.askReject));
+        if (options.askTimeout) throw new Error('signInHold.ask timed out');
+        return options.askAnswer;
+      },
+    };
+  }
   return client;
 }

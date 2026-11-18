@@ -42,6 +42,7 @@ export const capabilities = {
   forwardAudit: true,
   closeProtected: true,
   signInHold: true,
+  jsonList: true,
 };
 
 export const drivable = new Set([

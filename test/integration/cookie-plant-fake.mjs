@@ -148,7 +148,7 @@ export function cookiePlantFake(options = {}) {
           cookie.name === parsed.name &&
           cookie.domain.replace(/^\./, '') === storeDomain.replace(/^\./, '')
       );
-      if (parsed.maxAge === 0 || parsed.value === '') {
+      if (parsed.maxAge === 0) {
         if (existing >= 0) cookies.splice(existing, 1);
         continue;
       }

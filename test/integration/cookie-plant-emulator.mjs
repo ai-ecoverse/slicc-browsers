@@ -67,12 +67,22 @@ function cookieLines(headers) {
 }
 
 function parseDomain(line) {
-  const match = /(?:^|;\s*)Domain=([^;]+)/i.exec(line);
-  return match ? match[1].trim() : null;
+  let domain = null;
+  for (const attr of String(line).split(';').slice(1)) {
+    const match = /^\s*Domain=(.*)$/i.exec(attr);
+    if (match) domain = match[1].trim();
+  }
+  return domain;
 }
 
 function isDeletion(line) {
-  return /(?:^|;\s*)Max-Age=0(?:;|$)/i.test(line) || /=\s*(?:;|$)/.test(line.split(';')[0] ?? '');
+  if (/(?:^|;\s*)Max-Age=0(?:;|$)/i.test(line)) return true;
+  const expires = /(?:^|;\s*)Expires=([^;]+)/i.exec(line);
+  if (expires) {
+    const when = Date.parse(expires[1].trim());
+    if (Number.isFinite(when) && when <= Date.now()) return true;
+  }
+  return false;
 }
 
 function pathKind(method, params) {

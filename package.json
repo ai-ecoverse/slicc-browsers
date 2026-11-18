@@ -67,6 +67,7 @@
     "bfcache-restore.mjs",
     "close-protected-shape.mjs",
     "credential-export.mjs",
+    "cookie-plant.mjs",
     "protected-worker.mjs",
     "protected-parent-iframes.mjs",
     "sign-in-hold.mjs",

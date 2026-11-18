@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
 import { cookiePlantFake } from './cookie-plant-fake.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
+
+const execFileAsync = promisify(execFile);
+const root = fileURLToPath(new URL('../../', import.meta.url));
 
 const set = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
@@ -78,6 +86,28 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.equal(sweepCaps.requestInterception, true);
   assert.equal(sweepCaps.fetchInterception, true);
   assert.equal(sweepCaps.legacyInterception, undefined);
+});
+
+test('cookie-plant.mjs ships in the npm package and the packed runner imports', async () => {
+  const pkg = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.ok(pkg.files.includes('cookie-plant.mjs'));
+  const directory = await mkdtemp(join(tmpdir(), 'cookie-plant-pack-'));
+  try {
+    const { stdout } = await execFileAsync('npm', ['pack', '--pack-destination', directory], {
+      cwd: root,
+      maxBuffer: 10e6,
+    });
+    const tarball = join(directory, stdout.trim().split('\n').at(-1));
+    const { stdout: listing } = await execFileAsync('tar', ['-tzf', tarball]);
+    assert.match(listing, /(^|\/)cookie-plant\.mjs$/m);
+    assert.match(listing, /(^|\/)guard-runner\.mjs$/m);
+    await execFileAsync('tar', ['-xzf', tarball, '-C', directory]);
+    const packed = join(directory, 'package');
+    const loaded = await import(pathToFileURL(join(packed, 'guard-runner.mjs')).href);
+    assert.equal(typeof loaded.run, 'function');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('rows use the C10.cookie-plant prefix, not C8. or C6.', () => {

@@ -229,6 +229,7 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
+| `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |

@@ -639,10 +639,10 @@ function pageFake({
   };
 }
 
-test('protected-parent page rows require autoAttach and the ordinary control is drivable', () => {
+test('protected-parent page rows require iframeAutoAttach and the ordinary control is drivable', () => {
   assert.equal(vectors.length, 3);
   for (const vector of vectors) {
-    assert.deepEqual(vector.requires, ['autoAttach'], vector.id);
+    assert.deepEqual(vector.requires, ['iframeAutoAttach'], vector.id);
     assert.equal(vector.trigger[0].requires, undefined, vector.id);
     assert.equal(vector.control.via, 'unguarded', vector.id);
     assert.ok(vector.observe.frameTree, vector.id);
@@ -746,7 +746,7 @@ async function runMode(
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
-          capabilities: { discovery: true, autoAttach: true },
+          capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
           targets,
         }
       );
@@ -855,7 +855,12 @@ test('overblockOrdinaryFrames fails the ordinary-parent page control', async () 
   assert.equal(row.guarded, 'fail', describe(row));
 });
 
-test('a guard without autoAttach skips all three page rows as not-supported:autoAttach', async () => {
+test('a guard without iframeAutoAttach skips all three page rows as not-supported:iframeAutoAttach, with or without autoAttach', async () => {
+  for (const declared of [{ discovery: true }, { discovery: true, autoAttach: true }])
+    await skipsPageRows(declared);
+});
+
+async function skipsPageRows(declared) {
   const fixture = await fixtureServer();
   const browser = pageFake({ oopifGrandchildTargets: true });
   const origin = (host) => `http://${host}:${fixture.port}`;
@@ -872,7 +877,7 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true },
+        capabilities: declared,
         targets: {
           ordinary: origin('ordinary.example.test'),
           seven: origin('seven.sliccy.ai'),
@@ -887,7 +892,7 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
     assert.equal(execution.results.length, 4);
     for (const row of execution.results) {
       assert.deepEqual([row.control, row.guarded, row.live], ['skip', 'skip', 'skip'], row.id);
-      assert.equal(row.reason, 'not-supported:autoAttach', row.id);
+      assert.equal(row.reason, 'not-supported:iframeAutoAttach', row.id);
       assert.equal(row.via, 'unguarded', row.id);
       assert.ok(row.transport, row.id);
       assert.notEqual(row.control, 'fail', row.id);
@@ -899,9 +904,9 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
     await guard.stop();
     await fixture.close();
   }
-});
+}
 
-test('declaring autoAttach runs the page rows; a refused iframe attach is not a skip', async () => {
+test('declaring iframeAutoAttach runs the page rows; a refused iframe attach is not a skip', async () => {
   const fixture = await fixtureServer();
   const browser = pageFake({ oopifGrandchildTargets: true });
   const origin = (host) => `http://${host}:${fixture.port}`;
@@ -939,12 +944,12 @@ test('declaring autoAttach runs the page rows; a refused iframe attach is not a 
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true, autoAttach: true },
+        capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
         targets,
       }
     );
     for (const row of execution.results) {
-      assert.notEqual(row.reason, 'not-supported:autoAttach', describe(row));
+      assert.notEqual(row.reason, 'not-supported:iframeAutoAttach', describe(row));
       assert.notEqual(row.control, 'skip', describe(row));
       assert.notEqual(row.guarded, 'skip', describe(row));
       assert.ok(
@@ -976,7 +981,7 @@ test('without an unguarded observer the protected-parent page rows skip', async 
         client: guard.client,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true, autoAttach: true },
+        capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
         targets: {
           ordinary: origin('ordinary.example.test'),
           seven: origin('seven.sliccy.ai'),
@@ -1401,7 +1406,7 @@ test('without a mapped {cross} the ordinary-parent page row is incomplete', asyn
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
-          capabilities: { discovery: true, autoAttach: true },
+          capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
           targets,
         }
       );

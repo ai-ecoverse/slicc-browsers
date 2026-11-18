@@ -107,6 +107,7 @@
     "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
     "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
     "closeProtected": "the guard lets Target.closeTarget close a protected tab",
+    "iframeAutoAttach": "the transport auto-attaches non-tab child targets (out-of-process iframes) under a page session: Target.setAutoAttach with children steps and child sessions for iframe targets, not only tab-level auto-attach",
     "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable"
   },
   "placeholders": {
@@ -31785,7 +31786,7 @@
         }
       ],
       "targets": ["seven", "vault"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -31948,7 +31949,7 @@
         }
       ],
       "targets": ["seven"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-srcdoc.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -32099,7 +32100,7 @@
         }
       ],
       "targets": ["seven"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.ordinary-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",

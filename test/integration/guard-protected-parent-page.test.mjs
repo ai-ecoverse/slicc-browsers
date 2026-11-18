@@ -1068,7 +1068,7 @@ test('unanswered child Page.enable is incomplete, not a guarded pass', async () 
       budget: 2000,
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
-    assert.match(String(result.incomplete), /Page\.enable unanswered/);
+    assert.match(String(result.incomplete), /Page\.enable unanswered: timeout: no answer/);
     assert.equal(result.frameEvents, undefined);
     assert.equal(result.contextCreated, undefined);
   } finally {
@@ -1107,9 +1107,47 @@ test('unanswered child Runtime.enable is incomplete, not a guarded pass', async 
       budget: 2000,
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
-    assert.match(String(result.incomplete), /Runtime\.enable unanswered/);
+    assert.match(String(result.incomplete), /Runtime\.enable unanswered: timeout: no answer/);
     assert.equal(result.frameEvents, undefined);
     assert.equal(result.contextCreated, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('unanswered Runtime.evaluate names the harness error in the incomplete reason', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (method === 'Runtime.evaluate' && params?.expression === 'location.href')
+          throw new Error('No tab attached for sessionId');
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'evaluate-error-text',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(
+      String(result.incomplete),
+      /Runtime\.evaluate unanswered \(\d+: No tab attached for sessionId\)/
+    );
+    assert.notEqual(result.contextEvaluate, true);
   } finally {
     await fixture.close();
   }

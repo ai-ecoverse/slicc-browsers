@@ -639,10 +639,10 @@ function pageFake({
   };
 }
 
-test('protected-parent page rows require autoAttach and the ordinary control is drivable', () => {
+test('protected-parent page rows require iframeAutoAttach and the ordinary control is drivable', () => {
   assert.equal(vectors.length, 3);
   for (const vector of vectors) {
-    assert.deepEqual(vector.requires, ['autoAttach'], vector.id);
+    assert.deepEqual(vector.requires, ['iframeAutoAttach'], vector.id);
     assert.equal(vector.trigger[0].requires, undefined, vector.id);
     assert.equal(vector.control.via, 'unguarded', vector.id);
     assert.ok(vector.observe.frameTree, vector.id);
@@ -653,11 +653,23 @@ test('protected-parent page rows require autoAttach and the ordinary control is 
   assert.equal(drivable.has('C3.protected-parent-srcdoc.page'), false);
   assert.deepEqual(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').designDependent,
-    ['midFrameAttached', 'childEnableRefused']
+    ['midFrameAttached', 'childEnableRefused', 'topEnableRefused', 'topAttachRefused']
   );
   assert.equal(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.childEnableRefused,
     'either'
+  );
+  assert.equal(
+    vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.topEnableRefused,
+    'either'
+  );
+  assert.equal(
+    vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.topAttachRefused,
+    'either'
+  );
+  assert.equal(
+    vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.overBlocked,
+    false
   );
   assert.equal(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').expected.midFrameAttached,
@@ -666,6 +678,10 @@ test('protected-parent page rows require autoAttach and the ordinary control is 
   assert.equal(
     vectors.find((v) => v.id === 'C3.ordinary-parent-iframes.page').expected.frameTree,
     true
+  );
+  assert.equal(
+    vectors.find((v) => v.id === 'C3.ordinary-parent-iframes.page').expected.overBlocked,
+    false
   );
   assert.equal(
     vectors.find((v) => v.id === 'C3.protected-parent-iframes.page').trigger[0]
@@ -694,12 +710,18 @@ test('judge fails a grandchild frameTree leak on the page row', () => {
     contextEvaluate: false,
     midFrameAttached: false,
     childEnableRefused: false,
+    topEnableRefused: false,
+    topAttachRefused: false,
+    overBlocked: false,
     targetInfo: false,
     childAttach: false,
     targetEvents: false,
   };
   assert.equal(judge(vector, 'guarded', { ...ok, childEnableRefused: true }).pass, true);
+  assert.equal(judge(vector, 'guarded', { ...ok, topEnableRefused: true }).pass, true);
+  assert.equal(judge(vector, 'guarded', { ...ok, topAttachRefused: true }).pass, true);
   assert.equal(judge(vector, 'guarded', ok).pass, true);
+  assert.equal(judge(vector, 'guarded', { ...ok, overBlocked: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, frameTree: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, frameEvents: true }).pass, false);
   assert.equal(judge(vector, 'guarded', { ...ok, targetInfo: true }).pass, false);
@@ -746,7 +768,7 @@ async function runMode(
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
-          capabilities: { discovery: true, autoAttach: true },
+          capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
           targets,
         }
       );
@@ -855,7 +877,355 @@ test('overblockOrdinaryFrames fails the ordinary-parent page control', async () 
   assert.equal(row.guarded, 'fail', describe(row));
 });
 
-test('a guard without autoAttach skips all three page rows as not-supported:autoAttach', async () => {
+test('blocking the ordinary mid after attach fails the ordinary-parent page control', async () => {
+  const execution = await runMode(
+    { blockOrdinaryLiveMid: true },
+    {
+      only: ['C3.ordinary-parent-iframes.page'],
+      oopifGrandchildTargets: false,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.ordinary-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, true, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protection by over-blocking')),
+    describe(row)
+  );
+});
+
+test('a guard that blocks nothing still passes the ordinary-parent page control', async () => {
+  const execution = await runMode(
+    {},
+    { only: ['C3.ordinary-parent-iframes.page'], oopifGrandchildTargets: false }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.ordinary-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
+});
+
+test('refuseTopPageEnable with a clean lock and inline ordinary control passes', async () => {
+  const execution = await runMode(
+    { refuseTopPageEnable: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations.guarded.topEnableRefused, true, describe(row));
+  assert.equal(row.observations.guarded.overBlocked, false, describe(row));
+  assert.ok(
+    row.notes.some((note) => note.includes('protected-parent.top-refused')),
+    row.notes.join('\n')
+  );
+});
+
+const topEnableLeakMutants = [
+  ['leakProtectedIframeTargets', { refuseTopPageEnable: true, leakProtectedIframeTargets: true }],
+  ['leakAttachedToTarget', { refuseTopPageEnable: true, leakAttachedToTarget: true }],
+  [
+    'leakProtectedIframeTargetInfo',
+    { refuseTopPageEnable: true, leakProtectedIframeTargetInfo: true },
+  ],
+  ['leakProtectedIframeAttach', { refuseTopPageEnable: true, leakProtectedIframeAttach: true }],
+];
+
+for (const [name, options] of topEnableLeakMutants) {
+  test(`mutant refuseTopPageEnable + ${name} fails via a browser-session leak`, async () => {
+    const execution = await runMode(options, {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: true,
+    });
+    const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+    assert.ok(row, name);
+    assert.equal(row.control, 'pass', describe(row));
+    assert.equal(row.guarded, 'fail', describe(row));
+    assert.equal(row.observations.guarded.topEnableRefused, true, describe(row));
+  });
+}
+
+test('refuseTopPageEnable plus overblockOrdinaryFrames fails as protection by over-blocking', async () => {
+  const execution = await runMode(
+    { refuseTopPageEnable: true, overblockOrdinaryFrames: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.overBlocked, true, describe(row));
+  assert.ok(
+    row.notes.some((note) => note.includes('protection by over-blocking')),
+    row.notes.join('\n')
+  );
+});
+
+test('refuseTopPageAttach with a clean lock and inline ordinary control passes', async () => {
+  const execution = await runMode(
+    { refuseTopPageAttach: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
+  assert.equal(row.observations.guarded.overBlocked, false, describe(row));
+});
+
+test('refuseTopPageAttach plus leakProtectedIframeTargets fails', async () => {
+  const execution = await runMode(
+    { refuseTopPageAttach: true, leakProtectedIframeTargets: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
+});
+
+test('refuseTopPageAttach plus leakAttachedToTarget fails via discovery events', async () => {
+  const execution = await runMode(
+    { refuseTopPageAttach: true, leakAttachedToTarget: true },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
+  assert.equal(row.observations.guarded.targetEvents, true, describe(row));
+});
+
+test('unanswered top Page.getFrameTree after top enable refusal stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+    refuseTopPageEnable: true,
+  });
+  try {
+    let topSession;
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Target.attachToTarget') {
+        const attached = await send(method, params, sessionId);
+        topSession ??= attached?.sessionId;
+        return attached;
+      }
+      if (method === 'Page.getFrameTree' && sessionId && sessionId === topSession)
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'top-tree-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.getFrameTree unanswered/);
+    assert.match(String(result.topEnableRefused?.error ?? ''), /^slicc: refused:/);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
+test('unanswered Runtime.evaluate after top enable refusal stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+    refuseTopPageEnable: true,
+  });
+  try {
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Runtime.evaluate' && params?.expression === 'location.href')
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'top-evaluate-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Runtime\.evaluate unanswered/);
+    assert.match(String(result.topEnableRefused?.error ?? ''), /^slicc: refused:/);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
+test('unanswered Page.getFrameTree on a mid-frame child session stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+  });
+  try {
+    const pageSessions = new Set();
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Target.attachToTarget') {
+        const attached = await send(method, params, sessionId);
+        const info = await send('Target.getTargetInfo', { targetId: params.targetId }).catch(
+          () => null
+        );
+        if (info?.targetInfo?.type === 'page' && attached?.sessionId)
+          pageSessions.add(attached.sessionId);
+        return attached;
+      }
+      if (method === 'Page.getFrameTree' && sessionId && !pageSessions.has(sessionId))
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'child-tree-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.getFrameTree unanswered/);
+    assert.equal(result.frameTree, false);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
+test('unanswered Page.getResourceTree on a child session stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  const browser = pageFake({ oopifGrandchildTargets: true });
+  const origin = (host) => `http://${host}:${fixture.port}`;
+  const guard = emulatedGuard(browser, {
+    protectedOrigins: catalog.protectedOrigins,
+    extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+    protectedParentPages: true,
+  });
+  try {
+    const pageSessions = new Set();
+    const send = guard.client.send.bind(guard.client);
+    guard.client.send = async (method, params, sessionId) => {
+      if (method === 'Target.attachToTarget') {
+        const attached = await send(method, params, sessionId);
+        const info = await send('Target.getTargetInfo', { targetId: params.targetId }).catch(
+          () => null
+        );
+        if (info?.targetInfo?.type === 'page' && attached?.sessionId)
+          pageSessions.add(attached.sessionId);
+        return attached;
+      }
+      if (method === 'Page.getResourceTree' && sessionId && !pageSessions.has(sessionId))
+        throw new Error('timed out');
+      return send(method, params, sessionId);
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: guard.client,
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'child-resource-unanswered',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.getResourceTree unanswered/);
+  } finally {
+    await guard.stop?.();
+    await fixture.close();
+  }
+});
+
+test('inline ordinary control fails overBlocked when page-session setAutoAttach is refused', async () => {
+  const execution = await runMode(
+    {
+      refuseTopPageEnable: true,
+      refuseOrdinaryPageAutoAttach: true,
+    },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.overBlocked, true, describe(row));
+  assert.ok(
+    row.notes.some((note) => note.includes('protection by over-blocking')),
+    row.notes.join('\n')
+  );
+});
+
+test('refuseTopPageAttach plus redacted synthetic auto-attach session leak fails', async () => {
+  const execution = await runMode(
+    {
+      refuseTopPageAttach: true,
+      leakAttachedToTarget: true,
+      redactIframeUrlKeepId: true,
+      syntheticLeakedAttachTargetId: true,
+    },
+    { only: ['C3.protected-parent-iframes.page'], oopifGrandchildTargets: true }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.equal(row.control, 'pass', describe(row));
+  assert.equal(row.guarded, 'fail', describe(row));
+  assert.equal(row.observations.guarded.topAttachRefused, true, describe(row));
+});
+
+test('a guard without iframeAutoAttach skips all three page rows as not-supported:iframeAutoAttach, with or without autoAttach', async () => {
+  for (const declared of [{ discovery: true }, { discovery: true, autoAttach: true }])
+    await skipsPageRows(declared);
+});
+
+async function skipsPageRows(declared) {
   const fixture = await fixtureServer();
   const browser = pageFake({ oopifGrandchildTargets: true });
   const origin = (host) => `http://${host}:${fixture.port}`;
@@ -872,7 +1242,7 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true },
+        capabilities: declared,
         targets: {
           ordinary: origin('ordinary.example.test'),
           seven: origin('seven.sliccy.ai'),
@@ -887,7 +1257,7 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
     assert.equal(execution.results.length, 4);
     for (const row of execution.results) {
       assert.deepEqual([row.control, row.guarded, row.live], ['skip', 'skip', 'skip'], row.id);
-      assert.equal(row.reason, 'not-supported:autoAttach', row.id);
+      assert.equal(row.reason, 'not-supported:iframeAutoAttach', row.id);
       assert.equal(row.via, 'unguarded', row.id);
       assert.ok(row.transport, row.id);
       assert.notEqual(row.control, 'fail', row.id);
@@ -899,9 +1269,9 @@ test('a guard without autoAttach skips all three page rows as not-supported:auto
     await guard.stop();
     await fixture.close();
   }
-});
+}
 
-test('declaring autoAttach runs the page rows; a refused iframe attach is not a skip', async () => {
+test('declaring iframeAutoAttach runs the page rows; a refused iframe attach is not a skip', async () => {
   const fixture = await fixtureServer();
   const browser = pageFake({ oopifGrandchildTargets: true });
   const origin = (host) => `http://${host}:${fixture.port}`;
@@ -939,12 +1309,12 @@ test('declaring autoAttach runs the page rows; a refused iframe attach is not a 
         unguarded: browser.unguarded,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true, autoAttach: true },
+        capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
         targets,
       }
     );
     for (const row of execution.results) {
-      assert.notEqual(row.reason, 'not-supported:autoAttach', describe(row));
+      assert.notEqual(row.reason, 'not-supported:iframeAutoAttach', describe(row));
       assert.notEqual(row.control, 'skip', describe(row));
       assert.notEqual(row.guarded, 'skip', describe(row));
       assert.ok(
@@ -976,7 +1346,7 @@ test('without an unguarded observer the protected-parent page rows skip', async 
         client: guard.client,
         fixture,
         settleScale: 0.1,
-        capabilities: { discovery: true, autoAttach: true },
+        capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
         targets: {
           ordinary: origin('ordinary.example.test'),
           seven: origin('seven.sliccy.ai'),
@@ -1031,7 +1401,91 @@ test('unanswered Page.enable on the page session is incomplete, not a guarded pa
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
     assert.match(String(result.incomplete), /Page\.enable|Runtime\.enable/);
+    assert.equal(result.topEnableRefused, false);
     assert.equal(result.frameTree, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('non-refusal Page.enable error on the top session stays incomplete', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake();
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (sessionId && method === 'Page.enable') throw new Error('Internal error');
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'enable-internal-error',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(String(result.incomplete), /Page\.enable (failed|unanswered)/);
+    assert.equal(result.topEnableRefused, false);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('refused top Page.enable records the session and keeps measuring browser channels', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    let topSession;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (method === 'Target.attachToTarget') {
+          const attached = await send(method, params, sessionId);
+          topSession ??= attached.sessionId;
+          return attached;
+        }
+        if (sessionId && sessionId === topSession && method === 'Page.enable')
+          throw new Error('slicc: refused: protected tab');
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'top-page-enable-refused',
+      notes,
+      budget: 2000,
+    });
+    assert.equal(result.incomplete, undefined, JSON.stringify({ result, notes }));
+    assert.equal(result.topEnableRefused?.call, 'Page.enable');
+    assert.equal(result.topEnableRefused?.session, topSession);
+    assert.match(String(result.topEnableRefused?.error), /^slicc: refused: protected tab/);
+    assert.equal(result.overBlocked, false, JSON.stringify({ result, notes }));
+    assert.equal(typeof result.frameTree, 'boolean');
+    assert.equal(typeof result.targetInfo, 'boolean');
+    assert.ok(
+      notes.some((note) => note.includes('protected-parent.top-refused')),
+      notes.join('\n')
+    );
   } finally {
     await fixture.close();
   }
@@ -1068,7 +1522,7 @@ test('unanswered child Page.enable is incomplete, not a guarded pass', async () 
       budget: 2000,
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
-    assert.match(String(result.incomplete), /Page\.enable unanswered/);
+    assert.match(String(result.incomplete), /Page\.enable unanswered: timeout: no answer/);
     assert.equal(result.frameEvents, undefined);
     assert.equal(result.contextCreated, undefined);
   } finally {
@@ -1107,9 +1561,47 @@ test('unanswered child Runtime.enable is incomplete, not a guarded pass', async 
       budget: 2000,
     });
     assert.ok(result.incomplete, JSON.stringify({ result, notes }));
-    assert.match(String(result.incomplete), /Runtime\.enable unanswered/);
+    assert.match(String(result.incomplete), /Runtime\.enable unanswered: timeout: no answer/);
     assert.equal(result.frameEvents, undefined);
     assert.equal(result.contextCreated, undefined);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('unanswered Runtime.evaluate names the harness error in the incomplete reason', async () => {
+  const { protectedParentIframes } = await import('../../protected-parent-iframes.mjs');
+  const fixture = await fixtureServer();
+  try {
+    const browser = pageFake({ oopifGrandchildTargets: true });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const wrap = (conn) => {
+      const send = conn.send.bind(conn);
+      conn.send = async (method, params, sessionId) => {
+        if (method === 'Runtime.evaluate' && params?.expression === 'location.href')
+          throw new Error('No tab attached for sessionId');
+        return send(method, params, sessionId);
+      };
+      return conn;
+    };
+    const notes = [];
+    const result = await protectedParentIframes({
+      client: wrap(browser.connect()),
+      reader: browser.unguarded,
+      protectedOrigin: origin('seven.sliccy.ai'),
+      cross: origin('cross.test'),
+      ordinary: origin('ordinary.example.test'),
+      mode: 'page-nested',
+      tag: 'evaluate-error-text',
+      notes,
+      budget: 2000,
+    });
+    assert.ok(result.incomplete, JSON.stringify({ result, notes }));
+    assert.match(
+      String(result.incomplete),
+      /Runtime\.evaluate unanswered \(\d+: No tab attached for sessionId\)/
+    );
+    assert.notEqual(result.contextEvaluate, true);
   } finally {
     await fixture.close();
   }
@@ -1213,6 +1705,31 @@ test('guard-blocked live mid document completes with live channels protected', a
   assert.equal(row.observations?.guarded?.resourceTree, false, describe(row));
   assert.equal(row.observations?.guarded?.frameEvents, false, describe(row));
   assert.equal(row.observations?.guarded?.contextEvaluate, false, describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
+  assert.ok(
+    (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
+    describe(row)
+  );
+  assert.equal(
+    (row.notes ?? []).some((entry) => String(entry).includes('protection by over-blocking')),
+    false,
+    describe(row)
+  );
+});
+
+test('blockOrdinaryLiveMid leaves protected blocked-mid verdicts unchanged', async () => {
+  const execution = await runMode(
+    { blockOrdinaryLiveMid: true },
+    {
+      only: ['C3.protected-parent-iframes.page'],
+      oopifGrandchildTargets: true,
+      blockLiveMid: true,
+    }
+  );
+  const row = execution.results.find((entry) => entry.id === 'C3.protected-parent-iframes.page');
+  assert.ok(row);
+  assert.deepEqual([row.control, row.guarded, row.live], ['pass', 'pass', 'pass'], describe(row));
+  assert.equal(row.observations?.guarded?.overBlocked, false, describe(row));
   assert.ok(
     (row.notes ?? []).some((entry) => String(entry).includes('protected-parent.page-live-blocked')),
     describe(row)
@@ -1363,7 +1880,7 @@ test('without a mapped {cross} the ordinary-parent page row is incomplete', asyn
           unguarded: browser.unguarded,
           fixture,
           settleScale: 0.1,
-          capabilities: { discovery: true, autoAttach: true },
+          capabilities: { discovery: true, autoAttach: true, iframeAutoAttach: true },
           targets,
         }
       );

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { presentRefusal, shownRefusal, whenShownInput } from '../extension-frames-rules.mjs';
-import { protectedOrigins } from '../protected.mjs';
+import { credentialOrigins, protectedOrigins } from '../protected.mjs';
 import { isSevenLabel } from '../seven.mjs';
 import { bundle } from './corpus.mjs';
 
@@ -228,6 +228,26 @@ for (const [field, run, label] of vectorChecks) {
 }
 if (reserved.test(JSON.stringify(vectors))) fail('protected.json: never use ports 9222-9229');
 
+const co = catalog.credentialOrigins;
+if (!co?.origins?.length) fail('catalog.json: credentialOrigins.origins must be non-empty');
+if (!String(co.refusal ?? '').startsWith('slicc: refused: '))
+  fail('catalog.json: credentialOrigins.refusal must start with "slicc: refused: "');
+const cred = credentialOrigins(co);
+for (const origin of co.origins) {
+  let host;
+  try {
+    host = new URL(origin).hostname;
+  } catch {
+    fail(`catalog.json: credentialOrigins origin is not a URL: ${origin}`);
+  }
+  if (!cred.url(origin) || !cred.url(`http://${host}/`) || !cred.cookieDomain(host))
+    fail(`catalog.json: credentialOrigins matcher misses ${origin}`);
+  if (m.url(origin))
+    fail(`catalog.json: credential origin ${origin} must not be a protected page origin`);
+}
+if (cred.url('https://ordinary.example.test/'))
+  fail('catalog.json: credentialOrigins must not match an ordinary host');
+
 check('debugger-stage1', read('debugger-stage1.json'), 'debugger-stage1.json');
 
 const guard = read('guard-vectors.json');
@@ -368,7 +388,7 @@ for (const v of guard.vectors ?? []) {
       typeof st.protectedParentIframes === 'string' &&
       st.protectedParentIframes.startsWith('page')
     )
-      needs.add('autoAttach');
+      needs.add('iframeAutoAttach');
     if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
       if (c === 'autoAttach' && (st.requires ?? []).includes('syntheticAutoAttach')) continue;

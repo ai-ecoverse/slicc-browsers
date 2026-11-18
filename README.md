@@ -1,13 +1,13 @@
 # slicc-browsers
 
-The browser knowledge that SLICC's tools share. SLICC drives a real Chromium browser over the Chrome DevTools Protocol (CDP), and several programs, written in different languages, need to agree on the same facts:
+The browser knowledge SLICC's tools share. SLICC drives Chromium over the Chrome DevTools Protocol (CDP), and several programs in different languages must agree on facts:
 
 - which browsers exist, where they are installed, and how to launch them for SLICC;
 - how to find a browser that is already running with a debugging port, and which one to pick;
-- which origins browser control must **never** touch, starting with seven's own origin and the vault;
-- how to prove that a CDP guard really keeps a client away from them.
+- which origins browser control must never touch, starting with seven and the vault;
+- how to prove a CDP guard keeps clients away from them.
 
-These programs can't share code, so they share data: one catalog, four vector sets and schemas, as a Go module, Rust crate and npm package at one version.
+One catalog, four vector sets and schemas, shared as a Go module, Rust crate and npm package at one version.
 
 | who | uses it for |
 | --- | --- |
@@ -20,7 +20,7 @@ These programs can't share code, so they share data: one catalog, four vector se
 
 | file | what it is |
 | --- | --- |
-| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations and the protected origins |
+| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations, protected and credential origins |
 | [`corpus/`](corpus), `corpus.json` | discovery conformance cases: a fake machine each, with the ranked browser list it must produce |
 | [`protected.json`](protected.json), [`protected.mjs`](protected.mjs) | protected-origin test vectors, and a reference matcher in JavaScript |
 | [`guard-vectors.json`](guard-vectors.json) | the CDP scenarios every guard must pass |
@@ -165,7 +165,7 @@ Browser control must never navigate to, open, attach to, or read the cookies or 
 
 URLs are judged the way the browser parses them, so `blob:`, `view-source:` and `about:` aliases, backslashes, encoded dots and full-width letters can't sneak past. A URL the guard can't parse counts as protected wherever the browser might load it. A tab that seven opened keeps seven's origin when it goes to `about:blank`. A refused call fails with `slicc: refused: target is on seven's origin`.
 
-A browser extension's frame inside an ordinary page, such as a password manager's autofill list, doesn't make the tab protected. The frame itself stays out of reach: it can't be attached or read, and its URL never appears in target discovery, page reads, snapshots, accessibility trees or evaluate results. The tab's own page can still be read and snapshotted. Screenshots and input are allowed only while every extension frame is hidden (no layout box or `visibility: hidden`) and none holds focus through nested documents or shadow roots; a screenshot taken while one became shown is thrown away. Opacity and position don't count as hidden. A race between the visibility or focus check and the CDP reply is accepted. Whole-page captures and starting a screencast are refused while any extension frame is in the tab. If a screencast is already running when an extension frame appears, the guard stops it or drops every later `Page.screencastFrame` until the frame is gone; refusing `Page.startScreencast` on a clean tab is also fine. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, the methods and the refusals, and `protected.mjs` offers `extensionFrame(url)`.
+A browser extension's frame inside an ordinary page, such as a password manager's autofill list, doesn't make the tab protected. The frame itself stays out of reach: it can't be attached or read, and its URL never appears in target discovery, page reads, snapshots, accessibility trees or evaluate results. The tab's own page can still be read and snapshotted. Screenshots and input are allowed only while every extension frame is hidden (no layout box or `visibility: hidden`) and none holds focus through nested documents or shadow roots; a screenshot taken while one became shown is thrown away. Opacity and position don't count as hidden. A race between the visibility or focus check and the CDP reply is accepted. Whole-page captures and starting a screencast are refused while any extension frame is in the tab; an active screencast is stopped or its frames dropped until the frame is gone. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, methods and refusals; `protected.mjs` offers `extensionFrame(url)`.
 
 `catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. `protected.mjs` is the reference implementation:
 
@@ -181,6 +181,8 @@ guard.target({ url: 'about:blank', opener: 'protected' });
 
 It also offers `storageKey(key)` and `unparseable(text)`. A Go or Rust implementation needs a WHATWG URL parser, not `net/url`, and must pass every vector in `protected.json`.
 
+Credential origins (`catalog.credentialOrigins`) withhold cookie/storage export and refuse writes; pages stay drivable. Not covered hosts and Domain=.adobe.com stay exportable; see catalog + C7 notes.
+
 ## Guard vectors
 
 A guard sits between a CDP client and the browser and keeps the client away from protected origins. `guard-vectors.json` holds the attacks every guard must pass: navigation, redirects, popups, frames, interception, cookies, storage, privileged and error pages, foreign worlds, debugger tricks and session overrides.
@@ -195,7 +197,7 @@ For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stoc
 - `Page.addScriptToEvaluateOnNewDocument` whose `source` matches `^(?:[ \t\n]|//[^\n\r\u2028\u2029]*)*$` on the whole string without the multiline flag (no code), with any `worldName` or `runImmediately`, and its removal;
 - exactly `Emulation.setFocusEmulationEnabled`, `setEmulatedMedia`, `setDeviceMetricsOverride` and `setTouchEmulationEnabled`;
 - `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
-- `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe (including ordinary-URL children of a protected parent) or worker may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`.
+- `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe (including ordinary-URL children of a protected parent) or worker may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`; A top-page `slicc: refused:` protects when ordinary tabs still work.
 
 The strip holds whether that world reaches another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless; admitted display overrides and no-code init scripts must not remain on a protected document. Undeclared, they skip, never pass.
 
@@ -229,6 +231,7 @@ You supply:
 | capability | means the transport can |
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
+| `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |
@@ -240,10 +243,10 @@ You supply:
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock setup; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (including callback-origin on every route) without over-blocking ordinary ones |
-| `jsonList` | expose `/json/list` via `client.jsonList()` or `devtoolsHttp` (else `jsonListed` is not-supported; getTargets still measured) |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (incl. callback-origin) without over-blocking ordinary ones |
+| `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); else `jsonListed` is not-supported |
 
-`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel `slicc-held` cannot cross to seven; without it the page channel still runs. The unguarded observer creates the tab, waits for a committed document (not only getTargetInfo), then reads the fixture mark.
+`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
 
 ### Reading the result
 

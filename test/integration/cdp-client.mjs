@@ -140,7 +140,7 @@ async function start(fixture, { spki, signal, allowOrigin, isolation = true }) {
       '--no-proxy-server',
       ...(isolation ? ['--site-per-process'] : ['--disable-site-isolation-trials']),
       `--disable-features=${isolation ? '' : 'IsolateOrigins,site-per-process,OriginKeyedProcessesByDefault,'}HttpsUpgrades,HttpsFirstBalancedModeAutoEnable,LocalNetworkAccessChecks,LocalNetworkAccessRestrictions,LocalNetworkAccessChecksWebRTC,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults`,
-      `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP cross.test 127.0.0.1:${fixture.port}`,
+      `--host-resolver-rules=MAP *.sliccy.ai 127.0.0.1:${fixture.port}, MAP sliccy.ai 127.0.0.1:${fixture.port}, MAP *.example.test 127.0.0.1:${fixture.port}, MAP cross.test 127.0.0.1:${fixture.port}, MAP *.adobelogin.com 127.0.0.1:${fixture.port}, MAP adobelogin.com 127.0.0.1:${fixture.port}, MAP *.adobe.com 127.0.0.1:${fixture.port}, MAP adobe.com 127.0.0.1:${fixture.port}`,
       'about:blank',
     ],
     { detached: true, stdio: ['ignore', 'ignore', stderr] }
@@ -344,5 +344,7 @@ export function origins(fixture) {
     own: origin('client.example.test'),
     client: origin('client.example.test'),
     log: origin('log.example.test'),
+    idp: origin('ims-na1.adobelogin.com'),
+    'idp-stg': origin('ims-na1-stg1.adobelogin.com'),
   };
 }

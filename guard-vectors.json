@@ -85,6 +85,14 @@
     "file-root": {
       "url": "file:///",
       "description": "the local file system's root, standing in for any file: page"
+    },
+    "idp": {
+      "host": "ims-na1.adobelogin.com",
+      "description": "Adobe IMS IdP credential origin"
+    },
+    "idp-stg": {
+      "host": "ims-na1-stg1.adobelogin.com",
+      "description": "Adobe IMS staging IdP credential origin"
     }
   },
   "variants": {
@@ -107,6 +115,7 @@
     "syntheticAutoAttach": "the transport has no native Target.setAutoAttach, so the guard attaches new tabs, pages and their children itself and synthesizes Target.attachedToTarget, with the same placement and holds",
     "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
     "closeProtected": "the guard lets Target.closeTarget close a protected tab",
+    "iframeAutoAttach": "the transport auto-attaches non-tab child targets (out-of-process iframes) under a page session: Target.setAutoAttach with children steps and child sessions for iframe targets, not only tab-level auto-attach",
     "jsonList": "the guarded client exposes /json/list through client.jsonList() or client.devtoolsHttp (or a ws host the runner can fetch); without it the jsonListed observation is not-supported while Target.getTargets, discovery, attach and read still run",
     "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable; client.signInHold.ask({marker,hostLabel}) may answer the hold when the page-side BroadcastChannel cannot; redirect_uri cut to https://www.sliccy.ai (callback-origin) is hidden on every route"
   },
@@ -31786,7 +31795,7 @@
         }
       ],
       "targets": ["seven", "vault"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -31889,6 +31898,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-iframes.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-iframes.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-iframes.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -31911,7 +31954,10 @@
           "childEnableRefused": false,
           "targetInfo": false,
           "childAttach": false,
-          "targetEvents": false
+          "targetEvents": false,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -31924,9 +31970,17 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
-      "designDependent": ["midFrameAttached", "childEnableRefused"]
+      "designDependent": [
+        "midFrameAttached",
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
+      ]
     },
     {
       "id": "C3.protected-parent-srcdoc.page",
@@ -31949,7 +32003,7 @@
         }
       ],
       "targets": ["seven"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.protected-parent-srcdoc.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -32042,6 +32096,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-srcdoc.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -32063,7 +32151,10 @@
           "childEnableRefused": false,
           "targetInfo": true,
           "childAttach": true,
-          "targetEvents": true
+          "targetEvents": true,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -32075,9 +32166,17 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
-      "designDependent": ["midFrameAttached", "childEnableRefused"]
+      "designDependent": [
+        "midFrameAttached",
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
+      ]
     },
     {
       "id": "C3.ordinary-parent-iframes.page",
@@ -32100,7 +32199,7 @@
         }
       ],
       "targets": ["seven"],
-      "requires": ["autoAttach"],
+      "requires": ["iframeAutoAttach"],
       "observe": {
         "frameTree": {
           "means": "C3.ordinary-parent-iframes.page: Page.getFrameTree through the page session shows the ordinary grandchild under the middle frame by frameId, URL, or parentId",
@@ -32191,6 +32290,16 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.ordinary-parent-iframes.page: the ordinary mid document was BlockedByClient after attach during the live nest rebuild (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -32212,7 +32321,8 @@
           "midFrameAttached": true,
           "targetInfo": "either",
           "childAttach": "either",
-          "targetEvents": "either"
+          "targetEvents": "either",
+          "overBlocked": false
         }
       },
       "expected": {
@@ -32224,9 +32334,383 @@
         "midFrameAttached": true,
         "targetInfo": "either",
         "childAttach": "either",
-        "targetEvents": "either"
+        "targetEvents": "either",
+        "overBlocked": false
       },
       "designDependent": ["targetInfo", "childAttach", "targetEvents"]
+    },
+    {
+      "id": "C7.credential-export",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "defaultContext": true,
+      "setup": [
+        {
+          "page": "tab",
+          "url": "{ordinary}/blank"
+        }
+      ],
+      "trigger": [
+        {
+          "credentialExport": true,
+          "as": "probe"
+        }
+      ],
+      "targets": ["idp", "idp-stg"],
+      "observe": {
+        "live": {
+          "means": "unguarded reader planted IdP cookies and storage and could read them back",
+          "check": {
+            "result": "probe",
+            "path": "result.live",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "getCookiesFiltered": {
+          "means": "Network.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.getCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "getAllCookiesFiltered": {
+          "means": "Network.getAllCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.getAllCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageGetCookiesFiltered": {
+          "means": "Storage.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.storageGetCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageGetCookiesFiltered": {
+          "means": "Page.getCookies drops or refuses credential-origin cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.pageGetCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "partitionedCookieFiltered": {
+          "means": "a cookie on the ordinary host partitioned under the credential site (partitionKey.topLevelSite) is dropped or refused by every cookie read",
+          "check": {
+            "result": "probe",
+            "path": "result.partitionedCookieFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "setCookieRefused": {
+          "means": "Network.setCookie for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.setCookieRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "setCookiesRefused": {
+          "means": "Network.setCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.setCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "deleteCookiesRefused": {
+          "means": "Network.deleteCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.deleteCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageDeleteCookieRefused": {
+          "means": "Page.deleteCookie for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.pageDeleteCookieRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageSetCookiesRefused": {
+          "means": "Storage.setCookies for a credential origin is refused",
+          "check": {
+            "result": "probe",
+            "path": "result.storageSetCookiesRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clearBrowserCookiesSurvived": {
+          "means": "after Network.clearBrowserCookies on the guarded client the unguarded reader still sees the credential-origin and Domain= parent cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.clearBrowserCookiesSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageClearCookiesSurvived": {
+          "means": "after Storage.clearCookies on the guarded client the unguarded reader still sees the credential-origin and Domain= parent cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.storageClearCookiesSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "clearDataForOriginSurvived": {
+          "means": "after Storage.clearDataForOrigin on the guarded client the unguarded reader still sees planted credential-origin cookies and storage",
+          "check": {
+            "result": "probe",
+            "path": "result.clearDataForOriginSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "headersStripped": {
+          "means": "Cookie and Set-Cookie headers for credential-origin traffic are stripped from ExtraInfo events",
+          "check": {
+            "result": "probe",
+            "path": "result.headersStripped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "associatedCookiesStripped": {
+          "means": "associatedCookies for credential-origin ExtraInfo events are stripped",
+          "check": {
+            "result": "probe",
+            "path": "result.associatedCookiesStripped",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domStorageRefused": {
+          "means": "DOMStorage.getDOMStorageItems for a credential origin is refused or empty of planted keys",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domStorageSetRefused": {
+          "means": "DOMStorage.setDOMStorageItem on the credential origin and on the partitioned credential storageKey is refused or leaves no item",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageSetRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domStorageRemoveRefused": {
+          "means": "DOMStorage.removeDOMStorageItem on the credential origin and on the partitioned credential storageKey is refused or leaves the planted item",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageRemoveRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "indexedDBRefused": {
+          "means": "IndexedDB.requestDatabaseNames for a credential origin is refused or omits the planted DB",
+          "check": {
+            "result": "probe",
+            "path": "result.indexedDBRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "indexedDBDeleteRefused": {
+          "means": "IndexedDB.deleteDatabase on the credential origin is refused or leaves the planted DB",
+          "check": {
+            "result": "probe",
+            "path": "result.indexedDBDeleteRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cacheStorageRefused": {
+          "means": "CacheStorage.requestCacheNames for a credential origin is refused or omits the planted cache",
+          "check": {
+            "result": "probe",
+            "path": "result.cacheStorageRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cacheStorageDeleteRefused": {
+          "means": "CacheStorage.deleteCache of the credential origin cache is refused or leaves the planted cache",
+          "check": {
+            "result": "probe",
+            "path": "result.cacheStorageDeleteRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "ordinaryCookiesExportable": {
+          "means": "ordinary-origin cookies remain exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.ordinaryCookiesExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeComCookiesExportable": {
+          "means": "a cookie with Domain=.adobe.com remains exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeComCookiesExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeComPartitionedCookieExportable": {
+          "means": "a cookie on the ordinary host partitioned under adobe.com remains exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeComPartitionedCookieExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "partitionedStorageKeyFiltered": {
+          "means": "DOMStorage.getDOMStorageItems for a partitioned storageKey under adobelogin.com is refused or empty of planted keys",
+          "check": {
+            "result": "probe",
+            "path": "result.partitionedStorageKeyFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeComStorageKeyExportable": {
+          "means": "a partitioned storageKey with ^0 under adobe.com remains exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeComStorageKeyExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "pageDrivable": {
+          "means": "the IdP page stays attachable and fillable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.pageDrivable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "evaluateOk": {
+          "means": "Runtime.evaluate of a harmless expression on the IdP page succeeds",
+          "check": {
+            "result": "probe",
+            "path": "result.evaluateOk",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "subHostNotCredential": {
+          "means": "a sub-host of an entry host is not treated as credential by the catalog matcher contract",
+          "check": {
+            "result": "probe",
+            "path": "result.subHostNotCredential",
+            "equals": true,
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the unguarded reader planted IdP cookies and storage and read them back",
+      "liveCheck": {
+        "result": "probe",
+        "path": "result.live",
+        "equals": true,
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "live": true,
+          "ordinaryCookiesExportable": true,
+          "adobeComCookiesExportable": true,
+          "adobeComPartitionedCookieExportable": true,
+          "adobeComStorageKeyExportable": true,
+          "pageDrivable": true,
+          "evaluateOk": true,
+          "subHostNotCredential": true
+        }
+      },
+      "expected": {
+        "live": true,
+        "getCookiesFiltered": true,
+        "getAllCookiesFiltered": true,
+        "storageGetCookiesFiltered": true,
+        "pageGetCookiesFiltered": true,
+        "partitionedCookieFiltered": true,
+        "setCookieRefused": true,
+        "setCookiesRefused": true,
+        "deleteCookiesRefused": true,
+        "pageDeleteCookieRefused": true,
+        "storageSetCookiesRefused": true,
+        "clearBrowserCookiesSurvived": true,
+        "storageClearCookiesSurvived": true,
+        "clearDataForOriginSurvived": true,
+        "headersStripped": true,
+        "associatedCookiesStripped": true,
+        "domStorageRefused": true,
+        "domStorageSetRefused": true,
+        "domStorageRemoveRefused": true,
+        "indexedDBRefused": true,
+        "indexedDBDeleteRefused": true,
+        "cacheStorageRefused": true,
+        "cacheStorageDeleteRefused": true,
+        "ordinaryCookiesExportable": true,
+        "adobeComCookiesExportable": true,
+        "adobeComPartitionedCookieExportable": true,
+        "partitionedStorageKeyFiltered": true,
+        "adobeComStorageKeyExportable": true,
+        "pageDrivable": true,
+        "evaluateOk": true,
+        "subHostNotCredential": true
+      },
+      "notes": [
+        "residual only (not a fail): on a drivable IdP page Runtime.evaluate can read document.cookie (non-HttpOnly) and localStorage",
+        "residual only (not a fail): response bodies are not redacted; Network.getResponseBody is refused only for protected URLs as today, not for credential origins",
+        "residual only (not a fail): OAuth codes/tokens in URLs and Authorization headers on drivable IdP pages are not withheld",
+        "Network.loadNetworkResource is not measured in this row",
+        "NOT covered: Adobe login-UI hosts auth.services.adobe.com and adobeid-na1.services.adobe.com (pages drivable, cookies and storage exportable)",
+        "NOT covered: federated SSO/MFA/consent hosts (pages drivable, cookies and storage exportable)",
+        "cookie Domain=.adobe.com is not covered (does not cover an entry host); Domain=.adobelogin.com is covered",
+        "control: a Domain=.adobe.com cookie stays exportable",
+        "storageKey ^0 site part uses the same covering rule as partitionKey.topLevelSite; origin part before ^0 is exact host EQUALS",
+        "probe: partitioned storageKey under adobelogin.com is refused or empty of planted keys",
+        "control: partitioned storageKey ^0 under adobe.com stays exportable",
+        "probe: a Domain=.adobelogin.com cookie and a cookie partitioned under adobelogin.com count as credential cookies for every read, header and delete check",
+        "control: a cookie partitioned under adobe.com stays exportable",
+        "probe: global Network.clearBrowserCookies and Storage.clearCookies must leave credential cookies in place (refused or filtered)",
+        "probe: the partitioned storageKey is the one Chrome reports for the planted cross-site iframe, proven by read-back; a guessed key never counts",
+        "the staging IdP ims-na1-stg1.adobelogin.com runs the same row as idp-stg"
+      ]
     },
     {
       "id": "C7.sign-in-hold.held-popup",

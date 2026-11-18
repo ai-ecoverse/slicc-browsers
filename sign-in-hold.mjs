@@ -372,90 +372,70 @@ async function measureClient({
   return result;
 }
 
-async function rawReadable(reader, targetId, mark, notes, { budget = 5000, expectUrl } = {}) {
+async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
   const attached = await outcome(reader.send('Target.attachToTarget', { targetId, flatten: true }));
   if (!attached.ok || !attached.result?.sessionId)
     return {
       readable: false,
       step: 'attach',
       reason: `raw attach failed: ${attached.error?.message ?? attached.error}`,
+      text: '',
     };
   const sessionId = attached.result.sessionId;
   await outcome(reader.send('Runtime.enable', {}, sessionId));
-  const windowMs = Math.min(budget, 4000);
-  const deadline = Date.now() + windowMs;
-  let last = { readyState: null, href: null, text: '', body: null };
-  let evaluateError = null;
-  while (Date.now() <= deadline) {
+  const readOnce = async () => {
+    const ready = await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        { expression: 'document.readyState', returnByValue: true },
+        sessionId
+      )
+    );
+    const readyState = ready.ok ? ready.result?.result?.value : null;
+    const committed = ready.ok && ['interactive', 'complete'].includes(readyState);
     const read = await outcome(
       reader.send(
         'Runtime.evaluate',
         {
-          expression: `(() => {
-            const body = document.body;
-            return {
-              readyState: document.readyState,
-              href: location.href,
-              text: document.title + " " + (body && body.innerText),
-              body: body == null ? null : true,
-            };
-          })()`,
+          expression: 'document.title + " " + (document.body && document.body.innerText)',
           returnByValue: true,
         },
         sessionId
       )
     );
-    if (!answered(read)) {
-      evaluateError = 'evaluate unanswered';
-      await pause(50);
-      continue;
-    }
-    if (!read.ok) {
-      evaluateError = String(read.error?.message ?? read.error);
-      await pause(50);
-      continue;
-    }
-    evaluateError = null;
-    last = read.result?.result?.value ?? last;
-    const text = String(last.text ?? '');
-    const ready = ['interactive', 'complete'].includes(last.readyState);
-    const bodyReady = last.body === true;
-    const href = String(last.href ?? '');
-    const urlReady =
-      !expectUrl ||
-      href === expectUrl ||
-      href.startsWith(expectUrl) ||
-      (expectUrl.includes('/ims/authorize') && href.includes('/ims/authorize'));
-    const marked = Boolean(mark && text.includes(mark));
-    if (marked) {
-      await outcome(reader.send('Target.detachFromTarget', { sessionId }));
-      note(notes, 'sign-in-hold.raw-read', {
-        targetId,
-        readable: true,
-        text: text.slice(0, 120),
-        readyState: last.readyState,
-        href,
-        committed: ready && bodyReady && urlReady,
-      });
-      return { readable: true, text, readyState: last.readyState, href };
-    }
-    await pause(50);
+    const text = read.ok ? String(read.result?.result?.value ?? '') : '';
+    const readable = Boolean(committed && mark && text.includes(mark));
+    return { readable, text, readyState, committed };
+  };
+  let result = await readOnce();
+  if (!result.readable && waitMs > 0) {
+    const found = await until(async () => {
+      const next = await readOnce();
+      return next.readable ? next : null;
+    }, waitMs);
+    if (found) result = found;
   }
   await outcome(reader.send('Target.detachFromTarget', { sessionId }));
-  const text = String(last.text ?? '');
-  const step = evaluateError ? 'evaluate' : 'mark';
-  const reason = evaluateError
-    ? `raw evaluate failed: ${evaluateError}; last readyState=${last.readyState} href=${last.href} text=${JSON.stringify(text.slice(0, 80))}`
-    : `text without the mark; last readyState=${last.readyState} href=${last.href} text=${JSON.stringify(text.slice(0, 80))}`;
+  const text = String(result.text ?? '');
+  if (result.readable) {
+    note(notes, 'sign-in-hold.raw-read', {
+      targetId,
+      readable: true,
+      text: text.slice(0, 120),
+      readyState: result.readyState,
+    });
+    return { readable: true, text, readyState: result.readyState };
+  }
+  const step = 'mark';
+  const reason = `text without the mark; last readyState=${result.readyState} text=${JSON.stringify(text.slice(0, 80))}`;
   note(notes, 'sign-in-hold.raw-read', {
     targetId,
     readable: false,
     step,
     text: text.slice(0, 120),
-    readyState: last.readyState,
-    href: last.href,
+    readyState: result.readyState,
   });
-  return { readable: false, step, reason, text, readyState: last.readyState, href: last.href };
+  return { readable: false, step, reason, text, readyState: result.readyState };
 }
 
 function holdExpression(control, ordinary, tag, marker, heldUrl, { askHook = false } = {}) {
@@ -650,10 +630,7 @@ async function heldPopup({
     Math.min(budget, 3000)
   );
   const rawUrl = settled?.url ?? raw.url ?? heldUrl;
-  const read = await rawReadable(reader, raw.targetId, mark, notes, {
-    budget,
-    expectUrl: heldUrl,
-  });
+  const read = await rawReadable(reader, raw.targetId, mark, notes, Math.min(budget, 3000));
   if (!read.readable)
     return {
       live: false,
@@ -738,10 +715,7 @@ async function callbackTab({
       targetId,
     };
 
-  const read = await rawReadable(reader, targetId, mark, notes, {
-    budget,
-    expectUrl: ready.url ?? url,
-  });
+  const read = await rawReadable(reader, targetId, mark, notes, Math.min(budget, 3000));
   if (!read.readable)
     return {
       live: false,

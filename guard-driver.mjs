@@ -18,6 +18,8 @@ export const knownOrigins = [
   'plain',
   'cross',
   'log',
+  'idp',
+  'idp-stg',
 ];
 
 export const beacon = (log, tag) =>

@@ -16,8 +16,20 @@ const hostOf = (url) => {
     return '';
   }
 };
+const siteOf = (url) => {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${hostOf(url).split('.').slice(-2).join('.')}`;
+  } catch {
+    return null;
+  }
+};
+const partitionSite = (cookie) => {
+  const key = cookie?.partitionKey;
+  return typeof key === 'string' ? key : (key?.topLevelSite ?? null);
+};
 
-export function credentialBrowser() {
+export function credentialBrowser({ secure = true } = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const cookies = [];
@@ -29,7 +41,7 @@ export function credentialBrowser() {
 
   const info = (tab) => ({
     targetId: tab.targetId,
-    type: 'page',
+    type: tab.type ?? 'page',
     url: tab.url,
     title: tab.title,
     attached: [...sessions.values()].some((s) => s.targetId === tab.targetId),
@@ -57,7 +69,8 @@ export function credentialBrowser() {
   };
 
   const setCookie = (params) => {
-    const url = params.url ?? (params.domain ? `https://${params.domain}/` : null);
+    const url =
+      params.url ?? (params.domain ? `https://${params.domain.replace(/^\./, '')}/` : null);
     if (!url) return { success: false };
     const host = hostOf(url);
     const cookie = {
@@ -66,15 +79,23 @@ export function credentialBrowser() {
       domain: params.domain ?? host,
       path: params.path ?? '/',
       httpOnly: Boolean(params.httpOnly),
+      secure: Boolean(params.secure),
       url,
+      ...(params.partitionKey ? { partitionKey: params.partitionKey } : {}),
     };
     const idx = cookies.findIndex(
-      (c) => c.name === cookie.name && c.domain === cookie.domain && c.path === cookie.path
+      (c) =>
+        c.name === cookie.name &&
+        c.domain === cookie.domain &&
+        c.path === cookie.path &&
+        partitionSite(c) === partitionSite(cookie)
     );
     if (idx >= 0) cookies[idx] = cookie;
     else cookies.push(cookie);
     return { success: true };
   };
+
+  const storageKeyOf = (tab) => tab.storageKey ?? tab.frame?.securityOrigin ?? originOf(tab.url);
 
   const commit = (tab, url) => {
     const origin = originOf(url) ?? '://';
@@ -114,6 +135,21 @@ export function credentialBrowser() {
     return { frameId: tab.targetId, loaderId: tab.frame.loaderId };
   };
 
+  const addFrame = (parent, src) => {
+    const child = {
+      targetId: `T${++next}`,
+      type: 'iframe',
+      parentId: parent.targetId,
+      url: 'about:blank',
+      title: '',
+      frame: { id: `T${next}`, url: 'about:blank', securityOrigin: '://' },
+    };
+    tabs.set(child.targetId, child);
+    discovered('Target.targetCreated', child);
+    commit(child, src);
+    child.storageKey = `${originOf(src)}/^0${siteOf(parent.url)}^31`;
+  };
+
   const evaluate = (tab, expression) => {
     const origin = tab.frame?.securityOrigin ?? originOf(tab.url);
     if (expression === 'document.title') return { result: { type: 'string', value: tab.title } };
@@ -124,7 +160,12 @@ export function credentialBrowser() {
           value: { href: tab.url, ready: 'complete', title: tab.title },
         },
       };
-    if (expression.includes('localStorage.setItem') || expression.includes('indexedDB.open')) {
+    if (expression.includes("createElement('iframe')")) {
+      const src = /f\.src=(["'])(.*?)\1/.exec(expression)?.[2];
+      if (src) addFrame(tab, src);
+      return { result: { type: 'boolean', value: true } };
+    }
+    if (expression.includes('indexedDB.open')) {
       const store = localStores.get(origin) ?? new Map();
       const lsMatch = /localStorage\.setItem\((['"])(.*?)\1,\s*(['"])(.*?)\3\)/.exec(expression);
       if (lsMatch) store.set(lsMatch[2], lsMatch[4]);
@@ -132,23 +173,32 @@ export function credentialBrowser() {
       const dbMatch = /indexedDB\.open\((['"])(.*?)\1/.exec(expression);
       if (dbMatch) idb.set(`${origin}::${dbMatch[2]}`, true);
       const cacheMatch = /caches\.open\((['"])(.*?)\1/.exec(expression);
-      if (cacheMatch) {
+      if (cacheMatch && secure) {
         const list = caches.get(origin) ?? new Set();
         list.add(cacheMatch[2]);
         caches.set(origin, list);
       }
-      const cacheValue =
-        /new Response\((['"])(.*?)\1\)/.exec(expression)?.[2] ??
-        /new Response\(([^)]+)\)/.exec(expression)?.[1]?.replace(/^JSON\.stringify\((.*)\)$/, '$1');
-      const tag =
-        lsMatch?.[4] ??
-        (typeof cacheValue === 'string' ? cacheValue.replace(/^["']|["']$/g, '') : '1');
+      const cacheValue = /new Response\((['"])(.*?)\1\)/.exec(expression)?.[2];
       return {
         result: {
           type: 'object',
-          value: { localStorage: true, idb: true, cache: tag },
+          value: {
+            secure,
+            localStorage: true,
+            idb: true,
+            cache: secure ? (cacheValue ?? lsMatch?.[4]) : 'insecure-context',
+          },
         },
       };
+    }
+    if (expression.includes('localStorage.setItem')) {
+      const lsMatch = /localStorage\.setItem\((['"])(.*?)\1,\s*(['"])(.*?)\3\)/.exec(expression);
+      if (!lsMatch) return { result: { type: 'boolean', value: false } };
+      const key = storageKeyOf(tab);
+      const store = localStores.get(key) ?? new Map();
+      store.set(lsMatch[2], lsMatch[4]);
+      localStores.set(key, store);
+      return { result: { type: 'boolean', value: true } };
     }
     if (expression.includes('document.querySelector') && expression.includes('input')) {
       return { result: { type: 'string', value: tab.title } };
@@ -167,6 +217,18 @@ export function credentialBrowser() {
 
   const tabOf = (sessionId, targetId) =>
     sessionId ? tabs.get(sessions.get(sessionId)?.targetId) : tabs.get(targetId);
+  const storeKey = (storageId = {}) => storageId.storageKey ?? storageId.securityOrigin ?? '';
+
+  const closeTab = (targetId) => {
+    for (const child of [...tabs.values()])
+      if (child.parentId === targetId) closeTab(child.targetId);
+    tabs.delete(targetId);
+    for (const [id, s] of [...sessions])
+      if (s.targetId === targetId) {
+        sessions.delete(id);
+        emit(s.conn, 'Target.detachedFromTarget', { sessionId: id, targetId });
+      }
+  };
 
   async function handle(conn, method, params = {}, sessionId) {
     await tick();
@@ -202,12 +264,7 @@ export function credentialBrowser() {
       return { sessionId: id };
     }
     if (method === 'Target.closeTarget') {
-      tabs.delete(tab.targetId);
-      for (const [id, s] of [...sessions])
-        if (s.targetId === tab.targetId) {
-          sessions.delete(id);
-          emit(s.conn, 'Target.detachedFromTarget', { sessionId: id, targetId: tab.targetId });
-        }
+      closeTab(tab.targetId);
       return { success: true };
     }
     if (method === 'Target.detachFromTarget') {
@@ -219,8 +276,13 @@ export function credentialBrowser() {
     if (method === 'Page.navigate') return commit(tab, params.url);
     if (method === 'Page.getFrameTree') return { frameTree: { frame: tab.frame } };
     if (method === 'Runtime.evaluate') return evaluate(tab, params.expression);
+    if (method === 'Storage.getStorageKeyForFrame' || method === 'Storage.getStorageKey') {
+      const frameTab = tabs.get(params.frameId) ?? tab;
+      if (!frameTab) throw new Error('Frame tree node for given frame not found');
+      return { storageKey: storageKeyOf(frameTab) };
+    }
     if (method === 'Network.setCookie') return setCookie(params);
-    if (method === 'Network.setCookies') {
+    if (method === 'Network.setCookies' || method === 'Storage.setCookies') {
       for (const cookie of params.cookies ?? []) setCookie(cookie);
       return {};
     }
@@ -237,26 +299,33 @@ export function credentialBrowser() {
     }
     if (method === 'Network.deleteCookies' || method === 'Page.deleteCookie') {
       const name = params.name ?? params.cookieName;
-      const url = params.url ?? tab?.url;
-      for (let i = cookies.length - 1; i >= 0; i--)
-        if (cookies[i].name === name && (!url || matchCookie(cookies[i], url)))
-          cookies.splice(i, 1);
+      const url = params.url ?? (params.domain ? null : tab?.url);
+      const domain = params.domain?.toLowerCase().replace(/^\./, '');
+      for (let i = cookies.length - 1; i >= 0; i--) {
+        if (cookies[i].name !== name) continue;
+        if (url && !matchCookie(cookies[i], url)) continue;
+        if (domain && cookies[i].domain.toLowerCase().replace(/^\./, '') !== domain) continue;
+        cookies.splice(i, 1);
+      }
       return {};
     }
-    if (method === 'Storage.setCookies') {
-      for (const cookie of params.cookies ?? []) setCookie(cookie);
+    if (method === 'Network.clearBrowserCookies' || method === 'Storage.clearCookies') {
+      cookies.length = 0;
       return {};
     }
     if (method === 'DOMStorage.setDOMStorageItem') {
-      const key = params.storageId?.storageKey ?? params.storageId?.securityOrigin ?? '';
+      const key = storeKey(params.storageId);
       const store = localStores.get(key) ?? new Map();
       store.set(params.key, params.value);
       localStores.set(key, store);
       return {};
     }
+    if (method === 'DOMStorage.removeDOMStorageItem') {
+      localStores.get(storeKey(params.storageId))?.delete(params.key);
+      return {};
+    }
     if (method === 'DOMStorage.getDOMStorageItems') {
-      const key = params.storageId?.storageKey ?? params.storageId?.securityOrigin ?? '';
-      const store = localStores.get(key) ?? new Map();
+      const store = localStores.get(storeKey(params.storageId)) ?? new Map();
       return { entries: [...store.entries()].map(([k, v]) => [k, v]) };
     }
     if (method === 'IndexedDB.requestDatabaseNames') {
@@ -267,11 +336,24 @@ export function credentialBrowser() {
           .map((key) => key.slice(origin.length + 2)),
       };
     }
+    if (method === 'IndexedDB.deleteDatabase') {
+      idb.delete(`${params.securityOrigin}::${params.databaseName}`);
+      return {};
+    }
     if (method === 'CacheStorage.requestCacheNames') {
       const origin = params.securityOrigin;
       return {
-        caches: [...(caches.get(origin) ?? [])].map((cacheName) => ({ cacheName })),
+        caches: [...(caches.get(origin) ?? [])].map((cacheName) => ({
+          cacheId: `${origin}::${cacheName}`,
+          securityOrigin: origin,
+          cacheName,
+        })),
       };
+    }
+    if (method === 'CacheStorage.deleteCache') {
+      const at = String(params.cacheId).lastIndexOf('::');
+      caches.get(params.cacheId.slice(0, at))?.delete(params.cacheId.slice(at + 2));
+      return {};
     }
     return {};
   }
@@ -297,9 +379,18 @@ export function credentialGuard(browser, options = {}) {
     if (!matcher) return false;
     if (cookie.domain && matcher.cookieDomain(cookie.domain)) return true;
     if (cookie.url && matcher.url(cookie.url)) return true;
+    const site = partitionSite(cookie);
+    if (site && matcher.topLevelSite(site)) return true;
     return false;
   };
   const urlCredential = (url) => matcher?.url(url);
+  const storageCredential = (storageId = {}) =>
+    urlCredential(storageId.securityOrigin) ||
+    Boolean(storageId.storageKey && matcher.storageKey(storageId.storageKey));
+  const cacheCredential = (cacheId) => {
+    const text = String(cacheId ?? '');
+    return urlCredential(text.slice(0, text.lastIndexOf('::')));
+  };
 
   const client = {
     events: raw.events,
@@ -322,23 +413,26 @@ export function credentialGuard(browser, options = {}) {
         const name = params.name ?? params.cookieName;
         if (
           urlCredential(url) ||
+          (params.domain && matcher.cookieDomain(params.domain)) ||
           browser.cookies.some((c) => c.name === name && cookieCredential(c))
         )
           throw new Error(refusal);
       }
-      if (method === 'DOMStorage.getDOMStorageItems' && !mutants.leakDomStorage) {
-        const storageId = params.storageId ?? {};
-        if (
-          urlCredential(storageId.securityOrigin) ||
-          (storageId.storageKey && matcher.storageKey(storageId.storageKey))
-        )
-          throw new Error(refusal);
-      }
       if (
-        method === 'DOMStorage.setDOMStorageItem' &&
-        !mutants.allowSetCookie &&
-        params.storageId?.storageKey &&
-        matcher.storageKey(params.storageId.storageKey)
+        ['Network.clearBrowserCookies', 'Storage.clearCookies'].includes(method) &&
+        !mutants.allowClear
+      )
+        throw new Error(refusal);
+      if (
+        method === 'DOMStorage.getDOMStorageItems' &&
+        !mutants.leakDomStorage &&
+        storageCredential(params.storageId)
+      )
+        throw new Error(refusal);
+      if (
+        ['DOMStorage.setDOMStorageItem', 'DOMStorage.removeDOMStorageItem'].includes(method) &&
+        !mutants.allowStorageMutation &&
+        storageCredential(params.storageId)
       )
         throw new Error(refusal);
       if (
@@ -348,9 +442,21 @@ export function credentialGuard(browser, options = {}) {
       )
         throw new Error(refusal);
       if (
+        method === 'IndexedDB.deleteDatabase' &&
+        !mutants.allowStorageMutation &&
+        urlCredential(params.securityOrigin)
+      )
+        throw new Error(refusal);
+      if (
         method === 'CacheStorage.requestCacheNames' &&
         !mutants.leakCacheStorage &&
         urlCredential(params.securityOrigin)
+      )
+        throw new Error(refusal);
+      if (
+        method === 'CacheStorage.deleteCache' &&
+        !mutants.allowStorageMutation &&
+        cacheCredential(params.cacheId)
       )
         throw new Error(refusal);
 

@@ -15,7 +15,7 @@ export const partitions = {
   vault: ['vault'],
   'vault-x': ['vault-x'],
   apex: ['apex'],
-  idp: ['idp'],
+  idp: ['idp', 'idp-stg'],
   others: [
     'own',
     'chrome-newtab',
@@ -310,13 +310,12 @@ export async function sweep(partition) {
   const runs = [];
   try {
     for (const name of partitions[partition]) {
-      const tls =
-        name === 'idp'
-          ? {
-              key: await readFile(new URL('./fixtures/tls-key.pem', import.meta.url)),
-              cert: await readFile(new URL('./fixtures/tls-cert.pem', import.meta.url)),
-            }
-          : undefined;
+      const tls = name.startsWith('idp')
+        ? {
+            key: await readFile(new URL('./fixtures/tls-key.pem', import.meta.url)),
+            cert: await readFile(new URL('./fixtures/tls-cert.pem', import.meta.url)),
+          }
+        : undefined;
       const spki = tls
         ? createHash('sha256')
             .update(new X509Certificate(tls.cert).publicKey.export({ type: 'spki', format: 'der' }))

@@ -7,6 +7,7 @@ pub const TARGET_VAULT_X: &str = "vault-x";
 pub const TARGET_APEX: &str = "apex";
 pub const TARGET_OWN: &str = "own";
 pub const TARGET_IDP: &str = "idp";
+pub const TARGET_IDP_STG: &str = "idp-stg";
 pub const TARGET_CHROME_NEWTAB: &str = "chrome-newtab";
 pub const TARGET_CHROME_NEW_TAB_PAGE: &str = "chrome-new-tab-page";
 pub const TARGET_CHROME_SETTINGS: &str = "chrome-settings";

@@ -89,6 +89,10 @@
     "idp": {
       "host": "ims-na1.adobelogin.com",
       "description": "Adobe IMS IdP credential origin"
+    },
+    "idp-stg": {
+      "host": "ims-na1-stg1.adobelogin.com",
+      "description": "Adobe IMS staging IdP credential origin"
     }
   },
   "variants": {
@@ -26731,7 +26735,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc\u2028fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
+            "source": "// slicc fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
             "worldName": "slicc-bound-ls-{tag}"
           },
           "as": "boundLs",
@@ -26743,7 +26747,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc\u2029fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
+            "source": "// slicc fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
             "worldName": "slicc-bound-ps-{tag}"
           },
           "as": "boundPs",
@@ -26779,7 +26783,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "\ufefffetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
+            "source": "﻿fetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
             "worldName": "slicc-bound-bom-{tag}"
           },
           "as": "boundBom",
@@ -32250,7 +32254,7 @@
           "as": "probe"
         }
       ],
-      "targets": ["idp"],
+      "targets": ["idp", "idp-stg"],
       "observe": {
         "live": {
           "means": "unguarded reader planted IdP cookies and storage and could read them back",
@@ -32293,6 +32297,15 @@
           "check": {
             "result": "probe",
             "path": "result.pageGetCookiesFiltered",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "partitionedCookieFiltered": {
+          "means": "a cookie on the ordinary host partitioned under the credential site (partitionKey.topLevelSite) is dropped or refused by every cookie read",
+          "check": {
+            "result": "probe",
+            "path": "result.partitionedCookieFiltered",
             "equals": true,
             "observer": "client"
           }
@@ -32342,6 +32355,24 @@
             "observer": "client"
           }
         },
+        "clearBrowserCookiesSurvived": {
+          "means": "after Network.clearBrowserCookies on the guarded client the unguarded reader still sees the credential-origin and Domain= parent cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.clearBrowserCookiesSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "storageClearCookiesSurvived": {
+          "means": "after Storage.clearCookies on the guarded client the unguarded reader still sees the credential-origin and Domain= parent cookies",
+          "check": {
+            "result": "probe",
+            "path": "result.storageClearCookiesSurvived",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "headersStripped": {
           "means": "Cookie and Set-Cookie headers for credential-origin traffic are stripped from ExtraInfo events",
           "check": {
@@ -32369,6 +32400,24 @@
             "observer": "client"
           }
         },
+        "domStorageSetRefused": {
+          "means": "DOMStorage.setDOMStorageItem on the credential origin and on the partitioned credential storageKey is refused or leaves no item",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageSetRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "domStorageRemoveRefused": {
+          "means": "DOMStorage.removeDOMStorageItem on the credential origin and on the partitioned credential storageKey is refused or leaves the planted item",
+          "check": {
+            "result": "probe",
+            "path": "result.domStorageRemoveRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "indexedDBRefused": {
           "means": "IndexedDB.requestDatabaseNames for a credential origin is refused or omits the planted DB",
           "check": {
@@ -32378,11 +32427,29 @@
             "observer": "client"
           }
         },
+        "indexedDBDeleteRefused": {
+          "means": "IndexedDB.deleteDatabase on the credential origin is refused or leaves the planted DB",
+          "check": {
+            "result": "probe",
+            "path": "result.indexedDBDeleteRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "cacheStorageRefused": {
           "means": "CacheStorage.requestCacheNames for a credential origin is refused or omits the planted cache",
           "check": {
             "result": "probe",
             "path": "result.cacheStorageRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "cacheStorageDeleteRefused": {
+          "means": "CacheStorage.deleteCache of the credential origin cache is refused or leaves the planted cache",
+          "check": {
+            "result": "probe",
+            "path": "result.cacheStorageDeleteRefused",
             "equals": true,
             "observer": "client"
           }
@@ -32401,6 +32468,15 @@
           "check": {
             "result": "probe",
             "path": "result.adobeComCookiesExportable",
+            "equals": true,
+            "observer": "client"
+          }
+        },
+        "adobeComPartitionedCookieExportable": {
+          "means": "a cookie on the ordinary host partitioned under adobe.com remains exportable through the guard",
+          "check": {
+            "result": "probe",
+            "path": "result.adobeComPartitionedCookieExportable",
             "equals": true,
             "observer": "client"
           }
@@ -32465,6 +32541,7 @@
           "live": true,
           "ordinaryCookiesExportable": true,
           "adobeComCookiesExportable": true,
+          "adobeComPartitionedCookieExportable": true,
           "adobeComStorageKeyExportable": true,
           "pageDrivable": true,
           "evaluateOk": true,
@@ -32477,18 +32554,26 @@
         "getAllCookiesFiltered": true,
         "storageGetCookiesFiltered": true,
         "pageGetCookiesFiltered": true,
+        "partitionedCookieFiltered": true,
         "setCookieRefused": true,
         "setCookiesRefused": true,
         "deleteCookiesRefused": true,
         "pageDeleteCookieRefused": true,
         "storageSetCookiesRefused": true,
+        "clearBrowserCookiesSurvived": true,
+        "storageClearCookiesSurvived": true,
         "headersStripped": true,
         "associatedCookiesStripped": true,
         "domStorageRefused": true,
+        "domStorageSetRefused": true,
+        "domStorageRemoveRefused": true,
         "indexedDBRefused": true,
+        "indexedDBDeleteRefused": true,
         "cacheStorageRefused": true,
+        "cacheStorageDeleteRefused": true,
         "ordinaryCookiesExportable": true,
         "adobeComCookiesExportable": true,
+        "adobeComPartitionedCookieExportable": true,
         "partitionedStorageKeyFiltered": true,
         "adobeComStorageKeyExportable": true,
         "pageDrivable": true,
@@ -32506,7 +32591,12 @@
         "control: a Domain=.adobe.com cookie stays exportable",
         "storageKey ^0 site part uses the same covering rule as partitionKey.topLevelSite; origin part before ^0 is exact host EQUALS",
         "probe: partitioned storageKey under adobelogin.com is refused or empty of planted keys",
-        "control: partitioned storageKey ^0 under adobe.com stays exportable"
+        "control: partitioned storageKey ^0 under adobe.com stays exportable",
+        "probe: a Domain=.adobelogin.com cookie and a cookie partitioned under adobelogin.com count as credential cookies for every read, header and delete check",
+        "control: a cookie partitioned under adobe.com stays exportable",
+        "probe: global Network.clearBrowserCookies and Storage.clearCookies must leave credential cookies in place (refused or filtered)",
+        "probe: the partitioned storageKey is the one Chrome reports for the planted cross-site iframe, proven by read-back; a guessed key never counts",
+        "the staging IdP ims-na1-stg1.adobelogin.com runs the same row as idp-stg"
       ]
     },
     {

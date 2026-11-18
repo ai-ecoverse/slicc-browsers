@@ -2409,7 +2409,9 @@ function variables(targets, target, side, slot, index) {
   vars.protectedTarget = targets[target];
   vars.target = side === 'control' ? vars.plain : targets[target];
   vars.targetHost = new URL(vars.target).hostname;
-  vars.idp = targets.idp ?? targets[target];
+  vars.idp = ['idp', 'idp-stg'].includes(target)
+    ? targets[target]
+    : (targets.idp ?? targets[target]);
   vars.responseOrigin = vars.target === vars.ordinary ? '*' : vars.ordinary;
   vars.own ??= vars.client;
   vars.beacon = beacon(vars.log, tag);

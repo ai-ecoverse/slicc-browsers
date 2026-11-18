@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { credentialExport } from '../../credential-export.mjs';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { judge } from '../../guard-driver.mjs';
 import { run } from '../../guard-runner.mjs';
@@ -15,7 +16,8 @@ const vectors = set.vectors.filter((v) => ids.includes(v.id));
 test('C7.credential-export enumerates the credential-export row', () => {
   assert.deepEqual(ids, ['C7.credential-export']);
   const vector = vectors[0];
-  assert.equal(vector.targets[0], 'idp');
+  assert.deepEqual(vector.targets, ['idp', 'idp-stg']);
+  assert.equal(set.targets['idp-stg'].host, 'ims-na1-stg1.adobelogin.com');
   assert.equal(vector.control.via, 'unguarded');
   assert.equal(vector.control.expected.getCookiesFiltered, undefined);
   assert.equal(vector.trigger[0].credentialExport, true);
@@ -41,6 +43,21 @@ test('C7.credential-export enumerates the credential-export row', () => {
     'result.adobeComStorageKeyExportable'
   );
   assert.equal(vector.expected.adobeComStorageKeyExportable, true);
+  for (const name of [
+    'partitionedCookieFiltered',
+    'clearBrowserCookiesSurvived',
+    'storageClearCookiesSurvived',
+    'domStorageSetRefused',
+    'domStorageRemoveRefused',
+    'indexedDBDeleteRefused',
+    'cacheStorageDeleteRefused',
+  ]) {
+    assert.equal(vector.observe[name].check.path, `result.${name}`);
+    assert.equal(vector.expected[name], true);
+    assert.equal(vector.control.expected[name], undefined);
+  }
+  assert.equal(vector.expected.adobeComPartitionedCookieExportable, true);
+  assert.equal(vector.control.expected.adobeComPartitionedCookieExportable, true);
   assert.equal(vector.observe.getResponseBody, undefined);
   assert.equal(vector.expected.residualEvaluateCookie, undefined);
 });
@@ -100,6 +117,7 @@ async function rows(mutants = {}) {
           seven: origin('seven.sliccy.ai'),
           vault: origin('vault.sliccy.ai'),
           idp: origin('ims-na1.adobelogin.com'),
+          'idp-stg': origin('ims-na1-stg1.adobelogin.com'),
           own: origin('client.example.test'),
           client: origin('client.example.test'),
           log: origin('log.example.test'),
@@ -114,11 +132,12 @@ async function rows(mutants = {}) {
 
 test('a credential-export guard passes control and guarded', async () => {
   const execution = await rows();
-  assert.equal(execution.results.length, 1);
-  const row = execution.results[0];
-  assert.equal(row.control, 'pass', JSON.stringify(row));
-  assert.equal(row.guarded, 'pass', JSON.stringify(row));
-  assert.equal(row.live, 'pass', JSON.stringify(row));
+  assert.deepEqual(execution.results.map((row) => row.target).sort(), ['idp', 'idp-stg']);
+  for (const row of execution.results) {
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+  }
   assert.equal(execution.summary().pass, true);
 });
 
@@ -143,14 +162,18 @@ test('without an unguarded observer the row skips', async () => {
           seven: origin('seven.sliccy.ai'),
           vault: origin('vault.sliccy.ai'),
           idp: origin('ims-na1.adobelogin.com'),
+          'idp-stg': origin('ims-na1-stg1.adobelogin.com'),
           own: origin('client.example.test'),
           client: origin('client.example.test'),
           log: origin('log.example.test'),
         },
       }
     );
-    assert.equal(execution.results[0].control, 'skip');
-    assert.equal(execution.results[0].reason, 'not-supported:unguarded-observer');
+    assert.equal(execution.results.length, 2);
+    for (const row of execution.results) {
+      assert.equal(row.control, 'skip');
+      assert.equal(row.reason, 'not-supported:unguarded-observer');
+    }
   } finally {
     await fixture.close();
   }
@@ -164,6 +187,8 @@ const mutants = [
   ['leakIndexedDB', { leakIndexedDB: true }],
   ['leakCacheStorage', { leakCacheStorage: true }],
   ['leakHeaders', { leakHeaders: true }],
+  ['allowStorageMutation', { allowStorageMutation: true }],
+  ['allowClear', { allowClear: true }],
   ['blockOrdinaryCookies', { blockOrdinaryCookies: true }],
   ['refuseIdpAttach', { refuseIdpAttach: true }],
   ['disabled', { disabled: true }],
@@ -195,6 +220,14 @@ test('judge fails when credential cookies leak', () => {
       getAllCookiesFiltered: true,
       storageGetCookiesFiltered: true,
       pageGetCookiesFiltered: true,
+      partitionedCookieFiltered: true,
+      clearBrowserCookiesSurvived: true,
+      storageClearCookiesSurvived: true,
+      domStorageSetRefused: true,
+      domStorageRemoveRefused: true,
+      indexedDBDeleteRefused: true,
+      cacheStorageDeleteRefused: true,
+      adobeComPartitionedCookieExportable: true,
       setCookieRefused: true,
       setCookiesRefused: true,
       deleteCookiesRefused: true,
@@ -215,4 +248,52 @@ test('judge fails when credential cookies leak', () => {
     }).pass,
     false
   );
+});
+
+async function probe(browser, mutants = {}) {
+  const { client, unguarded } = credentialGuard(browser, {
+    credentialOrigins: catalog.credentialOrigins,
+    mutants,
+  });
+  const notes = [];
+  const result = await credentialExport({
+    client,
+    reader: unguarded,
+    credentialOrigin: 'http://ims-na1-stg1.adobelogin.com:1',
+    ordinary: 'http://ordinary.example.test:1',
+    tag: 'probe',
+    notes,
+  });
+  const partitioned = JSON.parse(
+    notes.find((entry) => entry.startsWith('partitioned: ')).slice('partitioned: '.length)
+  );
+  return { result, partitioned };
+}
+
+test('the partitioned storageKey is the frame-reported key, proven by read-back', async () => {
+  const { result, partitioned } = await probe(credentialBrowser());
+  assert.equal(partitioned.adobeloginPartitionProven, true);
+  assert.equal(
+    partitioned.adobeloginReportedKey,
+    'http://ordinary.example.test:1/^0http://adobelogin.com^31'
+  );
+  assert.equal(partitioned.adobeloginStorageKey, partitioned.adobeloginReportedKey);
+  assert.equal(partitioned.adobeComStorageKey, partitioned.adobeComReportedKey);
+  assert.equal(partitioned.partitionedCredentialProven, true);
+  assert.equal(result.partitionedStorageKeyFiltered, true);
+  assert.equal(result.adobeComStorageKeyExportable, true);
+  assert.equal(result.partitionedCookieFiltered, true);
+  assert.equal(result.adobeComPartitionedCookieExportable, true);
+  assert.equal(result.clearBrowserCookiesSurvived, true);
+  assert.equal(result.storageClearCookiesSurvived, true);
+  assert.deepEqual(result.skips, []);
+});
+
+test('an insecure context leaves the Cache API unplanted and its observations unmeasured', async () => {
+  const { result } = await probe(credentialBrowser({ secure: false }));
+  assert.equal(result.live, true);
+  assert.equal(result.cacheStorageRefused, 'incomplete');
+  assert.equal(result.cacheStorageDeleteRefused, 'incomplete');
+  assert.equal(result.domStorageSetRefused, true);
+  assert.equal(result.indexedDBDeleteRefused, true);
 });

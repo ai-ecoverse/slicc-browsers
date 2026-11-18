@@ -20,6 +20,7 @@ const (
 	GuardTargetApex                = "apex"
 	GuardTargetOwn                 = "own"
 	GuardTargetIdp                 = "idp"
+	GuardTargetIdpStg              = "idp-stg"
 	GuardTargetChromeNewtab        = "chrome-newtab"
 	GuardTargetChromeNewTabPage    = "chrome-new-tab-page"
 	GuardTargetChromeSettings      = "chrome-settings"

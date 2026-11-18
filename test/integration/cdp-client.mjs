@@ -345,5 +345,6 @@ export function origins(fixture) {
     client: origin('client.example.test'),
     log: origin('log.example.test'),
     idp: origin('ims-na1.adobelogin.com'),
+    'idp-stg': origin('ims-na1-stg1.adobelogin.com'),
   };
 }

@@ -257,6 +257,7 @@ function emulatedGuardPlain(browser, options = {}) {
   const shields = new Map();
   const readyShields = new Map();
   const sessions = new Map();
+  const leakedSessions = new Set();
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();
@@ -1112,7 +1113,8 @@ function emulatedGuardPlain(browser, options = {}) {
         (await decision(params.targetId)) ||
         (underParent &&
           !options.allowProtectedParentAttach &&
-          !(options.protectedParentPages && options.refuseChildEnableAllowAttach))
+          !(options.protectedParentPages && options.refuseChildEnableAllowAttach) &&
+          !options.leakProtectedIframeAttach)
       )
         throw catalog.unparseable(targetInfo.url)
           ? new Error(options.protectedOrigins.unparseableRefusal)
@@ -1139,10 +1141,14 @@ function emulatedGuardPlain(browser, options = {}) {
                 catalog.url(top.securityOrigin) &&
                 !allowExtension(top.securityOrigin)));
           if (topProtected) throw refusal('protected frame');
-          targetBlocked.set(
-            params.targetId,
-            collectProtectedDescendantIds(frameTree, catalog, options)
-          );
+          const blocked = collectProtectedDescendantIds(frameTree, catalog, options);
+          targetBlocked.set(params.targetId, blocked);
+          if (
+            options.refuseTopPageAttach &&
+            targetInfo.type === 'page' &&
+            (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0)
+          )
+            throw new Error("slicc: refused: target is on seven's origin");
         } else if (protectedFrame(frameTree)) throw refusal('protected frame');
         const start = unguarded.events.length;
         await unguarded.send(
@@ -1171,6 +1177,12 @@ function emulatedGuardPlain(browser, options = {}) {
             if (info.targetId) blocked.ids.add(info.targetId);
           }
           targetBlocked.set(params.targetId, blocked);
+          if (
+            options.refuseTopPageAttach &&
+            targetInfo.type === 'page' &&
+            (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0)
+          )
+            throw new Error("slicc: refused: target is on seven's origin");
         } else if (
           frames.some(
             (event) =>
@@ -1263,6 +1275,38 @@ function emulatedGuardPlain(browser, options = {}) {
     }
     forwarded.push({ method, params: forward, sessionId, sentAt: Date.now() });
     const result = await client.send(method, forward, sessionId);
+    if (
+      options.leakAttachedToTarget &&
+      catalog &&
+      method === 'Target.setAutoAttach' &&
+      params?.autoAttach
+    ) {
+      const listed = await unguarded.send('Target.getTargets').catch(() => null);
+      for (const info of listed?.targetInfos ?? []) {
+        if (info.type !== 'iframe') continue;
+        if (!(await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
+          continue;
+        const attached = await unguarded
+          .send('Target.attachToTarget', { targetId: info.targetId, flatten: true })
+          .catch(() => null);
+        const sessionId = attached?.sessionId ?? `leak-${info.targetId}`;
+        if (attached?.sessionId) {
+          sessions.set(sessionId, info.targetId);
+          leakedSessions.add(sessionId);
+        }
+        let targetInfo = rewriteIframeInfo(info, options);
+        if (options.syntheticLeakedAttachTargetId)
+          targetInfo = { ...targetInfo, targetId: `synthetic-${info.targetId}` };
+        events.push({
+          method: 'Target.attachedToTarget',
+          params: {
+            sessionId,
+            targetInfo,
+            waitingForDebugger: false,
+          },
+        });
+      }
+    }
     if (method === 'Page.startScreencast' && sessionId) casting.add(sessionId);
     if (method === 'Page.stopScreencast' && sessionId) {
       casting.delete(sessionId);
@@ -1334,12 +1378,42 @@ function emulatedGuardPlain(browser, options = {}) {
           throw refusal('protected frame');
       }
     }
+    if (
+      options.protectedParentPages &&
+      catalog &&
+      options.refuseTopPageEnable &&
+      sessionId &&
+      (method === 'Page.enable' || method === 'Runtime.enable')
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && pages.has(owner)) {
+        const blocked = targetBlocked.get(owner) ?? sessionBlocked.get(sessionId);
+        if (blocked && (blocked.ids.size > 0 || blocked.urls.size > 0 || blocked.midIds.size > 0))
+          throw refusal('protected tab');
+      }
+    }
+    if (
+      options.refuseOrdinaryPageAutoAttach &&
+      method === 'Target.setAutoAttach' &&
+      params?.autoAttach &&
+      sessionId
+    ) {
+      const owner = sessions.get(sessionId) ?? ownerOf(sessionId);
+      if (owner && pages.has(owner)) {
+        const blocked = targetBlocked.get(owner) ?? sessionBlocked.get(sessionId);
+        if (
+          !blocked ||
+          (blocked.ids.size === 0 && blocked.urls.size === 0 && blocked.midIds.size === 0)
+        )
+          throw refusal('ordinary page auto-attach');
+      }
+    }
     if (method === 'Target.getTargetInfo' && catalog) {
       const info = result.targetInfo;
       if (
         info &&
         (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)) &&
-        options.redactIframeUrlKeepId
+        (options.redactIframeUrlKeepId || options.leakProtectedIframeTargetInfo)
       )
         return { ...result, targetInfo: rewriteIframeInfo(info, options) };
       if (info && (await iframeAncestorProtected(unguarded, catalog, info, options, decisions)))
@@ -1358,8 +1432,10 @@ function emulatedGuardPlain(browser, options = {}) {
         const underParent = catalog
           ? await iframeAncestorProtected(unguarded, catalog, info, options, decisions)
           : false;
-        if (underParent && options.redactIframeUrlKeepId) {
-          visible.push(rewriteIframeInfo(info, options));
+        if (underParent && (options.redactIframeUrlKeepId || options.leakProtectedIframeTargets)) {
+          visible.push(
+            options.leakProtectedIframeTargets ? info : rewriteIframeInfo(info, options)
+          );
           continue;
         }
         if (underParent) continue;
@@ -1401,6 +1477,7 @@ function emulatedGuardPlain(browser, options = {}) {
         for (const child of node.childFrames ?? []) learn(child, node.frame.id);
       };
       learn(result.frameTree, undefined);
+      if (sessionId && leakedSessions.has(sessionId)) return result;
       return {
         ...result,
         frameTree: scrubProtectedDescendantTree(result.frameTree, catalog, options),
@@ -1480,6 +1557,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
   const shields = new Map();
   const readyShields = new Map();
   const sessions = new Map();
+  const leakedSessions = new Set();
   const decisions = new Map();
   const frames = new Map();
   const navigating = new Set();

@@ -34047,6 +34047,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-iframes.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-iframes.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-iframes.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -34069,7 +34103,10 @@
           "childEnableRefused": false,
           "targetInfo": false,
           "childAttach": false,
-          "targetEvents": false
+          "targetEvents": false,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -34082,11 +34119,16 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
       "designDependent": [
         "midFrameAttached",
-        "childEnableRefused"
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
       ]
     },
     {
@@ -34207,6 +34249,40 @@
             "observer": "client"
           },
           "absencePoll": true
+        },
+        "topEnableRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Page.enable or Runtime.enable on the ordinary TOP page session was refused with the guard error text, session id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topEnableRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "topAttachRefused": {
+          "means": "C3.protected-parent-srcdoc.page: Target.attachToTarget on the ordinary TOP page was refused with the guard error text, target id and call name",
+          "check": {
+            "result": "probe",
+            "path": "result.topAttachRefused",
+            "equals": {
+              "$regex": "slicc: refused:"
+            },
+            "observer": "client"
+          },
+          "absencePoll": true
+        },
+        "overBlocked": {
+          "means": "C3.protected-parent-srcdoc.page: after a top-session refusal the inline ordinary-nest control through the same guard failed (protection by over-blocking)",
+          "check": {
+            "result": "probe",
+            "path": "result.overBlocked",
+            "equals": true,
+            "observer": "client"
+          },
+          "absencePoll": true
         }
       },
       "live": "the unguarded reader opened the ordinary top page and saw the grandchild frame",
@@ -34228,7 +34304,10 @@
           "childEnableRefused": false,
           "targetInfo": true,
           "childAttach": true,
-          "targetEvents": true
+          "targetEvents": true,
+          "topEnableRefused": false,
+          "topAttachRefused": false,
+          "overBlocked": false
         }
       },
       "expected": {
@@ -34240,11 +34319,16 @@
         "childEnableRefused": "either",
         "targetInfo": false,
         "childAttach": false,
-        "targetEvents": false
+        "targetEvents": false,
+        "topEnableRefused": "either",
+        "topAttachRefused": "either",
+        "overBlocked": false
       },
       "designDependent": [
         "midFrameAttached",
-        "childEnableRefused"
+        "childEnableRefused",
+        "topEnableRefused",
+        "topAttachRefused"
       ]
     },
     {
@@ -35017,7 +35101,7 @@
       ],
       "setup": [
         {
-          "text": "a top-level navigation paused on Fetch or legacy Network interception is answered with Set-Cookie Domain=.<protected host> (seven, vault); the raw leg proves Chrome stores it (unguarded Storage.getCookies / Network.getAllCookies); a guarded client must not plant it via Fetch.fulfillRequest (array, object, lower-case, Set-Cookie2, newline-joined, binaryResponseHeaders), Fetch.continueResponse, Network.continueInterceptedRequest (rawResponse variants), or 3xx+Location+Set-Cookie; ordinary Set-Cookie, sid=; Max-Age=0 deletion, and Domain=.adobe.com stay allowed; credential-domain Domain=.adobelogin.com is a follow-up after catalog.credentialOrigins"
+          "text": "a top-level navigation paused on Fetch or legacy Network interception is answered with Set-Cookie Domain=.<protected host> (seven, vault); the raw leg proves Chrome stores it (unguarded Storage.getCookies / Network.getAllCookies); a guarded client must not plant it via Fetch.fulfillRequest (array, object, lower-case, binaryResponseHeaders), Network.continueInterceptedRequest (rawResponse variants), or 3xx+Location+Set-Cookie; Set-Cookie2, newline-joined Set-Cookie, and Fetch.continueResponse are answered but do not plant in Chrome; ordinary Set-Cookie, sid=; Max-Age=0 deletion, and Domain=.adobe.com stay allowed; credential-domain Domain=.adobelogin.com is a follow-up after catalog.credentialOrigins"
         },
         {
           "page": "tab",
@@ -35150,7 +35234,7 @@
           ]
         },
         "fulfillSetCookie2Planted": {
-          "means": "C10.cookie-plant: unguarded jar holds the fulfillSetCookie2 Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: Chrome does not store the fulfillSetCookie2 Domain=.<protected host> encoding",
           "check": {
             "result": "probe",
             "path": "result.fulfillSetCookie2Planted",
@@ -35187,7 +35271,7 @@
           ]
         },
         "fulfillNewlinePlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the fulfillNewline Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: Chrome does not store the fulfillNewline Domain=.<protected host> encoding",
           "check": {
             "result": "probe",
             "path": "result.fulfillNewlinePlanted",
@@ -35261,7 +35345,7 @@
           ]
         },
         "continueResponsePlanted": {
-          "means": "C10.cookie-plant: unguarded jar holds the continueResponse Domain=.<protected host> plant",
+          "means": "C10.cookie-plant: Chrome does not store the continueResponse Domain=.<protected host> encoding",
           "check": {
             "result": "probe",
             "path": "result.continueResponsePlanted",
@@ -35504,16 +35588,16 @@
           "fulfillLowerPlanted": true,
           "fulfillLowerAnswered": true,
           "fulfillLowerRefused": "either",
-          "fulfillSetCookie2Planted": true,
+          "fulfillSetCookie2Planted": false,
           "fulfillSetCookie2Answered": true,
           "fulfillSetCookie2Refused": "either",
-          "fulfillNewlinePlanted": true,
+          "fulfillNewlinePlanted": false,
           "fulfillNewlineAnswered": true,
           "fulfillNewlineRefused": "either",
           "fulfillBinaryPlanted": true,
           "fulfillBinaryAnswered": true,
           "fulfillBinaryRefused": "either",
-          "continueResponsePlanted": true,
+          "continueResponsePlanted": false,
           "continueResponseAnswered": true,
           "continueResponseRefused": "either",
           "redirect3xxPlanted": true,

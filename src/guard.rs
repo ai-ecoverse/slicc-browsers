@@ -42,6 +42,7 @@ pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
 pub const CAP_SIGN_IN_HOLD: &str = "signInHold";
 pub const CAP_IFRAME_AUTO_ATTACH: &str = "iframeAutoAttach";
+pub const CAP_ERROR_FRAME_CLASS: &str = "errorFrameClass";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";

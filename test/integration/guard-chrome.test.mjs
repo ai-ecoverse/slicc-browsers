@@ -12,6 +12,7 @@ const capabilities = {
   browserSession: true,
   browserContexts: true,
   chromeUrlsAttach: true,
+  errorFrameClass: true,
 };
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const browserUiIds = ['C8.browser-ui-listed', 'C8.browser-ui-attach'];

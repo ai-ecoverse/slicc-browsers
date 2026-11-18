@@ -45,6 +45,7 @@ export const capabilities = {
   closeProtected: true,
   signInHold: true,
   iframeAutoAttach: true,
+  errorFrameClass: true,
 };
 
 export const drivable = new Set([

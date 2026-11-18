@@ -56,6 +56,7 @@ const (
 	GuardCapCloseProtected   = "closeProtected"
 	GuardCapSignInHold       = "signInHold"
 	GuardCapIframeAutoAttach = "iframeAutoAttach"
+	GuardCapErrorFrameClass  = "errorFrameClass"
 	GuardObserverWatch       = "watch"
 	GuardObserverFail        = "fail"
 	GuardClientExit          = "exit"

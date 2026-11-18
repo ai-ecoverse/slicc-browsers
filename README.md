@@ -232,6 +232,7 @@ You supply:
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
 | `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
+| `errorFrameClass` | tell whether a failed (error) iframe was loading a protected URL, without being given the URL (for example from `unreachableUrl` in `Page.getFrameTree`, or a transport boolean) |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |

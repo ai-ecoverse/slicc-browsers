@@ -370,27 +370,50 @@ async function measureClient({
   return result;
 }
 
-async function rawReadable(reader, targetId, mark, notes) {
+async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
   const attached = await outcome(reader.send('Target.attachToTarget', { targetId, flatten: true }));
   if (!attached.ok || !attached.result?.sessionId)
     return { readable: false, reason: `raw attach failed: ${attached.error?.message}` };
   const sessionId = attached.result.sessionId;
   await outcome(reader.send('Runtime.enable', {}, sessionId));
-  const read = await outcome(
-    reader.send(
-      'Runtime.evaluate',
-      {
-        expression: 'document.title + " " + (document.body && document.body.innerText)',
-        returnByValue: true,
-      },
-      sessionId
-    )
-  );
+  const readOnce = async () => {
+    const ready = await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        { expression: 'document.readyState', returnByValue: true },
+        sessionId
+      )
+    );
+    const committed = ready.ok && ['interactive', 'complete'].includes(ready.result?.result?.value);
+    const read = await outcome(
+      reader.send(
+        'Runtime.evaluate',
+        {
+          expression: 'document.title + " " + (document.body && document.body.innerText)',
+          returnByValue: true,
+        },
+        sessionId
+      )
+    );
+    const text = read.ok ? String(read.result?.result?.value ?? '') : '';
+    const readable = Boolean(committed && mark && text.includes(mark));
+    return { readable, text };
+  };
+  let result = await readOnce();
+  if (!result.readable && waitMs > 0) {
+    const found = await until(async () => {
+      const next = await readOnce();
+      return next.readable ? next : null;
+    }, waitMs);
+    if (found) result = found;
+  }
   await outcome(reader.send('Target.detachFromTarget', { sessionId }));
-  const text = read.ok ? String(read.result?.result?.value ?? '') : '';
-  const readable = Boolean(mark && text.includes(mark));
-  note(notes, 'sign-in-hold.raw-read', { targetId, readable, text: text.slice(0, 120) });
-  return { readable, text };
+  note(notes, 'sign-in-hold.raw-read', {
+    targetId,
+    readable: result.readable,
+    text: result.text.slice(0, 120),
+  });
+  return result;
 }
 
 function holdExpression(control, ordinary, tag, marker, heldUrl) {
@@ -616,7 +639,7 @@ async function callbackTab({
       targetId,
     };
 
-  const { readable } = await rawReadable(reader, targetId, mark, notes);
+  const { readable } = await rawReadable(reader, targetId, mark, notes, Math.min(budget, 3000));
   if (!readable)
     return {
       live: false,

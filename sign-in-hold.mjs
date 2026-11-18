@@ -25,8 +25,8 @@ function note(notes, label, evidence) {
   notes.push(`${label}: ${JSON.stringify(evidence)}`);
 }
 
-function authorizeUrl(idp, redirect) {
-  return `${idp}/ims/authorize/v2?client_id=any&redirect_uri=${redirect}&response_type=token`;
+function authorizeUrl(idp, redirect, clientId = 'any') {
+  return `${idp}/ims/authorize/v2?client_id=${clientId}&redirect_uri=${redirect}&response_type=token`;
 }
 
 function callbackRedirect(mode) {
@@ -579,10 +579,17 @@ async function callbackTab({
   control,
 }) {
   const mark = BODY;
-  const redirect = control ? encodeURIComponent(`${ordinary}/cb`) : callbackRedirect(mode);
-  if (!redirect && !control) return { incomplete: `unknown callback mode ${mode}` };
-  const url = authorizeUrl(idp, redirect);
-  note(notes, 'sign-in-hold.callback-url', { url, control: Boolean(control), mode });
+  const ordinaryAuthorize = control || mode === 'ordinary-authorize';
+  const redirect = ordinaryAuthorize
+    ? encodeURIComponent(`${ordinary}/cb`)
+    : callbackRedirect(mode);
+  if (!redirect && !ordinaryAuthorize) return { incomplete: `unknown callback mode ${mode}` };
+  const url = authorizeUrl(idp, redirect, ordinaryAuthorize ? 'other' : 'any');
+  note(notes, 'sign-in-hold.callback-url', {
+    url,
+    control: Boolean(ordinaryAuthorize),
+    mode,
+  });
 
   const created = await outcome(reader.send('Target.createTarget', { url, background: true }));
   if (!created.ok)
@@ -676,7 +683,7 @@ export async function signInHold({
           eventStart,
           control: control || mode === 'ordinary-popup',
         })
-      : String(mode).startsWith('callback')
+      : String(mode).startsWith('callback') || mode === 'ordinary-authorize'
         ? await callbackTab({
             reader,
             client,
@@ -689,7 +696,7 @@ export async function signInHold({
             discovery,
             internalSessions,
             eventStart,
-            control,
+            control: control || mode === 'ordinary-authorize',
           })
         : { incomplete: `unknown signInHold mode ${mode}` };
 

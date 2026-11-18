@@ -243,7 +243,7 @@ You supply:
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
 
 ### Reading the result
 

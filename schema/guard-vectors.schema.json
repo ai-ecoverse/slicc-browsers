@@ -629,7 +629,8 @@
                 "callback",
                 "callback-encoded",
                 "callback-origin",
-                "ordinary-popup"
+                "ordinary-popup",
+                "ordinary-authorize"
               ]
             },
             "as": {

@@ -23,7 +23,9 @@ function castTransport({
   emitDuringTargets = false,
   emitLateAfterInsert = false,
   emitLateContent = false,
+  emitStartFrame = true,
   hangPaint = false,
+  hangPaintAfterInsert = false,
   hangAck = false,
   failAck = false,
   embedLoads = true,
@@ -50,7 +52,7 @@ function castTransport({
   };
   const evaluate = async (expression) => {
     if (expression.includes('sliccCastTick') || expression.includes('--slicc-cast-tick')) {
-      if (hangPaint) await new Promise(() => {});
+      if (hangPaint || (hangPaintAfterInsert && inserted)) await new Promise(() => {});
       if (!inserted && emitBeforeInsert && castSession != null) pushFrame(castSession);
       if (inserted && emitAfterInsert && castSession != null) pushFrame(castSession);
       if (inserted && (emitLateAfterInsert || emitLateContent) && castSession != null) {
@@ -152,7 +154,7 @@ function castTransport({
     if (method === 'Page.printToPDF') return { data: 'pdf' };
     if (method === 'Page.startScreencast') {
       castSession = sessionId;
-      if (emitBeforeInsert) pushFrame(sessionId);
+      if (emitBeforeInsert && emitStartFrame) pushFrame(sessionId);
       return {};
     }
     if (method === 'Page.screencastFrameAck') {
@@ -256,6 +258,25 @@ test('a stalled cast whose paint cannot be confirmed is incomplete', async () =>
   });
   const result = await probe(transport);
   assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.equal(result.castLeak, undefined, JSON.stringify(result));
+  assert.equal(result.castStopped, undefined, JSON.stringify(result));
+  assert.match(
+    result.incomplete ?? '',
+    /cast stalled: no frame after insertion and paint was not confirmed/
+  );
+});
+
+test('a pre-insertion paint alone does not pass without post-insertion confirmation', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    emitStartFrame: false,
+    hangPaintAfterInsert: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
   assert.equal(result.castLeak, undefined, JSON.stringify(result));
   assert.equal(result.castStopped, undefined, JSON.stringify(result));
   assert.match(

@@ -963,7 +963,9 @@ function castExplicitStop(client, page, state, from = 0) {
       .slice(from)
       .some(
         (event) =>
-          (event.method === 'Inspector.detached' && event.params?.reason) ||
+          (event.method === 'Inspector.detached' &&
+            event.sessionId === page &&
+            event.params?.reason) ||
           (event.method === 'Target.detachedFromTarget' && event.params?.sessionId === page)
       )
   );
@@ -1130,6 +1132,10 @@ async function driveCast(
       await ackCastFrames(client, page, state);
       framesBefore = castFrameEvents(client, page).length;
       leakFrom = client.events?.length ?? 0;
+      state.paintConfirmed = false;
+      state.paintAt = undefined;
+      state.repaintToFrameMs = undefined;
+      state.ackRefused = false;
     },
     async afterEmbed({ inserted }) {
       pumping = false;
@@ -1165,6 +1171,10 @@ async function driveCast(
         await ackCastFrames(client, page, state);
         framesBefore = castFrameEvents(client, page).length;
         leakFrom = client.events?.length ?? 0;
+        state.paintConfirmed = false;
+        state.paintAt = undefined;
+        state.repaintToFrameMs = undefined;
+        state.ackRefused = false;
       }
       const frames = await waitCastWindow(client, page, state, leakFrom, waitMs, frameMs);
       const contentLeak = castContentOf(frames);
@@ -1247,7 +1257,6 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
   noteCastFields(result, castDrive, castAfter);
   const inserted = Boolean(castAfter.castInserted);
   const leaked = Boolean(castAfter.castLeak || castAfter.castContentLeak);
-  const paintConfirmed = Boolean(castAfter.paintConfirmed);
   const stopped = Boolean(castAfter.castStopped);
   if (!castDrive.castBefore || !inserted) {
     result.castLeak = false;
@@ -1274,7 +1283,7 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
     return;
   }
   if (castAckMissing(castAfter, missing)) return;
-  if (stopped || paintConfirmed) {
+  if (stopped) {
     result.castLeak = false;
     result.castStopped = true;
     return;

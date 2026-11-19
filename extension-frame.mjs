@@ -1249,6 +1249,10 @@ function castAckMissing(castAfter, missing) {
   return false;
 }
 
+function castRefusedStart(result, castDrive) {
+  return Boolean(result.castRefusal) || Boolean(castDrive.castBeforeRefusal);
+}
+
 function applyCastResult(result, castDrive, castAfter, side, missing) {
   if (!castDrive) return;
   noteCastFields(result, castDrive, castAfter);
@@ -1256,7 +1260,12 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
   const leaked = Boolean(castAfter.castLeak);
   const stopped = Boolean(castAfter.castStopped);
   const stoppedExplicit = Boolean(castAfter.castStoppedExplicit);
-  if (!castDrive.castBefore || !inserted) {
+  if (!castDrive.castBefore) {
+    result.castLeak = false;
+    result.castStopped = castRefusedStart(result, castDrive);
+    return;
+  }
+  if (!inserted) {
     result.castLeak = false;
     result.castStopped = false;
     return;
@@ -1285,8 +1294,13 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
     return;
   }
   if (castAckMissing(castAfter, missing)) return;
+  if (castRefusedStart(result, castDrive) || stoppedExplicit) {
+    result.castLeak = false;
+    result.castStopped = true;
+    return;
+  }
   if (stopped) {
-    if (!stoppedExplicit && !(result.castFramesBefore > 0)) {
+    if (!(result.castFramesBefore > 0)) {
       missing.push(CAST_NEVER_STREAMED);
       return;
     }

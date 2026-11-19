@@ -28,6 +28,7 @@ function castTransport({
   hangAck = false,
   failAck = false,
   noObserver = false,
+  refuseStartScreencast = false,
   embedLoads = true,
 } = {}) {
   const sessions = new Map();
@@ -154,6 +155,10 @@ function castTransport({
     if (method === 'Page.captureSnapshot') return { data: 'mhtml' };
     if (method === 'Page.printToPDF') return { data: 'pdf' };
     if (method === 'Page.startScreencast') {
+      if (refuseStartScreencast)
+        throw new Error(
+          'slicc: refused: this tab holds a browser extension frame so it cannot be streamed'
+        );
       castSession = sessionId;
       if (emitBeforeInsert && emitStartFrame) pushFrame(sessionId);
       return {};
@@ -263,6 +268,51 @@ test('a cast that never streamed before insertion is incomplete', async () => {
   assert.equal(result.castLeak, undefined, JSON.stringify(result));
   assert.equal(result.castStopped, undefined, JSON.stringify(result));
   assert.match(result.incomplete ?? '', /cast never streamed before the insertion/);
+});
+
+test('a refused startScreencast passes without pre-insertion frames', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: false,
+    emitAfterInsert: false,
+    refuseStartScreencast: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castBefore, false, JSON.stringify(result));
+  assert.ok(result.castBeforeRefusal || result.castRefusal, JSON.stringify(result));
+  assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('a post-insertion castRefusal passes a never-streamed silent stop', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: false,
+    emitAfterInsert: false,
+  });
+  const start = transport.client.send;
+  let starts = 0;
+  transport.client.send = async (method, params, sessionId) => {
+    if (method === 'Page.startScreencast') {
+      starts += 1;
+      if (starts > 1)
+        throw new Error(
+          'slicc: refused: this tab holds a browser extension frame so it cannot be streamed'
+        );
+    }
+    return start(method, params, sessionId);
+  };
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.ok(result.castRefusal, JSON.stringify(result));
+  assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
 });
 
 test('a cast without an unguarded observer is incomplete', async () => {

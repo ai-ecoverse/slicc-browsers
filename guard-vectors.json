@@ -9081,7 +9081,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; both legs ack every Page.screencastFrame; the control proves frames before and after a forced paint and records repaint-to-frame latency; the guarded wait is at least 3× that latency (floor 1500ms) plus a drain; any post-insertion frame fails; a silent stop needs frames before insertion plus a confirmed post-insertion paint with none after; an explicit startScreencast refusal (castBeforeRefusal or castRefusal), ack refusal, or detach still passes without pre-frames; missing acks, no observer, never-streamed without those, or an unconfirmed paint are incomplete",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; both legs ack every Page.screencastFrame event (Chrome reuses params.sessionId per cast); the control proves frames before and after a forced paint and records repaint-to-frame latency; the guarded wait is at least 3× that latency (floor 1500ms) plus a drain; any post-insertion frame fails; a silent stop needs frames before insertion plus a confirmed post-insertion paint with none after; an explicit startScreencast refusal (castBeforeRefusal or castRefusal), ack refusal, or detach still passes without pre-frames; missing acks, no observer, never-streamed without those, a paint probe that times out (cannot confirm paint), or an unconfirmed paint are incomplete",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",

@@ -921,6 +921,7 @@ const CAST_ACK_INCOMPLETE = 'cast ack incomplete: frames received but not all ac
 const CAST_ACK_UNANSWERED = 'cast ack unanswered';
 const CAST_NEVER_STREAMED = 'cast never streamed before the insertion';
 const CAST_NO_OBSERVER = 'no unguarded observer to confirm the paint';
+const CAST_PAINT_INCOMPLETE = 'cannot confirm paint';
 const CAST_PAINT_MS = 500;
 const CAST_FLOOR_MS = 1500;
 const CAST_LATENCY_FACTOR = 3;
@@ -967,16 +968,18 @@ function castExplicitStop(client, page, state, from = 0) {
 }
 
 async function ackCastFrames(client, page, state) {
-  for (const event of client.events ?? []) {
+  const events = client.events ?? [];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
     if (event.method !== 'Page.screencastFrame' || event.sessionId !== page) continue;
-    const id = event.params?.sessionId;
-    if (typeof id !== 'number' || state.ackAttempted.has(id)) continue;
-    state.ackAttempted.add(id);
+    const sessionId = event.params?.sessionId;
+    if (typeof sessionId !== 'number' || state.ackAttempted.has(i)) continue;
+    state.ackAttempted.add(i);
     state.framesReceived += 1;
     let out;
     try {
       out = await Promise.race([
-        outcome(client.send('Page.screencastFrameAck', { sessionId: id }, page)),
+        outcome(client.send('Page.screencastFrameAck', { sessionId }, page)),
         pause(CAST_ACK_MS).then(() => null),
       ]);
     } catch {
@@ -987,12 +990,12 @@ async function ackCastFrames(client, page, state) {
       continue;
     }
     if (out.ok) {
-      state.acked.add(id);
+      state.acked.add(i);
       state.framesAcked += 1;
       continue;
     }
     if (presentish(out) === PRESENT) {
-      state.acked.add(id);
+      state.acked.add(i);
       state.framesAcked += 1;
       state.ackRefused = true;
       continue;
@@ -1007,16 +1010,19 @@ async function provokeCastPaint(reader, observer, state) {
     state.paintObserverMissing = true;
     return;
   }
+  let timedOut = false;
   try {
     await Promise.race([
       observe(reader, observer, CAST_TICK),
       pause(CAST_PAINT_MS).then(() => {
+        timedOut = true;
         throw new Error('cast paint timed out');
       }),
     ]);
     state.paintConfirmed = true;
     state.paintAt ??= Date.now();
   } catch {
+    if (timedOut) state.paintUnconfirmed = true;
     return;
   }
 }
@@ -1078,6 +1084,7 @@ async function driveCast(
     ackAttempted: new Set(),
     paintConfirmed: false,
     paintObserverMissing: false,
+    paintUnconfirmed: false,
     paintAt: undefined,
     repaintToFrameMs: undefined,
     ackRefused: false,
@@ -1129,6 +1136,7 @@ async function driveCast(
       framesBefore = castFrameEvents(client, page).length;
       leakFrom = client.events?.length ?? 0;
       state.paintConfirmed = false;
+      state.paintUnconfirmed = false;
       state.paintAt = undefined;
       state.repaintToFrameMs = undefined;
       state.ackRefused = false;
@@ -1141,6 +1149,7 @@ async function driveCast(
         framesAcked: state.framesAcked,
         ackUnanswered: state.ackUnanswered,
         paintObserverMissing: state.paintObserverMissing,
+        paintUnconfirmed: state.paintUnconfirmed,
         waitMs,
         repaintToFrameMs: state.repaintToFrameMs,
       });
@@ -1171,6 +1180,7 @@ async function driveCast(
         framesBefore = castFrameEvents(client, page).length;
         leakFrom = client.events?.length ?? 0;
         state.paintConfirmed = false;
+        state.paintUnconfirmed = false;
         state.paintAt = undefined;
         state.repaintToFrameMs = undefined;
         state.ackRefused = false;
@@ -1306,6 +1316,10 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
     }
     result.castLeak = false;
     result.castStopped = true;
+    return;
+  }
+  if (castAfter.paintUnconfirmed) {
+    missing.push(CAST_PAINT_INCOMPLETE);
     return;
   }
   missing.push(CAST_STALL);

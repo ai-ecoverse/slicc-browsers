@@ -244,7 +244,10 @@ You supply:
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (incl. callback-origin) without over-blocking ordinary ones |
+| `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); missing → not-supported, or incomplete if declared |
+
+`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
 
 ### Reading the result
 

@@ -46,6 +46,7 @@ export const capabilities = {
   signInHold: true,
   iframeAutoAttach: true,
   errorFrameClass: true,
+  jsonList: true,
 };
 
 export const drivable = new Set([

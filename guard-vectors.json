@@ -9069,9 +9069,18 @@
             "equals": true,
             "observer": "client"
           }
+        },
+        "castStopped": {
+          "means": "extension frame cast: the guard stopped or refused the screencast after the frame appeared (stop, visibility change, ack refusal, cut, or detach)",
+          "check": {
+            "result": "frame",
+            "path": "result.castStopped",
+            "equals": true,
+            "observer": "client"
+          }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; no Page.screencastFrame arrives after the frame appears (a refusal of Page.startScreencast on the clean tab also satisfies the row)",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; the control proves frames before and after insertion; the guarded leg passes only with positive stop evidence (refusal, stop, visibility change, cut, or detach) and no post-insertion frame (a refusal of Page.startScreencast on the clean tab also satisfies the row); a stall with neither a frame nor a stop signal is incomplete",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -9200,9 +9209,10 @@
         "describeNodeLeak": false,
         "outerHTMLLeak": false,
         "castBefore": "either",
-        "castLeak": false
+        "castLeak": false,
+        "castStopped": "either"
       },
-      "designDependent": ["frameTreeLeak", "axLeak", "castBefore"]
+      "designDependent": ["frameTreeLeak", "axLeak", "castBefore", "castStopped"]
     },
     {
       "id": "C1.script-nav",

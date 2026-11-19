@@ -662,12 +662,30 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
         for (const row of execution.results) {
           assert.equal(row.control, 'pass', JSON.stringify({ mode, row }));
           const want = expected(row.id);
-          if (want !== undefined) assert.equal(row.guarded, want, JSON.stringify({ mode, row }));
+          if (want !== undefined) {
+            if (mode === 'screencast keeps streaming' && want === 'fail')
+              assert.ok(
+                row.guarded === 'fail' || row.guarded === 'incomplete',
+                JSON.stringify({ mode, row })
+              );
+            else assert.equal(row.guarded, want, JSON.stringify({ mode, row }));
+          }
           if (row.guarded === 'pass') assert.equal(row.live, 'pass', JSON.stringify({ mode, row }));
           if (mode === 'catalog' && row.guarded === 'pass') {
             for (const key of ['archiveRefusal', 'pdfRefusal', 'castRefusal'])
               assert.equal(row.observations.guarded[key], true, `${row.id} ${key}`);
+            if (row.id === 'C9.frame-cast')
+              assert.equal(row.observations.guarded.castLeak, false, JSON.stringify(row));
           }
+          if (
+            mode === 'screencast keeps streaming' &&
+            row.guarded === 'incomplete' &&
+            Array.isArray(row.incomplete)
+          )
+            assert.match(
+              row.incomplete.join('; '),
+              /cast stalled: no frame after insertion and no stop signal/
+            );
         }
         assert.equal(execution.summary().pass, mode === 'catalog');
       } finally {

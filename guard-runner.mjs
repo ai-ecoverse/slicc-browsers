@@ -1125,6 +1125,8 @@ class Execution {
           extensionId: this.options.extensionFrameId ?? DEFAULT_EXTENSION_WORLD_ID,
           side: this.side,
           capabilities: this.options.capabilities,
+          notes: this.notes,
+          castControls: (this.clients.castControls ??= {}),
         })
       );
     if (step.guess) return this.guess(step.guess, session);

@@ -21,28 +21,55 @@ function castTransport({
   emitBeforeInsert = false,
   emitAfterInsert = false,
   emitDuringTargets = false,
+  emitLateAfterInsert = false,
+  emitStartFrame = true,
+  hangPaint = false,
+  hangPaintAfterInsert = false,
+  hangAck = false,
+  failAck = false,
+  noObserver = false,
+  refuseStartScreencast = false,
   embedLoads = true,
 } = {}) {
   const sessions = new Map();
   let next = 0;
+  let attaches = 0;
   let castSession;
   let frameSeq = 0;
+  let inserted = false;
+  let lateArmed = false;
+  let lateAt;
   const attach = (targetId) => {
     const sessionId = `S${++next}`;
     sessions.set(sessionId, targetId);
     return { sessionId };
   };
-  const pushFrame = (sessionId) => {
+  const pushFrame = (sessionId, data = 'frame') => {
     frameSeq += 1;
     client.events.push({
       method: 'Page.screencastFrame',
-      params: { data: 'frame', sessionId: frameSeq },
+      params: { data, sessionId: frameSeq },
       sessionId,
     });
   };
-  const evaluate = (expression) => {
+  const evaluate = async (expression) => {
+    if (expression.includes('sliccCastTick') || expression.includes('--slicc-cast-tick')) {
+      if (hangPaint || (hangPaintAfterInsert && inserted)) await new Promise(() => {});
+      if (!inserted && emitBeforeInsert && castSession != null) pushFrame(castSession);
+      if (inserted && emitAfterInsert && castSession != null) pushFrame(castSession);
+      if (inserted && emitLateAfterInsert && castSession != null) {
+        if (lateArmed) {
+          if (lateAt == null || Date.now() >= lateAt) pushFrame(castSession);
+        } else {
+          lateArmed = true;
+          lateAt = Date.now() + 30;
+        }
+      }
+      return { result: { type: 'number', value: 1 } };
+    }
     if (expression.includes('new Promise') && expression.includes('createElement')) {
       if (emitBeforeInsert && castSession != null) pushFrame(castSession);
+      inserted = true;
       return { result: { type: 'boolean', value: embedLoads } };
     }
     if (expression.includes('slicc-private-extension-frame-content')) {
@@ -67,7 +94,11 @@ function castTransport({
     return { result: { type: 'boolean', value: true } };
   };
   const send = async (method, params = {}, sessionId) => {
-    if (method === 'Target.attachToTarget') return attach(params.targetId);
+    if (method === 'Target.attachToTarget') {
+      attaches += 1;
+      if (noObserver && attaches === 1) return {};
+      return attach(params.targetId);
+    }
     if (method === 'Target.detachFromTarget') {
       sessions.delete(params.sessionId);
       return {};
@@ -124,10 +155,19 @@ function castTransport({
     if (method === 'Page.captureSnapshot') return { data: 'mhtml' };
     if (method === 'Page.printToPDF') return { data: 'pdf' };
     if (method === 'Page.startScreencast') {
+      if (refuseStartScreencast)
+        throw new Error(
+          'slicc: refused: this tab holds a browser extension frame so it cannot be streamed'
+        );
       castSession = sessionId;
+      if (emitBeforeInsert && emitStartFrame) pushFrame(sessionId);
       return {};
     }
-    if (method === 'Page.screencastFrameAck') return {};
+    if (method === 'Page.screencastFrameAck') {
+      if (hangAck) await new Promise(() => {});
+      if (failAck) throw new Error('ack transport failed');
+      return {};
+    }
     if (method === 'Page.stopScreencast') return {};
     if (method === 'HeadlessExperimental.beginFrame') return {};
     if (method.startsWith('Input.')) return {};
@@ -137,7 +177,7 @@ function castTransport({
   return { client, reader: client };
 }
 
-async function probe(transport, side = 'guarded') {
+async function probe(transport, { side = 'guarded', frameMs = 0, castControls, notes } = {}) {
   return extensionFrame({
     client: transport.client,
     reader: transport.reader,
@@ -146,19 +186,27 @@ async function probe(transport, side = 'guarded') {
     mode: 'cast',
     origin,
     extensionId,
-    frameMs: 0,
+    frameMs,
     inputMethods: [],
     side,
     capabilities,
+    castControls,
+    notes,
   });
 }
 
-test('a compliant cast drops a pre-insertion screencast frame', async () => {
-  const transport = castTransport({ emitBeforeInsert: true, emitAfterInsert: false });
-  const result = await probe(transport);
+test('a compliant cast that silently drops post-insertion frames passes', async () => {
+  const notes = [];
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+  });
+  const result = await probe(transport, { notes });
   assert.equal(result.castBefore, true, JSON.stringify(result));
   assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
   assert.equal(result.incomplete, undefined, JSON.stringify(result));
+  assert.match(notes.join('; '), /cast acked \d+ of \d+ frames/);
 });
 
 test('a mutant cast that emits after insertion still leaks', async () => {
@@ -177,10 +225,217 @@ test('a mutant cast that emits during target discovery still leaks', async () =>
   assert.equal(result.incomplete, undefined, JSON.stringify(result));
 });
 
+test('a late post-insertion frame after the wait window never passes', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitLateAfterInsert: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.notEqual(result.castLeak, false);
+  assert.notEqual(result.castStopped, true);
+  assert.ok(
+    result.castLeak === true || /incomplete|cast/.test(String(result.incomplete ?? '')),
+    JSON.stringify(result)
+  );
+});
+
+test('a late post-insertion frame in the drain fails', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitLateAfterInsert: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castLeak, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('a cast that never streamed before insertion is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: false,
+    emitAfterInsert: false,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castLeak, undefined, JSON.stringify(result));
+  assert.equal(result.castStopped, undefined, JSON.stringify(result));
+  assert.match(result.incomplete ?? '', /cast never streamed before the insertion/);
+});
+
+test('a refused startScreencast passes without pre-insertion frames', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: false,
+    emitAfterInsert: false,
+    refuseStartScreencast: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castBefore, false, JSON.stringify(result));
+  assert.ok(result.castBeforeRefusal || result.castRefusal, JSON.stringify(result));
+  assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('a post-insertion castRefusal passes a never-streamed silent stop', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: false,
+    emitAfterInsert: false,
+  });
+  const start = transport.client.send;
+  let starts = 0;
+  transport.client.send = async (method, params, sessionId) => {
+    if (method === 'Page.startScreencast') {
+      starts += 1;
+      if (starts > 1)
+        throw new Error(
+          'slicc: refused: this tab holds a browser extension frame so it cannot be streamed'
+        );
+    }
+    return start(method, params, sessionId);
+  };
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.ok(result.castRefusal, JSON.stringify(result));
+  assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('a cast without an unguarded observer is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    noObserver: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.match(result.incomplete ?? '', /no unguarded observer to confirm the paint/);
+});
+
+test('a stalled cast whose paint cannot be confirmed is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    hangPaint: true,
+  });
+  const result = await probe(transport);
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.equal(result.castLeak, undefined, JSON.stringify(result));
+  assert.equal(result.castStopped, undefined, JSON.stringify(result));
+  assert.match(
+    result.incomplete ?? '',
+    /cast stalled: no frame after insertion and paint was not confirmed/
+  );
+});
+
+test('a pre-insertion paint alone does not pass without post-insertion confirmation', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    emitStartFrame: false,
+    hangPaintAfterInsert: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.equal(result.castLeak, undefined, JSON.stringify(result));
+  assert.equal(result.castStopped, undefined, JSON.stringify(result));
+  assert.match(
+    result.incomplete ?? '',
+    /cast stalled: no frame after insertion and paint was not confirmed/
+  );
+});
+
+test('an unanswered screencast ack is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    hangAck: true,
+  });
+  const result = await probe(transport);
+  assert.match(result.incomplete ?? '', /cast ack unanswered/);
+});
+
+test('a failed screencast ack is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    failAck: true,
+  });
+  const result = await probe(transport);
+  assert.match(result.incomplete ?? '', /cast ack unanswered|cast ack incomplete/);
+});
+
+test('control without post-insertion frames is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+  });
+  const result = await probe(transport, { side: 'control' });
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.match(
+    result.incomplete ?? '',
+    /control screencast produced no frames after the extension frame appeared/
+  );
+});
+
+test('control proves frames before and after insertion and records latency', async () => {
+  const notes = [];
+  const castControls = {};
+  const transport = castTransport({ emitBeforeInsert: true, emitAfterInsert: true });
+  const result = await probe(transport, { side: 'control', notes, castControls });
+  assert.equal(result.castBefore, true, JSON.stringify(result));
+  assert.ok(result.castFramesBefore > 0, JSON.stringify(result));
+  assert.equal(result.castLeak, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+  assert.equal(typeof castControls.repaintToFrameMs, 'number');
+  assert.match(notes.join('; '), /cast acked \d+ of \d+ frames/);
+});
+
 test('a missing insertion confirmation is incomplete', async () => {
   const transport = castTransport({ embedLoads: false, emitBeforeInsert: true });
   const result = await probe(transport);
   assert.equal(result.castBefore, true, JSON.stringify(result));
   assert.equal(result.castLeak, false, JSON.stringify(result));
   assert.match(result.incomplete ?? '', /insertion was not confirmed/);
+});
+
+test('a pre-insertion frame alone does not count as a leak after a confirmed paint', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+  });
+  const result = await probe(transport);
+  assert.equal(result.castLeak, false, JSON.stringify(result));
+  assert.equal(result.castStopped, true, JSON.stringify(result));
+  assert.equal(result.incomplete, undefined, JSON.stringify(result));
+});
+
+test('guarded wait uses three times the control repaint-to-frame latency', async () => {
+  const notes = [];
+  const transport = castTransport({ emitBeforeInsert: true, emitAfterInsert: false });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 40 },
+    notes,
+  });
+  assert.equal(result.castWaitMs, 120, JSON.stringify(result));
+  assert.match(notes.join('; '), /wait 120ms/);
 });

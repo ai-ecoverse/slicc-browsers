@@ -286,6 +286,18 @@ test('refuseWithoutFail still finishes and protects', async () => {
   assert.equal(row.control, 'pass', JSON.stringify(row));
 });
 
+test('mutant dead fetch after binaryObsFold leaves later paths incomplete', async () => {
+  const out = await rows({
+    allowPlantPaths: ['binaryObsFold'],
+    fake: { deadFetchAfter: 'bof-' },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.live, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.control.binaryObsFoldAnswered, true, JSON.stringify(row));
+  assert.equal(row.observations.control.domainQuotedAnswered, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.control.ordinaryAnswered, 'incomplete', JSON.stringify(row));
+});
+
 test('unreadable jar after a plant is incomplete, not a false pass', async () => {
   const fixture = await fixtureServer();
   try {

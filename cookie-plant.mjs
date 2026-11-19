@@ -422,7 +422,33 @@ function pathCeiling(budget) {
 }
 
 function cleanupCeiling() {
-  return 2000;
+  return 6000;
+}
+
+async function enableFetch(client, pageSession) {
+  return capped(
+    outcome(
+      client.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            { urlPattern: '*', requestStage: 'Request' },
+            { urlPattern: '*', requestStage: 'Response' },
+          ],
+        },
+        pageSession
+      )
+    ),
+    800,
+    'enableFetch'
+  );
+}
+
+async function ensureInterception(client, pageSession, transport) {
+  if (!pageSession || !transport?.kind) return { ok: true };
+  if (transport.fetch) return enableFetch(client, pageSession);
+  if (transport.legacy) return capped(enableLegacy(client, pageSession), 800, 'enableLegacy');
+  return { ok: true };
 }
 
 async function cleanupPath({
@@ -440,11 +466,7 @@ async function cleanupPath({
   await releasePause(client, paused);
   await drainPauses(client, from);
   await settleTrigger(triggerPromise, Math.min(budget, 500));
-  await capped(
-    restorePage(client, pageSession, homeUrl, transport, reader, readerSession),
-    1500,
-    'restorePage'
-  );
+  await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
 }
 
 function attemptRecord(out, planted) {
@@ -514,50 +536,37 @@ async function pageReady(client, pageSession, ms = 4000) {
 }
 
 async function restorePage(client, pageSession, homeUrl, transport, reader, readerSession) {
-  if (!homeUrl) return;
+  if (!homeUrl) return { ok: true };
   const wasFetch = Boolean(transport?.fetch);
   const wasLegacy = Boolean(transport?.legacy);
-  if (pageSession)
+  try {
+    if (pageSession)
+      await capped(
+        disableInterception(client, pageSession, { fetch: true, legacy: true }),
+        800,
+        'disable'
+      );
+    if (reader && readerSession)
+      await capped(
+        disableInterception(reader, readerSession, { fetch: true, legacy: true }),
+        800,
+        'disable'
+      );
+    const navClient = reader ?? client;
+    const navSession = readerSession ?? pageSession;
+    if (!navSession) return { ok: true };
     await capped(
-      disableInterception(client, pageSession, { fetch: true, legacy: true }),
+      outcome(navClient.send('Page.navigate', { url: homeUrl }, navSession)),
       800,
-      'disable'
+      'navigate'
     );
-  if (reader && readerSession)
-    await capped(
-      disableInterception(reader, readerSession, { fetch: true, legacy: true }),
-      800,
-      'disable'
-    );
-  const navClient = reader ?? client;
-  const navSession = readerSession ?? pageSession;
-  if (!navSession) return;
-  await capped(
-    outcome(navClient.send('Page.navigate', { url: homeUrl }, navSession)),
-    800,
-    'navigate'
-  );
-  await pageReady(navClient, navSession, 1000);
-  if (pageSession && wasFetch) {
-    await capped(
-      outcome(
-        client.send(
-          'Fetch.enable',
-          {
-            patterns: [
-              { urlPattern: '*', requestStage: 'Request' },
-              { urlPattern: '*', requestStage: 'Response' },
-            ],
-          },
-          pageSession
-        )
-      ),
-      800,
-      'reenable'
-    );
-  } else if (pageSession && wasLegacy) {
-    await capped(enableLegacy(client, pageSession), 800, 'reenable');
+    await pageReady(navClient, navSession, 1000);
+  } finally {
+    if (pageSession && wasFetch) await enableFetch(client, pageSession);
+    else if (pageSession && wasLegacy)
+      await capped(enableLegacy(client, pageSession), 800, 'reenable');
   }
+  return { ok: true };
 }
 
 async function finishPlant({ reader, readerSession, out, cookie, notes, label }) {
@@ -604,6 +613,7 @@ async function runPlant({
     return await withPathBudget(
       (async () => {
         await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+        await ensureInterception(client, pageSession, transport);
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel
@@ -1287,6 +1297,7 @@ async function allowedHeaderAttempt({
   try {
     return await withPathBudget(
       (async () => {
+        await ensureInterception(client, pageSession, transport);
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel

@@ -135,7 +135,9 @@ export function cookiePlantFake(options = {}) {
   let next = 0;
   const paused = new Map();
   let sawCplantJar = false;
+  let fetchDead = false;
   const rejectCplantJarAfterFirst = options.rejectCplantJarAfterFirst === true;
+  const deadFetchAfter = options.deadFetchAfter ? String(options.deadFetchAfter) : '';
 
   const infoOf = (tab) => ({
     targetId: tab.targetId,
@@ -302,6 +304,7 @@ export function cookiePlantFake(options = {}) {
         : { frameTree: { frame } };
     }
     if (method === 'Fetch.enable') {
+      if (fetchDead) return {};
       const tab = tabs.get(sessions.get(sessionId));
       if (tab) {
         tab.fetchSessions ??= new Set();
@@ -489,6 +492,18 @@ export function cookiePlantFake(options = {}) {
       if (entry.topLevel && entry.tab) {
         entry.tab.url = entry.url;
         entry.tab.title = entry.url;
+      }
+      if (deadFetchAfter && !fetchDead) {
+        const blob = params.binaryResponseHeaders
+          ? Buffer.from(params.binaryResponseHeaders, 'base64').toString('utf8')
+          : JSON.stringify(params ?? {});
+        if (blob.includes(deadFetchAfter)) {
+          fetchDead = true;
+          for (const tab of tabs.values()) {
+            tab.fetchSessions = new Set();
+            tab.fetch = false;
+          }
+        }
       }
       entry.resolve?.(`${params.responseCode ?? 200} ok`);
       paused.delete(params.requestId);

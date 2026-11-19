@@ -76,9 +76,10 @@ function cookieLines(headers) {
 
 function parseDomain(line) {
   let domain = null;
-  for (const attr of String(line).split(';').slice(1)) {
+  const normalized = String(line).replace(/\r?\n[ \t]+/g, '; ');
+  for (const attr of normalized.split(';').slice(1)) {
     const match = /^\s*Domain\s*=\s*(.*)$/i.exec(attr);
-    if (match) domain = match[1].trim().replace(/^"|"$/g, '');
+    if (match) domain = match[1].trim().replace(/^["']|["']$/g, '');
   }
   return domain;
 }

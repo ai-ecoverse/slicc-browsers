@@ -43,6 +43,13 @@ function refused(out) {
   return /^slicc: refused:/.test(String(out.error?.message ?? out.error ?? ''));
 }
 
+function sessionCut(out) {
+  if (!out || out.ok) return false;
+  return /slicc: refused: session cut on protected execution context/i.test(
+    String(out.error?.message ?? out.error ?? '')
+  );
+}
+
 function note(notes, label, evidence) {
   notes.push(`${label}: ${JSON.stringify(evidence)}`);
 }
@@ -549,22 +556,79 @@ async function ensureInterception(client, pageSession, transport) {
   return { ok: true };
 }
 
-async function cleanupPath({
-  client,
-  paused,
-  from,
-  triggerPromise,
-  budget,
-  pageSession,
-  homeUrl,
-  transport,
-  reader,
-  readerSession,
-}) {
+async function reattachClient(handle) {
+  const { client, reader, pageTarget, homeUrl, transport, internalSessions, notes } = handle;
+  if (!pageTarget) return { ok: false, error: { message: 'missing page target for reattach' } };
+  if (reader && handle.readerSession && homeUrl) {
+    await capped(
+      outcome(reader.send('Page.navigate', { url: homeUrl }, handle.readerSession)),
+      800,
+      'recover-navigate'
+    );
+    await pageReady(reader, handle.readerSession, 1000);
+  }
+  if (handle.pageSession)
+    await capped(
+      outcome(client.send('Target.detachFromTarget', { sessionId: handle.pageSession })),
+      800,
+      'recover-detach'
+    );
+  const attached = await attachClientPage(client, pageTarget, internalSessions);
+  if (!attached.pageSession)
+    return { ok: false, error: { message: attached.incomplete ?? 'reattach failed' } };
+  handle.pageSession = attached.pageSession;
+  let enabled = { ok: true };
+  if (transport?.fetch) enabled = await enableFetch(client, handle.pageSession);
+  else if (transport?.legacy)
+    enabled = await capped(enableLegacy(client, handle.pageSession), 800, 'recover-legacy');
+  note(notes, 'cookie-plant.recover', {
+    pageSession: handle.pageSession,
+    enabled: enabled.ok,
+    cut: sessionCut(enabled),
+  });
+  if (sessionCut(enabled)) return enabled;
+  return enabled.ok ? { ok: true, pageSession: handle.pageSession } : enabled;
+}
+
+async function ensureLiveSession(handle) {
+  if (!handle?.pageSession) return { ok: false, error: { message: 'missing page session' } };
+  const probe = await capped(
+    outcome(
+      handle.client.send(
+        'Runtime.evaluate',
+        { expression: '1', returnByValue: true },
+        handle.pageSession
+      )
+    ),
+    800,
+    'session-probe'
+  );
+  if (probe.ok) return { ok: true, pageSession: handle.pageSession };
+  return reattachClient(handle);
+}
+
+async function ensureInterceptionLive(handle) {
+  const live = await ensureLiveSession(handle);
+  if (!live.ok) return live;
+  const ensure = await ensureInterception(handle.client, handle.pageSession, handle.transport);
+  if (ensure.ok) return ensure;
+  if (
+    !sessionCut(ensure) &&
+    !/session with given id not found/i.test(String(ensure.error?.message))
+  )
+    return ensure;
+  const recovered = await reattachClient(handle);
+  if (!recovered.ok) return ensure;
+  return ensureInterception(handle.client, handle.pageSession, handle.transport);
+}
+
+async function cleanupPath({ handle, paused, from, triggerPromise, budget }) {
+  const { client, reader, homeUrl, transport, readerSession } = handle;
   await releasePause(client, paused);
   await drainPauses(client, from);
   await settleTrigger(triggerPromise, Math.min(budget, 500));
-  await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
+  await restorePage(client, handle.pageSession, homeUrl, transport, reader, readerSession);
+  await ensureLiveSession(handle);
 }
 
 function attemptRecord(out, planted) {
@@ -687,128 +751,200 @@ async function finishPlant({ reader, readerSession, out, cookie, notes, label })
   return attemptRecord(out, planted);
 }
 
-async function runPlant({
-  client,
-  reader,
-  pageSession,
-  readerSession,
+function recordSessionCut(notes, label) {
+  note(notes, `cookie-plant.${label}`, {
+    answered: true,
+    refused: true,
+    planted: false,
+    note: 'session cut on protected execution context',
+  });
+  return attemptRecord(
+    {
+      ok: false,
+      error: { message: 'slicc: refused: session cut on protected execution context' },
+    },
+    false
+  );
+}
+
+async function runPlantBody({
+  handle,
   url,
   cookie,
   build,
-  transport,
+  budget,
+  notes,
+  label,
+  stage,
+  topLevel,
+  fixtureLog,
+  legAt,
+  firstIncomplete,
+  from,
+  pauseMs,
+  startedAt,
+  state,
+}) {
+  const { client, reader, readerSession, transport } = handle;
+  await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+  const ensure = await ensureInterceptionLive(handle);
+  const pageSession = handle.pageSession;
+  if (sessionCut(ensure)) return recordSessionCut(notes, label);
+  if (!ensure.ok) {
+    await diagnoseIncomplete({
+      notes,
+      label,
+      incomplete: String(ensure.error?.message ?? 'ensure failed'),
+      url,
+      client,
+      pageSession,
+      from,
+      methods:
+        transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'],
+      pauseMs,
+      startedAt,
+      legStartedAt: legAt,
+      fixtureLog,
+      ensure,
+      trigger: null,
+      firstIncomplete,
+    });
+    return attemptRecord(
+      { ok: false, error: ensure.error ?? { message: 'ensure failed' } },
+      'incomplete'
+    );
+  }
+  const methods =
+    transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+  state.triggerPromise = topLevel
+    ? triggerNavigate(client, pageSession, url)
+    : triggerFetch(client, pageSession, url);
+  state.paused = await waitPause(client, from, url, methods, pauseMs);
+  if (!state.paused) {
+    const trigger = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
+    state.triggerPromise = Promise.resolve(trigger);
+    await diagnoseIncomplete({
+      notes,
+      label,
+      incomplete: 'no pause',
+      url,
+      client,
+      pageSession,
+      from,
+      methods,
+      pauseMs,
+      startedAt,
+      legStartedAt: legAt,
+      fixtureLog,
+      ensure,
+      trigger,
+      firstIncomplete,
+    });
+    return attemptRecord({ ok: false, error: { message: 'timeout: no pause' } }, 'incomplete');
+  }
+  if (
+    transport.kind === 'fetch' &&
+    stage === 'Response' &&
+    state.paused.params?.responseStatusCode === undefined &&
+    state.paused.params?.responseErrorReason === undefined
+  ) {
+    const responseFrom = client.events.length;
+    await capped(
+      outcome(
+        client.send(
+          'Fetch.continueRequest',
+          { requestId: state.paused.params.requestId },
+          state.paused.sessionId
+        )
+      ),
+      800,
+      'continueRequest'
+    );
+    const again = await waitPause(client, responseFrom, url, methods, pauseMs);
+    if (!again) {
+      const trigger = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
+      state.triggerPromise = Promise.resolve(trigger);
+      await diagnoseIncomplete({
+        notes,
+        label,
+        incomplete: 'no response pause',
+        url,
+        client,
+        pageSession,
+        from: responseFrom,
+        methods,
+        pauseMs,
+        startedAt,
+        legStartedAt: legAt,
+        fixtureLog,
+        ensure,
+        trigger,
+        firstIncomplete,
+      });
+      return attemptRecord(
+        { ok: false, error: { message: 'timeout: no response pause' } },
+        'incomplete'
+      );
+    }
+    state.paused = again;
+  }
+  const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
+  if (sessionCut(out)) return recordSessionCut(notes, label);
+  return finishPlant({ reader, readerSession, out, cookie, notes, label });
+}
+
+async function runPlant({
+  handle,
+  url,
+  cookie,
+  build,
   budget,
   notes,
   label,
   stage = 'Request',
-  homeUrl,
   topLevel = true,
   fixtureLog,
   legStartedAt,
   firstIncomplete,
 }) {
-  let paused = null;
-  let triggerPromise = Promise.resolve();
+  const { client, transport } = handle;
+  const state = { paused: null, triggerPromise: Promise.resolve() };
   const from = client.events.length;
   const pauseMs = Math.min(budget, 2000);
   const startedAt = Date.now();
   const legAt = legStartedAt ?? startedAt;
   try {
     return await withPathBudget(
-      (async () => {
-        await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
-        const ensure = await ensureInterception(client, pageSession, transport);
-        const methods =
-          transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
-        triggerPromise = topLevel
-          ? triggerNavigate(client, pageSession, url)
-          : triggerFetch(client, pageSession, url);
-        paused = await waitPause(client, from, url, methods, pauseMs);
-        if (!paused) {
-          const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
-          triggerPromise = Promise.resolve(trigger);
-          await diagnoseIncomplete({
-            notes,
-            label,
-            incomplete: 'no pause',
-            url,
-            client,
-            pageSession,
-            from,
-            methods,
-            pauseMs,
-            startedAt,
-            legStartedAt: legAt,
-            fixtureLog,
-            ensure,
-            trigger,
-            firstIncomplete,
-          });
-          return attemptRecord(
-            { ok: false, error: { message: 'timeout: no pause' } },
-            'incomplete'
-          );
-        }
-        if (
-          transport.kind === 'fetch' &&
-          stage === 'Response' &&
-          paused.params?.responseStatusCode === undefined &&
-          paused.params?.responseErrorReason === undefined
-        ) {
-          const responseFrom = client.events.length;
-          await capped(
-            outcome(
-              client.send(
-                'Fetch.continueRequest',
-                { requestId: paused.params.requestId },
-                paused.sessionId
-              )
-            ),
-            800,
-            'continueRequest'
-          );
-          const again = await waitPause(client, responseFrom, url, methods, pauseMs);
-          if (!again) {
-            const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
-            triggerPromise = Promise.resolve(trigger);
-            await diagnoseIncomplete({
-              notes,
-              label,
-              incomplete: 'no response pause',
-              url,
-              client,
-              pageSession,
-              from: responseFrom,
-              methods,
-              pauseMs,
-              startedAt,
-              legStartedAt: legAt,
-              fixtureLog,
-              ensure,
-              trigger,
-              firstIncomplete,
-            });
-            return attemptRecord(
-              { ok: false, error: { message: 'timeout: no response pause' } },
-              'incomplete'
-            );
-          }
-          paused = again;
-        }
-        const built = build(paused);
-        const out = await capped(built.send(client, paused), 1500, 'plant-send');
-        return finishPlant({ reader, readerSession, out, cookie, notes, label });
-      })(),
+      runPlantBody({
+        handle,
+        url,
+        cookie,
+        build,
+        budget,
+        notes,
+        label,
+        stage,
+        topLevel,
+        fixtureLog,
+        legAt,
+        firstIncomplete,
+        from,
+        pauseMs,
+        startedAt,
+        state,
+      }),
       pathCeiling(budget),
       label
     );
   } catch (error) {
+    if (sessionCut({ ok: false, error })) return recordSessionCut(notes, label);
     await diagnoseIncomplete({
       notes,
       label,
       incomplete: String(error?.message ?? error),
       url,
       client,
-      pageSession,
+      pageSession: handle.pageSession,
       from,
       methods:
         transport?.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'],
@@ -828,16 +964,11 @@ async function runPlant({
     try {
       await withPathBudget(
         cleanupPath({
-          client,
-          paused,
+          handle,
+          paused: state.paused,
           from,
-          triggerPromise,
+          triggerPromise: state.triggerPromise,
           budget,
-          pageSession,
-          homeUrl,
-          transport,
-          reader,
-          readerSession,
         }),
         cleanupCeiling(),
         `${label}:cleanup`
@@ -1309,15 +1440,10 @@ function fetchAttackSpecs(ctx, header, bareDomain) {
 function fetchAttacks(ctx) {
   if (!ctx.transport.fetch) return null;
   const base = {
-    client: ctx.client,
-    reader: ctx.reader,
-    pageSession: ctx.pageSession,
-    readerSession: ctx.readerSession,
+    handle: ctx.handle,
     url: ctx.plantUrl,
-    transport: ctx.transport,
     budget: ctx.budget,
     notes: ctx.notes,
-    homeUrl: ctx.homeUrl,
     topLevel: true,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
@@ -1344,15 +1470,16 @@ function fetchAttacks(ctx) {
   return out;
 }
 
-async function withLegacyOnly(client, pageSession, transport, run) {
-  if (transport.fetch) await outcome(client.send('Fetch.disable', {}, pageSession));
-  await enableLegacy(client, pageSession);
+async function withLegacyOnly(handle, transport, run) {
+  const session = () => handle.pageSession;
+  if (transport.fetch) await outcome(handle.client.send('Fetch.disable', {}, session()));
+  await enableLegacy(handle.client, session());
   try {
     return await run();
   } finally {
     if (transport.fetch) {
       await outcome(
-        client.send(
+        handle.client.send(
           'Fetch.enable',
           {
             patterns: [
@@ -1360,7 +1487,7 @@ async function withLegacyOnly(client, pageSession, transport, run) {
               { urlPattern: '*', requestStage: 'Response' },
             ],
           },
-          pageSession
+          session()
         )
       );
     }
@@ -1371,15 +1498,10 @@ function legacyAttacks(ctx, legacyReady) {
   if (!legacyReady) return null;
   const legacyTransport = { kind: 'legacy', fetch: false, legacy: true };
   const base = {
-    client: ctx.client,
-    reader: ctx.reader,
-    pageSession: ctx.pageSession,
-    readerSession: ctx.readerSession,
+    handle: ctx.handle,
     url: ctx.plantUrl,
-    transport: legacyTransport,
     budget: ctx.budget,
     notes: ctx.notes,
-    homeUrl: ctx.homeUrl,
     topLevel: true,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
@@ -1387,8 +1509,10 @@ function legacyAttacks(ctx, legacyReady) {
   };
   return {
     legacyHeaders: () =>
-      withLegacyOnly(ctx.client, ctx.pageSession, ctx.transport, () =>
-        runPlant({
+      withLegacyOnly(ctx.handle, ctx.transport, () => {
+        const prior = ctx.handle.transport;
+        ctx.handle.transport = legacyTransport;
+        return runPlant({
           ...base,
           cookie: { ...ctx.plantCookie, value: `lh-${ctx.tag}` },
           label: 'legacyHeaders',
@@ -1407,11 +1531,15 @@ function legacyAttacks(ctx, legacyReady) {
                 body: 'ok',
               }),
             }),
-        })
-      ),
+        }).finally(() => {
+          ctx.handle.transport = prior;
+        });
+      }),
     legacyRaw: () =>
-      withLegacyOnly(ctx.client, ctx.pageSession, ctx.transport, () =>
-        runPlant({
+      withLegacyOnly(ctx.handle, ctx.transport, () => {
+        const prior = ctx.handle.transport;
+        ctx.handle.transport = legacyTransport;
+        return runPlant({
           ...base,
           cookie: { ...ctx.plantCookie, value: `lr-${ctx.tag}` },
           label: 'legacyRaw',
@@ -1430,29 +1558,28 @@ function legacyAttacks(ctx, legacyReady) {
                 body: 'ok',
               }),
             }),
-        })
-      ),
+        }).finally(() => {
+          ctx.handle.transport = prior;
+        });
+      }),
   };
 }
 
 async function allowedHeaderAttempt({
-  client,
-  pageSession,
-  reader,
-  readerSession,
+  handle,
   url,
-  transport,
   budget,
   notes,
   label,
   header,
   fetchReady,
-  homeUrl,
   topLevel = false,
   fixtureLog,
   legStartedAt,
   firstIncomplete,
 }) {
+  const { client, transport } = handle;
+  let pageSession = handle.pageSession;
   let paused = null;
   let triggerPromise = Promise.resolve();
   const from = client.events.length;
@@ -1462,7 +1589,46 @@ async function allowedHeaderAttempt({
   try {
     return await withPathBudget(
       (async () => {
-        const ensure = await ensureInterception(client, pageSession, transport);
+        const ensure = await ensureInterceptionLive(handle);
+        pageSession = handle.pageSession;
+        if (sessionCut(ensure)) {
+          note(notes, `cookie-plant.${label}`, {
+            answered: true,
+            refused: true,
+            note: 'session cut on protected execution context',
+          });
+          return {
+            answered: true,
+            refused: true,
+            planted: false,
+          };
+        }
+        if (!ensure.ok) {
+          await diagnoseIncomplete({
+            notes,
+            label,
+            incomplete: String(ensure.error?.message ?? 'ensure failed'),
+            url,
+            client,
+            pageSession,
+            from,
+            methods:
+              transport.kind === 'legacy'
+                ? ['Network.requestIntercepted']
+                : ['Fetch.requestPaused'],
+            pauseMs,
+            startedAt,
+            legStartedAt: legAt,
+            fixtureLog,
+            ensure,
+            trigger: null,
+            firstIncomplete,
+          });
+          return attemptRecord(
+            { ok: false, error: ensure.error ?? { message: 'ensure failed' } },
+            'incomplete'
+          );
+        }
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel
@@ -1514,6 +1680,14 @@ async function allowedHeaderAttempt({
           1500,
           'allowed-send'
         );
+        if (sessionCut(out)) {
+          note(notes, `cookie-plant.${label}`, {
+            answered: true,
+            refused: true,
+            note: 'session cut on protected execution context',
+          });
+          return { answered: true, refused: true, planted: false };
+        }
         note(notes, `cookie-plant.${label}`, { answered: answered(out), refused: refused(out) });
         return {
           answered: answered(out) ? true : 'incomplete',
@@ -1525,6 +1699,14 @@ async function allowedHeaderAttempt({
       label
     );
   } catch (error) {
+    if (sessionCut({ ok: false, error })) {
+      note(notes, `cookie-plant.${label}`, {
+        answered: true,
+        refused: true,
+        note: 'session cut on protected execution context',
+      });
+      return { answered: true, refused: true, planted: false };
+    }
     note(notes, `cookie-plant.${label}`, { incomplete: String(error?.message ?? error) });
     return attemptRecord(
       { ok: false, error: { message: String(error?.message ?? error) } },
@@ -1534,16 +1716,11 @@ async function allowedHeaderAttempt({
     try {
       await withPathBudget(
         cleanupPath({
-          client,
+          handle,
           paused,
           from,
           triggerPromise,
           budget,
-          pageSession,
-          homeUrl,
-          transport,
-          reader,
-          readerSession,
         }),
         cleanupCeiling(),
         `${label}:cleanup`
@@ -1589,9 +1766,6 @@ function controlAttacks(ctx) {
     url: `${ctx.ordinary}/`,
   };
   const ordinaryUrl = `${ctx.ordinary}/data?n=ctrl-${ctx.tag}`;
-  const controlTransport = ctx.transport.fetch
-    ? ctx.transport
-    : { kind: 'legacy', fetch: false, legacy: true };
   const fetchReady = Boolean(ctx.transport.fetch);
   const deleteCookie = {
     name: ctx.names.delete,
@@ -1600,6 +1774,9 @@ function controlAttacks(ctx) {
     url: `${ctx.plantOrigin}/`,
   };
   const diag = {
+    handle: ctx.handle,
+    budget: ctx.budget,
+    notes: ctx.notes,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
@@ -1607,19 +1784,11 @@ function controlAttacks(ctx) {
   return {
     ordinary: () =>
       runPlant({
-        client: ctx.client,
-        reader: ctx.reader,
-        pageSession: ctx.pageSession,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: ordinaryUrl,
         cookie: ordinaryCookie,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'ordinary',
-        homeUrl: ctx.homeUrl,
         topLevel: false,
-        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1649,20 +1818,12 @@ function controlAttacks(ctx) {
       }),
     adobe: () =>
       allowedHeaderAttempt({
-        client: ctx.client,
-        pageSession: ctx.pageSession,
-        reader: ctx.reader,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: ordinaryUrl,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'adobe',
         header: cookieHeader(ctx.names.adobe, `a-${ctx.tag}`, '.adobe.com'),
         fetchReady,
-        homeUrl: ctx.homeUrl,
         topLevel: true,
-        ...diag,
       }),
     deletion: async () => {
       const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteCookie);
@@ -1676,20 +1837,12 @@ function controlAttacks(ctx) {
         };
       }
       const attempt = await allowedHeaderAttempt({
-        client: ctx.client,
-        pageSession: ctx.pageSession,
-        reader: ctx.reader,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: ctx.plantUrl,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'deletion',
         header: cookieHeader(ctx.names.delete, '', ctx.domain, 'Max-Age=0'),
         fetchReady,
-        homeUrl: ctx.homeUrl,
         topLevel: true,
-        ...diag,
       });
       const after = await readJar(ctx.reader, ctx.readerSession, {
         name: ctx.names.delete,
@@ -1794,9 +1947,6 @@ async function enableClientTransport(client, pageSession, notes) {
 function credentialAttacks(ctx) {
   if (!ctx.credential) return null;
   const fetchReady = Boolean(ctx.transport.fetch);
-  const controlTransport = ctx.transport.fetch
-    ? ctx.transport
-    : { kind: 'legacy', fetch: false, legacy: true };
   const hostOnlyUrl = ctx.plantUrl;
   const hostOnlyCookie = {
     name: ctx.names.plant,
@@ -1813,6 +1963,9 @@ function credentialAttacks(ctx) {
   const subHost = `x.${ctx.credentialHost}`;
   const subUrl = `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/data?n=sub-${ctx.tag}`;
   const diag = {
+    handle: ctx.handle,
+    budget: ctx.budget,
+    notes: ctx.notes,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
@@ -1820,19 +1973,11 @@ function credentialAttacks(ctx) {
   return {
     hostOnly: () =>
       runPlant({
-        client: ctx.client,
-        reader: ctx.reader,
-        pageSession: ctx.pageSession,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: hostOnlyUrl,
         cookie: hostOnlyCookie,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'hostOnly',
-        homeUrl: ctx.homeUrl,
         topLevel: true,
-        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1861,19 +2006,11 @@ function credentialAttacks(ctx) {
       }),
     domainCover: () =>
       runPlant({
-        client: ctx.client,
-        reader: ctx.reader,
-        pageSession: ctx.pageSession,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: `${ctx.ordinary}/data?n=cover-${ctx.tag}`,
         cookie: coverCookie,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'domainCover',
-        homeUrl: ctx.homeUrl,
         topLevel: true,
-        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1910,20 +2047,12 @@ function credentialAttacks(ctx) {
       }),
     subHost: () =>
       allowedHeaderAttempt({
-        client: ctx.client,
-        pageSession: ctx.pageSession,
-        reader: ctx.reader,
-        readerSession: ctx.readerSession,
+        ...diag,
         url: subUrl,
-        transport: controlTransport,
-        budget: ctx.budget,
-        notes: ctx.notes,
         label: 'subHost',
         header: cookieHeader(ctx.names.ordinary, `sub-${ctx.tag}`, `.${subHost}`),
         fetchReady,
-        homeUrl: ctx.homeUrl,
         topLevel: true,
-        ...diag,
       }),
   };
 }
@@ -2012,11 +2141,23 @@ export async function cookiePlant({
     return { live: true, incomplete: enabled.incomplete };
   }
 
+  const handle = {
+    client,
+    reader,
+    pageSession,
+    readerSession,
+    pageTarget,
+    homeUrl,
+    transport: enabled.transport,
+    internalSessions,
+    notes,
+  };
   const ctx = plantCtx({
     client,
     reader,
     pageSession,
     readerSession,
+    handle,
     plantUrl: `${plantOrigin}/data?n=plant-${tag}`,
     plantCookie: {
       name: names.plant,
@@ -2052,7 +2193,11 @@ export async function cookiePlant({
     budget
   );
 
-  await capped(disableInterception(client, pageSession, enabled.transport), 800, 'disable-final');
+  await capped(
+    disableInterception(client, handle.pageSession, enabled.transport),
+    800,
+    'disable-final'
+  );
   await capped(
     outcome(reader.send('Target.closeTarget', { targetId: pageTarget })),
     800,

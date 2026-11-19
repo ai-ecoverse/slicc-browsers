@@ -303,6 +303,30 @@ test('mutant missObsFoldDomain lets binaryObsFold through then stalls later path
   );
 });
 
+test('mutant that cuts the session at continueAtRequest leaves later paths incomplete', async () => {
+  const out = await rows({
+    allowPlantPaths: ['responsePhrase'],
+    fake: { cutSessionAfter: 'rp-', cutSessionOnNth: 2, cutBlocksReattach: true },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.responsePhraseAnswered, true, JSON.stringify(row));
+  assert.equal(
+    row.observations.guarded.continueAtRequestAnswered,
+    'incomplete',
+    JSON.stringify(row)
+  );
+  assert.equal(row.observations.guarded.ordinaryAnswered, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.firstIncomplete:.*"path":"continueAtRequest"/.test(n) ||
+        /cookie-plant\.continueAtRequest:.*(session cut|reattach failed)/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
 test('unreadable jar after a plant is incomplete, not a false pass', async () => {
   const fixture = await fixtureServer();
   try {

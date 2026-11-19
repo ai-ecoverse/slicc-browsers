@@ -137,9 +137,17 @@ export function cookiePlantFake(options = {}) {
   let sawCplantJar = false;
   let fetchDead = false;
   let deadFetchHits = 0;
+  let contextId = 1;
+  const cutSessions = new Set();
   const rejectCplantJarAfterFirst = options.rejectCplantJarAfterFirst === true;
   const deadFetchAfter = options.deadFetchAfter ? String(options.deadFetchAfter) : '';
   const deadFetchOnNth = Number(options.deadFetchOnNth ?? 1) || 1;
+  const cutSessionAfter = options.cutSessionAfter ? String(options.cutSessionAfter) : '';
+  const cutSessionOnNth = Number(options.cutSessionOnNth ?? 1) || 1;
+  let cutSessionHits = 0;
+  const cutBlocksReattach = options.cutBlocksReattach === true;
+  const cutTargets = new Set();
+  const emitContexts = options.emitContexts !== false;
 
   const infoOf = (tab) => ({
     targetId: tab.targetId,
@@ -151,6 +159,37 @@ export function cookiePlantFake(options = {}) {
 
   const emit = (conn, method, params, sessionId) => {
     conn.events.push({ method, params, ...(sessionId ? { sessionId } : {}) });
+  };
+
+  const emitContext = (conn, sessionId, url) => {
+    if (!emitContexts || !sessionId || !url || !/^https?:/i.test(url)) return;
+    let origin = '';
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return;
+    }
+    emit(
+      conn,
+      'Runtime.executionContextCreated',
+      {
+        context: {
+          id: contextId++,
+          origin,
+          name: '',
+          uniqueId: `ctx-${contextId}`,
+          auxData: { isDefault: true },
+        },
+      },
+      sessionId
+    );
+  };
+
+  const setTabUrl = (conn, sessionId, tab, url) => {
+    if (!tab || !url) return;
+    tab.url = url;
+    tab.title = url;
+    emitContext(conn, sessionId, url);
   };
 
   const plantFromHeaders = (tab, requestUrl, headers, topLevel) => {
@@ -233,6 +272,8 @@ export function cookiePlantFake(options = {}) {
     await tick();
     if (sessionId && !sessions.has(sessionId))
       throw new Error(`Session with given id not found: ${sessionId}`);
+    if (sessionId && cutSessions.has(sessionId))
+      throw new Error('slicc: refused: session cut on protected execution context');
     if (method === 'Browser.getVersion') return { product: 'Fake/1', protocolVersion: '1.3' };
     if (method === 'Target.createTarget') {
       const tab = {
@@ -248,6 +289,8 @@ export function cookiePlantFake(options = {}) {
     if (method === 'Target.attachToTarget') {
       const tab = tabs.get(params.targetId);
       if (!tab) throw new Error('No target with given id');
+      if (cutBlocksReattach && cutTargets.has(params.targetId))
+        throw new Error('slicc: refused: session cut on protected execution context');
       const id = `S${++next}`;
       sessions.set(id, tab.targetId);
       emit(conn, 'Target.attachedToTarget', {
@@ -396,12 +439,10 @@ export function cookiePlantFake(options = {}) {
       if (sessionIntercepts(tab, sessionId).any) {
         const settled = await emitPause(conn, tab, sessionId, params.url, true);
         if (String(settled).startsWith('error:')) return { frameId: sessions.get(sessionId) };
-        tab.url = params.url;
-        tab.title = params.url;
+        setTabUrl(conn, sessionId, tab, params.url);
         return { frameId: sessions.get(sessionId) };
       }
-      tab.url = params.url;
-      tab.title = params.url;
+      setTabUrl(conn, sessionId, tab, params.url);
       return { frameId: sessions.get(sessionId) };
     }
     if (method === 'Runtime.evaluate') {
@@ -415,15 +456,11 @@ export function cookiePlantFake(options = {}) {
         if (!url || !tab) return { result: { type: 'string', value: 'error' } };
         if (sessionIntercepts(tab, sessionId).any) {
           void emitPause(conn, tab, sessionId, url, true).then((settled) => {
-            if (!String(settled).startsWith('error:') && tab) {
-              tab.url = url;
-              tab.title = url;
-            }
+            if (!String(settled).startsWith('error:') && tab) setTabUrl(conn, sessionId, tab, url);
           });
           return { result: { type: 'undefined' } };
         }
-        tab.url = url;
-        tab.title = url;
+        setTabUrl(conn, sessionId, tab, url);
         return { result: { type: 'undefined' } };
       }
       if (expression.includes('fetch(')) {
@@ -491,14 +528,19 @@ export function cookiePlantFake(options = {}) {
           plantFromHeaders(entry.tab, entry.url, expanded, entry.topLevel);
         }
       }
-      if (entry.topLevel && entry.tab) {
-        entry.tab.url = entry.url;
-        entry.tab.title = entry.url;
+      if (entry.topLevel && entry.tab) setTabUrl(conn, entry.sessionId, entry.tab, entry.url);
+      const blob = params.binaryResponseHeaders
+        ? Buffer.from(params.binaryResponseHeaders, 'base64').toString('utf8')
+        : `${params.responsePhrase ?? ''}${JSON.stringify(params ?? {})}`;
+      if (cutSessionAfter && blob.includes(cutSessionAfter) && entry.sessionId) {
+        cutSessionHits += 1;
+        if (cutSessionHits >= cutSessionOnNth) {
+          cutSessions.add(entry.sessionId);
+          const targetId = sessions.get(entry.sessionId);
+          if (targetId) cutTargets.add(targetId);
+        }
       }
       if (deadFetchAfter && !fetchDead) {
-        const blob = params.binaryResponseHeaders
-          ? Buffer.from(params.binaryResponseHeaders, 'base64').toString('utf8')
-          : JSON.stringify(params ?? {});
         if (blob.includes(deadFetchAfter)) {
           deadFetchHits += 1;
           if (deadFetchHits >= deadFetchOnNth) {

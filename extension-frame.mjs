@@ -916,23 +916,182 @@ async function driveCaptures(client, page, missing) {
   return { archive, pdf, cast, begin };
 }
 
-async function driveCast(client, page, frameMs) {
+const CAST_STALL = 'cast stalled: no frame after insertion and paint was not confirmed';
+const CAST_ACK_INCOMPLETE = 'cast ack incomplete: frames received but not all acked';
+const CAST_ACK_UNANSWERED = 'cast ack unanswered';
+const CAST_NEVER_STREAMED = 'cast never streamed before the insertion';
+const CAST_NO_OBSERVER = 'no unguarded observer to confirm the paint';
+const CAST_PAINT_MS = 500;
+const CAST_FLOOR_MS = 1500;
+const CAST_LATENCY_FACTOR = 3;
+const CAST_ACK_MS = 1000;
+const CAST_TICK = `(() => {
+  const root = document.documentElement;
+  const n = Number(root.dataset.sliccCastTick || '0') + 1;
+  root.dataset.sliccCastTick = String(n);
+  root.style.setProperty('--slicc-cast-tick', String(n));
+  root.style.outline = n % 2 === 0 ? '1px solid transparent' : '0 solid transparent';
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(n)));
+  });
+})()`;
+
+function castWaitMs(frameMs, castControls) {
+  if (!(frameMs > 0)) return 0;
+  const floor = frameMs >= 1000 ? CAST_FLOOR_MS : frameMs;
+  const controlMs = castControls?.repaintToFrameMs;
+  if (typeof controlMs === 'number' && controlMs >= 0)
+    return Math.max(floor, Math.ceil(controlMs * CAST_LATENCY_FACTOR));
+  return Math.max(floor, frameMs);
+}
+
+function castFrameEvents(client, page, from = 0) {
+  return (client.events ?? [])
+    .slice(from)
+    .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
+}
+
+function castExplicitStop(client, page, state, from = 0) {
+  return (
+    state.ackRefused ||
+    (client.events ?? [])
+      .slice(from)
+      .some(
+        (event) =>
+          (event.method === 'Inspector.detached' &&
+            event.sessionId === page &&
+            event.params?.reason) ||
+          (event.method === 'Target.detachedFromTarget' && event.params?.sessionId === page)
+      )
+  );
+}
+
+async function ackCastFrames(client, page, state) {
+  for (const event of client.events ?? []) {
+    if (event.method !== 'Page.screencastFrame' || event.sessionId !== page) continue;
+    const id = event.params?.sessionId;
+    if (typeof id !== 'number' || state.ackAttempted.has(id)) continue;
+    state.ackAttempted.add(id);
+    state.framesReceived += 1;
+    let out;
+    try {
+      out = await Promise.race([
+        outcome(client.send('Page.screencastFrameAck', { sessionId: id }, page)),
+        pause(CAST_ACK_MS).then(() => null),
+      ]);
+    } catch {
+      out = null;
+    }
+    if (out == null) {
+      state.ackUnanswered = true;
+      continue;
+    }
+    if (out.ok) {
+      state.acked.add(id);
+      state.framesAcked += 1;
+      continue;
+    }
+    if (presentish(out) === PRESENT) {
+      state.acked.add(id);
+      state.framesAcked += 1;
+      state.ackRefused = true;
+      continue;
+    }
+    state.ackUnanswered = true;
+  }
+}
+
+async function provokeCastPaint(reader, observer, state) {
+  if (!reader || !observer) {
+    state.paintConfirmed = false;
+    state.paintObserverMissing = true;
+    return;
+  }
+  try {
+    await Promise.race([
+      observe(reader, observer, CAST_TICK),
+      pause(CAST_PAINT_MS).then(() => {
+        throw new Error('cast paint timed out');
+      }),
+    ]);
+    state.paintConfirmed = true;
+    state.paintAt ??= Date.now();
+  } catch {
+    return;
+  }
+}
+
+function noteCastLatency(state, frames) {
+  if (state.paintAt == null || state.repaintToFrameMs != null || frames.length === 0) return;
+  state.repaintToFrameMs = Math.max(0, Date.now() - state.paintAt);
+}
+
+async function waitCastWindow(client, page, state, leakFrom, waitMs, frameMs) {
+  const until = Date.now() + waitMs;
+  let frames = [];
+  do {
+    await provokeCastPaint(state.reader, state.observer, state);
+    await ackCastFrames(client, page, state);
+    frames = castFrameEvents(client, page, leakFrom);
+    noteCastLatency(state, frames);
+    if (frames.length > 0 || castExplicitStop(client, page, state, leakFrom)) break;
+    await pause(25);
+  } while (Date.now() < until);
+  await ackCastFrames(client, page, state);
+  frames = castFrameEvents(client, page, leakFrom);
+  noteCastLatency(state, frames);
+  if (
+    frames.length === 0 &&
+    !castExplicitStop(client, page, state, leakFrom) &&
+    state.paintConfirmed
+  ) {
+    const drainMs =
+      frameMs >= 1000 ? Math.max(waitMs, CAST_FLOOR_MS) : Math.max(waitMs, frameMs > 0 ? 100 : 50);
+    const drainUntil = Date.now() + drainMs;
+    while (Date.now() < drainUntil) {
+      await provokeCastPaint(state.reader, state.observer, state);
+      await ackCastFrames(client, page, state);
+      frames = castFrameEvents(client, page, leakFrom);
+      if (frames.length > 0) break;
+      await pause(25);
+    }
+  }
+  await ackCastFrames(client, page, state);
+  frames = castFrameEvents(client, page, leakFrom);
+  noteCastLatency(state, frames);
+  return frames;
+}
+
+async function driveCast(
+  client,
+  page,
+  frameMs,
+  reader,
+  observer,
+  { notes, castControls, side } = {}
+) {
   const start = await outcome(
     client.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 }, page)
   );
-  const acked = new Set();
+  const state = {
+    acked: new Set(),
+    ackAttempted: new Set(),
+    paintConfirmed: false,
+    paintObserverMissing: false,
+    paintAt: undefined,
+    repaintToFrameMs: undefined,
+    ackRefused: false,
+    ackUnanswered: false,
+    framesReceived: 0,
+    framesAcked: 0,
+    reader,
+    observer,
+  };
   let leakFrom;
+  let framesBefore = 0;
   let pumping = start.ok;
   let stopped = false;
-  const ackFrames = async () => {
-    for (const event of client.events ?? []) {
-      if (event.method !== 'Page.screencastFrame' || event.sessionId !== page) continue;
-      const id = event.params?.sessionId;
-      if (typeof id !== 'number' || acked.has(id)) continue;
-      acked.add(id);
-      await outcome(client.send('Page.screencastFrameAck', { sessionId: id }, page));
-    }
-  };
+  const waitMs = castWaitMs(frameMs, castControls);
   const halt = async () => {
     pumping = false;
     await pump;
@@ -945,7 +1104,7 @@ async function driveCast(client, page, frameMs) {
     start.ok && frameMs > 0
       ? (async () => {
           while (pumping) {
-            await ackFrames();
+            await ackCastFrames(client, page, state);
             await pause(25);
           }
         })()
@@ -953,41 +1112,94 @@ async function driveCast(client, page, frameMs) {
   return {
     castBefore: start.ok,
     castBeforeRefusal: presentish(start),
+    async waitForFrame(ms = waitMs) {
+      if (!start.ok) return false;
+      const until = Date.now() + ms;
+      do {
+        await ackCastFrames(client, page, state);
+        if (castFrameEvents(client, page).length > 0) return true;
+        await provokeCastPaint(reader, observer, state);
+        await pause(25);
+      } while (Date.now() < until);
+      await ackCastFrames(client, page, state);
+      return castFrameEvents(client, page).length > 0;
+    },
     async markInserted() {
-      await ackFrames();
+      await ackCastFrames(client, page, state);
+      framesBefore = castFrameEvents(client, page).length;
       leakFrom = client.events?.length ?? 0;
+      state.paintConfirmed = false;
+      state.paintAt = undefined;
+      state.repaintToFrameMs = undefined;
+      state.ackRefused = false;
     },
     async afterEmbed({ inserted }) {
       pumping = false;
       await pump;
-      if (!start.ok) {
-        return { castLeak: false, castFramesAfter: 0, castInserted: Boolean(inserted) };
-      }
+      const tally = () => ({
+        framesReceived: state.framesReceived,
+        framesAcked: state.framesAcked,
+        ackUnanswered: state.ackUnanswered,
+        paintObserverMissing: state.paintObserverMissing,
+        waitMs,
+        repaintToFrameMs: state.repaintToFrameMs,
+      });
+      if (!start.ok)
+        return {
+          castFramesBefore: 0,
+          castFramesAfter: 0,
+          castInserted: Boolean(inserted),
+          castStopped: false,
+          castStoppedExplicit: false,
+          paintConfirmed: false,
+          ...tally(),
+        };
       if (!inserted) {
         await halt();
-        return { castLeak: false, castFramesAfter: 0, castInserted: false };
+        return {
+          castFramesBefore: framesBefore,
+          castFramesAfter: 0,
+          castInserted: false,
+          castStopped: false,
+          castStoppedExplicit: false,
+          paintConfirmed: false,
+          ...tally(),
+        };
       }
       if (leakFrom == null) {
-        await ackFrames();
+        await ackCastFrames(client, page, state);
+        framesBefore = castFrameEvents(client, page).length;
         leakFrom = client.events?.length ?? 0;
+        state.paintConfirmed = false;
+        state.paintAt = undefined;
+        state.repaintToFrameMs = undefined;
+        state.ackRefused = false;
       }
-      await pause(Math.max(frameMs, 200));
-      await ackFrames();
-      const frames = (client.events ?? [])
-        .slice(leakFrom)
-        .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
+      const frames = await waitCastWindow(client, page, state, leakFrom, waitMs, frameMs);
+      const stoppedExplicit = castExplicitStop(client, page, state, leakFrom);
+      if (side === 'control' && typeof state.repaintToFrameMs === 'number' && castControls)
+        castControls.repaintToFrameMs = state.repaintToFrameMs;
+      notes?.push(
+        `cast acked ${state.framesAcked} of ${state.framesReceived} frames; wait ${waitMs}ms` +
+          (state.repaintToFrameMs != null ? `; repaint-to-frame ${state.repaintToFrameMs}ms` : '')
+      );
       await halt();
       return {
         castLeak: frames.length > 0,
+        castFramesBefore: framesBefore,
         castFramesAfter: frames.length,
         castInserted: true,
+        castStopped: stoppedExplicit || (frames.length === 0 && state.paintConfirmed),
+        castStoppedExplicit: stoppedExplicit,
+        paintConfirmed: state.paintConfirmed,
+        ...tally(),
       };
     },
     stop: halt,
   };
 }
 
-async function beginCast(client, session, targetId, frameMs) {
+async function beginCast(client, session, targetId, frameMs, reader, observer, extras) {
   const attachEarly = await outcome(
     client.send('Target.attachToTarget', { targetId, flatten: true })
   );
@@ -999,7 +1211,7 @@ async function beginCast(client, session, targetId, frameMs) {
   return {
     page,
     pageAttached: attachEarly.ok,
-    castDrive: await driveCast(client, page, frameMs),
+    castDrive: await driveCast(client, page, frameMs, reader, observer, extras),
   };
 }
 
@@ -1014,14 +1226,89 @@ function finishCast(castDrive, embedded) {
   return castDrive.afterEmbed({ inserted: Boolean(embedded) });
 }
 
-function applyCastResult(result, castDrive, castAfter, side, missing) {
-  if (!castDrive) return;
+function noteCastFields(result, castDrive, castAfter) {
   result.castBefore = castDrive.castBefore;
   result.castBeforeRefusal = castDrive.castBeforeRefusal;
-  result.castLeak = castAfter.castLeak;
-  result.castFramesAfter = castAfter.castFramesAfter;
-  if (side === 'control' && castDrive.castBefore && castAfter.castInserted && !castAfter.castLeak)
-    missing.push('control screencast produced no frames after the extension frame appeared');
+  result.castFramesBefore = castAfter.castFramesBefore ?? 0;
+  result.castFramesAfter = castAfter.castFramesAfter ?? 0;
+  result.castFramesReceived = castAfter.framesReceived ?? 0;
+  result.castFramesAcked = castAfter.framesAcked ?? 0;
+  result.castWaitMs = castAfter.waitMs ?? 0;
+  if (castAfter.repaintToFrameMs != null) result.castRepaintToFrameMs = castAfter.repaintToFrameMs;
+}
+
+function castAckMissing(castAfter, missing) {
+  if (castAfter.ackUnanswered) {
+    missing.push(CAST_ACK_UNANSWERED);
+    return true;
+  }
+  if ((castAfter.framesReceived ?? 0) > (castAfter.framesAcked ?? 0)) {
+    missing.push(CAST_ACK_INCOMPLETE);
+    return true;
+  }
+  return false;
+}
+
+function castRefusedStart(result, castDrive) {
+  return Boolean(result.castRefusal) || Boolean(castDrive.castBeforeRefusal);
+}
+
+function applyCastResult(result, castDrive, castAfter, side, missing) {
+  if (!castDrive) return;
+  noteCastFields(result, castDrive, castAfter);
+  const inserted = Boolean(castAfter.castInserted);
+  const leaked = Boolean(castAfter.castLeak);
+  const stopped = Boolean(castAfter.castStopped);
+  const stoppedExplicit = Boolean(castAfter.castStoppedExplicit);
+  if (!castDrive.castBefore) {
+    result.castLeak = false;
+    result.castStopped = castRefusedStart(result, castDrive);
+    return;
+  }
+  if (!inserted) {
+    result.castLeak = false;
+    result.castStopped = false;
+    return;
+  }
+  if (side === 'control') {
+    if (!(result.castFramesBefore > 0)) {
+      missing.push('control screencast produced no frames before the extension frame appeared');
+      return;
+    }
+    if (!leaked) {
+      missing.push('control screencast produced no frames after the extension frame appeared');
+      return;
+    }
+    if (castAckMissing(castAfter, missing)) return;
+    result.castLeak = true;
+    result.castStopped = false;
+    return;
+  }
+  if (leaked) {
+    result.castLeak = true;
+    result.castStopped = false;
+    return;
+  }
+  if (castAfter.paintObserverMissing) {
+    missing.push(CAST_NO_OBSERVER);
+    return;
+  }
+  if (castAckMissing(castAfter, missing)) return;
+  if (castRefusedStart(result, castDrive) || stoppedExplicit) {
+    result.castLeak = false;
+    result.castStopped = true;
+    return;
+  }
+  if (stopped) {
+    if (!(result.castFramesBefore > 0)) {
+      missing.push(CAST_NEVER_STREAMED);
+      return;
+    }
+    result.castLeak = false;
+    result.castStopped = true;
+    return;
+  }
+  missing.push(CAST_STALL);
 }
 
 function classifyRevealOverlap(
@@ -1179,6 +1466,8 @@ export async function extensionFrame({
   inputMethods: inputList = INPUT_METHODS,
   side = 'guarded',
   capabilities = {},
+  notes,
+  castControls,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -1196,10 +1485,15 @@ export async function extensionFrame({
     await reader.send('DOM.enable', {}, observer);
     await reader.send('Accessibility.enable', {}, observer);
     if (mode === 'cast') {
-      const started = await beginCast(client, session, targetId, frameMs);
+      const started = await beginCast(client, session, targetId, frameMs, reader, observer, {
+        notes,
+        castControls,
+        side,
+      });
       page = started.page;
       pageAttached = started.pageAttached;
       castDrive = started.castDrive;
+      await castDrive.waitForFrame(castWaitMs(frameMs, castControls));
     }
     const embedded = await embed(reader, observer, mode, frameURL);
     await noteCastInsertion(castDrive, embedded, missing);

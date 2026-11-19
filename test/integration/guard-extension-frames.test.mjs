@@ -667,6 +667,8 @@ test('extension-frame rows: only the catalog rule passes', { timeout: 600000 }, 
           if (mode === 'catalog' && row.guarded === 'pass') {
             for (const key of ['archiveRefusal', 'pdfRefusal', 'castRefusal'])
               assert.equal(row.observations.guarded[key], true, `${row.id} ${key}`);
+            if (row.id === 'C9.frame-cast')
+              assert.equal(row.observations.guarded.castLeak, false, JSON.stringify(row));
           }
         }
         assert.equal(execution.summary().pass, mode === 'catalog');

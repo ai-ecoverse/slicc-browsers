@@ -56,19 +56,27 @@ function note(notes, label, evidence) {
 
 async function pageSnapshot(client, pageSession) {
   if (!pageSession) return { ready: false };
-  const ready = await outcome(
-    client.send(
-      'Runtime.evaluate',
-      { expression: 'document.readyState', returnByValue: true },
-      pageSession
-    )
+  const ready = await capped(
+    outcome(
+      client.send(
+        'Runtime.evaluate',
+        { expression: 'document.readyState', returnByValue: true },
+        pageSession
+      )
+    ),
+    800,
+    'pageSnapshot'
   );
-  const href = await outcome(
-    client.send(
-      'Runtime.evaluate',
-      { expression: 'location.href', returnByValue: true },
-      pageSession
-    )
+  const href = await capped(
+    outcome(
+      client.send(
+        'Runtime.evaluate',
+        { expression: 'location.href', returnByValue: true },
+        pageSession
+      )
+    ),
+    800,
+    'pageSnapshot'
   );
   return {
     ready: ready.ok,
@@ -265,38 +273,41 @@ async function openPage(reader, url, notes, internalSessions) {
 }
 
 async function detectTransport(client, sessionId, notes) {
-  const fetchEnable = await outcome(
-    client.send(
-      'Fetch.enable',
-      {
-        patterns: [
-          { urlPattern: '*', requestStage: 'Request' },
-          { urlPattern: '*', requestStage: 'Response' },
-        ],
-      },
-      sessionId
-    )
+  const fetchEnable = await capped(
+    outcome(
+      client.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            { urlPattern: '*', requestStage: 'Request' },
+            { urlPattern: '*', requestStage: 'Response' },
+          ],
+        },
+        sessionId
+      )
+    ),
+    800,
+    'detectTransport'
   );
   if (fetchEnable.ok) {
     note(notes, 'cookie-plant.transport', { kind: 'fetch' });
     return { kind: 'fetch', fetch: true, legacy: false };
   }
-  const legacyEnable = await outcome(
-    client.send('Network.setRequestInterception', { patterns: [{ urlPattern: '*' }] }, sessionId)
+  const legacyEnable = await capped(
+    outcome(
+      client.send('Network.setRequestInterception', { patterns: [{ urlPattern: '*' }] }, sessionId)
+    ),
+    800,
+    'detectTransport'
   );
   if (legacyEnable.ok) {
     note(notes, 'cookie-plant.transport', { kind: 'legacy' });
     return { kind: 'legacy', fetch: false, legacy: true };
   }
-  const legacyFetch = await outcome(
-    client.send('Network.setRequestInterception', { patterns: [{ urlPattern: '*' }] }, sessionId)
-  );
   note(notes, 'cookie-plant.transport', {
     kind: null,
     fetchError: String(fetchEnable.error?.message ?? fetchEnable.error),
-    legacyError: String(
-      legacyEnable.error?.message ?? legacyFetch.error?.message ?? legacyEnable.error
-    ),
+    legacyError: String(legacyEnable.error?.message ?? legacyEnable.error),
   });
   return { kind: null, fetch: false, legacy: false };
 }
@@ -751,20 +762,18 @@ async function finishPlant({ reader, readerSession, out, cookie, notes, label })
   return attemptRecord(out, planted);
 }
 
-function recordSessionCut(notes, label) {
-  note(notes, `cookie-plant.${label}`, {
-    answered: true,
-    refused: true,
-    planted: false,
-    note: 'session cut on protected execution context',
-  });
-  return attemptRecord(
-    {
+async function recordSessionCut({ reader, readerSession, cookie, notes, label }) {
+  return finishPlant({
+    reader,
+    readerSession,
+    out: {
       ok: false,
       error: { message: 'slicc: refused: session cut on protected execution context' },
     },
-    false
-  );
+    cookie,
+    notes,
+    label,
+  });
 }
 
 async function runPlantBody({
@@ -789,7 +798,7 @@ async function runPlantBody({
   await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
   const ensure = await ensureInterceptionLive(handle);
   const pageSession = handle.pageSession;
-  if (sessionCut(ensure)) return recordSessionCut(notes, label);
+  if (sessionCut(ensure)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
   if (!ensure.ok) {
     await diagnoseIncomplete({
       notes,
@@ -889,7 +898,7 @@ async function runPlantBody({
     state.paused = again;
   }
   const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
-  if (sessionCut(out)) return recordSessionCut(notes, label);
+  if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
   return finishPlant({ reader, readerSession, out, cookie, notes, label });
 }
 
@@ -937,7 +946,14 @@ async function runPlant({
       label
     );
   } catch (error) {
-    if (sessionCut({ ok: false, error })) return recordSessionCut(notes, label);
+    if (sessionCut({ ok: false, error }))
+      return recordSessionCut({
+        reader: handle.reader,
+        readerSession: handle.readerSession,
+        cookie,
+        notes,
+        label,
+      });
     await diagnoseIncomplete({
       notes,
       label,
@@ -1875,8 +1891,10 @@ async function runAttempts(groups, budget = 5000) {
 }
 
 async function attachClientPage(client, pageTarget, internalSessions) {
-  const attached = await outcome(
-    client.send('Target.attachToTarget', { targetId: pageTarget, flatten: true })
+  const attached = await capped(
+    outcome(client.send('Target.attachToTarget', { targetId: pageTarget, flatten: true })),
+    800,
+    'attachToTarget'
   );
   if (!attached.ok && !refused(attached))
     return {
@@ -1885,9 +1903,17 @@ async function attachClientPage(client, pageTarget, internalSessions) {
   const pageSession = attached.result?.sessionId;
   if (pageSession) {
     internalSessions.add(pageSession);
-    await outcome(client.send('Page.enable', {}, pageSession));
-    await outcome(client.send('Runtime.enable', {}, pageSession));
-    await outcome(client.send('Network.enable', {}, pageSession));
+    for (const [method, label] of [
+      ['Page.enable', 'Page.enable'],
+      ['Runtime.enable', 'Runtime.enable'],
+      ['Network.enable', 'Network.enable'],
+    ]) {
+      const enabled = await capped(outcome(client.send(method, {}, pageSession)), 800, label);
+      if (!enabled.ok && !refused(enabled))
+        return {
+          incomplete: `client ${label} failed: ${enabled.error?.message ?? enabled.error}`,
+        };
+    }
   }
   return { pageSession };
 }

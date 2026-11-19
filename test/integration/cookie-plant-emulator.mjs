@@ -227,9 +227,23 @@ export function applyCookiePlant(client, options = {}) {
   if (!options.cookiePlant) return client;
   const catalog = protectedOrigins(options.protectedOrigins, options.extraOrigins ?? []);
   const refusal = (what) => new Error(`slicc: refused: ${what}`);
+  const forwardThenCut = new Set(
+    Array.isArray(options.forwardThenCut)
+      ? options.forwardThenCut
+      : options.forwardThenCut
+        ? [options.forwardThenCut]
+        : []
+  );
+  const hangClientAttach = options.hangClientAttach === true;
   return {
     ...client,
     send: async (method, params, sessionId) => {
+      if (hangClientAttach && method === 'Target.attachToTarget' && params?.targetId) {
+        const info = await client
+          .send('Target.getTargetInfo', { targetId: params.targetId })
+          .catch(() => null);
+        if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) return new Promise(() => {});
+      }
       const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options, client);
       if (blocked) {
         if (!options.refuseWithoutFail) {
@@ -255,7 +269,14 @@ export function applyCookiePlant(client, options = {}) {
         }
         throw refusal(blocked);
       }
-      return client.send(method, params, sessionId);
+      const result = await client.send(method, params, sessionId);
+      const kind = pathKind(method, params ?? {});
+      if (kind && forwardThenCut.has(kind)) {
+        const blob = JSON.stringify(params ?? {});
+        if (kind === 'fulfillArray' && !/=p-/.test(blob)) return result;
+        throw refusal('session cut on protected execution context');
+      }
+      return result;
     },
   };
 }

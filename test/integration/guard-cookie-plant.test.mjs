@@ -327,6 +327,28 @@ test('mutant that cuts the session at continueAtRequest leaves later paths incom
   );
 });
 
+test('mutant that forwards fulfillArray then cuts still fails planted', async () => {
+  const out = await rows({
+    allowPlantPaths: ['fulfillArray'],
+    forwardThenCut: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayRefused, true, JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('mutant that never answers client attach is incomplete', async () => {
+  const out = await rows({ hangClientAttach: true });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.match(
+    [...(row.incomplete ?? []), row.why ?? ''].join('\n'),
+    /attachToTarget timeout|client attach failed/
+  );
+});
+
 test('unreadable jar after a plant is incomplete, not a false pass', async () => {
   const fixture = await fixtureServer();
   try {

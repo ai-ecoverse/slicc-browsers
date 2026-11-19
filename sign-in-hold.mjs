@@ -168,7 +168,6 @@ async function listHttp(client, notes) {
     });
     return {
       ok: false,
-      missing: true,
       error: { message: String(error?.message ?? error) },
     };
   }
@@ -591,7 +590,26 @@ async function heldPopup({
       hostLabel: hostLabelOf(openerOrigin ?? ordinary),
       notes,
     });
-    if (askedHold.incomplete) return { live: false, incomplete: askedHold.incomplete, openerId };
+    if (askedHold.incomplete) {
+      const popup = await until(
+        async () => {
+          const listed = await outcome(reader.send('Target.getTargets', {}));
+          if (!listed.ok) return null;
+          return (
+            (listed.result?.targetInfos ?? []).find((info) =>
+              matchPopup(info, known, openerId, heldUrl, control)
+            ) ?? null
+          );
+        },
+        Math.min(budget, 1000)
+      );
+      return {
+        live: false,
+        incomplete: askedHold.incomplete,
+        openerId,
+        ...(popup?.targetId ? { targetId: popup.targetId } : {}),
+      };
+    }
     holdAnswer = askedHold.answer;
   }
   note(notes, 'sign-in-hold.hold', {

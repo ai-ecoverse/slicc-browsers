@@ -1341,6 +1341,7 @@ class Execution {
         budget: this.bound(5000),
         control: this.side === 'control',
         mode: step.cookiePlant,
+        fixtureLog: () => this.options.fixture.log(),
       })
     );
   }

@@ -53,11 +53,13 @@ function decodeRawResponse(encoded) {
   }
 }
 
-function cookieLines(headers) {
+function cookieLines(headers, options = {}) {
   const lines = [];
+  const joinObsFold = options.missObsFoldDomain !== true;
   for (const { name, value } of headers) {
     const key = String(name).trim().toLowerCase();
-    const text = String(value ?? '');
+    let text = String(value ?? '');
+    if (joinObsFold) text = text.replace(/\r?\n[ \t]+/g, '; ');
     if (key === 'set-cookie' || key === 'set-cookie2') {
       for (const part of text.split(/\n/)) {
         const trimmed = part.trim();
@@ -68,7 +70,10 @@ function cookieLines(headers) {
     if (!/[\r\n]/.test(text)) continue;
     for (const part of text.split(/\r?\n/)) {
       const match = /^\s*Set-Cookie2?:\s*(.*)$/i.exec(part);
-      if (match?.[1]?.trim()) lines.push(match[1].trim());
+      if (match?.[1]?.trim()) {
+        const line = joinObsFold ? match[1].trim().replace(/\r?\n[ \t]+/g, '; ') : match[1].trim();
+        lines.push(line);
+      }
     }
   }
   return lines;
@@ -197,7 +202,7 @@ export function cookiePlantBlocked(method, params, catalog, options = {}, client
     return null;
   if (options.refuseAllInterception) return 'response interception';
   const headers = collectHeaders(method, params);
-  const lines = cookieLines(headers);
+  const lines = cookieLines(headers, options);
   if (!lines.length) return null;
   const kind = pathKind(method, params);
   const allow = options.allowPlantPaths ?? [];

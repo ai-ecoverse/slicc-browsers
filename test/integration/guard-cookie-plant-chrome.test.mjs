@@ -39,9 +39,19 @@ test('C10.cookie-plant reaches live:pass in real Chrome with the cookiePlant gua
     );
     assert.equal(execution.results.length, 2);
     for (const row of execution.results) {
-      assert.equal(row.live, 'pass', JSON.stringify(row));
-      assert.equal(row.control, 'pass', JSON.stringify(row));
-      assert.equal(row.guarded, 'pass', JSON.stringify(row));
+      const dump = () =>
+        JSON.stringify({
+          id: row.id,
+          target: row.target,
+          live: row.live,
+          control: row.control,
+          guarded: row.guarded,
+          why: row.why,
+          notes: row.notes,
+        });
+      assert.equal(row.live, 'pass', dump());
+      assert.equal(row.control, 'pass', dump());
+      assert.equal(row.guarded, 'pass', dump());
     }
   } finally {
     await guard.stop();

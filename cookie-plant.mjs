@@ -47,6 +47,104 @@ function note(notes, label, evidence) {
   notes.push(`${label}: ${JSON.stringify(evidence)}`);
 }
 
+async function pageSnapshot(client, pageSession) {
+  if (!pageSession) return { ready: false };
+  const ready = await outcome(
+    client.send(
+      'Runtime.evaluate',
+      { expression: 'document.readyState', returnByValue: true },
+      pageSession
+    )
+  );
+  const href = await outcome(
+    client.send(
+      'Runtime.evaluate',
+      { expression: 'location.href', returnByValue: true },
+      pageSession
+    )
+  );
+  return {
+    ready: ready.ok,
+    readyState: ready.result?.result?.value ?? null,
+    href: href.ok ? (href.result?.result?.value ?? null) : null,
+    readyError: ready.ok ? undefined : String(ready.error?.message ?? ready.error),
+    hrefError: href.ok ? undefined : String(href.error?.message ?? href.error),
+  };
+}
+
+async function serverHitsFor(fixtureLog, url, since) {
+  if (typeof fixtureLog !== 'function') return null;
+  let entries;
+  try {
+    entries = await fixtureLog();
+  } catch (error) {
+    return { error: String(error?.message ?? error) };
+  }
+  if (!Array.isArray(entries)) return { error: 'fixture log not an array' };
+  const matched = entries.filter(
+    (entry) =>
+      Number(entry?.time ?? 0) >= since &&
+      (entry?.url === url || String(entry?.url ?? '').startsWith(url))
+  );
+  const byPath = {};
+  for (const entry of entries) {
+    if (Number(entry?.time ?? 0) < since) continue;
+    let path = entry?.url ?? '';
+    try {
+      path = new URL(entry.url).pathname;
+    } catch {}
+    byPath[path] = (byPath[path] ?? 0) + 1;
+  }
+  return { hits: matched.length, urls: matched.map((e) => e.url), byPath };
+}
+
+async function diagnoseIncomplete({
+  notes,
+  label,
+  incomplete,
+  url,
+  client,
+  pageSession,
+  from,
+  methods,
+  pauseMs,
+  startedAt,
+  legStartedAt,
+  fixtureLog,
+  ensure,
+  trigger,
+  firstIncomplete,
+}) {
+  const elapsedMs = Date.now() - startedAt;
+  const legElapsedMs = Date.now() - legStartedAt;
+  const page = await pageSnapshot(client, pageSession);
+  const since = client.events.slice(from);
+  const pauses = pauseEvents(since, 0, url, methods);
+  const anyPaused = since.filter((event) => methods.includes(event.method)).length;
+  const server = await serverHitsFor(fixtureLog, url, startedAt);
+  const evidence = {
+    incomplete,
+    path: label,
+    url,
+    elapsedMs,
+    legElapsedMs,
+    pauseMs,
+    ensure: ensure ?? null,
+    triggerOk: trigger?.ok ?? null,
+    triggerError: trigger?.ok ? undefined : String(trigger?.error?.message ?? trigger?.error ?? ''),
+    page,
+    pauseHits: pauses.length,
+    anyPaused,
+    server,
+  };
+  note(notes, `cookie-plant.${label}`, evidence);
+  if (firstIncomplete && !firstIncomplete.noted) {
+    firstIncomplete.noted = true;
+    note(notes, 'cookie-plant.firstIncomplete', evidence);
+  }
+  return evidence;
+}
+
 function hostOf(origin) {
   try {
     return new URL(origin).hostname.toLowerCase();
@@ -604,16 +702,21 @@ async function runPlant({
   stage = 'Request',
   homeUrl,
   topLevel = true,
+  fixtureLog,
+  legStartedAt,
+  firstIncomplete,
 }) {
   let paused = null;
   let triggerPromise = Promise.resolve();
   const from = client.events.length;
   const pauseMs = Math.min(budget, 2000);
+  const startedAt = Date.now();
+  const legAt = legStartedAt ?? startedAt;
   try {
     return await withPathBudget(
       (async () => {
         await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
-        await ensureInterception(client, pageSession, transport);
+        const ensure = await ensureInterception(client, pageSession, transport);
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel
@@ -621,7 +724,25 @@ async function runPlant({
           : triggerFetch(client, pageSession, url);
         paused = await waitPause(client, from, url, methods, pauseMs);
         if (!paused) {
-          note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
+          const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
+          triggerPromise = Promise.resolve(trigger);
+          await diagnoseIncomplete({
+            notes,
+            label,
+            incomplete: 'no pause',
+            url,
+            client,
+            pageSession,
+            from,
+            methods,
+            pauseMs,
+            startedAt,
+            legStartedAt: legAt,
+            fixtureLog,
+            ensure,
+            trigger,
+            firstIncomplete,
+          });
           return attemptRecord(
             { ok: false, error: { message: 'timeout: no pause' } },
             'incomplete'
@@ -647,7 +768,25 @@ async function runPlant({
           );
           const again = await waitPause(client, responseFrom, url, methods, pauseMs);
           if (!again) {
-            note(notes, `cookie-plant.${label}`, { incomplete: 'no response pause', url });
+            const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
+            triggerPromise = Promise.resolve(trigger);
+            await diagnoseIncomplete({
+              notes,
+              label,
+              incomplete: 'no response pause',
+              url,
+              client,
+              pageSession,
+              from: responseFrom,
+              methods,
+              pauseMs,
+              startedAt,
+              legStartedAt: legAt,
+              fixtureLog,
+              ensure,
+              trigger,
+              firstIncomplete,
+            });
             return attemptRecord(
               { ok: false, error: { message: 'timeout: no response pause' } },
               'incomplete'
@@ -663,8 +802,23 @@ async function runPlant({
       label
     );
   } catch (error) {
-    note(notes, `cookie-plant.${label}`, {
+    await diagnoseIncomplete({
+      notes,
+      label,
       incomplete: String(error?.message ?? error),
+      url,
+      client,
+      pageSession,
+      from,
+      methods:
+        transport?.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'],
+      pauseMs,
+      startedAt,
+      legStartedAt: legAt,
+      fixtureLog,
+      ensure: null,
+      trigger: null,
+      firstIncomplete,
     });
     return attemptRecord(
       { ok: false, error: { message: String(error?.message ?? error) } },
@@ -1165,6 +1319,9 @@ function fetchAttacks(ctx) {
     notes: ctx.notes,
     homeUrl: ctx.homeUrl,
     topLevel: true,
+    fixtureLog: ctx.fixtureLog,
+    legStartedAt: ctx.legStartedAt,
+    firstIncomplete: ctx.firstIncomplete,
   };
   const header = (value, domain = ctx.domain, domainAttr = null) =>
     cookieHeader(ctx.names.plant, value, domain, '', domainAttr);
@@ -1224,6 +1381,9 @@ function legacyAttacks(ctx, legacyReady) {
     notes: ctx.notes,
     homeUrl: ctx.homeUrl,
     topLevel: true,
+    fixtureLog: ctx.fixtureLog,
+    legStartedAt: ctx.legStartedAt,
+    firstIncomplete: ctx.firstIncomplete,
   };
   return {
     legacyHeaders: () =>
@@ -1289,15 +1449,20 @@ async function allowedHeaderAttempt({
   fetchReady,
   homeUrl,
   topLevel = false,
+  fixtureLog,
+  legStartedAt,
+  firstIncomplete,
 }) {
   let paused = null;
   let triggerPromise = Promise.resolve();
   const from = client.events.length;
   const pauseMs = Math.min(budget, 2000);
+  const startedAt = Date.now();
+  const legAt = legStartedAt ?? startedAt;
   try {
     return await withPathBudget(
       (async () => {
-        await ensureInterception(client, pageSession, transport);
+        const ensure = await ensureInterception(client, pageSession, transport);
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel
@@ -1305,7 +1470,25 @@ async function allowedHeaderAttempt({
           : triggerFetch(client, pageSession, url);
         paused = await waitPause(client, from, url, methods, pauseMs);
         if (!paused) {
-          note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
+          const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
+          triggerPromise = Promise.resolve(trigger);
+          await diagnoseIncomplete({
+            notes,
+            label,
+            incomplete: 'no pause',
+            url,
+            client,
+            pageSession,
+            from,
+            methods,
+            pauseMs,
+            startedAt,
+            legStartedAt: legAt,
+            fixtureLog,
+            ensure,
+            trigger,
+            firstIncomplete,
+          });
           return attemptRecord(
             { ok: false, error: { message: 'timeout: no pause' } },
             'incomplete'
@@ -1416,6 +1599,11 @@ function controlAttacks(ctx) {
     domain: ctx.domain,
     url: `${ctx.plantOrigin}/`,
   };
+  const diag = {
+    fixtureLog: ctx.fixtureLog,
+    legStartedAt: ctx.legStartedAt,
+    firstIncomplete: ctx.firstIncomplete,
+  };
   return {
     ordinary: () =>
       runPlant({
@@ -1431,6 +1619,7 @@ function controlAttacks(ctx) {
         label: 'ordinary',
         homeUrl: ctx.homeUrl,
         topLevel: false,
+        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1473,6 +1662,7 @@ function controlAttacks(ctx) {
         fetchReady,
         homeUrl: ctx.homeUrl,
         topLevel: true,
+        ...diag,
       }),
     deletion: async () => {
       const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteCookie);
@@ -1499,6 +1689,7 @@ function controlAttacks(ctx) {
         fetchReady,
         homeUrl: ctx.homeUrl,
         topLevel: true,
+        ...diag,
       });
       const after = await readJar(ctx.reader, ctx.readerSession, {
         name: ctx.names.delete,
@@ -1621,6 +1812,11 @@ function credentialAttacks(ctx) {
   };
   const subHost = `x.${ctx.credentialHost}`;
   const subUrl = `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/data?n=sub-${ctx.tag}`;
+  const diag = {
+    fixtureLog: ctx.fixtureLog,
+    legStartedAt: ctx.legStartedAt,
+    firstIncomplete: ctx.firstIncomplete,
+  };
   return {
     hostOnly: () =>
       runPlant({
@@ -1636,6 +1832,7 @@ function credentialAttacks(ctx) {
         label: 'hostOnly',
         homeUrl: ctx.homeUrl,
         topLevel: true,
+        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1676,6 +1873,7 @@ function credentialAttacks(ctx) {
         label: 'domainCover',
         homeUrl: ctx.homeUrl,
         topLevel: true,
+        ...diag,
         build: () =>
           fetchReady
             ? fetchFulfill({
@@ -1725,6 +1923,7 @@ function credentialAttacks(ctx) {
         fetchReady,
         homeUrl: ctx.homeUrl,
         topLevel: true,
+        ...diag,
       }),
   };
 }
@@ -1741,6 +1940,7 @@ export async function cookiePlant({
   control = false,
   mode = 'set-cookie',
   credentialOrigin,
+  fixtureLog,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -1837,6 +2037,9 @@ export async function cookiePlant({
     credential,
     credentialHost,
     credentialSiteDomain,
+    fixtureLog,
+    legStartedAt: Date.now(),
+    firstIncomplete: { noted: false },
   });
 
   const results = await runAttempts(

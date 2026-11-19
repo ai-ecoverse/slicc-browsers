@@ -136,8 +136,10 @@ export function cookiePlantFake(options = {}) {
   const paused = new Map();
   let sawCplantJar = false;
   let fetchDead = false;
+  let deadFetchHits = 0;
   const rejectCplantJarAfterFirst = options.rejectCplantJarAfterFirst === true;
   const deadFetchAfter = options.deadFetchAfter ? String(options.deadFetchAfter) : '';
+  const deadFetchOnNth = Number(options.deadFetchOnNth ?? 1) || 1;
 
   const infoOf = (tab) => ({
     targetId: tab.targetId,
@@ -498,10 +500,13 @@ export function cookiePlantFake(options = {}) {
           ? Buffer.from(params.binaryResponseHeaders, 'base64').toString('utf8')
           : JSON.stringify(params ?? {});
         if (blob.includes(deadFetchAfter)) {
-          fetchDead = true;
-          for (const tab of tabs.values()) {
-            tab.fetchSessions = new Set();
-            tab.fetch = false;
+          deadFetchHits += 1;
+          if (deadFetchHits >= deadFetchOnNth) {
+            fetchDead = true;
+            for (const tab of tabs.values()) {
+              tab.fetchSessions = new Set();
+              tab.fetch = false;
+            }
           }
         }
       }

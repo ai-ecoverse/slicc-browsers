@@ -15,8 +15,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const protectedURL = (url) => new URL(url).hostname.endsWith('.sliccy.ai');
 const protectedChain = (url) =>
   new URL(url).pathname === '/hop' && decodeURIComponent(url).includes('.sliccy.ai');
+const ordinaryHop = (url) =>
+  new URL(url).origin === origins.ordinary && new URL(url).pathname === '/hop';
 
-function refusingGuard({ cut = () => false, delay = () => 0 } = {}) {
+function refusingGuard({ cut = () => false, delay = () => 0, skip = () => false } = {}) {
   const log = [];
   const targets = new Map();
   const sessions = new Map();
@@ -57,7 +59,7 @@ function refusingGuard({ cut = () => false, delay = () => 0 } = {}) {
         commit(target, loaderId, 'chrome-error://chromewebdata/', at);
         return;
       }
-      log.push({ url: at, headers: {} });
+      if (!skip(at)) log.push({ url: at, headers: {} });
       const parsed = new URL(at);
       if (parsed.pathname !== '/hop') break;
       at = parsed.searchParams.get('to');
@@ -210,6 +212,33 @@ for (const id of rows) {
     assert.deepEqual(row.incomplete, ['guarded chainStarted: first hop not observed']);
     assert.deepEqual(row.errors, []);
     assert.equal(summary.pass, false);
+  });
+
+  test(`${id}: a control whose chain never starts is incomplete, not a failed control`, async () => {
+    const { row, summary } = await measure(published(id), refusingGuard({ cut: ordinaryHop }));
+    assert.equal(row.control, 'incomplete', JSON.stringify(row));
+    assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+    for (const name of ['chainStarted', 'protectedHop', 'landed'])
+      assert.equal(row.observations.control[name], 'incomplete', name);
+    assert.deepEqual(row.incomplete, [
+      'control chainStarted: first hop not observed',
+      'guarded chainStarted: first hop not observed',
+    ]);
+    assert.deepEqual(row.errors, []);
+    assert.equal(summary.pass, false);
+  });
+
+  test(`${id}: a guard that skips the first hop but serves the protected hop still fails`, async () => {
+    const { row } = await measure(
+      published(id),
+      refusingGuard({ skip: (url) => ordinaryHop(url) && protectedChain(url) })
+    );
+    controlMeasured(row);
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.equal(row.observations.guarded.chainStarted, 'incomplete');
+    assert.equal(row.observations.guarded.protectedHop, true);
+    assert.equal(row.observations.guarded.landed, true);
+    assert.deepEqual(row.errors, []);
   });
 
   test(`${id}: a control on which every observation is excused by a refusal measured nothing and is incomplete`, async () => {

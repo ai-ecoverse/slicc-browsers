@@ -2131,7 +2131,6 @@ class Execution {
   async observeAll(unseen) {
     const observed = { ...this.refused };
     const incomplete = [];
-    const want = this.side === 'control' ? this.vector.control.expected : this.vector.expected;
     let measured = 0;
     let excused = 0;
     for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
@@ -2154,15 +2153,6 @@ class Execution {
         observed[name] = 'incomplete';
         this.incomplete.push(`${name}: absence watch not installed`);
       }
-      if (
-        Object.hasOwn(premises, name) &&
-        !dependencies.length &&
-        want?.[name] === true &&
-        observed[name] === false
-      ) {
-        observed[name] = 'incomplete';
-        this.incomplete.push(`${name}: ${premises[name]}`);
-      }
       if (exitsClient(this.vector) && dependencies.length && observed[name] === false) {
         observed[name] = 'incomplete';
         this.incomplete.push(`${name}: pre-exit evidence not observed`);
@@ -2172,8 +2162,25 @@ class Execution {
       observed[`${name}.either`] = holds;
       if (holds === 'incomplete') incomplete.push(name);
     }
+    this.premises(observed);
     if (this.side === 'control' && excused && !measured) this.incomplete.push('measured nothing');
     return { observed, incomplete };
+  }
+
+  premises(observed) {
+    const want = this.side === 'control' ? this.vector.control.expected : this.vector.expected;
+    const observe = this.vector.observe ?? {};
+    const missing = Object.keys(premises).filter(
+      (name) =>
+        Object.hasOwn(observe, name) &&
+        !(observe[name].dependsOn ?? []).length &&
+        want?.[name] === true &&
+        observed[name] === false
+    );
+    if (!missing.length) return;
+    for (const name of missing) this.incomplete.push(`${name}: ${premises[name]}`);
+    for (const name of Object.keys(observe))
+      if (want?.[name] === true && observed[name] === false) observed[name] = 'incomplete';
   }
 
   async either(check, value, name, unseen) {

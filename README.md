@@ -232,6 +232,7 @@ You supply:
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
 | `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
+| `errorFrameClass` | tell whether a failed (error) iframe was loading a protected URL, without being given the URL (for example from `unreachableUrl` in `Page.getFrameTree`, or a transport boolean) |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |
@@ -243,10 +244,10 @@ You supply:
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock setup; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (incl. callback-origin) without over-blocking ordinary ones |
-| `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); unreachable listing → not-supported |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
+| `jsonList` | expose `/json/list`; missing → not-supported (incomplete if declared) |
 
-`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
+`signInHold.ask({ marker, hostLabel })` may answer the hold when BroadcastChannel cannot; else the page channel runs. The raw observer waits for a committed document, then reads the mark.
 
 ### Reading the result
 
@@ -262,21 +263,21 @@ Read `guard-vectors.json` for steps, `means`, live and expected; [`schema/guard-
 
 ## Development
 
-You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome/Chromium (`CHROME_PATH` or `npx slicc-cdp install-browser`); headless unless `CI` is set (`SLICC_HEADLESS` overrides).
+Need Go 1.26, Rust/`wasm32-wasip1`, Node 24+, Chrome (`CHROME_PATH` or `npx slicc-cdp install-browser`); headless unless `CI` is set (`SLICC_HEADLESS` overrides).
 
 | command | what it does |
 | --- | --- |
 | `npm run corpus` | rebuilds `corpus.json` from `corpus/` |
 | `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs` |
 | `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature |
-| `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
+| `npm test` | every `test/integration/` file: validation, Node/Go/Rust tests, and the unguarded Chromium runner |
 | `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
 
 New discovery behaviour gets a corpus case; new guard behaviour gets a guard vector.
 
 ## CI and releases
 
-CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, sharded `npm test`, then Claude and Codex review; merge re-runs lint and tests on Linux.
+CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline) via `.github/workflows/ci.yml`: lint, sharded `npm test`, Claude and Codex review; merge re-runs on Linux.
 
 Merges to `main` that warrant it release via semantic-release as one version for all three packages. Pushed tags are never moved or deleted.
 

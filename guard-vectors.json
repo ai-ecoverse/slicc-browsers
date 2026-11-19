@@ -116,7 +116,8 @@
     "secureOrigin": "the fixture and page origins are secure contexts (HTTPS), so service worker registration is available",
     "closeProtected": "the guard lets Target.closeTarget close a protected tab",
     "iframeAutoAttach": "the transport auto-attaches non-tab child targets (out-of-process iframes) under a page session: Target.setAutoAttach with children steps and child sessions for iframe targets, not only tab-level auto-attach",
-    "jsonList": "the guarded client exposes /json/list through client.jsonList() or client.devtoolsHttp (or a ws host the runner can fetch); when none is reachable the jsonListed observation is not-supported while Target.getTargets, discovery, attach and read still run",
+    "errorFrameClass": "the guard can tell whether a failed (error) iframe was loading a protected URL without being given the URL: for example from Page.getFrameTree unreachableUrl, or a boolean the transport reports (errorProtected); a transport that can do neither cannot snapshot a page that has an error frame",
+    "jsonList": "the guarded client exposes /json/list through client.jsonList() or client.devtoolsHttp (or a ws host the runner can fetch); when none is reachable and jsonList is undeclared the jsonListed observation is not-supported, but when jsonList is declared the leg is incomplete; Target.getTargets, discovery, attach and read still run",
     "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable; client.signInHold.ask({marker,hostLabel}) may answer the hold when the page-side BroadcastChannel cannot; redirect_uri cut to https://www.sliccy.ai (callback-origin) is hidden like other callback shapes"
   },
   "placeholders": {
@@ -24379,7 +24380,8 @@
         {
           "page": "framed",
           "from": "{ordinary}",
-          "url": "{network-error}"
+          "url": "{network-error}",
+          "requires": ["errorFrameClass"]
         },
         {
           "settle": {
@@ -24422,7 +24424,7 @@
         }
       ],
       "targets": ["network-error"],
-      "requires": ["browserSession"],
+      "requires": ["browserSession", "errorFrameClass"],
       "observe": {
         "errorSeen": {
           "means": "Chrome reported a failed ordinary document request before the tab navigated away",

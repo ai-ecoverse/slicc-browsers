@@ -163,6 +163,10 @@
           "type": "string",
           "minLength": 1
         },
+        "errorFrameClass": {
+          "type": "string",
+          "minLength": 1
+        },
         "jsonList": {
           "type": "string",
           "minLength": 1
@@ -207,6 +211,7 @@
         "closeProtected",
         "signInHold",
         "iframeAutoAttach",
+        "errorFrameClass",
         "jsonList"
       ]
     },

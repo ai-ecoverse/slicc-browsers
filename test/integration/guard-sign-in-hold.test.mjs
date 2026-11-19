@@ -559,7 +559,22 @@ async function withoutListing(options = {}) {
   }
 }
 
-test('unreachable /json/list is not-supported and the run still passes', async () => {
+test('declared jsonList with unreachable listing is incomplete', async () => {
+  const out = await withoutListing({ capabilities: { jsonList: true } });
+  const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+  assert.ok(row, JSON.stringify(out.results.map((r) => r.id)));
+  assert.ok(row.control === 'incomplete' || row.guarded === 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.control, 'pass', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.match(String(row.why ?? row.incomplete ?? ''), /jsonListed|listing unavailable/);
+  assert.ok(!(row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+  const report = out.summary({ guard: 'emulator', sha: 'test' });
+  assert.equal(report.pass, false);
+  assert.deepEqual(report.forged, []);
+  assert.match(report.line, /^GUARD-FAIL /);
+});
+
+test('undeclared jsonList with unreachable listing passes as not-supported', async () => {
   const out = await withoutListing();
   for (const id of ids) {
     const row = out.results.find((r) => r.id === id && r.target === 'seven');
@@ -577,11 +592,8 @@ test('unreachable /json/list is not-supported and the run still passes', async (
   assert.match(report.line, /^GUARD-PASS /);
 });
 
-test('jsonList leak fails when listing is reachable even without jsonList declared', async () => {
-  const out = await rows({
-    leakJsonList: true,
-    capabilities: { jsonList: undefined },
-  });
+test('declared jsonList with a reachable listing leak fails', async () => {
+  const out = await rows({ leakJsonList: true });
   const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
   assert.equal(row.observations.guarded.jsonListed, true, JSON.stringify(row));

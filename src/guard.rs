@@ -45,6 +45,7 @@ pub const CAP_IFRAME_AUTO_ATTACH: &str = "iframeAutoAttach";
 pub const CAP_REQUEST_INTERCEPTION: &str = "requestInterception";
 pub const CAP_FETCH_INTERCEPTION: &str = "fetchInterception";
 pub const CAP_LEGACY_INTERCEPTION: &str = "legacyInterception";
+pub const CAP_ERROR_FRAME_CLASS: &str = "errorFrameClass";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";

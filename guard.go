@@ -56,6 +56,7 @@ const (
 	GuardCapCloseProtected      = "closeProtected"
 	GuardCapSignInHold          = "signInHold"
 	GuardCapIframeAutoAttach    = "iframeAutoAttach"
+	GuardCapErrorFrameClass     = "errorFrameClass"
 	GuardCapRequestInterception = "requestInterception"
 	GuardCapFetchInterception   = "fetchInterception"
 	GuardCapLegacyInterception  = "legacyInterception"

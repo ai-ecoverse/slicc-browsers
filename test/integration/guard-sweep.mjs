@@ -47,6 +47,8 @@ export const capabilities = {
   iframeAutoAttach: true,
   requestInterception: true,
   fetchInterception: true,
+  errorFrameClass: true,
+  jsonList: true,
 };
 
 export const drivable = new Set([

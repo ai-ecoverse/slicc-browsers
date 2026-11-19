@@ -1859,7 +1859,15 @@ class Execution {
     if (!check?.result) return undefined;
     const out = this.calls[check.result];
     const value = at(out, check.path);
-    if (value === 'not-supported') return 'not-supported';
+    if (value === 'not-supported') {
+      if (name === 'jsonListed' && declared('jsonList', this.options.capabilities)) {
+        const reason = 'jsonListed: jsonList declared but listing unavailable';
+        if (!this.incomplete.some((entry) => entry.startsWith('jsonListed:')))
+          this.incomplete.push(reason);
+        return 'incomplete';
+      }
+      return 'not-supported';
+    }
     if (value === 'incomplete') {
       const skips = out?.result?.skips ?? [];
       const hint = skips.find(

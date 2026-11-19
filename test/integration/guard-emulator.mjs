@@ -633,11 +633,6 @@ function emulatedGuardPlain(browser, options = {}) {
                 castStopped.add(event.sessionId);
                 casting.delete(event.sessionId);
                 await client.send('Page.stopScreencast', {}, event.sessionId).catch(() => {});
-                events.push({
-                  method: 'Page.screencastVisibilityChanged',
-                  params: { visible: false },
-                  sessionId: event.sessionId,
-                });
               }
               continue;
             }
@@ -1959,11 +1954,6 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
                 castStopped.add(event.sessionId);
                 casting.delete(event.sessionId);
                 await client.send('Page.stopScreencast', {}, event.sessionId).catch(() => {});
-                events.push({
-                  method: 'Page.screencastVisibilityChanged',
-                  params: { visible: false },
-                  sessionId: event.sessionId,
-                });
               }
               continue;
             }

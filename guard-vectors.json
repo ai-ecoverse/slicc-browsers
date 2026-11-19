@@ -9071,7 +9071,7 @@
           }
         },
         "castStopped": {
-          "means": "extension frame cast: the guard stopped or refused the screencast after the frame appeared (stop, visibility change, ack refusal, cut, or detach)",
+          "means": "extension frame cast: after a confirmed paint the guard delivered no post-insertion frame (silent stop/drop), or refused an ack / detached",
           "check": {
             "result": "frame",
             "path": "result.castStopped",
@@ -9080,7 +9080,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; the control proves frames before and after insertion; the guarded leg passes only with positive stop evidence (refusal, stop, visibility change, cut, or detach) and no post-insertion frame (a refusal of Page.startScreencast on the clean tab also satisfies the row); a stall with neither a frame nor a stop signal is incomplete",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; the control proves frames before and after a forced paint; the guarded leg fails on any post-insertion frame and passes when a confirmed paint yields none (silent stop/drop, as shipping guards do) or an ack refusal/detach; a stall where paint cannot be confirmed is incomplete (a refusal of Page.startScreencast on the clean tab also satisfies the row)",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",

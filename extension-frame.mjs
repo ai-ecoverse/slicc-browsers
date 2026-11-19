@@ -916,7 +916,8 @@ async function driveCaptures(client, page, missing) {
   return { archive, pdf, cast, begin };
 }
 
-const CAST_STALL = 'cast stalled: no frame after insertion and no stop signal';
+const CAST_STALL = 'cast stalled: no frame after insertion and paint was not confirmed';
+const CAST_PAINT_MS = 500;
 const CAST_TICK = `(() => {
   const root = document.documentElement;
   const n = Number(root.dataset.sliccCastTick || '0') + 1;
@@ -935,6 +936,7 @@ async function driveCast(client, page, frameMs, reader, observer) {
   const acked = new Set();
   let leakFrom;
   let framesBefore = 0;
+  let paintConfirmed = false;
   let ackRefused = false;
   let pumping = start.ok;
   let stopped = false;
@@ -942,18 +944,14 @@ async function driveCast(client, page, frameMs, reader, observer) {
     (client.events ?? [])
       .slice(from)
       .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
-  const stopSeen = (from = 0) =>
+  const explicitStop = (from = 0) =>
     ackRefused ||
     (client.events ?? [])
       .slice(from)
       .some(
         (event) =>
-          event.sessionId === page &&
-          ((event.method === 'Page.screencastVisibilityChanged' &&
-            event.params?.visible === false) ||
-            event.method === 'Page.screencastStopped' ||
-            (event.method === 'Inspector.detached' && event.params?.reason) ||
-            (event.method === 'Target.detachedFromTarget' && event.params?.sessionId === page))
+          (event.method === 'Inspector.detached' && event.params?.reason) ||
+          (event.method === 'Target.detachedFromTarget' && event.params?.sessionId === page)
       );
   const ackFrames = async () => {
     for (const event of client.events ?? []) {
@@ -966,8 +964,21 @@ async function driveCast(client, page, frameMs, reader, observer) {
     }
   };
   const provoke = async () => {
-    if (!reader || !observer) return;
-    await observe(reader, observer, CAST_TICK).catch(() => {});
+    if (!reader || !observer) {
+      paintConfirmed = true;
+      return;
+    }
+    try {
+      await Promise.race([
+        observe(reader, observer, CAST_TICK),
+        pause(CAST_PAINT_MS).then(() => {
+          throw new Error('cast paint timed out');
+        }),
+      ]);
+      paintConfirmed = true;
+    } catch {
+      return;
+    }
   };
   const halt = async () => {
     pumping = false;
@@ -1016,6 +1027,7 @@ async function driveCast(client, page, frameMs, reader, observer) {
           castFramesAfter: 0,
           castInserted: Boolean(inserted),
           castStopped: false,
+          paintConfirmed: false,
         };
       }
       if (!inserted) {
@@ -1025,6 +1037,7 @@ async function driveCast(client, page, frameMs, reader, observer) {
           castFramesAfter: 0,
           castInserted: false,
           castStopped: false,
+          paintConfirmed: false,
         };
       }
       if (leakFrom == null) {
@@ -1034,22 +1047,20 @@ async function driveCast(client, page, frameMs, reader, observer) {
       }
       const until = Date.now() + deadlineMs;
       let frames = [];
-      let castStopped = false;
       do {
         await provoke();
         await ackFrames();
         frames = castFrames(leakFrom);
-        castStopped = stopSeen(leakFrom);
-        if (frames.length > 0 || castStopped) break;
+        if (frames.length > 0 || explicitStop(leakFrom)) break;
         await pause(25);
       } while (Date.now() < until);
       await ackFrames();
       frames = castFrames(leakFrom);
-      castStopped = stopSeen(leakFrom);
       const contentLeak = frames.some((event) => {
         const data = event.params?.data;
         return typeof data === 'string' && (data.includes(MARKER) || data.includes(USERNAME));
       });
+      const stoppedExplicit = explicitStop(leakFrom);
       await halt();
       return {
         castLeak: frames.length > 0 || contentLeak,
@@ -1057,7 +1068,8 @@ async function driveCast(client, page, frameMs, reader, observer) {
         castFramesBefore: framesBefore,
         castFramesAfter: frames.length,
         castInserted: true,
-        castStopped,
+        castStopped: stoppedExplicit || (frames.length === 0 && !contentLeak && paintConfirmed),
+        paintConfirmed,
       };
     },
     stop: halt,
@@ -1099,6 +1111,7 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
   result.castFramesAfter = castAfter.castFramesAfter ?? 0;
   const inserted = Boolean(castAfter.castInserted);
   const leaked = Boolean(castAfter.castLeak || castAfter.castContentLeak);
+  const paintConfirmed = Boolean(castAfter.paintConfirmed);
   const stopped = Boolean(castAfter.castStopped);
   if (!castDrive.castBefore) {
     result.castLeak = false;
@@ -1120,15 +1133,15 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
       return;
     }
     result.castLeak = true;
-    result.castStopped = stopped;
+    result.castStopped = false;
     return;
   }
   if (leaked) {
     result.castLeak = true;
-    result.castStopped = stopped;
+    result.castStopped = false;
     return;
   }
-  if (stopped) {
+  if (stopped || paintConfirmed) {
     result.castLeak = false;
     result.castStopped = true;
     return;

@@ -188,7 +188,7 @@ function jsonEntryLeak(entry, rawId, rawUrl, mark) {
 
 function recordJson(listed, result, missing, rawId, rawUrl, mark) {
   if (listed?.missing) {
-    if (!missing.includes('/json/list unavailable')) missing.push('/json/list unavailable');
+    result.jsonListed = 'not-supported';
     return;
   }
   if (!answered(listed)) {
@@ -302,10 +302,11 @@ async function recordConnect(client, result, missing) {
 
 function finalizeMeasured(result, discovery) {
   if (discovery && result.eventsSeen === undefined) result.eventsSeen = false;
-  result.jsonListed ??= false;
+  if (result.jsonListed !== 'not-supported') result.jsonListed ??= false;
   result.targetsListed ??= false;
   result.idAnnounced ??= false;
-  if (result.targetsListed || result.jsonListed || result.eventsSeen) result.idAnnounced = false;
+  if (result.targetsListed || result.jsonListed === true || result.eventsSeen)
+    result.idAnnounced = false;
   result.attachSession ??= false;
   result.attachRefused ??= false;
   result.contentRead ??= false;
@@ -341,8 +342,9 @@ async function measureClient({
     if (result.attachSession !== true)
       firstAttach ??= await recordAttach(client, result, missing, rawId, mark);
     if (firstConnect === undefined) firstConnect = await recordConnect(client, result, missing);
+    const jsonDone = result.jsonListed === true || result.jsonListed === 'not-supported';
     if (
-      result.jsonListed === true &&
+      jsonDone &&
       result.targetsListed === true &&
       result.attachSession === true &&
       result.contentRead === true
@@ -373,7 +375,12 @@ async function measureClient({
 async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
   const attached = await outcome(reader.send('Target.attachToTarget', { targetId, flatten: true }));
   if (!attached.ok || !attached.result?.sessionId)
-    return { readable: false, reason: `raw attach failed: ${attached.error?.message}` };
+    return {
+      readable: false,
+      step: 'attach',
+      reason: `raw attach failed: ${attached.error?.message ?? attached.error}`,
+      text: '',
+    };
   const sessionId = attached.result.sessionId;
   await outcome(reader.send('Runtime.enable', {}, sessionId));
   const readOnce = async () => {
@@ -384,7 +391,8 @@ async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
         sessionId
       )
     );
-    const committed = ready.ok && ['interactive', 'complete'].includes(ready.result?.result?.value);
+    const readyState = ready.ok ? ready.result?.result?.value : null;
+    const committed = ready.ok && ['interactive', 'complete'].includes(readyState);
     const read = await outcome(
       reader.send(
         'Runtime.evaluate',
@@ -397,7 +405,7 @@ async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
     );
     const text = read.ok ? String(read.result?.result?.value ?? '') : '';
     const readable = Boolean(committed && mark && text.includes(mark));
-    return { readable, text };
+    return { readable, text, readyState, committed };
   };
   let result = await readOnce();
   if (!result.readable && waitMs > 0) {
@@ -408,19 +416,39 @@ async function rawReadable(reader, targetId, mark, notes, waitMs = 0) {
     if (found) result = found;
   }
   await outcome(reader.send('Target.detachFromTarget', { sessionId }));
+  const text = String(result.text ?? '');
+  if (result.readable) {
+    note(notes, 'sign-in-hold.raw-read', {
+      targetId,
+      readable: true,
+      text: text.slice(0, 120),
+      readyState: result.readyState,
+    });
+    return { readable: true, text, readyState: result.readyState };
+  }
+  const step = 'mark';
+  const reason = `text without the mark; last readyState=${result.readyState} text=${JSON.stringify(text.slice(0, 80))}`;
   note(notes, 'sign-in-hold.raw-read', {
     targetId,
-    readable: result.readable,
-    text: result.text.slice(0, 120),
+    readable: false,
+    step,
+    text: text.slice(0, 120),
+    readyState: result.readyState,
   });
-  return result;
+  return { readable: false, step, reason, text, readyState: result.readyState };
 }
 
-function holdExpression(control, ordinary, tag, marker, heldUrl) {
+function holdExpression(control, ordinary, tag, marker, heldUrl, { askHook = false } = {}) {
   if (control)
     return `(async () => {
         const popup = window.open(${JSON.stringify(`${ordinary}/held?n=${tag}`)}, 'slicc-ordinary', 'popup,width=520,height=720');
         return { answer: 'none', opened: Boolean(popup) };
+      })()`;
+  if (askHook)
+    return `(async () => {
+        const marker = ${JSON.stringify(marker)};
+        const popup = window.open('about:blank#${MARK_PREFIX}' + marker, 'slicc-sign-in', 'popup,width=520,height=720');
+        return { answer: 'pending', opened: Boolean(popup), marker };
       })()`;
   return `(async () => {
         const marker = ${JSON.stringify(marker)};
@@ -440,6 +468,46 @@ function holdExpression(control, ordinary, tag, marker, heldUrl) {
         if (popup && (answer === 'held' || answer === 'timeout')) popup.location.href = heldUrl;
         return { answer, opened: Boolean(popup) };
       })()`;
+}
+
+function hostLabelOf(origin) {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return String(origin ?? '');
+  }
+}
+
+async function askHold(client, { marker, hostLabel, notes }) {
+  const hold = client?.signInHold;
+  if (typeof hold?.ask !== 'function') return { used: false };
+  note(notes, 'sign-in-hold.ask', { via: 'signInHold.ask', marker, hostLabel });
+  let timer;
+  try {
+    const answer = await Promise.race([
+      Promise.resolve(hold.ask({ marker, hostLabel })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error('signInHold.ask timed out');
+          error.code = 'ask-timeout';
+          reject(error);
+        }, 6000);
+      }),
+    ]);
+    if (!['held', 'unheld', 'none'].includes(answer))
+      return {
+        used: true,
+        incomplete: `signInHold.ask returned ${JSON.stringify(answer)}, want held|unheld|none`,
+      };
+    return { used: true, answer };
+  } catch (error) {
+    return {
+      used: true,
+      incomplete: `signInHold.ask failed: ${error?.message ?? error}`,
+    };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function matchPopup(info, known, openerId, heldUrl, control) {
@@ -496,11 +564,12 @@ async function heldPopup({
   const { sessionId, targetId: openerId } = opened.result;
   const before = await outcome(reader.send('Target.getTargets', {}));
   const known = new Set((before.result?.targetInfos ?? []).map((info) => info.targetId));
+  const useAsk = !control && typeof client?.signInHold?.ask === 'function';
   const asked = await outcome(
     reader.send(
       'Runtime.evaluate',
       {
-        expression: holdExpression(control, ordinary, tag, marker, heldUrl),
+        expression: holdExpression(control, ordinary, tag, marker, heldUrl, { askHook: useAsk }),
         awaitPromise: true,
         returnByValue: true,
         userGesture: true,
@@ -514,12 +583,22 @@ async function heldPopup({
       incomplete: `hold evaluate failed: ${asked.error?.message ?? asked.error}`,
       openerId,
     };
-  const holdAnswer = asked.result?.result?.value?.answer ?? 'missing';
+  let holdAnswer = asked.result?.result?.value?.answer ?? 'missing';
   const openedPopup = asked.result?.result?.value?.opened;
+  if (useAsk) {
+    const askedHold = await askHold(client, {
+      marker,
+      hostLabel: hostLabelOf(openerOrigin ?? ordinary),
+      notes,
+    });
+    if (askedHold.incomplete) return { live: false, incomplete: askedHold.incomplete, openerId };
+    holdAnswer = askedHold.answer;
+  }
   note(notes, 'sign-in-hold.hold', {
     holdAnswer,
     control: Boolean(control),
     opened: openedPopup,
+    askHook: useAsk,
   });
   if (openedPopup === false)
     return {
@@ -556,11 +635,11 @@ async function heldPopup({
     Math.min(budget, 3000)
   );
   const rawUrl = settled?.url ?? raw.url ?? heldUrl;
-  const { readable } = await rawReadable(reader, raw.targetId, mark, notes);
-  if (!readable)
+  const read = await rawReadable(reader, raw.targetId, mark, notes, Math.min(budget, 3000));
+  if (!read.readable)
     return {
       live: false,
-      incomplete: 'raw leg could not read the popup body mark',
+      incomplete: `raw leg could not read the popup body mark (${read.step}): ${read.reason}`,
       holdAnswer,
       openerId,
       targetId: raw.targetId,
@@ -623,10 +702,12 @@ async function callbackTab({
   const targetId = created.result?.targetId;
   if (!targetId) return { live: false, incomplete: 'createTarget returned no targetId' };
 
+  let lastSeenUrl = null;
   const ready = await until(async () => {
     const info = await outcome(reader.send('Target.getTargetInfo', { targetId }));
     if (!info.ok) return null;
     const current = info.result?.targetInfo;
+    if (current?.url) lastSeenUrl = current.url;
     if (current?.url && (current.url.includes('/ims/authorize') || current.url === url))
       return current;
     return null;
@@ -635,15 +716,15 @@ async function callbackTab({
   if (!ready)
     return {
       live: false,
-      incomplete: 'callback tab did not settle in the raw leg',
+      incomplete: `callback tab did not settle in the raw leg; last seen URL ${JSON.stringify(lastSeenUrl)}`,
       targetId,
     };
 
-  const { readable } = await rawReadable(reader, targetId, mark, notes, Math.min(budget, 3000));
-  if (!readable)
+  const read = await rawReadable(reader, targetId, mark, notes, Math.min(budget, 3000));
+  if (!read.readable)
     return {
       live: false,
-      incomplete: 'raw leg could not read the callback tab mark',
+      incomplete: `raw leg could not read the callback tab mark (${read.step}): ${read.reason}`,
       targetId,
     };
 
@@ -683,7 +764,7 @@ export async function signInHold({
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   if (!ordinary) return { incomplete: 'missing {ordinary} placeholder' };
-  if (!cross && String(mode).startsWith('callback'))
+  if (!cross && (String(mode).startsWith('callback') || mode === 'ordinary-authorize'))
     return { incomplete: 'missing {cross} placeholder' };
   if (discovery) {
     await outcome(client.send('Target.setDiscoverTargets', { discover: true }));

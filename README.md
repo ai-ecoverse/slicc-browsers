@@ -105,7 +105,7 @@ The catalog is `"schema": 1`. Minor releases only add fields; changing or removi
 
 ## Discovery
 
-A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a port probe, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) describes that output. Seven's tabs are reported by origin only, never with a path, query or title.
+A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a probe of ports 9222 to 9229, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) describes that output. Seven's tabs are reported by origin only, never with a path, query or title.
 
 ### The process source
 
@@ -232,6 +232,7 @@ You supply:
 | --- | --- |
 | `autoAttach` | auto-attach to child targets such as popups and iframes |
 | `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
+| `errorFrameClass` | tell whether a failed (error) iframe was loading a protected URL, without being given the URL (for example from `unreachableUrl` in `Page.getFrameTree`, or a transport boolean) |
 | `browserSession` | send commands on the browser session, not only a page |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |

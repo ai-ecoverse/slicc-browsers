@@ -919,6 +919,8 @@ async function driveCaptures(client, page, missing) {
 const CAST_STALL = 'cast stalled: no frame after insertion and paint was not confirmed';
 const CAST_ACK_INCOMPLETE = 'cast ack incomplete: frames received but not all acked';
 const CAST_ACK_UNANSWERED = 'cast ack unanswered';
+const CAST_NEVER_STREAMED = 'cast never streamed before the insertion';
+const CAST_NO_OBSERVER = 'no unguarded observer to confirm the paint';
 const CAST_PAINT_MS = 500;
 const CAST_FLOOR_MS = 1500;
 const CAST_LATENCY_FACTOR = 3;
@@ -947,13 +949,6 @@ function castFrameEvents(client, page, from = 0) {
   return (client.events ?? [])
     .slice(from)
     .filter((event) => event.method === 'Page.screencastFrame' && event.sessionId === page);
-}
-
-function castContentOf(frames) {
-  return frames.some((event) => {
-    const data = event.params?.data;
-    return typeof data === 'string' && (data.includes(MARKER) || data.includes(USERNAME));
-  });
 }
 
 function castExplicitStop(client, page, state, from = 0) {
@@ -1008,8 +1003,8 @@ async function ackCastFrames(client, page, state) {
 
 async function provokeCastPaint(reader, observer, state) {
   if (!reader || !observer) {
-    state.paintConfirmed = true;
-    state.paintAt ??= Date.now();
+    state.paintConfirmed = false;
+    state.paintObserverMissing = true;
     return;
   }
   try {
@@ -1082,6 +1077,7 @@ async function driveCast(
     acked: new Set(),
     ackAttempted: new Set(),
     paintConfirmed: false,
+    paintObserverMissing: false,
     paintAt: undefined,
     repaintToFrameMs: undefined,
     ackRefused: false,
@@ -1144,6 +1140,7 @@ async function driveCast(
         framesReceived: state.framesReceived,
         framesAcked: state.framesAcked,
         ackUnanswered: state.ackUnanswered,
+        paintObserverMissing: state.paintObserverMissing,
         waitMs,
         repaintToFrameMs: state.repaintToFrameMs,
       });
@@ -1153,6 +1150,7 @@ async function driveCast(
           castFramesAfter: 0,
           castInserted: Boolean(inserted),
           castStopped: false,
+          castStoppedExplicit: false,
           paintConfirmed: false,
           ...tally(),
         };
@@ -1163,6 +1161,7 @@ async function driveCast(
           castFramesAfter: 0,
           castInserted: false,
           castStopped: false,
+          castStoppedExplicit: false,
           paintConfirmed: false,
           ...tally(),
         };
@@ -1177,7 +1176,6 @@ async function driveCast(
         state.ackRefused = false;
       }
       const frames = await waitCastWindow(client, page, state, leakFrom, waitMs, frameMs);
-      const contentLeak = castContentOf(frames);
       const stoppedExplicit = castExplicitStop(client, page, state, leakFrom);
       if (side === 'control' && typeof state.repaintToFrameMs === 'number' && castControls)
         castControls.repaintToFrameMs = state.repaintToFrameMs;
@@ -1187,13 +1185,12 @@ async function driveCast(
       );
       await halt();
       return {
-        castLeak: frames.length > 0 || contentLeak,
-        castContentLeak: contentLeak,
+        castLeak: frames.length > 0,
         castFramesBefore: framesBefore,
         castFramesAfter: frames.length,
         castInserted: true,
-        castStopped:
-          stoppedExplicit || (frames.length === 0 && !contentLeak && state.paintConfirmed),
+        castStopped: stoppedExplicit || (frames.length === 0 && state.paintConfirmed),
+        castStoppedExplicit: stoppedExplicit,
         paintConfirmed: state.paintConfirmed,
         ...tally(),
       };
@@ -1256,8 +1253,9 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
   if (!castDrive) return;
   noteCastFields(result, castDrive, castAfter);
   const inserted = Boolean(castAfter.castInserted);
-  const leaked = Boolean(castAfter.castLeak || castAfter.castContentLeak);
+  const leaked = Boolean(castAfter.castLeak);
   const stopped = Boolean(castAfter.castStopped);
+  const stoppedExplicit = Boolean(castAfter.castStoppedExplicit);
   if (!castDrive.castBefore || !inserted) {
     result.castLeak = false;
     result.castStopped = false;
@@ -1282,8 +1280,16 @@ function applyCastResult(result, castDrive, castAfter, side, missing) {
     result.castStopped = false;
     return;
   }
+  if (castAfter.paintObserverMissing) {
+    missing.push(CAST_NO_OBSERVER);
+    return;
+  }
   if (castAckMissing(castAfter, missing)) return;
   if (stopped) {
+    if (!stoppedExplicit && !(result.castFramesBefore > 0)) {
+      missing.push(CAST_NEVER_STREAMED);
+      return;
+    }
     result.castLeak = false;
     result.castStopped = true;
     return;

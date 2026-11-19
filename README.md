@@ -199,7 +199,7 @@ For stock Playwright, Puppeteer and raw CDP clients, a guard that declares `stoc
 - `Page.createIsolatedWorld` on a frame the guard already classifies as ordinary: strip `grantUniveralAccess` and `contentSecurityPolicy`, return no `executionContextId` for any other frame; `Runtime.addBinding` scoped to such a world by a non-empty `executionContextName` or its `executionContextId`, with `Runtime.bindingCalled` only from those worlds;
 - `Target.setAutoAttach`: either narrow the filter to tab targets or hide per target; no protected-origin page, iframe (including ordinary-URL children of a protected parent) or worker may reach the client; pages under the tab are held like pages (same URL redaction in `targetInfo`); a transport that synthesizes it declares `syntheticAutoAttach`; A top-page `slicc: refused:` protects when ordinary tabs still work.
 
-The strip holds whether that world reaches another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless; admitted display overrides and no-code init scripts must not remain on a protected document. Undeclared, they skip, never pass.
+The strip holds whether or not a given Chrome lets that world reach another origin. Code init scripts, main-world bindings and other overrides stay refused or harmless. Admitted display overrides and no-code init scripts must not remain in effect on a protected document — refuse that navigation, or clear them before it runs. Undeclared, they skip, never pass.
 
 ### Running them
 
@@ -240,14 +240,14 @@ You supply:
 | `extensionWorld` | host a foreign extension content script on the test page |
 | `extensionFrame` | host the harness extension frame an ordinary test page embeds |
 | `clientExit` | close the guarded client mid-row |
-| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwards |
+| `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
-| `stockSetup`, `syntheticAutoAttach` | admit stock setup; synthesize auto-attach |
+| `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
-| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs without over-blocking ordinary ones |
-| `jsonList` | expose `/json/list`; missing → not-supported (incomplete if declared) |
+| `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (incl. callback-origin) without over-blocking ordinary ones |
+| `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); missing → not-supported, or incomplete if declared |
 
-`signInHold.ask({ marker, hostLabel })` may answer the hold when BroadcastChannel cannot; else the page channel runs. The raw observer waits for a committed document, then reads the mark.
+`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
 
 ### Reading the result
 
@@ -257,29 +257,29 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes and none is missing. Forged skips and incomplete rows are counted, so the line can't overstate coverage.
+The run passes only when every row passes and none is missing. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it can't overstate what was tested.
 
-Read `guard-vectors.json` for steps, `means`, live and expected; [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
+To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 
 ## Development
 
-Need Go 1.26, Rust/`wasm32-wasip1`, Node 24+, Chrome (`CHROME_PATH` or `npx slicc-cdp install-browser`); headless unless `CI` is set (`SLICC_HEADLESS` overrides).
+You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or Chrome for Testing from `npx slicc-cdp install-browser`, and run headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
 
 | command | what it does |
 | --- | --- |
 | `npm run corpus` | rebuilds `corpus.json` from `corpus/` |
 | `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs` |
 | `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature |
-| `npm test` | every `test/integration/` file: validation, Node/Go/Rust tests, and the unguarded Chromium runner |
+| `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
 | `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
 
-New discovery behaviour gets a corpus case; new guard behaviour gets a guard vector.
+A new discovery behaviour gets a corpus case, and a new guard behaviour gets a guard vector.
 
 ## CI and releases
 
-CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline) via `.github/workflows/ci.yml`: lint, sharded `npm test`, Claude and Codex review; merge re-runs on Linux.
+CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, then `npm test` split over shards by timing, then a Claude and a Codex review; the merge queue runs lint and the tests again. Tests run on Linux only.
 
-Merges to `main` that warrant it release via semantic-release as one version for all three packages. Pushed tags are never moved or deleted.
+Every merge to `main` that warrants it is released by semantic-release as one version for all three packages. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
 
 ## License
 

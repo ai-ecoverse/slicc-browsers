@@ -12412,9 +12412,18 @@
             "observer": "client"
           }
         },
+        "chainStarted": {
+          "means": "the stand-in served {ordinary}/hop?code=301",
+          "dependsOn": [],
+          "check": {
+            "served": "/hop",
+            "origin": "{ordinary}",
+            "observer": "fixture"
+          }
+        },
         "protectedHop": {
           "means": "the stand-in served {target}/hop?code=302",
-          "dependsOn": ["refused.3", "refused.4"],
+          "dependsOn": [],
           "check": {
             "served": "/hop",
             "origin": "{target}",
@@ -12423,7 +12432,7 @@
         },
         "landed": {
           "means": "the stand-in served {cross}/doc?n={tag}-after",
-          "dependsOn": ["refused.3", "refused.4"],
+          "dependsOn": [],
           "check": {
             "served": "{cross}/doc?n={tag}-after",
             "observer": "fixture"
@@ -12591,6 +12600,7 @@
         "via": "guard",
         "expected": {
           "allowedBeacon": true,
+          "chainStarted": true,
           "protectedHop": true,
           "landed": true,
           "afterBeacon": true,
@@ -12599,6 +12609,7 @@
       },
       "expected": {
         "allowedBeacon": true,
+        "chainStarted": true,
         "protectedHop": false,
         "landed": false,
         "afterBeacon": false,
@@ -12868,9 +12879,18 @@
             "observer": "client"
           }
         },
+        "chainStarted": {
+          "means": "the stand-in served {ordinary}/hop?code=301",
+          "dependsOn": [],
+          "check": {
+            "served": "/hop",
+            "origin": "{ordinary}",
+            "observer": "fixture"
+          }
+        },
         "protectedHop": {
           "means": "the stand-in served {target}/hop?code=307",
-          "dependsOn": ["refused.3", "refused.4"],
+          "dependsOn": [],
           "check": {
             "served": "/hop",
             "origin": "{target}",
@@ -12879,7 +12899,7 @@
         },
         "landed": {
           "means": "the stand-in served {cross}/doc?n={tag}-after",
-          "dependsOn": ["refused.3", "refused.4"],
+          "dependsOn": [],
           "check": {
             "served": "{cross}/doc?n={tag}-after",
             "observer": "fixture"
@@ -13047,6 +13067,7 @@
         "via": "guard",
         "expected": {
           "allowedBeacon": true,
+          "chainStarted": true,
           "protectedHop": true,
           "landed": true,
           "afterBeacon": true,
@@ -13055,6 +13076,7 @@
       },
       "expected": {
         "allowedBeacon": true,
+        "chainStarted": true,
         "protectedHop": false,
         "landed": false,
         "afterBeacon": false,

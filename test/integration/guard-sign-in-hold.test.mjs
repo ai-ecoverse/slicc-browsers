@@ -592,6 +592,66 @@ test('undeclared jsonList with unreachable listing passes as not-supported', asy
   assert.match(report.line, /^GUARD-PASS /);
 });
 
+test('configured /json/list fetch failure is incomplete, not not-supported', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = signInFake();
+    for (const conn of [browser.client, browser.unguarded]) {
+      delete conn.jsonList;
+      conn.devtoolsHttp = 'http://127.0.0.1:1';
+      delete conn.ws;
+    }
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+      signInHold: true,
+    });
+    delete guard.client.jsonList;
+    guard.client.devtoolsHttp = 'http://127.0.0.1:1';
+    delete guard.client.ws;
+    try {
+      const out = await run(
+        { ...set, vectors: vectors.slice(0, 1), variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture,
+          settleScale: 0.1,
+          capabilities: {
+            browserSession: true,
+            discovery: true,
+            signInHold: true,
+          },
+          targets: {
+            ordinary: origin('ordinary.example.test'),
+            cross: origin('cross.test'),
+            seven: origin('seven.sliccy.ai'),
+            vault: origin('vault.sliccy.ai'),
+            own: origin('client.example.test'),
+            client: origin('client.example.test'),
+            log: origin('log.example.test'),
+          },
+        }
+      );
+      const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+      assert.ok(row, JSON.stringify(out.results.map((r) => r.id)));
+      assert.ok(row.control === 'incomplete' || row.guarded === 'incomplete', JSON.stringify(row));
+      assert.notEqual(row.control, 'pass', JSON.stringify(row));
+      assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+      assert.ok(!(row.notSupported ?? []).includes('jsonListed'), JSON.stringify(row));
+      assert.match(String(row.why ?? row.incomplete ?? row.reason ?? ''), /json\/list|jsonListed/);
+      const report = out.summary({ guard: 'emulator', sha: 'test' });
+      assert.equal(report.pass, false);
+      assert.deepEqual(report.forged, []);
+    } finally {
+      await guard.stop();
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
 test('declared jsonList with a reachable listing leak fails', async () => {
   const out = await rows({ leakJsonList: true });
   const row = out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
@@ -674,6 +734,34 @@ test('signInHold.ask reject or timeout is incomplete', async () => {
     );
     assert.match(String(row.reason ?? row.why ?? ''), /signInHold\.ask/);
   }
+});
+
+test('signInHold.ask failure closes the opened popup', async () => {
+  const browser = signInFake();
+  browser.client.signInHold = {
+    ask() {
+      throw new Error('boom');
+    },
+  };
+  const notes = [];
+  const out = await signInHold({
+    client: browser.client,
+    reader: browser.unguarded,
+    mode: 'held-popup',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    openerOrigin: 'http://seven.sliccy.ai',
+    tag: 'ask-fail-close',
+    notes,
+    budget: 500,
+  });
+  assert.match(String(out.incomplete ?? ''), /signInHold\.ask/);
+  const listed = await browser.unguarded.send('Target.getTargets', {});
+  assert.equal(
+    (listed.targetInfos ?? []).length,
+    0,
+    JSON.stringify({ out, listed: listed.targetInfos })
+  );
 });
 
 test('announce-only id with empty URL/title still passes', async () => {

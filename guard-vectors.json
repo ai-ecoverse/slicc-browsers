@@ -9080,7 +9080,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; the control proves frames before and after a forced paint; the guarded leg fails on any post-insertion frame and passes when a confirmed paint yields none (silent stop/drop, as shipping guards do) or an ack refusal/detach; a stall where paint cannot be confirmed is incomplete (a refusal of Page.startScreencast on the clean tab also satisfies the row)",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; both legs ack every Page.screencastFrame; the control proves frames before and after a forced paint and records repaint-to-frame latency; the guarded wait is at least 3× that latency (floor 1500ms) plus a drain; any post-insertion frame fails; a confirmed paint with no frame passes as a silent stop; missing acks or an unconfirmed paint are incomplete (a refusal of Page.startScreencast on the clean tab also satisfies the row)",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",

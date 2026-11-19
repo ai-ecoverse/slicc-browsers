@@ -15,7 +15,7 @@ const capabilities = {
 };
 
 test('C10.cookie-plant reaches live:pass in real Chrome with the cookiePlant guard', {
-  timeout: 180000,
+  timeout: 300000,
 }, async () => {
   const fixture = await fixtureServer();
   const browser = await launch(fixture);

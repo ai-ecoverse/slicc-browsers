@@ -326,15 +326,15 @@ async function triggerNavigate(client, sessionId, url) {
   );
 }
 
-async function settleTrigger(promise, budget) {
+async function capped(promise, ms, label = 'cdp') {
   let timer;
   try {
     return await Promise.race([
       promise,
       new Promise((resolve) => {
         timer = setTimeout(
-          () => resolve({ ok: false, error: { message: 'trigger settle timeout' } }),
-          budget
+          () => resolve({ ok: false, error: { message: `${label} timeout` } }),
+          ms
         );
       }),
     ]);
@@ -343,27 +343,46 @@ async function settleTrigger(promise, budget) {
   }
 }
 
+async function settleTrigger(promise, budget) {
+  return capped(
+    promise.then(
+      (value) => value,
+      (error) => ({ ok: false, error: { message: String(error?.message ?? error) } })
+    ),
+    budget,
+    'trigger settle'
+  );
+}
+
 async function releasePause(client, paused) {
-  if (!paused) return;
+  if (!paused) return { ok: true };
   if (paused.method === 'Fetch.requestPaused' && paused.params?.requestId) {
-    await outcome(
-      client.send(
-        'Fetch.failRequest',
-        { requestId: paused.params.requestId, errorReason: 'Aborted' },
-        paused.sessionId
-      )
+    return capped(
+      outcome(
+        client.send(
+          'Fetch.failRequest',
+          { requestId: paused.params.requestId, errorReason: 'Aborted' },
+          paused.sessionId
+        )
+      ),
+      800,
+      'releasePause'
     );
-    return;
   }
   if (paused.method === 'Network.requestIntercepted' && paused.params?.interceptionId) {
-    await outcome(
-      client.send(
-        'Network.continueInterceptedRequest',
-        { interceptionId: paused.params.interceptionId, errorReason: 'Aborted' },
-        paused.sessionId
-      )
+    return capped(
+      outcome(
+        client.send(
+          'Network.continueInterceptedRequest',
+          { interceptionId: paused.params.interceptionId, errorReason: 'Aborted' },
+          paused.sessionId
+        )
+      ),
+      800,
+      'releasePause'
     );
   }
+  return { ok: true };
 }
 
 async function drainPauses(client, from = 0) {
@@ -396,6 +415,36 @@ async function withPathBudget(promise, ms, label) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function pathCeiling(budget) {
+  return Math.min(Math.max(budget * 2, 4000), 6000);
+}
+
+function cleanupCeiling() {
+  return 2000;
+}
+
+async function cleanupPath({
+  client,
+  paused,
+  from,
+  triggerPromise,
+  budget,
+  pageSession,
+  homeUrl,
+  transport,
+  reader,
+  readerSession,
+}) {
+  await releasePause(client, paused);
+  await drainPauses(client, from);
+  await settleTrigger(triggerPromise, Math.min(budget, 500));
+  await capped(
+    restorePage(client, pageSession, homeUrl, transport, reader, readerSession),
+    1500,
+    'restorePage'
+  );
 }
 
 function attemptRecord(out, planted) {
@@ -468,35 +517,54 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
   if (!homeUrl) return;
   const wasFetch = Boolean(transport?.fetch);
   const wasLegacy = Boolean(transport?.legacy);
-  if (pageSession) await disableInterception(client, pageSession, { fetch: true, legacy: true });
+  if (pageSession)
+    await capped(
+      disableInterception(client, pageSession, { fetch: true, legacy: true }),
+      800,
+      'disable'
+    );
   if (reader && readerSession)
-    await disableInterception(reader, readerSession, { fetch: true, legacy: true });
+    await capped(
+      disableInterception(reader, readerSession, { fetch: true, legacy: true }),
+      800,
+      'disable'
+    );
   const navClient = reader ?? client;
   const navSession = readerSession ?? pageSession;
   if (!navSession) return;
-  await outcome(navClient.send('Page.navigate', { url: homeUrl }, navSession));
-  await pageReady(navClient, navSession, 2000);
+  await capped(
+    outcome(navClient.send('Page.navigate', { url: homeUrl }, navSession)),
+    800,
+    'navigate'
+  );
+  await pageReady(navClient, navSession, 1000);
   if (pageSession && wasFetch) {
-    await outcome(
-      client.send(
-        'Fetch.enable',
-        {
-          patterns: [
-            { urlPattern: '*', requestStage: 'Request' },
-            { urlPattern: '*', requestStage: 'Response' },
-          ],
-        },
-        pageSession
-      )
+    await capped(
+      outcome(
+        client.send(
+          'Fetch.enable',
+          {
+            patterns: [
+              { urlPattern: '*', requestStage: 'Request' },
+              { urlPattern: '*', requestStage: 'Response' },
+            ],
+          },
+          pageSession
+        )
+      ),
+      800,
+      'reenable'
     );
   } else if (pageSession && wasLegacy) {
-    await enableLegacy(client, pageSession);
+    await capped(enableLegacy(client, pageSession), 800, 'reenable');
   }
 }
 
 async function finishPlant({ reader, readerSession, out, cookie, notes, label }) {
-  const jar = await readJar(reader, readerSession, cookie);
-  const planted = plantedOf(jar);
+  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
   const evidence = {
     answered: answered(out),
     refused: refused(out),
@@ -531,16 +599,17 @@ async function runPlant({
   let paused = null;
   let triggerPromise = Promise.resolve();
   const from = client.events.length;
+  const pauseMs = Math.min(budget, 2000);
   try {
     return await withPathBudget(
       (async () => {
-        await clearCookie(reader, readerSession, cookie);
+        await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
         triggerPromise = topLevel
           ? triggerNavigate(client, pageSession, url)
           : triggerFetch(client, pageSession, url);
-        paused = await waitPause(client, from, url, methods, budget);
+        paused = await waitPause(client, from, url, methods, pauseMs);
         if (!paused) {
           note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
           return attemptRecord(
@@ -555,14 +624,18 @@ async function runPlant({
           paused.params?.responseErrorReason === undefined
         ) {
           const responseFrom = client.events.length;
-          await outcome(
-            client.send(
-              'Fetch.continueRequest',
-              { requestId: paused.params.requestId },
-              paused.sessionId
-            )
+          await capped(
+            outcome(
+              client.send(
+                'Fetch.continueRequest',
+                { requestId: paused.params.requestId },
+                paused.sessionId
+              )
+            ),
+            800,
+            'continueRequest'
           );
-          const again = await waitPause(client, responseFrom, url, methods, budget);
+          const again = await waitPause(client, responseFrom, url, methods, pauseMs);
           if (!again) {
             note(notes, `cookie-plant.${label}`, { incomplete: 'no response pause', url });
             return attemptRecord(
@@ -573,10 +646,10 @@ async function runPlant({
           paused = again;
         }
         const built = build(paused);
-        const out = await built.send(client, paused);
+        const out = await capped(built.send(client, paused), 1500, 'plant-send');
         return finishPlant({ reader, readerSession, out, cookie, notes, label });
       })(),
-      Math.max(budget * 2, 8000),
+      pathCeiling(budget),
       label
     );
   } catch (error) {
@@ -588,10 +661,28 @@ async function runPlant({
       'incomplete'
     );
   } finally {
-    await releasePause(client, paused);
-    await drainPauses(client, from);
-    await settleTrigger(triggerPromise, Math.min(budget, 1000));
-    await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
+    try {
+      await withPathBudget(
+        cleanupPath({
+          client,
+          paused,
+          from,
+          triggerPromise,
+          budget,
+          pageSession,
+          homeUrl,
+          transport,
+          reader,
+          readerSession,
+        }),
+        cleanupCeiling(),
+        `${label}:cleanup`
+      );
+    } catch (error) {
+      note(notes, `cookie-plant.${label}`, {
+        cleanup: String(error?.message ?? error),
+      });
+    }
   }
 }
 
@@ -666,6 +757,9 @@ async function proveDoor({
   transport,
   plantName,
 }) {
+  let paused = null;
+  let triggerPromise = Promise.resolve();
+  const from = reader.events.length;
   const host = hostOf(protectedOrigin);
   const domain = `.${host}`;
   const url = `${protectedOrigin}/data?n=door-${tag}`;
@@ -675,66 +769,97 @@ async function proveDoor({
     domain,
     url: `${protectedOrigin}/`,
   };
-  await clearCookie(reader, sessionId, cookie);
-  const from = reader.events.length;
-  if (transport.kind === 'fetch') {
-    await outcome(
-      reader.send(
-        'Fetch.enable',
-        {
-          patterns: [
-            { urlPattern: '*', requestStage: 'Request' },
-            { urlPattern: '*', requestStage: 'Response' },
-          ],
-        },
-        sessionId
-      )
+  try {
+    return await withPathBudget(
+      (async () => {
+        await capped(clearCookie(reader, sessionId, cookie), 800, 'door-clear');
+        if (transport.kind === 'fetch') {
+          await capped(
+            outcome(
+              reader.send(
+                'Fetch.enable',
+                {
+                  patterns: [
+                    { urlPattern: '*', requestStage: 'Request' },
+                    { urlPattern: '*', requestStage: 'Response' },
+                  ],
+                },
+                sessionId
+              )
+            ),
+            800,
+            'door-enable'
+          );
+        } else {
+          await capped(enableLegacy(reader, sessionId), 800, 'door-enable');
+        }
+        triggerPromise = triggerNavigate(reader, sessionId, url);
+        const methods =
+          transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+        paused = await waitPause(reader, from, url, methods, Math.min(budget, 2000));
+        if (!paused) {
+          return { live: false, incomplete: 'raw leg: no pause for top-level plant navigation' };
+        }
+        const setCookie = cookieHeader(plantName, cookie.value, domain);
+        const out = await capped(
+          fulfillPaused(reader, paused, {
+            responseCode: 200,
+            responseHeaders: [
+              { name: 'content-type', value: 'text/plain' },
+              { name: 'Set-Cookie', value: setCookie },
+            ],
+            body: b64text(`door-${tag}`),
+          }),
+          1500,
+          'door-fulfill'
+        );
+        if (refused(out) || !out.ok) await releasePause(reader, paused);
+        await settleTrigger(triggerPromise, Math.min(budget, 500));
+        const jar = await capped(readJar(reader, sessionId, cookie), 1500, 'door-jar');
+        const planted = plantedOf(
+          jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+        );
+        note(notes, 'cookie-plant.door', {
+          answered: answered(out),
+          planted,
+          via: jar?.via,
+          domain,
+        });
+        await capped(clearCookie(reader, sessionId, cookie), 800, 'door-clear');
+        if (!answered(out))
+          return { live: false, incomplete: `raw leg: fulfill unanswered: ${out.error?.message}` };
+        if (planted === 'incomplete')
+          return { live: false, incomplete: 'raw leg: cookie jar unreadable after plant' };
+        if (!planted)
+          return {
+            live: false,
+            incomplete: 'raw leg: Chrome did not store Domain=.<protected host> Set-Cookie',
+          };
+        return { live: true, doorVia: jar.via };
+      })(),
+      Math.min(Math.max(budget * 3, 8000), 12000),
+      'door'
     );
-  } else {
-    await enableLegacy(reader, sessionId);
+  } catch (error) {
+    note(notes, 'cookie-plant.door', { incomplete: String(error?.message ?? error) });
+    return { live: false, incomplete: `raw leg: ${String(error?.message ?? error)}` };
+  } finally {
+    try {
+      await withPathBudget(
+        (async () => {
+          await releasePause(reader, paused);
+          await drainPauses(reader, from);
+          await settleTrigger(triggerPromise, Math.min(budget, 500));
+          await capped(disableInterception(reader, sessionId, transport), 800, 'door-disable');
+          await capped(restorePage(reader, sessionId, homeUrl), 1500, 'door-restore');
+        })(),
+        cleanupCeiling(),
+        'door:cleanup'
+      );
+    } catch (error) {
+      note(notes, 'cookie-plant.door', { cleanup: String(error?.message ?? error) });
+    }
   }
-  const triggerPromise = triggerNavigate(reader, sessionId, url);
-  const methods =
-    transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
-  const paused = await waitPause(reader, from, url, methods, budget);
-  if (!paused) {
-    await settleTrigger(triggerPromise, budget);
-    await disableInterception(reader, sessionId, transport);
-    await restorePage(reader, sessionId, homeUrl);
-    return { live: false, incomplete: 'raw leg: no pause for top-level plant navigation' };
-  }
-  const setCookie = cookieHeader(plantName, cookie.value, domain);
-  const out = await fulfillPaused(reader, paused, {
-    responseCode: 200,
-    responseHeaders: [
-      { name: 'content-type', value: 'text/plain' },
-      { name: 'Set-Cookie', value: setCookie },
-    ],
-    body: b64text(`door-${tag}`),
-  });
-  if (refused(out) || !out.ok) await releasePause(reader, paused);
-  await settleTrigger(triggerPromise, budget);
-  const jar = await readJar(reader, sessionId, cookie);
-  const planted = plantedOf(jar);
-  note(notes, 'cookie-plant.door', {
-    answered: answered(out),
-    planted,
-    via: jar?.via,
-    domain,
-  });
-  await clearCookie(reader, sessionId, cookie);
-  await disableInterception(reader, sessionId, transport);
-  await restorePage(reader, sessionId, homeUrl);
-  if (!answered(out))
-    return { live: false, incomplete: `raw leg: fulfill unanswered: ${out.error?.message}` };
-  if (planted === 'incomplete')
-    return { live: false, incomplete: 'raw leg: cookie jar unreadable after plant' };
-  if (!planted)
-    return {
-      live: false,
-      incomplete: 'raw leg: Chrome did not store Domain=.<protected host> Set-Cookie',
-    };
-  return { live: true, doorVia: jar.via };
 }
 
 const EMPTY_ATTEMPT = {
@@ -1158,6 +1283,7 @@ async function allowedHeaderAttempt({
   let paused = null;
   let triggerPromise = Promise.resolve();
   const from = client.events.length;
+  const pauseMs = Math.min(budget, 2000);
   try {
     return await withPathBudget(
       (async () => {
@@ -1166,7 +1292,7 @@ async function allowedHeaderAttempt({
         triggerPromise = topLevel
           ? triggerNavigate(client, pageSession, url)
           : triggerFetch(client, pageSession, url);
-        paused = await waitPause(client, from, url, methods, budget);
+        paused = await waitPause(client, from, url, methods, pauseMs);
         if (!paused) {
           note(notes, `cookie-plant.${label}`, { incomplete: 'no pause', url });
           return attemptRecord(
@@ -1174,22 +1300,26 @@ async function allowedHeaderAttempt({
             'incomplete'
           );
         }
-        const out = fetchReady
-          ? await fetchFulfill({
-              responseHeaders: [
-                { name: 'content-type', value: 'text/plain' },
-                { name: 'Set-Cookie', value: header },
-              ],
-              body: b64text('ok'),
-            }).send(client, paused)
-          : await legacyContinue({
-              rawResponse: rawHttpResponse({
-                code: 200,
-                phrase: 'OK',
-                headers: [{ name: 'Set-Cookie', value: header }],
-                body: 'ok',
-              }),
-            }).send(client, paused);
+        const out = await capped(
+          fetchReady
+            ? fetchFulfill({
+                responseHeaders: [
+                  { name: 'content-type', value: 'text/plain' },
+                  { name: 'Set-Cookie', value: header },
+                ],
+                body: b64text('ok'),
+              }).send(client, paused)
+            : legacyContinue({
+                rawResponse: rawHttpResponse({
+                  code: 200,
+                  phrase: 'OK',
+                  headers: [{ name: 'Set-Cookie', value: header }],
+                  body: 'ok',
+                }),
+              }).send(client, paused),
+          1500,
+          'allowed-send'
+        );
         note(notes, `cookie-plant.${label}`, { answered: answered(out), refused: refused(out) });
         return {
           answered: answered(out) ? true : 'incomplete',
@@ -1197,7 +1327,7 @@ async function allowedHeaderAttempt({
           planted: false,
         };
       })(),
-      Math.max(budget * 2, 8000),
+      pathCeiling(budget),
       label
     );
   } catch (error) {
@@ -1207,10 +1337,28 @@ async function allowedHeaderAttempt({
       'incomplete'
     );
   } finally {
-    await releasePause(client, paused);
-    await drainPauses(client, from);
-    await settleTrigger(triggerPromise, Math.min(budget, 1000));
-    await restorePage(client, pageSession, homeUrl, transport, reader, readerSession);
+    try {
+      await withPathBudget(
+        cleanupPath({
+          client,
+          paused,
+          from,
+          triggerPromise,
+          budget,
+          pageSession,
+          homeUrl,
+          transport,
+          reader,
+          readerSession,
+        }),
+        cleanupCeiling(),
+        `${label}:cleanup`
+      );
+    } catch (error) {
+      note(notes, `cookie-plant.${label}`, {
+        cleanup: String(error?.message ?? error),
+      });
+    }
   }
 }
 
@@ -1354,10 +1502,11 @@ function controlAttacks(ctx) {
 
 async function runAttempts(groups, budget = 5000) {
   const results = {};
+  const ceiling = pathCeiling(budget) + cleanupCeiling() + 500;
   for (const group of groups) {
     for (const [name, run] of Object.entries(group ?? {})) {
       try {
-        results[name] = await withPathBudget(run(), Math.max(budget * 3, 12000), name);
+        results[name] = await withPathBudget(run(), ceiling, name);
       } catch (error) {
         results[name] = attemptRecord(
           { ok: false, error: { message: String(error?.message ?? error) } },
@@ -1689,8 +1838,12 @@ export async function cookiePlant({
     budget
   );
 
-  await disableInterception(client, pageSession, enabled.transport);
-  await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+  await capped(disableInterception(client, pageSession, enabled.transport), 800, 'disable-final');
+  await capped(
+    outcome(reader.send('Target.closeTarget', { targetId: pageTarget })),
+    800,
+    'close-final'
+  );
   return Object.assign(
     {
       live: true,

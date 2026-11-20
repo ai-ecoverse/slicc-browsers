@@ -278,6 +278,15 @@ test('refuse-all interception fails the controls', async () => {
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
+test('mutant that silently drops allowed Set-Cookie fails the controls', async () => {
+  const out = await rows({ silentDropAllowed: true });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.ordinaryPlanted, false, JSON.stringify(row));
+  assert.equal(row.observations.guarded.adobePlanted, false, JSON.stringify(row));
+  assert.equal(row.observations.guarded.deletionCleared, false, JSON.stringify(row));
+});
+
 test('refuseWithoutFail still finishes and protects', async () => {
   const out = await rows({ refuseWithoutFail: true });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');

@@ -189,12 +189,13 @@ const hstsPreloaded = (host) => {
   );
 };
 
-function fixtureOriginFor(templateUrl, host) {
+function fixtureOriginFor(templateUrl, host, { insecurePreloaded = false } = {}) {
   try {
     const parsed = new URL(templateUrl);
     const name = host ?? parsed.hostname;
     const port = parsed.port ? `:${parsed.port}` : '';
-    const scheme = hstsPreloaded(name) ? 'https:' : parsed.protocol;
+    const scheme =
+      !insecurePreloaded && hstsPreloaded(name) ? 'https:' : (parsed?.protocol ?? 'http:');
     return `${scheme}//${name}${port}`;
   } catch {
     return null;
@@ -1230,7 +1231,6 @@ const CHROME_NO_STORE = new Set([
   'responsePhrase',
   'continueAtRequest',
   'hostOnly',
-  'domainCover',
 ]);
 
 function incompletePaths() {
@@ -1588,13 +1588,14 @@ async function allowedHeaderAttempt({
   notes,
   label,
   header,
+  cookie,
   fetchReady,
   topLevel = false,
   fixtureLog,
   legStartedAt,
   firstIncomplete,
 }) {
-  const { client, transport } = handle;
+  const { client, reader, readerSession, transport } = handle;
   let pageSession = handle.pageSession;
   let paused = null;
   let triggerPromise = Promise.resolve();
@@ -1602,23 +1603,32 @@ async function allowedHeaderAttempt({
   const pauseMs = Math.min(budget, 2000);
   const startedAt = Date.now();
   const legAt = legStartedAt ?? startedAt;
+  const finish = (out) =>
+    cookie
+      ? finishPlant({ reader, readerSession, out, cookie, notes, label })
+      : (() => {
+          note(notes, `cookie-plant.${label}`, {
+            answered: answered(out),
+            refused: refused(out),
+          });
+          return {
+            answered: answered(out) ? true : 'incomplete',
+            refused: answered(out) ? refused(out) : 'incomplete',
+            planted: false,
+          };
+        })();
   try {
     return await withPathBudget(
       (async () => {
         const ensure = await ensureInterceptionLive(handle);
         pageSession = handle.pageSession;
-        if (sessionCut(ensure)) {
-          note(notes, `cookie-plant.${label}`, {
-            answered: true,
-            refused: true,
-            note: 'session cut on protected execution context',
-          });
-          return {
-            answered: true,
-            refused: true,
-            planted: false,
-          };
-        }
+        if (sessionCut(ensure))
+          return cookie
+            ? recordSessionCut({ reader, readerSession, cookie, notes, label })
+            : finish({
+                ok: false,
+                error: { message: 'slicc: refused: session cut on protected execution context' },
+              });
         if (!ensure.ok) {
           await diagnoseIncomplete({
             notes,
@@ -1696,33 +1706,23 @@ async function allowedHeaderAttempt({
           1500,
           'allowed-send'
         );
-        if (sessionCut(out)) {
-          note(notes, `cookie-plant.${label}`, {
-            answered: true,
-            refused: true,
-            note: 'session cut on protected execution context',
-          });
-          return { answered: true, refused: true, planted: false };
-        }
-        note(notes, `cookie-plant.${label}`, { answered: answered(out), refused: refused(out) });
-        return {
-          answered: answered(out) ? true : 'incomplete',
-          refused: answered(out) ? refused(out) : 'incomplete',
-          planted: false,
-        };
+        if (sessionCut(out))
+          return cookie
+            ? recordSessionCut({ reader, readerSession, cookie, notes, label })
+            : finish(out);
+        return finish(out);
       })(),
       pathCeiling(budget),
       label
     );
   } catch (error) {
-    if (sessionCut({ ok: false, error })) {
-      note(notes, `cookie-plant.${label}`, {
-        answered: true,
-        refused: true,
-        note: 'session cut on protected execution context',
-      });
-      return { answered: true, refused: true, planted: false };
-    }
+    if (sessionCut({ ok: false, error }))
+      return cookie
+        ? recordSessionCut({ reader, readerSession, cookie, notes, label })
+        : finish({
+            ok: false,
+            error: { message: 'slicc: refused: session cut on protected execution context' },
+          });
     note(notes, `cookie-plant.${label}`, { incomplete: String(error?.message ?? error) });
     return attemptRecord(
       { ok: false, error: { message: String(error?.message ?? error) } },
@@ -1832,15 +1832,25 @@ function controlAttacks(ctx) {
                 }),
               }),
       }),
-    adobe: () =>
-      allowedHeaderAttempt({
+    adobe: () => {
+      const adobeOrigin =
+        fixtureOriginFor(ctx.ordinary, 'www.adobe.com') ?? 'https://www.adobe.com';
+      const adobeCookie = {
+        name: ctx.names.adobe,
+        value: `a-${ctx.tag}`,
+        domain: '.adobe.com',
+        url: `${adobeOrigin}/`,
+      };
+      return allowedHeaderAttempt({
         ...diag,
-        url: ordinaryUrl,
+        url: `${adobeOrigin}/data?n=adobe-${ctx.tag}`,
         label: 'adobe',
-        header: cookieHeader(ctx.names.adobe, `a-${ctx.tag}`, '.adobe.com'),
+        header: cookieHeader(ctx.names.adobe, adobeCookie.value, '.adobe.com'),
+        cookie: adobeCookie,
         fetchReady,
         topLevel: true,
-      }),
+      });
+    },
     deletion: async () => {
       const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteCookie);
       if (plantedOf(seeded) !== true) {
@@ -1857,6 +1867,7 @@ function controlAttacks(ctx) {
         url: ctx.plantUrl,
         label: 'deletion',
         header: cookieHeader(ctx.names.delete, '', ctx.domain, 'Max-Age=0'),
+        cookie: deleteCookie,
         fetchReady,
         topLevel: true,
       });
@@ -2033,7 +2044,7 @@ function credentialAttacks(ctx) {
     domainCover: () =>
       runPlant({
         ...diag,
-        url: `${ctx.ordinary}/data?n=cover-${ctx.tag}`,
+        url: subUrl,
         cookie: coverCookie,
         label: 'domainCover',
         topLevel: true,
@@ -2071,15 +2082,23 @@ function credentialAttacks(ctx) {
                 }),
               }),
       }),
-    subHost: () =>
-      allowedHeaderAttempt({
+    subHost: () => {
+      const subCookie = {
+        name: ctx.names.ordinary,
+        value: `sub-${ctx.tag}`,
+        domain: `.${subHost}`,
+        url: `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/`,
+      };
+      return allowedHeaderAttempt({
         ...diag,
         url: subUrl,
         label: 'subHost',
-        header: cookieHeader(ctx.names.ordinary, `sub-${ctx.tag}`, `.${subHost}`),
+        header: cookieHeader(ctx.names.ordinary, subCookie.value, `.${subHost}`),
+        cookie: subCookie,
         fetchReady,
         topLevel: true,
-      }),
+      });
+    },
   };
 }
 

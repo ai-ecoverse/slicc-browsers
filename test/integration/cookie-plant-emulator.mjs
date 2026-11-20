@@ -223,6 +223,34 @@ export function cookiePlantBlocked(method, params, catalog, options = {}, client
   return null;
 }
 
+function stripSetCookieParams(method, params) {
+  const next = { ...(params ?? {}) };
+  if (method === 'Fetch.fulfillRequest' || method === 'Fetch.continueResponse') {
+    if (Array.isArray(next.responseHeaders))
+      next.responseHeaders = next.responseHeaders.filter(
+        (header) => !/^set-cookie2?$/i.test(String(header?.name ?? ''))
+      );
+    if (next.binaryResponseHeaders) delete next.binaryResponseHeaders;
+    if (next.responsePhrase && /set-cookie/i.test(String(next.responsePhrase)))
+      next.responsePhrase = 'OK';
+  }
+  if (method === 'Network.continueInterceptedRequest') {
+    if (next.rawResponse) {
+      const raw = Buffer.from(String(next.rawResponse), 'base64').toString('utf8');
+      const cleaned = raw
+        .split(/\r?\n/)
+        .filter((line) => !/^set-cookie2?\s*:/i.test(line))
+        .join('\r\n');
+      next.rawResponse = Buffer.from(cleaned, 'utf8').toString('base64');
+    }
+    if (next.headers && typeof next.headers === 'object' && !Array.isArray(next.headers)) {
+      for (const key of Object.keys(next.headers))
+        if (/^set-cookie2?$/i.test(key)) delete next.headers[key];
+    }
+  }
+  return next;
+}
+
 export function applyCookiePlant(client, options = {}) {
   if (!options.cookiePlant) return client;
   const catalog = protectedOrigins(options.protectedOrigins, options.extraOrigins ?? []);
@@ -235,6 +263,7 @@ export function applyCookiePlant(client, options = {}) {
         : []
   );
   const hangClientAttach = options.hangClientAttach === true;
+  const silentDropAllowed = options.silentDropAllowed === true;
   return {
     ...client,
     send: async (method, params, sessionId) => {
@@ -269,7 +298,8 @@ export function applyCookiePlant(client, options = {}) {
         }
         throw refusal(blocked);
       }
-      const result = await client.send(method, params, sessionId);
+      const forward = silentDropAllowed ? stripSetCookieParams(method, params) : params;
+      const result = await client.send(method, forward, sessionId);
       const kind = pathKind(method, params ?? {});
       if (kind && forwardThenCut.has(kind)) {
         const blob = JSON.stringify(params ?? {});

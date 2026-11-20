@@ -252,7 +252,7 @@ function signInFake({ holdAnswer = 'held', markReadyMs = 0, markNever = false } 
     connections.push(conn);
     return conn;
   };
-  return { connect, client: connect(), unguarded: connect() };
+  return { connect, client: connect(), unguarded: connect(), tabs, addTab };
 }
 
 async function rows(options = {}) {
@@ -762,6 +762,154 @@ test('signInHold.ask failure closes the opened popup', async () => {
     0,
     JSON.stringify({ out, listed: listed.targetInfos })
   );
+});
+
+function askFailure(tag, arrange) {
+  const browser = signInFake();
+  const markerUrl = `about:blank#${SIGN_IN_HOLD_MARK}hold-${tag}`;
+  const closed = [];
+  const first = new Set();
+  const seen = {};
+  browser.client.signInHold = {
+    ask() {
+      const popup = [...browser.tabs.values()].find((tab) => tab.url === markerUrl);
+      seen.popupId = popup?.targetId;
+      seen.openerId = popup?.openerId;
+      for (const tab of arrange({ browser, popup, markerUrl }) ?? []) first.add(tab.targetId);
+      seen.ids = [...browser.tabs.keys()].sort();
+      throw new Error('boom');
+    },
+  };
+  const reader = {
+    ...browser.unguarded,
+    async send(method, params, sessionId) {
+      if (method === 'Target.closeTarget') closed.push(params.targetId);
+      const result = await browser.unguarded.send(method, params, sessionId);
+      if (method !== 'Target.getTargets') return result;
+      const infos = result.targetInfos ?? [];
+      return {
+        ...result,
+        targetInfos: [
+          ...infos.filter((info) => first.has(info.targetId)),
+          ...infos.filter((info) => !first.has(info.targetId)),
+        ],
+      };
+    },
+  };
+  return { browser, reader, closed, first, seen };
+}
+
+async function runAskFailure(tag, arrange) {
+  const failure = askFailure(tag, arrange);
+  const notes = [];
+  const out = await signInHold({
+    client: failure.browser.client,
+    reader: failure.reader,
+    mode: 'held-popup',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    openerOrigin: 'http://seven.sliccy.ai',
+    tag,
+    notes,
+    budget: 300,
+  });
+  const listed = await failure.browser.unguarded.send('Target.getTargets', {});
+  const left = (listed.targetInfos ?? []).map((info) => info.targetId).sort();
+  return { ...failure, out, notes, left };
+}
+
+test('signInHold.ask failure closes the exact marker popup, not an unrelated page listed first', async () => {
+  const { out, closed, seen, left } = await runAskFailure('ask-fail-unrelated', ({ browser }) => [
+    browser.addTab({ targetId: 'U1', type: 'page', url: 'about:blank#unrelated', title: '' }),
+  ]);
+  const debug = JSON.stringify({ out, closed, seen, left });
+  assert.ok(seen.popupId && seen.openerId, debug);
+  assert.match(String(out.incomplete ?? ''), /signInHold\.ask failed: boom/, debug);
+  assert.equal(out.live, false, debug);
+  assert.equal(out.targetId, seen.popupId, debug);
+  assert.equal(closed.includes('U1'), false, debug);
+  assert.ok(closed.includes(seen.popupId), debug);
+  assert.ok(closed.includes(seen.openerId), debug);
+  assert.deepEqual(left, ['U1'], debug);
+});
+
+test('signInHold.ask failure closes nothing when the exact popup cannot be identified', async () => {
+  const unrelated = (browser) =>
+    browser.addTab({ targetId: 'U1', type: 'page', url: 'about:blank#unrelated', title: '' });
+  const scenarios = {
+    'popup gone': ({ browser, popup }) => {
+      browser.tabs.delete(popup.targetId);
+      return [unrelated(browser)];
+    },
+    'marker URL prefix only': ({ browser, popup, markerUrl }) => {
+      popup.url = `${markerUrl}-2`;
+      return [unrelated(browser)];
+    },
+    'foreign opener': ({ browser, popup }) => {
+      const other = unrelated(browser);
+      popup.openerId = other.targetId;
+      return [other];
+    },
+    'no opener': ({ browser, popup }) => {
+      delete popup.openerId;
+      return [unrelated(browser)];
+    },
+    ambiguous: ({ browser, popup, markerUrl }) => [
+      unrelated(browser),
+      browser.addTab({
+        targetId: 'U2',
+        type: 'page',
+        url: markerUrl,
+        title: '',
+        openerId: popup.openerId,
+      }),
+    ],
+  };
+  for (const [name, arrange] of Object.entries(scenarios)) {
+    const { out, closed, seen, left } = await runAskFailure('ask-fail-unidentified', arrange);
+    const debug = JSON.stringify({ name, out, closed, seen, left });
+    assert.ok(seen.popupId && seen.openerId, debug);
+    assert.equal(out.live, false, debug);
+    assert.match(String(out.incomplete ?? ''), /signInHold\.ask failed: boom/, debug);
+    assert.match(String(out.incomplete ?? ''), /popup not identified exactly/, debug);
+    assert.match(String(out.incomplete ?? ''), /nothing closed/, debug);
+    assert.equal(out.targetId, undefined, debug);
+    assert.equal(out.openerId, undefined, debug);
+    assert.deepEqual(closed, [], debug);
+    assert.deepEqual(left, seen.ids, debug);
+  }
+});
+
+test('signInHold.ask failure closes nothing when Target.getTargets fails', async () => {
+  let down = false;
+  const failure = askFailure('ask-fail-list', ({ browser }) => {
+    down = true;
+    return [
+      browser.addTab({ targetId: 'U1', type: 'page', url: 'about:blank#unrelated', title: '' }),
+    ];
+  });
+  const send = failure.reader.send;
+  failure.reader.send = async (method, params, sessionId) => {
+    if (down && method === 'Target.getTargets') throw new Error('list down');
+    return send(method, params, sessionId);
+  };
+  const out = await signInHold({
+    client: failure.browser.client,
+    reader: failure.reader,
+    mode: 'held-popup',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    openerOrigin: 'http://seven.sliccy.ai',
+    tag: 'ask-fail-list',
+    budget: 300,
+  });
+  const debug = JSON.stringify({ out, closed: failure.closed, seen: failure.seen });
+  assert.match(String(out.incomplete ?? ''), /signInHold\.ask failed: boom/, debug);
+  assert.match(String(out.incomplete ?? ''), /Target\.getTargets failed: list down/, debug);
+  assert.match(String(out.incomplete ?? ''), /nothing closed/, debug);
+  assert.equal(out.targetId, undefined, debug);
+  assert.equal(out.openerId, undefined, debug);
+  assert.deepEqual(failure.closed, [], debug);
 });
 
 test('announce-only id with empty URL/title still passes', async () => {

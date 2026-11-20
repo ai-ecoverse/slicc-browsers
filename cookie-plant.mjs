@@ -535,11 +535,15 @@ async function withPathBudget(promise, ms, label) {
 }
 
 function pathCeiling(budget) {
-  return Math.min(Math.max(budget * 2, 4000), 6000);
+  const ms = Number(budget);
+  if (!Number.isFinite(ms) || ms <= 0) return 400;
+  return Math.min(Math.max(ms * 2, 200), 6000);
 }
 
-function cleanupCeiling() {
-  return 6000;
+function cleanupCeiling(budget = 5000) {
+  const ms = Number(budget);
+  if (!Number.isFinite(ms) || ms <= 0) return 200;
+  return Math.min(Math.max(ms, 200), 2000);
 }
 
 async function enableFetch(client, pageSession) {
@@ -1258,7 +1262,7 @@ async function runPlant({
           triggerPromise: state.triggerPromise,
           budget,
         }),
-        cleanupCeiling(),
+        cleanupCeiling(budget),
         `${label}:cleanup`
       );
     } catch (error) {
@@ -1420,7 +1424,7 @@ async function proveDoor({
           };
         return { live: true, doorVia: jar.via };
       })(),
-      Math.min(Math.max(budget * 3, 8000), 12000),
+      Math.min(Math.max(budget * 3, 800), 12000),
       'door'
     );
   } catch (error) {
@@ -1436,7 +1440,7 @@ async function proveDoor({
           await capped(disableInterception(reader, sessionId, transport), 800, 'door-disable');
           await capped(restorePage(reader, sessionId, homeUrl), 1500, 'door-restore');
         })(),
-        cleanupCeiling(),
+        cleanupCeiling(budget),
         'door:cleanup'
       );
     } catch (error) {
@@ -2017,7 +2021,7 @@ async function allowedHeaderAttempt({
           triggerPromise,
           budget,
         }),
-        cleanupCeiling(),
+        cleanupCeiling(budget),
         `${label}:cleanup`
       );
     } catch (error) {
@@ -2161,11 +2165,14 @@ function controlAttacks(ctx) {
   };
 }
 
-async function runAttempts(groups, budget = 5000) {
+async function runAttempts(groups, budget = 5000, onlyPaths = null) {
   const results = {};
-  const ceiling = pathCeiling(budget) + cleanupCeiling() + 500;
+  const ceiling = pathCeiling(budget) + cleanupCeiling(budget) + Math.min(budget, 500);
+  const allow =
+    Array.isArray(onlyPaths) && onlyPaths.length ? new Set(onlyPaths.map(String)) : null;
   for (const group of groups) {
     for (const [name, run] of Object.entries(group ?? {})) {
+      if (allow && !allow.has(name)) continue;
       try {
         results[name] = await withPathBudget(run(), ceiling, name);
       } catch (error) {
@@ -2398,6 +2405,7 @@ export async function cookiePlant({
   credentialOrigin,
   fixtureLog,
   blockedMarkers,
+  onlyPaths = null,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -2521,7 +2529,8 @@ export async function cookiePlant({
       credential ? credentialAttacks(ctx) : null,
       controlAttacks(ctx),
     ],
-    budget
+    budget,
+    onlyPaths
   );
 
   await capped(

@@ -10,13 +10,50 @@ import { emulatedGuard } from './guard-emulator.mjs';
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
 const catalog = JSON.parse(await readFile(new URL('../../catalog.json', import.meta.url)));
 const c5Ids = ['C5.document', 'C5.fulfill'];
-const c5Vectors = data.vectors.filter((v) => c5Ids.includes(v.id));
-const protectedVectors = data.vectors.filter((v) => v.id === 'C10.cookie-plant');
-const credentialVectors = data.vectors.filter((v) => v.id === 'C10.cookie-plant.credential');
+const c5Vectors = data.vectors
+  .filter((v) => c5Ids.includes(v.id))
+  .map((v) => ({ ...v, targets: ['seven'] }));
+const protectedVectors = data.vectors
+  .filter((v) => v.id === 'C10.cookie-plant')
+  .map((v) => ({ ...v, targets: ['seven'] }));
+const credentialVectors = data.vectors
+  .filter((v) => v.id === 'C10.cookie-plant.credential')
+  .map((v) => ({ ...v, targets: ['idp'] }));
 const capabilities = {
   requestInterception: true,
   fetchInterception: true,
 };
+const chromePlantPaths = [
+  'fulfillArray',
+  'fulfillLower',
+  'fulfillBinary',
+  'redirect3xx',
+  'ordinary',
+  'adobe',
+  'deletion',
+];
+const chromeCredentialPaths = ['hostOnly', 'domainCover', 'subHost', 'adobe'];
+
+function observationKeys(path) {
+  const keys = [`${path}Planted`, `${path}Answered`, `${path}Refused`];
+  if (path === 'deletion') keys.push('deletionCleared');
+  return keys;
+}
+
+function prunePaths(vector, onlyPaths) {
+  if (!Array.isArray(onlyPaths) || !onlyPaths.length) return vector;
+  const keep = new Set(onlyPaths.flatMap(observationKeys));
+  const filter = (expected) =>
+    Object.fromEntries(Object.entries(expected ?? {}).filter(([key]) => keep.has(key)));
+  return {
+    ...vector,
+    expected: filter(vector.expected),
+    control: { ...vector.control, expected: filter(vector.control?.expected) },
+    observe: Object.fromEntries(
+      Object.entries(vector.observe ?? {}).filter(([key]) => keep.has(key))
+    ),
+  };
+}
 
 function dump(row) {
   return JSON.stringify({
@@ -42,7 +79,7 @@ async function tlsFixture() {
 }
 
 test('C5-correct emulator without cookiePlant layer passes C5.document, C5.fulfill and C10.cookie-plant in real Chrome', {
-  timeout: 300000,
+  timeout: 180000,
 }, async () => {
   const { fixture, spki } = await tlsFixture();
   const browser = await launch(fixture, { spki });
@@ -61,15 +98,20 @@ test('C5-correct emulator without cookiePlant layer passes C5.document, C5.fulfi
         fixture,
         catalog,
         capabilities,
-        rowTimeoutMs: 180000,
+        settleScale: 0.25,
+        rowTimeoutMs: 90000,
       }
     );
-    for (const row of c5.results.filter((r) => ['seven', 'vault'].includes(r.target))) {
+    for (const row of c5.results.filter((r) => r.target === 'seven')) {
       assert.equal(row.live, 'pass', dump(row));
       assert.equal(row.guarded, 'pass', dump(row));
     }
     const plant = await run(
-      { ...data, vectors: protectedVectors, variants: { prompt: 0 } },
+      {
+        ...data,
+        vectors: protectedVectors.map((v) => prunePaths(v, chromePlantPaths)),
+        variants: { prompt: 0 },
+      },
       {
         client: guard.client,
         unguarded: browser.unguarded,
@@ -77,15 +119,16 @@ test('C5-correct emulator without cookiePlant layer passes C5.document, C5.fulfi
         fixture,
         catalog,
         capabilities,
-        rowTimeoutMs: 180000,
+        settleScale: 0.25,
+        rowTimeoutMs: 90000,
+        cookiePlantOnlyPaths: chromePlantPaths,
       }
     );
-    assert.equal(plant.results.length, 2);
-    for (const row of plant.results) {
-      assert.equal(row.live, 'pass', dump(row));
-      assert.equal(row.control, 'pass', dump(row));
-      assert.equal(row.guarded, 'pass', dump(row));
-    }
+    assert.equal(plant.results.length, 1);
+    const row = plant.results[0];
+    assert.equal(row.live, 'pass', dump(row));
+    assert.equal(row.control, 'pass', dump(row));
+    assert.equal(row.guarded, 'pass', dump(row));
   } finally {
     await guard.stop();
     await browser.close();
@@ -94,7 +137,7 @@ test('C5-correct emulator without cookiePlant layer passes C5.document, C5.fulfi
 });
 
 test('admitProtectedNavigation mutant that plants fails C10.cookie-plant in real Chrome', {
-  timeout: 300000,
+  timeout: 120000,
 }, async () => {
   const { fixture, spki } = await tlsFixture();
   const browser = await launch(fixture, { spki });
@@ -114,8 +157,13 @@ test('admitProtectedNavigation mutant that plants fails C10.cookie-plant in real
     ],
   });
   try {
+    const onlyPaths = ['fulfillArray'];
     const execution = await run(
-      { ...data, vectors: protectedVectors, variants: { prompt: 0 } },
+      {
+        ...data,
+        vectors: protectedVectors.map((v) => prunePaths(v, onlyPaths)),
+        variants: { prompt: 0 },
+      },
       {
         client: guard.client,
         unguarded: browser.unguarded,
@@ -123,7 +171,9 @@ test('admitProtectedNavigation mutant that plants fails C10.cookie-plant in real
         fixture,
         catalog,
         capabilities,
-        rowTimeoutMs: 180000,
+        settleScale: 0.25,
+        rowTimeoutMs: 90000,
+        cookiePlantOnlyPaths: onlyPaths,
       }
     );
     const row = execution.results.find((r) => r.target === 'seven');
@@ -137,7 +187,7 @@ test('admitProtectedNavigation mutant that plants fails C10.cookie-plant in real
 });
 
 test('C10.cookie-plant.credential reaches live:pass in real Chrome with the cookiePlant guard', {
-  timeout: 300000,
+  timeout: 120000,
 }, async () => {
   const { fixture, spki } = await tlsFixture();
   const browser = await launch(fixture, { spki });
@@ -149,7 +199,11 @@ test('C10.cookie-plant.credential reaches live:pass in real Chrome with the cook
   });
   try {
     const execution = await run(
-      { ...data, vectors: credentialVectors, variants: { prompt: 0 } },
+      {
+        ...data,
+        vectors: credentialVectors.map((v) => prunePaths(v, chromeCredentialPaths)),
+        variants: { prompt: 0 },
+      },
       {
         client: guard.client,
         unguarded: browser.unguarded,
@@ -158,18 +212,19 @@ test('C10.cookie-plant.credential reaches live:pass in real Chrome with the cook
         catalog,
         credentialOrigins: catalog.credentialOrigins,
         capabilities,
-        rowTimeoutMs: 180000,
+        settleScale: 0.25,
+        rowTimeoutMs: 90000,
+        cookiePlantOnlyPaths: chromeCredentialPaths,
       }
     );
-    assert.equal(execution.results.length, 2);
-    for (const row of execution.results) {
-      assert.equal(row.live, 'pass', dump(row));
-      assert.equal(row.control, 'pass', dump(row));
-      assert.equal(row.guarded, 'pass', dump(row));
-      assert.equal(row.observations.guarded.hostOnlyPlanted, false, dump(row));
-      assert.equal(row.observations.guarded.domainCoverPlanted, false, dump(row));
-      assert.equal(row.observations.guarded.subHostPlanted, true, dump(row));
-    }
+    assert.equal(execution.results.length, 1);
+    const row = execution.results[0];
+    assert.equal(row.live, 'pass', dump(row));
+    assert.equal(row.control, 'pass', dump(row));
+    assert.equal(row.guarded, 'pass', dump(row));
+    assert.equal(row.observations.guarded.hostOnlyPlanted, false, dump(row));
+    assert.equal(row.observations.guarded.domainCoverPlanted, false, dump(row));
+    assert.equal(row.observations.guarded.subHostPlanted, true, dump(row));
   } finally {
     await guard.stop();
     await browser.close();

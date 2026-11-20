@@ -1346,6 +1346,7 @@ class Execution {
         mode: step.cookiePlant,
         fixtureLog: () => this.options.fixture.log(),
         blockedMarkers: this.vector.blockedMarkers ?? [],
+        onlyPaths: this.options.cookiePlantOnlyPaths ?? null,
       })
     );
   }

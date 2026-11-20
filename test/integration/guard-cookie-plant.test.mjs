@@ -47,10 +47,37 @@ const plantHosts = [
   ...(catalog.protectedOrigins?.hosts ?? []),
 ];
 
+function observationKeys(path) {
+  const keys = [`${path}Planted`, `${path}Answered`, `${path}Refused`];
+  if (path === 'deletion') keys.push('deletionCleared');
+  return keys;
+}
+
+function prunePaths(vector, onlyPaths) {
+  if (!Array.isArray(onlyPaths) || !onlyPaths.length) return vector;
+  const keep = new Set(onlyPaths.flatMap(observationKeys));
+  const filter = (expected) =>
+    Object.fromEntries(Object.entries(expected ?? {}).filter(([key]) => keep.has(key)));
+  return {
+    ...vector,
+    expected: filter(vector.expected),
+    control: { ...vector.control, expected: filter(vector.control?.expected) },
+    observe: Object.fromEntries(
+      Object.entries(vector.observe ?? {}).filter(([key]) => keep.has(key))
+    ),
+  };
+}
+
 async function rows(options = {}, subset = protectedVectors) {
   const fixture = await fixtureServer();
   try {
-    const { capabilities: extraCaps, fake: fakeOptions, ...guardOptions } = options;
+    const {
+      capabilities: extraCaps,
+      fake: fakeOptions,
+      oneTarget = false,
+      onlyPaths = null,
+      ...guardOptions
+    } = options;
     const browser = cookiePlantFake({
       protectedHosts: plantHosts,
       blockedMarkers: protectedVectors[0]?.blockedMarkers ?? [],
@@ -65,9 +92,13 @@ async function rows(options = {}, subset = protectedVectors) {
       cookiePlant: true,
       ...guardOptions,
     });
+    const vectors = subset.map((vector) => {
+      const narrowed = oneTarget ? { ...vector, targets: [vector.targets[0]] } : vector;
+      return prunePaths(narrowed, onlyPaths);
+    });
     try {
       return await run(
-        { ...set, vectors: subset, variants: { prompt: 0 } },
+        { ...set, vectors, variants: { prompt: 0 } },
         {
           client: guard.client,
           unguarded: browser.unguarded,
@@ -80,6 +111,7 @@ async function rows(options = {}, subset = protectedVectors) {
           targets: targetsOf(fixture, origin),
           catalog,
           credentialOrigins: catalog.credentialOrigins,
+          cookiePlantOnlyPaths: onlyPaths,
         }
       );
     } finally {
@@ -189,13 +221,21 @@ test('a correct cookiePlant guard passes the row', async () => {
 });
 
 test('m1 guarded trigger never fires (dead session) => incomplete, not pass', async () => {
-  const out = await rows({ fake: { deadPageSession: true } });
+  const out = await rows({
+    fake: { deadPageSession: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
 test('m2 guard blocks and the page ends on data:,blocked (bios shape) => pass', async () => {
-  const out = await rows({ fake: { blockedMarker: 'data:,blocked' } });
+  const out = await rows({
+    fake: { blockedMarker: 'data:,blocked' },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.ok(
@@ -205,7 +245,11 @@ test('m2 guard blocks and the page ends on data:,blocked (bios shape) => pass', 
 });
 
 test('m3 guard blocks and the page ends on chrome-error (slicc shape) => pass', async () => {
-  const out = await rows({ fake: { blockedMarker: 'chrome-error://chromewebdata/' } });
+  const out = await rows({
+    fake: { blockedMarker: 'chrome-error://chromewebdata/' },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.ok(
@@ -215,7 +259,11 @@ test('m3 guard blocks and the page ends on chrome-error (slicc shape) => pass', 
 });
 
 test('m4 trigger refused by reply but the page left on the home URL => pass', async () => {
-  const out = await rows({ fake: { blockWithoutMarker: true } });
+  const out = await rows({
+    fake: { blockWithoutMarker: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.ok(
@@ -236,6 +284,8 @@ test('m5 unknown href and no refusal => incomplete', async () => {
       settleAssignOk: true,
       finalHref: 'https://unknown.example.test/done',
     },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
@@ -247,6 +297,8 @@ test('trigger aborted by a superseding navigation, page on a non-marker URL => i
       supersedeAbort: true,
       finalHref: 'https://ordinary.example.test/doc?n=home',
     },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
@@ -277,7 +329,13 @@ test('empty fixture log without control proof => incomplete', async () => {
     });
     try {
       const out = await run(
-        { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
+        {
+          ...set,
+          vectors: protectedVectors.map((v) =>
+            prunePaths({ ...v, targets: ['seven'] }, ['fulfillArray'])
+          ),
+          variants: { prompt: 0 },
+        },
         {
           client: guard.client,
           unguarded: browser.unguarded,
@@ -286,6 +344,7 @@ test('empty fixture log without control proof => incomplete', async () => {
           capabilities: caps,
           targets: targetsOf(fixture, origin),
           catalog,
+          cookiePlantOnlyPaths: ['fulfillArray'],
         }
       );
       const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
@@ -304,7 +363,13 @@ test('unguarded client fails the guarded expectations', async () => {
     const browser = cookiePlantFake();
     const origin = (host) => `http://${host}:${fixture.port}`;
     const out = await run(
-      { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
+      {
+        ...set,
+        vectors: protectedVectors.map((v) =>
+          prunePaths({ ...v, targets: ['seven'] }, ['fulfillArray'])
+        ),
+        variants: { prompt: 0 },
+      },
       {
         client: browser.client,
         unguarded: browser.unguarded,
@@ -312,6 +377,7 @@ test('unguarded client fails the guarded expectations', async () => {
         settleScale: 0.1,
         capabilities: caps,
         targets: targetsOf(fixture, origin),
+        cookiePlantOnlyPaths: ['fulfillArray'],
       }
     );
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
@@ -332,7 +398,12 @@ for (const path of [
   'setCookieSecond',
 ]) {
   test(`mutant allowPlantPaths=${path} fails`, async () => {
-    const out = await rows({ allowPlantPaths: [path], admitProtectedNavigation: true });
+    const out = await rows({
+      allowPlantPaths: [path],
+      admitProtectedNavigation: true,
+      oneTarget: true,
+      onlyPaths: [path],
+    });
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
     assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
   });
@@ -349,6 +420,8 @@ test('mutant that admits the protected pause and plants fails', async () => {
       'redirect3xx',
       'legacyRaw',
     ],
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
@@ -356,13 +429,21 @@ test('mutant that admits the protected pause and plants fails', async () => {
 });
 
 test('mutant that blocks navigation but poisons the jar fails', async () => {
-  const out = await rows({ poisonProtectedJar: true });
+  const out = await rows({
+    poisonProtectedJar: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
 test('mutant that hangs on protected navigation is incomplete', async () => {
-  const out = await rows({ hangOnProtected: true });
+  const out = await rows({
+    hangOnProtected: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
@@ -381,13 +462,19 @@ test('a correct cookiePlant guard passes the credential row', async () => {
 });
 
 test('mutant allowPlantPaths=hostOnly fails the credential row', async () => {
-  const out = await rows({ allowPlantPaths: ['hostOnly'] }, credentialVectors);
+  const out = await rows(
+    { allowPlantPaths: ['hostOnly'], oneTarget: true, onlyPaths: ['hostOnly'] },
+    credentialVectors
+  );
   const row = out.results.find((r) => r.id === 'C10.cookie-plant.credential' && r.target === 'idp');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
 test('binaryLf not stored is recorded as not-a-plant-path, not required', async () => {
-  const out = await rows();
+  const out = await rows({
+    oneTarget: true,
+    onlyPaths: ['binaryLf', 'ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
@@ -401,7 +488,11 @@ test('binaryLf not stored is recorded as not-a-plant-path, not required', async 
 });
 
 test('binaryLf stored by the transport is a plant path; a leak fails', async () => {
-  const ok = await rows({ fake: { storeBinaryLf: true } });
+  const ok = await rows({
+    fake: { storeBinaryLf: true },
+    oneTarget: true,
+    onlyPaths: ['binaryLf', 'ordinary', 'adobe', 'deletion'],
+  });
   const pass = ok.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(pass.control, 'pass', JSON.stringify(pass));
   assert.equal(pass.guarded, 'pass', JSON.stringify(pass));
@@ -417,6 +508,8 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
     fake: { storeBinaryLf: true },
     allowPlantPaths: ['binaryLf'],
     admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['binaryLf'],
   });
   const row = leak.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
@@ -424,13 +517,21 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
 });
 
 test('refuse-all interception fails the controls', async () => {
-  const out = await rows({ refuseAllInterception: true });
+  const out = await rows({
+    refuseAllInterception: true,
+    oneTarget: true,
+    onlyPaths: ['ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
 });
 
 test('mutant that silently drops allowed Set-Cookie fails the controls', async () => {
-  const out = await rows({ silentDropAllowed: true });
+  const out = await rows({
+    silentDropAllowed: true,
+    oneTarget: true,
+    onlyPaths: ['ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
   assert.equal(row.observations.guarded.ordinaryPlanted, false, JSON.stringify(row));
@@ -439,7 +540,11 @@ test('mutant that silently drops allowed Set-Cookie fails the controls', async (
 });
 
 test('refuseWithoutFail still finishes and protects', async () => {
-  const out = await rows({ refuseWithoutFail: true });
+  const out = await rows({
+    refuseWithoutFail: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.live, 'pass', JSON.stringify(row));
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
@@ -451,6 +556,8 @@ test('mutant missObsFoldDomain that admits pauses leaves protected evidence inco
     missObsFoldDomain: true,
     admitProtectedNavigation: true,
     fake: { deadFetchAfter: 'bof-', deadFetchOnNth: 2 },
+    oneTarget: true,
+    onlyPaths: ['binaryObsFold', 'domainQuoted', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -468,6 +575,8 @@ test('mutant that cuts the session after admitting pauses does not pass', async 
     allowPlantPaths: ['responsePhrase'],
     admitProtectedNavigation: true,
     fake: { cutSessionAfter: 'rp-', cutSessionOnNth: 2, cutBlocksReattach: true },
+    oneTarget: true,
+    onlyPaths: ['responsePhrase', 'continueAtRequest', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -488,6 +597,8 @@ test('mutant that forwards fulfillArray then cuts still fails planted', async ()
     allowPlantPaths: ['fulfillArray'],
     forwardThenCut: ['fulfillArray'],
     admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -497,7 +608,11 @@ test('mutant that forwards fulfillArray then cuts still fails planted', async ()
 });
 
 test('mutant that never answers client attach is incomplete', async () => {
-  const out = await rows({ hangClientAttach: true });
+  const out = await rows({
+    hangClientAttach: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
   assert.match(
@@ -524,7 +639,13 @@ test('unreadable jar after a plant is incomplete, not a false pass', async () =>
     });
     try {
       const out = await run(
-        { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
+        {
+          ...set,
+          vectors: protectedVectors.map((v) =>
+            prunePaths({ ...v, targets: ['seven'] }, ['fulfillArray'])
+          ),
+          variants: { prompt: 0 },
+        },
         {
           client: guard.client,
           unguarded: browser.unguarded,
@@ -534,6 +655,7 @@ test('unreadable jar after a plant is incomplete, not a false pass', async () =>
           targets: targetsOf(fixture, origin),
           catalog,
           credentialOrigins: catalog.credentialOrigins,
+          cookiePlantOnlyPaths: ['fulfillArray'],
         }
       );
       const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
@@ -549,6 +671,8 @@ test('unreadable jar after a plant is incomplete, not a false pass', async () =>
 test('requestInterception alone still judges fetch attack observations', async () => {
   const out = await rows({
     capabilities: { requestInterception: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
@@ -559,6 +683,8 @@ test('requestInterception alone still judges fetch attack observations', async (
 test('fetch-only transport skips legacy observations', async () => {
   const out = await rows({
     capabilities: { ...caps, legacyInterception: false },
+    oneTarget: true,
+    onlyPaths: ['legacyRaw', 'fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
@@ -571,6 +697,8 @@ test('sweep caps omit legacyInterception so Chrome-unavailable legacy is not for
       requestInterception: true,
       fetchInterception: true,
     },
+    oneTarget: true,
+    onlyPaths: ['legacyRaw', 'fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));

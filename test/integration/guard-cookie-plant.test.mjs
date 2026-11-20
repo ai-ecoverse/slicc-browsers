@@ -6,11 +6,14 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { cookiePlantHandleApi } from '../../cookie-plant.mjs';
 import { fixtureServer } from '../../fixture-server.mjs';
 import { run } from '../../guard-runner.mjs';
 import { cookiePlantFake } from './cookie-plant-fake.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
+
+const { evidenceFormOf } = cookiePlantHandleApi;
 
 const execFileAsync = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -617,10 +620,124 @@ test('b) canary absent => incomplete', async () => {
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  const plantedNotes = parsePlantedNotes(row.notes);
+  assert.ok(plantedNotes.length, JSON.stringify(row.notes));
   assert.ok(
-    (row.notes ?? []).some((n) => /jar view canary absent/.test(n)) ||
-      /canary/.test(String(row.why ?? '')),
-    JSON.stringify(row)
+    plantedNotes.some((n) => n.canaryVisible === false && n.canaryName),
+    JSON.stringify(plantedNotes)
+  );
+});
+
+function parsePlantedNotes(notes) {
+  return (notes ?? [])
+    .map((line) => {
+      const m = /^(?:guarded |control )?(cookie-plant\.[^:]+):\s*(\{.*\})\s*$/.exec(line);
+      if (!m) return null;
+      let evidence;
+      try {
+        evidence = JSON.parse(m[2]);
+      } catch {
+        return null;
+      }
+      if (!Object.hasOwn(evidence, 'planted')) return null;
+      return { label: m[1], ...evidence };
+    })
+    .filter(Boolean);
+}
+
+test('planted:false guarded path notes carry canaryVisible true with audit fields', async () => {
+  const out = await rows({
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  const plantedFalse = parsePlantedNotes(row.notes).filter((n) => n.planted === false);
+  assert.ok(plantedFalse.length >= 1, JSON.stringify(row.notes));
+  for (const n of plantedFalse) {
+    assert.equal(n.canaryVisible, true, JSON.stringify(n));
+    assert.match(String(n.canaryName ?? ''), /^cplantcanary/, JSON.stringify(n));
+    assert.ok(
+      n.via === 'Storage.getCookies' ||
+        n.via === 'Network.getAllCookies' ||
+        n.via === 'Network.getCookies',
+      JSON.stringify(n)
+    );
+    assert.ok(Object.hasOwn(n, 'browserContextId'), JSON.stringify(n));
+  }
+});
+
+test('Network cookie call with a foreign session fails in the fake', async () => {
+  const browser = cookiePlantFake({ protectedHosts: plantHosts });
+  await browser.client.send('Target.setDiscoverTargets', { discover: true });
+  const created = await browser.unguarded.send('Target.createTarget', {
+    url: 'http://ordinary.example.test/',
+  });
+  const attached = await browser.unguarded.send('Target.attachToTarget', {
+    targetId: created.targetId,
+    flatten: true,
+  });
+  await assert.rejects(
+    () => browser.unguarded.send('Network.getAllCookies', {}, 'not-an-attempt-session'),
+    /attempt tab session/
+  );
+  await browser.unguarded.send('Network.getAllCookies', {}, attached.sessionId);
+});
+
+test('evidenceFormOf covers commandRefused, answeredNotPlanted, allowedPlant and rejects the rest', () => {
+  assert.equal(evidenceFormOf({ answered: true, refused: true, planted: false }), 'commandRefused');
+  assert.equal(
+    evidenceFormOf({ answered: true, refused: false, planted: false }),
+    'answeredNotPlanted'
+  );
+  assert.equal(evidenceFormOf({ answered: true, refused: false, planted: true }), 'allowedPlant');
+  assert.equal(evidenceFormOf({ answered: true, refused: true, planted: true }), null);
+  assert.equal(evidenceFormOf({ answered: false, refused: true, planted: false }), null);
+  assert.equal(evidenceFormOf({ answered: true, refused: false, planted: 'incomplete' }), null);
+  assert.equal(evidenceFormOf({ answered: 'incomplete', refused: false, planted: false }), null);
+});
+
+test('credential path notes carry evidenceForm matching the classifier', async () => {
+  const out = await rows(
+    {
+      oneTarget: true,
+      onlyPaths: ['hostOnly', 'domainCover', 'subHost', 'adobe', 'deletion'],
+    },
+    credentialVectors
+  );
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant.credential' && r.target === 'idp');
+  assert.ok(row, JSON.stringify(out.results));
+  const labels = new Set([
+    'cookie-plant.hostOnly',
+    'cookie-plant.domainCover',
+    'cookie-plant.subHost',
+    'cookie-plant.adobe',
+    'cookie-plant.deletion',
+  ]);
+  const credentialNotes = parsePlantedNotes(row.notes).filter((n) => labels.has(n.label));
+  assert.ok(credentialNotes.length >= 1, JSON.stringify(row.notes));
+  const seen = new Set();
+  for (const n of credentialNotes) {
+    assert.ok(Object.hasOwn(n, 'evidenceForm'), JSON.stringify(n));
+    const form = evidenceFormOf({
+      answered: n.answered,
+      refused: n.refused,
+      planted: n.planted,
+    });
+    assert.equal(n.evidenceForm, form, JSON.stringify(n));
+    assert.ok(
+      form === 'commandRefused' || form === 'answeredNotPlanted' || form === 'allowedPlant',
+      JSON.stringify(n)
+    );
+    seen.add(form);
+    assert.match(String(n.canaryName ?? ''), /^cplantcanary/, JSON.stringify(n));
+    assert.ok(Object.hasOwn(n, 'canaryVisible'), JSON.stringify(n));
+    assert.ok(Object.hasOwn(n, 'via'), JSON.stringify(n));
+    assert.ok(Object.hasOwn(n, 'browserContextId'), JSON.stringify(n));
+  }
+  assert.ok(
+    seen.has('commandRefused') || seen.has('answeredNotPlanted') || seen.has('allowedPlant')
   );
 });
 
@@ -1549,8 +1666,6 @@ test('sweep caps omit legacyInterception so Chrome-unavailable legacy is not for
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.deepEqual(out.summary({ guard: 'cookie-plant', sha: 'test' }).forged, []);
 });
-
-const { cookiePlantHandleApi } = await import('../../cookie-plant.mjs');
 
 test('jar/score helpers throw when attempt handle is missing', async () => {
   const {

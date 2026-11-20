@@ -217,6 +217,11 @@ export function cookiePlantFake(options = {}) {
         `cookie-plant-fake: ${method} context ${got ?? 'missing'} !== attempt tab context(s) ${want.join(',')}`
       );
   };
+  const assertNetworkCookieSession = (method, sessionId) => {
+    if (!sessionId) throw new Error(`cookie-plant-fake: ${method} requires attempt tab session`);
+    if (!sessions.has(sessionId) || !tabs.has(sessions.get(sessionId)))
+      throw new Error(`cookie-plant-fake: ${method} session ${sessionId} !== attempt tab session`);
+  };
   const recordPreTriggerPlantHit = (tab) => {
     if (!preTriggerPlantHit || !tab || preTriggerHitTabs.has(tab.targetId)) return;
     const m = /cookie-plant-([^&/?#]+)/.exec(String(tab.url ?? ''));
@@ -536,7 +541,13 @@ export function cookiePlantFake(options = {}) {
 
   async function handle(conn, method, params = {}, sessionId) {
     await tick();
-    if (sessionId && !sessions.has(sessionId))
+    const networkCookie =
+      method === 'Network.setCookie' ||
+      method === 'Network.deleteCookies' ||
+      method === 'Network.getCookies' ||
+      method === 'Network.getAllCookies';
+    if (networkCookie) assertNetworkCookieSession(method, sessionId);
+    else if (sessionId && !sessions.has(sessionId))
       throw new Error(`Session with given id not found: ${sessionId}`);
     if (sessionId && cutSessions.has(sessionId))
       throw new Error('slicc: refused: session cut on protected execution context');
@@ -663,6 +674,7 @@ export function cookiePlantFake(options = {}) {
       return {};
     }
     if (method === 'Network.setCookie') {
+      assertNetworkCookieSession(method, sessionId);
       const jar = jarOf(contextOfSession(sessionId));
       const domain = params.domain ?? (params.url ? hostOf(params.url) : '');
       const storeDomain = domain
@@ -687,8 +699,10 @@ export function cookiePlantFake(options = {}) {
       return { success: true };
     }
     if (method === 'Network.deleteCookies') {
+      assertNetworkCookieSession(method, sessionId);
       const tab = tabs.get(sessions.get(sessionId));
       recordPreTriggerPlantHit(tab);
+      if (preTriggerPlantHit) await tick();
       const jar = jarOf(tab?.browserContextId || contextOfSession(sessionId));
       const host = params.url ? hostOf(params.url) : (params.domain ?? '').replace(/^\./, '');
       for (let i = jar.length - 1; i >= 0; i -= 1) {
@@ -710,6 +724,8 @@ export function cookiePlantFake(options = {}) {
       method === 'Network.getCookies'
     ) {
       if (method === 'Storage.getCookies') assertStorageCookieContext(method, params);
+      if (method === 'Network.getAllCookies' || method === 'Network.getCookies')
+        assertNetworkCookieSession(method, sessionId);
       if (method === 'Storage.getCookies' && storageGetCookiesFails)
         throw new Error('Storage.getCookies failed');
       if (method === 'Network.getAllCookies' && networkGetAllCookiesFails)

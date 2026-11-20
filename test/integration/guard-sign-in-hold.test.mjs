@@ -833,7 +833,7 @@ test('signInHold.ask failure closes the exact marker popup, not an unrelated pag
   assert.deepEqual(left, ['U1'], debug);
 });
 
-test('signInHold.ask failure closes nothing when the exact popup cannot be identified', async () => {
+test('signInHold.ask failure closes only the opener when the exact popup cannot be identified', async () => {
   const unrelated = (browser) =>
     browser.addTab({ targetId: 'U1', type: 'page', url: 'about:blank#unrelated', title: '' });
   const scenarios = {
@@ -874,13 +874,17 @@ test('signInHold.ask failure closes nothing when the exact popup cannot be ident
     assert.match(String(out.incomplete ?? ''), /popup not identified exactly/, debug);
     assert.match(String(out.incomplete ?? ''), /nothing closed/, debug);
     assert.equal(out.targetId, undefined, debug);
-    assert.equal(out.openerId, undefined, debug);
-    assert.deepEqual(closed, [], debug);
-    assert.deepEqual(left, seen.ids, debug);
+    assert.equal(out.openerId, seen.openerId, debug);
+    assert.deepEqual(closed, [seen.openerId], debug);
+    assert.deepEqual(
+      left,
+      seen.ids.filter((id) => id !== seen.openerId),
+      debug
+    );
   }
 });
 
-test('signInHold.ask failure closes nothing when Target.getTargets fails', async () => {
+test('signInHold.ask failure closes only the opener when Target.getTargets fails', async () => {
   let down = false;
   const failure = askFailure('ask-fail-list', ({ browser }) => {
     down = true;
@@ -904,12 +908,20 @@ test('signInHold.ask failure closes nothing when Target.getTargets fails', async
     budget: 300,
   });
   const debug = JSON.stringify({ out, closed: failure.closed, seen: failure.seen });
+  assert.ok(failure.seen.popupId && failure.seen.openerId, debug);
+  assert.equal(out.live, false, debug);
   assert.match(String(out.incomplete ?? ''), /signInHold\.ask failed: boom/, debug);
   assert.match(String(out.incomplete ?? ''), /Target\.getTargets failed: list down/, debug);
   assert.match(String(out.incomplete ?? ''), /nothing closed/, debug);
   assert.equal(out.targetId, undefined, debug);
-  assert.equal(out.openerId, undefined, debug);
-  assert.deepEqual(failure.closed, [], debug);
+  assert.equal(out.openerId, failure.seen.openerId, debug);
+  assert.deepEqual(failure.closed, [failure.seen.openerId], debug);
+  const listed = await failure.browser.unguarded.send('Target.getTargets', {});
+  assert.deepEqual(
+    (listed.targetInfos ?? []).map((info) => info.targetId).sort(),
+    failure.seen.ids.filter((id) => id !== failure.seen.openerId),
+    debug
+  );
 });
 
 test('announce-only id with empty URL/title still passes', async () => {

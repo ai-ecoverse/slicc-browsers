@@ -637,7 +637,7 @@ async function heldPopup({
         notes,
       });
       if (!found.popup)
-        return { live: false, incomplete: `${askedHold.incomplete}; ${found.reason}` };
+        return { live: false, incomplete: `${askedHold.incomplete}; ${found.reason}`, openerId };
       return {
         live: false,
         incomplete: askedHold.incomplete,

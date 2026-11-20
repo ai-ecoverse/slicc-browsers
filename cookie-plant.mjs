@@ -235,9 +235,13 @@ async function until(check, ms, step = 25) {
   }
 }
 
-async function openPage(reader, url, notes, internalSessions) {
+async function openPage(reader, url, notes, internalSessions, browserContextId = null) {
   const created = await outcome(
-    createObserverTarget(reader, { url }, notes).then(async (result) => {
+    createObserverTarget(
+      reader,
+      { url, ...(browserContextId ? { browserContextId } : {}) },
+      notes
+    ).then(async (result) => {
       const { sessionId } = await reader.send('Target.attachToTarget', {
         targetId: result.targetId,
         flatten: true,
@@ -347,22 +351,42 @@ async function waitPause(client, from, url, methods, budget) {
   }, budget);
 }
 
-async function hrefOf(client, pageSession) {
-  if (!pageSession) return null;
-  const href = await capped(
-    outcome(
-      client.send(
-        'Runtime.evaluate',
-        { expression: 'location.href', returnByValue: true },
-        pageSession
-      )
-    ),
-    400,
-    'href'
+async function tabHrefFromReader(reader, pageTarget) {
+  if (!reader || !pageTarget) return null;
+  const info = await capped(
+    outcome(reader.send('Target.getTargetInfo', { targetId: pageTarget })),
+    800,
+    'tabHref'
   );
-  if (!href.ok) return null;
-  const value = href.result?.result?.value ?? href.result?.value;
+  if (!info.ok) return null;
+  const value = info.result?.targetInfo?.url;
   return typeof value === 'string' ? value : null;
+}
+
+async function readTabHref({ reader, pageTarget }) {
+  return tabHrefFromReader(reader, pageTarget);
+}
+
+function readerNetworkBlocked(reader, sessionId, url, from = 0) {
+  if (!reader?.events || !url) return false;
+  const events = reader.events.slice(Math.max(0, from));
+  const requests = new Map();
+  const base = String(url).split('?')[0];
+  for (const event of events) {
+    if (sessionId && event.sessionId && event.sessionId !== sessionId) continue;
+    if (event.method === 'Network.requestWillBeSent') {
+      const reqUrl = String(event.params?.request?.url ?? '');
+      if (reqUrl === url || (base && reqUrl.startsWith(base)))
+        requests.set(event.params.requestId, reqUrl);
+    }
+    if (event.method === 'Network.loadingFailed') {
+      const id = event.params?.requestId;
+      if (id && !requests.has(id)) continue;
+      const err = String(event.params?.errorText ?? event.params?.blockedReason ?? '');
+      if (/ERR_BLOCKED_BY_CLIENT|BlockedByClient/i.test(err)) return true;
+    }
+  }
+  return false;
 }
 
 async function quietFixture(fixtureLog, ms) {
@@ -387,9 +411,46 @@ async function quietFixture(fixtureLog, ms) {
   }
 }
 
+function leftHome(href, homeUrl) {
+  if (!href || !homeUrl) return false;
+  if (href === homeUrl) return false;
+  try {
+    const home = new URL(homeUrl);
+    const now = new URL(href);
+    if (now.href === home.href) return false;
+    if (now.origin === home.origin && now.pathname === home.pathname) return false;
+  } catch {
+    return href !== homeUrl;
+  }
+  return true;
+}
+
+async function continueItselfEvidence({
+  fixtureLog,
+  url,
+  since,
+  tag,
+  proofTag,
+  cookie,
+  reader,
+  readerSession,
+}) {
+  if (!fixtureLog || !url || !cookie || !reader || !readerSession) return null;
+  const hits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
+  if (typeof hits !== 'number' || hits < 1) return null;
+  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  return { fixtureHits: hits, planted };
+}
+
 async function waitPauseOrBlocked({
   client,
+  reader,
+  pageTarget,
   pageSession,
+  homeUrl,
   from,
   url,
   methods,
@@ -397,10 +458,20 @@ async function waitPauseOrBlocked({
   triggerPromise,
   blockedMarkers,
   fixtureLog,
+  handle,
+  tag = null,
+  proofTag = null,
+  triggerSentAt = null,
+  cookie = null,
 }) {
   let settled = null;
   let href = null;
-  const quietMs = Math.min(150, Math.max(50, Math.floor(pauseMs / 8)));
+  let postTriggerRefusal = null;
+  let probedRefusal = false;
+  let fixtureHits = null;
+  let planted = null;
+  const quietMs = Math.min(150, Math.max(50, Math.floor(pauseMs / 16)));
+  const since = triggerSentAt ?? Date.now();
   const triggerDone = Promise.resolve(triggerPromise).then(
     (value) => {
       settled = value;
@@ -412,25 +483,65 @@ async function waitPauseOrBlocked({
     }
   );
   const deadline = Date.now() + pauseMs;
+  const pack = (paused, early) => ({
+    paused,
+    settled,
+    href,
+    postTriggerRefusal,
+    early,
+    fixtureHits,
+    planted,
+  });
+  const finish = async (paused, early, opts = {}) => {
+    href = (await readTabHref({ reader, pageTarget })) ?? href;
+    if (!probedRefusal && handle && !paused && !opts.skipRefusalProbe) {
+      postTriggerRefusal = await probePostTriggerRefusal(handle);
+      probedRefusal = true;
+    }
+    if ((early || paused) && !opts.skipQuiet) await quietFixture(fixtureLog, quietMs);
+    return pack(paused, early);
+  };
   while (Date.now() < deadline) {
     const paused = pauseEvents(client.events, from, url, methods).at(-1) ?? null;
-    if (paused) return { paused, settled, href, early: false };
+    if (paused) return finish(paused, false);
     if (settled != null && triggerRefusal(settled) === true) {
-      await quietFixture(fixtureLog, quietMs);
-      href = await hrefOf(client, pageSession);
-      return { paused: null, settled, href, early: true };
-    }
-    href = await hrefOf(client, pageSession);
-    if (blockedMarkerHit(href, blockedMarkers)) {
-      await quietFixture(fixtureLog, quietMs);
       await Promise.race([triggerDone, pause(50)]);
-      return { paused: null, settled, href, early: true };
+      return finish(null, true);
     }
+    href = await readTabHref({ reader, pageTarget });
+    if (blockedMarkerHit(href, blockedMarkers)) {
+      await Promise.race([triggerDone, pause(50)]);
+      return finish(null, true);
+    }
+    if (readerNetworkBlocked(reader, handle?.readerSession, url, handle?.readerEventFrom ?? 0)) {
+      await Promise.race([triggerDone, pause(50)]);
+      return finish(null, true);
+    }
+    const bios = await continueItselfEvidence({
+      fixtureLog,
+      url,
+      since,
+      tag,
+      proofTag,
+      cookie,
+      reader,
+      readerSession: handle?.readerSession,
+    });
+    if (bios) {
+      fixtureHits = bios.fixtureHits;
+      planted = bios.planted;
+      return finish(null, true, { skipRefusalProbe: true, skipQuiet: true });
+    }
+    if (settled != null && !probedRefusal && handle) {
+      postTriggerRefusal = await probePostTriggerRefusal(handle);
+      probedRefusal = true;
+      if (refused(postTriggerRefusal)) return finish(null, true);
+    }
+    if (settled != null && leftHome(href, homeUrl)) return finish(null, true);
     await Promise.race([triggerDone.then(() => null), pause(25)]);
   }
   settled = settled ?? (await settleTrigger(triggerDone, Math.min(pauseMs, 500)));
-  href = href ?? (await hrefOf(client, pageSession));
-  return { paused: null, settled, href, early: false };
+  return finish(null, false);
 }
 
 async function evidenceAfterTrigger({
@@ -443,10 +554,9 @@ async function evidenceAfterTrigger({
   startedAt,
   hrefHint,
 }) {
-  const page =
-    hrefHint != null
-      ? { href: hrefHint, ready: true }
-      : await pageSnapshot(handle.client, handle.pageSession);
+  const readerHref =
+    hrefHint != null ? hrefHint : await tabHrefFromReader(handle.reader, handle.pageTarget);
+  const page = { href: readerHref, ready: readerHref != null };
   const afterTriggerAt = Date.now();
   if (afterTriggerAt < startedAt) {
     return {
@@ -1021,6 +1131,59 @@ function scoreRawOrDoorBranch({
   return incompletePlantedAttempt(notes, label, evidence);
 }
 
+function protectedPlantSignals({
+  pauseCount,
+  fixtureHits,
+  planted,
+  pageHref,
+  triggerOutcome,
+  blockedMarkers,
+  postTriggerRefusal,
+  triggerIssued,
+  fetchEnableOk,
+  doorAbsent,
+  rawDoor,
+  readerBlocked,
+}) {
+  const href = pageHref == null ? null : String(pageHref);
+  const onMarker = blockedMarkerHit(href, blockedMarkers);
+  const refusal = triggerRefusal(triggerOutcome);
+  const sessionBlocked = Boolean(triggerIssued && postTriggerRefusal === true);
+  const blockSeen = Boolean(onMarker === true || readerBlocked === true);
+  const issuedAndBlocked =
+    refusal === 'incomplete'
+      ? 'incomplete'
+      : Boolean(blockSeen || refusal === true || sessionBlocked);
+  const loadBlocked =
+    fixtureHits === 'incomplete' || issuedAndBlocked === 'incomplete'
+      ? 'incomplete'
+      : issuedAndBlocked === true && fixtureHits === 0;
+  const rawPremise =
+    Boolean(rawDoor) &&
+    !doorAbsent &&
+    rawDoor.observed === true &&
+    rawDoor.answered === true &&
+    rawDoor.planted === true;
+  const shapeD =
+    Boolean(triggerIssued) &&
+    pauseCount === 0 &&
+    fixtureHits === 0 &&
+    planted === false &&
+    rawPremise &&
+    blockSeen &&
+    fetchEnableOk === true;
+  return {
+    href,
+    onMarker,
+    refusal,
+    sessionBlocked,
+    blockSeen,
+    issuedAndBlocked,
+    loadBlocked,
+    shapeD,
+  };
+}
+
 function scoreProtectedPlant({
   pauseCount,
   fixtureHits,
@@ -1037,30 +1200,45 @@ function scoreProtectedPlant({
   doorAbsent = false,
   rawDoor = null,
   plantSurfaceRefused = false,
+  readerBlocked = false,
 }) {
-  const href = pageHref == null ? null : String(pageHref);
-  const onMarker = blockedMarkerHit(href, blockedMarkers);
-  const refusal = triggerRefusal(triggerOutcome);
-  const sessionBlocked = Boolean(triggerIssued && postTriggerRefusal === true);
-  const issuedAndBlocked =
-    refusal === 'incomplete'
-      ? 'incomplete'
-      : Boolean(onMarker === true || refusal === true || sessionBlocked);
-  const loadBlocked =
-    fixtureHits === 'incomplete' || issuedAndBlocked === 'incomplete'
-      ? 'incomplete'
-      : issuedAndBlocked === true && fixtureHits === 0;
+  const signals = protectedPlantSignals({
+    pauseCount,
+    fixtureHits,
+    planted,
+    pageHref,
+    triggerOutcome,
+    blockedMarkers,
+    postTriggerRefusal,
+    triggerIssued,
+    fetchEnableOk,
+    doorAbsent,
+    rawDoor,
+    readerBlocked,
+  });
+  const {
+    href,
+    onMarker,
+    refusal,
+    sessionBlocked,
+    blockSeen,
+    issuedAndBlocked,
+    loadBlocked,
+    shapeD,
+  } = signals;
   const evidence = {
     pauseCount,
     fixtureHits,
     planted,
     pageHref: href,
     onMarker,
+    readerBlocked: Boolean(readerBlocked),
     triggerRefused: refusal,
     postTriggerRefusal: sessionBlocked,
     triggerIssued: Boolean(triggerIssued),
     issuedAndBlocked,
     loadBlocked,
+    shapeD,
     fetchEnableOk,
     doorAbsent: Boolean(doorAbsent),
     plantSurfaceRefused: Boolean(plantSurfaceRefused),
@@ -1086,12 +1264,9 @@ function scoreProtectedPlant({
   });
   if (early) return early;
   if (planted === true) {
-    note(notes, `cookie-plant.${label}`, {
-      ...evidence,
-      answered: true,
-      refused: pauseCount > 0 || sessionBlocked,
-    });
-    return { answered: true, refused: pauseCount > 0 || sessionBlocked, planted: true };
+    const refused = pauseCount > 0 || sessionBlocked || blockSeen;
+    note(notes, `cookie-plant.${label}`, { ...evidence, answered: true, refused });
+    return { answered: true, refused, planted: true };
   }
   if (
     (planted !== true && planted !== false) ||
@@ -1102,6 +1277,15 @@ function scoreProtectedPlant({
   ) {
     return incompletePlantedAttempt(notes, label, evidence);
   }
+  if (shapeD) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      answered: true,
+      refused: true,
+      note: 'guard blocks the request itself',
+    });
+    return { answered: true, refused: true, planted: false };
+  }
   if (pauseCount === 0 && loadBlocked === true && planted === false) {
     if (fetchEnableOk === false) {
       return incompletePlantedAttempt(notes, label, {
@@ -1109,11 +1293,7 @@ function scoreProtectedPlant({
         incomplete: 'Fetch.enable unanswered for bios-shape',
       });
     }
-    note(notes, `cookie-plant.${label}`, {
-      ...evidence,
-      answered: true,
-      refused: true,
-    });
+    note(notes, `cookie-plant.${label}`, { ...evidence, answered: true, refused: true });
     return { answered: true, refused: true, planted: false };
   }
   if (
@@ -1574,34 +1754,54 @@ async function scoreUnpausedGuardedPlant(args) {
     settled.ok === false &&
     /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
   if (hung) handle.evidenceIncomplete = true;
-  const evidence = await evidenceAfterTrigger({
-    handle,
-    cookie,
-    fixtureLog,
-    url,
-    tag,
-    proofTag,
-    startedAt,
-    hrefHint: waited.href,
-  });
+  const evidence =
+    waited.fixtureHits != null && waited.planted != null
+      ? {
+          page: { href: waited.href ?? null, ready: true },
+          fixtureHits: waited.fixtureHits,
+          planted: waited.planted,
+          afterTriggerAt: Date.now(),
+        }
+      : await evidenceAfterTrigger({
+          handle,
+          cookie,
+          fixtureLog,
+          url,
+          tag,
+          proofTag,
+          startedAt,
+          hrefHint: waited.href,
+        });
   if (evidence.planted === 'incomplete') handle.evidenceIncomplete = true;
+  const pageHref =
+    (await readTabHref({ reader: handle.reader, pageTarget: handle.pageTarget })) ??
+    evidence.page.href ??
+    waited.href ??
+    null;
+  const readerBlocked = readerNetworkBlocked(
+    handle.reader,
+    handle.readerSession,
+    url,
+    handle.readerEventFrom ?? 0
+  );
   return markScored(
     handle,
     scoreProtectedPlant({
       pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
       fixtureHits: hung ? 'incomplete' : evidence.fixtureHits,
       planted: hung ? 'incomplete' : evidence.planted,
-      pageHref: evidence.page.href ?? waited.href,
+      pageHref,
       notes,
       label,
       triggerOutcome: hung ? { unresolved: true } : settled,
       blockedMarkers,
       handle,
-      postTriggerRefusal: state.postTriggerRefusal,
+      postTriggerRefusal: state.postTriggerRefusal || refused(waited.postTriggerRefusal),
       triggerIssued: true,
       fetchEnableOk,
       doorAbsent,
       rawDoor,
+      readerBlocked,
     })
   );
 }
@@ -1619,7 +1819,6 @@ async function runGuardedProtectedPlantBody({
   tag,
   from,
   pauseMs,
-  startedAt,
   state,
   blockedMarkers,
   proofTag,
@@ -1634,7 +1833,7 @@ async function runGuardedProtectedPlantBody({
     const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
     return scoreProtectedPlant({
       pauseCount: 0,
-      fixtureHits: await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag),
+      fixtureHits: await fixtureHitsFor(fixtureLog, url, Number.POSITIVE_INFINITY, tag, proofTag),
       planted: plantedOf(jar),
       pageHref: null,
       notes,
@@ -1671,23 +1870,33 @@ async function runGuardedProtectedPlantBody({
   const methods =
     transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
   state.triggerIssued = true;
+  const triggerSentAt = Date.now();
+  handle.triggerSentAt = triggerSentAt;
+  handle.readerEventFrom = handle.reader?.events?.length ?? 0;
   state.triggerPromise = topLevel
     ? triggerNavigate(client, handle.pageSession, url)
     : triggerFetch(client, handle.pageSession, url);
-  const postRefusal = await probePostTriggerRefusal(handle);
-  state.postTriggerRefusal = refused(postRefusal);
   const waited = await waitPauseOrBlocked({
     client,
+    reader,
+    pageTarget: handle.pageTarget,
     pageSession: handle.pageSession,
+    homeUrl: handle.homeUrl,
     from,
     url,
     methods,
-    pauseMs,
+    pauseMs: Math.max(pauseMs, pathCeiling(budget)),
     triggerPromise: state.triggerPromise,
     blockedMarkers,
     fixtureLog,
+    handle,
+    tag,
+    proofTag,
+    triggerSentAt,
+    cookie,
   });
   state.paused = waited.paused;
+  state.postTriggerRefusal = refused(waited.postTriggerRefusal);
   const shared = {
     handle,
     client,
@@ -1710,7 +1919,7 @@ async function runGuardedProtectedPlantBody({
     fixtureLog,
     tag,
     proofTag,
-    startedAt,
+    startedAt: triggerSentAt,
   };
   if (state.paused) return scorePausedGuardedPlant(shared);
   return scoreUnpausedGuardedPlant(shared);
@@ -1757,7 +1966,6 @@ async function runPlant({
             tag,
             from,
             pauseMs,
-            startedAt,
             state,
             blockedMarkers,
             proofTag,
@@ -1794,8 +2002,8 @@ async function runPlant({
         label,
       });
     if (protectedBlock) {
-      const page = await pageSnapshot(client, handle.pageSession);
-      const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
+      const since = handle.triggerSentAt ?? Number.POSITIVE_INFINITY;
+      const fixtureHits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
       const jar = await capped(
         readJar(handle.reader, handle.readerSession, cookie),
         1500,
@@ -1804,16 +2012,26 @@ async function runPlant({
       const planted = plantedOf(
         jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
       );
+      const pageHref = await readTabHref({
+        reader: handle.reader,
+        pageTarget: handle.pageTarget,
+      });
       const scored = scoreProtectedPlant({
         pauseCount: 'incomplete',
         fixtureHits,
         planted,
-        pageHref: page.href,
+        pageHref,
         notes,
         label,
         triggerOutcome: { unresolved: true },
         blockedMarkers,
         handle,
+        readerBlocked: readerNetworkBlocked(
+          handle.reader,
+          handle.readerSession,
+          url,
+          handle.readerEventFrom ?? 0
+        ),
       });
       if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
       return scored;
@@ -2134,8 +2352,8 @@ function timedClient(client, timing) {
 }
 
 async function withFreshAttemptTab(ctx, run) {
-  const { client, reader, homeUrl, notes, internalSessions } = ctx;
-  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  const { client, reader, homeUrl, notes, internalSessions, browserContextId } = ctx;
+  const page = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
   if (!page.ok)
     return attemptRecord(
       { ok: false, error: { message: `open failed: ${page.error?.message ?? page.error}` } },
@@ -2600,15 +2818,24 @@ async function observeRawPlantSend({
 }
 
 async function measureRawDoor(ctx, spec) {
-  const { reader, homeUrl, notes, internalSessions, budget, plantUrl, plantCookie, forcedRaw } =
-    ctx;
+  const {
+    reader,
+    homeUrl,
+    notes,
+    internalSessions,
+    budget,
+    plantUrl,
+    plantCookie,
+    forcedRaw,
+    browserContextId = null,
+  } = ctx;
   const forced = forcedRawDoor(forcedRaw?.[spec.label], notes, spec.label);
   if (forced) return forced;
   const pathStartedAt = Date.now();
   const timing = { pathStartedAt };
   const timedReader = timedClient(reader, timing);
   const handle = { timing };
-  const page = await openPage(timedReader, homeUrl, notes, internalSessions);
+  const page = await openPage(timedReader, homeUrl, notes, internalSessions, browserContextId);
   if (!page.ok || page.result?.incomplete) {
     return noteRawDoor(
       notes,
@@ -3403,12 +3630,13 @@ async function proveDoorOnOwnTab({
   notes,
   internalSessions,
   plantName,
+  browserContextId = null,
 }) {
   const host = hostOf(doorOrigin);
   const domain = `.${host}`;
   const value = `door-${tag}`;
   const setCookie = cookieHeader(plantName, value, domain);
-  const probePage = await openPage(reader, homeUrl, notes, internalSessions);
+  const probePage = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
   if (!probePage.ok)
     return { incomplete: `open failed: ${probePage.error?.message ?? probePage.error}` };
   if (probePage.result?.incomplete) return { incomplete: probePage.result.incomplete };
@@ -3435,6 +3663,7 @@ async function proveDoorOnOwnTab({
         notes,
         internalSessions,
         budget,
+        browserContextId,
         plantUrl: `${doorOrigin}/data?n=door-${tag}`,
         plantCookie: {
           name: plantName,
@@ -3476,7 +3705,7 @@ async function proveDoorOnOwnTab({
     });
     return { live: true };
   }
-  const doorPage = await openPage(reader, homeUrl, notes, internalSessions);
+  const doorPage = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
   if (!doorPage.ok)
     return { incomplete: `open failed: ${doorPage.error?.message ?? doorPage.error}` };
   if (doorPage.result?.incomplete) return { incomplete: doorPage.result.incomplete };
@@ -3507,8 +3736,9 @@ async function openPlantClient({
   internalSessions,
   control,
   credential,
+  browserContextId = null,
 }) {
-  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  const page = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
   if (!page.ok)
     return { done: { incomplete: `open failed: ${page.error?.message ?? page.error}` } };
   if (page.result?.incomplete) return { done: { incomplete: page.result.incomplete } };
@@ -3576,6 +3806,7 @@ export async function cookiePlant({
   blockedMarkers,
   onlyPaths = null,
   forcedRaw = null,
+  browserContextId = null,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -3604,6 +3835,7 @@ export async function cookiePlant({
     notes,
     internalSessions,
     plantName: names.plant,
+    browserContextId,
   });
   if (!door.live) return door;
 
@@ -3615,6 +3847,7 @@ export async function cookiePlant({
     internalSessions,
     control,
     credential,
+    browserContextId,
   });
   if (probe.done) return probe.done;
   const transport = probe.enabled.transport;
@@ -3658,6 +3891,7 @@ export async function cookiePlant({
     proofTag: tag,
     rawDoors: {},
     forcedRaw: forcedRaw && typeof forcedRaw === 'object' ? forcedRaw : null,
+    browserContextId,
   });
 
   const { results, ran } = await runAttempts(

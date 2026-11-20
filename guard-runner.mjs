@@ -1356,6 +1356,7 @@ class Execution {
         blockedMarkers: this.vector.blockedMarkers ?? [],
         onlyPaths: this.options.cookiePlantOnlyPaths ?? null,
         forcedRaw: this.options.cookiePlantForcedRaw ?? null,
+        browserContextId: this.vars.context ?? null,
       })
     );
   }

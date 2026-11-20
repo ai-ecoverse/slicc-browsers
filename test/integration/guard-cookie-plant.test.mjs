@@ -77,6 +77,7 @@ async function rows(options = {}, subset = protectedVectors) {
       oneTarget = false,
       onlyPaths = null,
       forcedRaw = null,
+      withBrowser = false,
       ...guardOptions
     } = options;
     const browser = cookiePlantFake({
@@ -98,7 +99,7 @@ async function rows(options = {}, subset = protectedVectors) {
       return prunePaths(narrowed, onlyPaths);
     });
     try {
-      return await run(
+      const out = await run(
         { ...set, vectors, variants: { prompt: 0 } },
         {
           client: guard.client,
@@ -116,6 +117,7 @@ async function rows(options = {}, subset = protectedVectors) {
           cookiePlantForcedRaw: forcedRaw,
         }
       );
+      return withBrowser ? { out, browser } : out;
     } finally {
       await guard.stop?.();
     }
@@ -471,6 +473,53 @@ test('blocking guard with replyDelay still passes', async () => {
   assert.equal(row.live, 'pass', JSON.stringify(row));
 });
 
+test('late block after the old short window still passes (event-driven wait)', async () => {
+  const out = await rows({
+    replyDelayMs: 600,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"pageHref":"[^"]+"/.test(n) &&
+        /"elapsedMs":[6-9][0-9]{2,}/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('cookie-plant closes every probe target after the row', async () => {
+  const { out, browser } = await rows({
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    withBrowser: true,
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(browser.pageTargetCount(), 0, JSON.stringify(browser.openPageTargets()));
+});
+
+test('leaking a tab on session-cut fails the isolation check', async () => {
+  const { out, browser } = await rows({
+    sessionCutOnFetchEnable: true,
+    fake: { leakCloseCount: 1 },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+    withBrowser: true,
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    browser.pageTargetCount() > 0,
+    `expected a leaked tab, got ${JSON.stringify(browser.openPageTargets())}`
+  );
+});
+
 test('C10.cookie-plant declares timeoutMs finite and at least the runner global', () => {
   const global = 180000;
   for (const vector of vectors) {
@@ -648,6 +697,68 @@ test('m11 continue-itself but trigger never issued (fixtureHits 0, no refusal, n
   assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
 });
 
+test('earlier path fixture hit does not count when this path trigger never issued => incomplete', async () => {
+  const out = await rows({
+    fake: { continueItself: true, continueItselfNoHitAfter: 1 },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'fulfillLower'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillLowerPlanted, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"fixtureHits":[1-9]/.test(n) &&
+        /continue-itself/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.fulfillLower:/.test(n) && /"fixtureHits":0/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('fixture hit after path entry but before triggerSentAt does not count => incomplete', async () => {
+  const out = await rows({
+    fake: { continueItselfNoHit: true, preTriggerPlantHit: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.fulfillArray:/.test(n) && /"fixtureHits":0/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('continue-itself early-exits evidence wait under 1.5s (event-driven)', async () => {
+  const out = await rows({
+    fake: { continueItself: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  const note = (row.notes ?? []).find(
+    (n) => /cookie-plant\.fulfillArray:/.test(n) && /continue-itself/.test(n)
+  );
+  assert.ok(note, JSON.stringify(row.notes));
+  const elapsed = Number(/"pathElapsedMs":(\d+)/.exec(note)?.[1]);
+  assert.ok(Number.isFinite(elapsed) && elapsed < 1500, note);
+});
+
 test('m12 guard continues itself but the client Set-Cookie is applied (planted) => fail', async () => {
   const out = await rows({
     fake: { continueItselfPlant: true },
@@ -658,6 +769,90 @@ test('m12 guard continues itself but the client Set-Cookie is applied (planted) 
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
   assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('m13 guard fails the request, reader sees chrome-error => pass', async () => {
+  const out = await rows({
+    fake: { blockedMarker: 'chrome-error://chromewebdata/' },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"pageHref":"chrome-error:\/\/chromewebdata\/"/.test(n) &&
+        /"fixtureHits":0/.test(n) &&
+        (/guard blocks the request itself/.test(n) || /"onMarker":true/.test(n))
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m14 guard fails silently but reader still sees the home URL => incomplete', async () => {
+  const out = await rows({
+    fake: { failSilentKeepHome: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"fixtureHits":0/.test(n) &&
+        /"onMarker":false/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m15 reader sees a blocked marker but fixtureHits >= 1 => fail', async () => {
+  const out = await rows({
+    fake: {
+      continueItselfPlant: true,
+      blockedMarker: 'chrome-error://chromewebdata/',
+    },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"fixtureHits":[1-9]/.test(n) &&
+        /"onMarker":true/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m16 guarded client href is null while the reader sees the marker => pass', async () => {
+  const out = await rows({
+    fake: {
+      blockedMarker: 'chrome-error://chromewebdata/',
+      nullGuardHref: true,
+    },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"pageHref":"chrome-error:\/\/chromewebdata\/"/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
 });
 
 test('Fetch.enable unanswered => incomplete', async () => {
@@ -685,6 +880,27 @@ test('Fetch.enable unanswered + fixtureHits>=1 => incomplete', async () => {
       (n) =>
         /cookie-plant\.fulfillArray:/.test(n) &&
         (/Fetch\.enable unanswered for continue-itself/.test(n) || /"fixtureHits":[1-9]/.test(n))
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('earlier tab Fetch.enable ok, this tab unanswered => incomplete', async () => {
+  const out = await rows({
+    hangFetchEnableAfterOkSessions: 2,
+    fake: { continueItself: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'fulfillLower'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillLowerPlanted, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillLower:/.test(n) &&
+        (/Fetch\.enable unanswered for continue-itself/.test(n) || /"fetchEnableOk":false/.test(n))
     ),
     JSON.stringify(row.notes)
   );

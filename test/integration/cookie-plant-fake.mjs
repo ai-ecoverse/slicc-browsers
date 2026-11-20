@@ -155,6 +155,8 @@ export function cookiePlantFake(options = {}) {
   const blockedMarkers = (options.blockedMarkers ?? []).map(String).filter(Boolean);
   const defaultBlockedMarker = blockedMarkers[0] || 'chrome-error://chromewebdata/';
   const blockWithoutMarker = options.blockWithoutMarker === true;
+  const failSilentKeepHome = options.failSilentKeepHome === true;
+  const nullGuardHref = options.nullGuardHref === true;
   const supersedeAbort = options.supersedeAbort === true;
   const deadPageSession = options.deadPageSession === true;
   const settleAssignOk = options.settleAssignOk === true;
@@ -162,6 +164,25 @@ export function cookiePlantFake(options = {}) {
   const continueItself = options.continueItself === true;
   const continueItselfNoHit = options.continueItselfNoHit === true;
   const continueItselfPlant = options.continueItselfPlant === true;
+  const continueItselfNoHitAfter = Number(options.continueItselfNoHitAfter);
+  let continueItselfHitCount = 0;
+  const preTriggerPlantHit = options.preTriggerPlantHit === true;
+  const preTriggerHitTabs = new Set();
+  const leakCloseCount = Math.max(0, Number(options.leakCloseCount ?? 0) || 0);
+  let leakedCloses = 0;
+  const contexts = new Map();
+  const recordPreTriggerPlantHit = (tab) => {
+    if (!preTriggerPlantHit || !tab || preTriggerHitTabs.has(tab.targetId)) return;
+    const m = /cookie-plant-([^&/?#]+)/.exec(String(tab.url ?? ''));
+    if (!m || !protectedHosts[0]) return;
+    preTriggerHitTabs.add(tab.targetId);
+    let port = '';
+    try {
+      port = new URL(tab.url).port;
+    } catch {}
+    const host = port ? `${protectedHosts[0]}:${port}` : protectedHosts[0];
+    options.onNavigate?.(`http://${host}/data?n=plant-${m[1]}`);
+  };
   const guardedUrl = (url) => {
     const host = hostOf(url);
     if (!host || !protectedHosts.length) return false;
@@ -174,7 +195,7 @@ export function cookiePlantFake(options = {}) {
     type: 'page',
     url: tab.url,
     title: tab.title ?? tab.url,
-    browserContextId: 'B1',
+    browserContextId: tab.browserContextId ?? 'B1',
   });
 
   const emit = (conn, method, params, sessionId) => {
@@ -271,13 +292,65 @@ export function cookiePlantFake(options = {}) {
     else cookies.push(entry);
   };
 
+  const continueItselfSkipHit = () =>
+    continueItselfNoHit ||
+    (Number.isFinite(continueItselfNoHitAfter) &&
+      continueItselfHitCount >= continueItselfNoHitAfter);
+
   const continueItselfSettle = (conn, sessionId, tab, url) => {
-    if (!(continueItself || continueItselfNoHit || continueItselfPlant) || !guardedUrl(url))
+    if (
+      !(
+        continueItself ||
+        continueItselfNoHit ||
+        continueItselfPlant ||
+        Number.isFinite(continueItselfNoHitAfter)
+      ) ||
+      !guardedUrl(url)
+    )
       return null;
     if (connections[0] && conn !== connections[0]) return null;
-    if (continueItselfPlant) plantFromContinueItself(url);
-    if (!continueItselfNoHit) setTabUrl(conn, sessionId, tab, url);
-    return '200 ok';
+    if (continueItselfPlant) {
+      plantFromContinueItself(url);
+      options.onNavigate?.(url);
+      const marker = options.blockedMarker || defaultBlockedMarker;
+      if (marker) setTabUrl(conn, sessionId, tab, marker);
+      else setTabUrl(conn, sessionId, tab, url);
+      continueItselfHitCount += 1;
+      return '200 ok';
+    }
+    const skipHit = continueItselfSkipHit();
+    if (!skipHit) {
+      continueItselfHitCount += 1;
+      setTabUrl(conn, sessionId, tab, url);
+    }
+    return skipHit ? '200 ok:nohit' : '200 ok';
+  };
+
+  const emitBlockedToReader = (tab, url) => {
+    if (!tab) return;
+    const requestId = `NR${++next}`;
+    for (const [sid, targetId] of sessions.entries()) {
+      if (targetId !== tab.targetId) continue;
+      const owner = sessionConns.get(sid);
+      if (!owner || owner === connections[0]) continue;
+      emit(
+        owner,
+        'Network.requestWillBeSent',
+        { requestId, request: { url, method: 'GET' }, type: 'Document' },
+        sid
+      );
+      emit(
+        owner,
+        'Network.loadingFailed',
+        {
+          requestId,
+          errorText: 'net::ERR_BLOCKED_BY_CLIENT',
+          blockedReason: 'inspector',
+          type: 'Document',
+        },
+        sid
+      );
+    }
   };
 
   const emitPause = (conn, tab, sessionId, url, topLevel) => {
@@ -357,6 +430,18 @@ export function cookiePlantFake(options = {}) {
     if (sessionId && cutSessions.has(sessionId))
       throw new Error('slicc: refused: session cut on protected execution context');
     if (method === 'Browser.getVersion') return { product: 'Fake/1', protocolVersion: '1.3' };
+    if (method === 'Target.createBrowserContext') {
+      const id = `C${++next}`;
+      contexts.set(id, true);
+      return { browserContextId: id };
+    }
+    if (method === 'Target.disposeBrowserContext') {
+      contexts.delete(params.browserContextId);
+      for (const [targetId, tab] of [...tabs.entries()]) {
+        if (tab.browserContextId === params.browserContextId) tabs.delete(targetId);
+      }
+      return {};
+    }
     if (method === 'Target.createTarget') {
       const tab = {
         targetId: `T${++next}`,
@@ -364,6 +449,7 @@ export function cookiePlantFake(options = {}) {
         title: params.url ?? 'about:blank',
         fetch: false,
         legacy: false,
+        browserContextId: params.browserContextId ?? 'B1',
       };
       tabs.set(tab.targetId, tab);
       return { targetId: tab.targetId };
@@ -389,6 +475,10 @@ export function cookiePlantFake(options = {}) {
       return {};
     }
     if (method === 'Target.closeTarget') {
+      if (leakedCloses < leakCloseCount) {
+        leakedCloses += 1;
+        return { success: true };
+      }
       tabs.delete(params.targetId);
       return { success: true };
     }
@@ -475,6 +565,8 @@ export function cookiePlantFake(options = {}) {
       return { success: true };
     }
     if (method === 'Network.deleteCookies') {
+      const tab = tabs.get(sessions.get(sessionId));
+      recordPreTriggerPlantHit(tab);
       const host = params.url ? hostOf(params.url) : (params.domain ?? '').replace(/^\./, '');
       for (let i = cookies.length - 1; i >= 0; i -= 1) {
         const cookie = cookies[i];
@@ -552,6 +644,7 @@ export function cookiePlantFake(options = {}) {
         if (String(settled).startsWith('error:')) return { frameId: sessions.get(sessionId) };
         if (
           tab.url === before &&
+          settled !== '200 ok:nohit' &&
           !(continueItselfNoHit && guardedUrl(params.url) && conn === connections[0])
         )
           setTabUrl(conn, sessionId, tab, params.url);
@@ -565,6 +658,8 @@ export function cookiePlantFake(options = {}) {
       if (expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
       if (expression === 'location.href') {
+        if (nullGuardHref && conn === connections[0])
+          throw new Error('slicc: refused: protected origin execution context');
         const tab = tabs.get(sessions.get(sessionId));
         return { result: { type: 'string', value: tab?.url ?? '' } };
       }
@@ -585,6 +680,7 @@ export function cookiePlantFake(options = {}) {
           if (
             tab &&
             tab.url === before &&
+            settled !== '200 ok:nohit' &&
             !(continueItselfNoHit && guardedUrl(url) && conn === connections[0])
           )
             setTabUrl(conn, sessionId, tab, url);
@@ -612,7 +708,9 @@ export function cookiePlantFake(options = {}) {
       const entry = paused.get(params.requestId);
       if (entry) {
         const owner = sessionConns.get(entry.sessionId) ?? conn;
-        if (settleAssignOk) {
+        if (failSilentKeepHome) {
+          entry.resolve?.('200 ok:nohit');
+        } else if (settleAssignOk) {
           if (entry.tab && finalHref) setTabUrl(owner, entry.sessionId, entry.tab, finalHref);
           entry.resolve?.('200 ok');
         } else if (supersedeAbort) {
@@ -623,6 +721,7 @@ export function cookiePlantFake(options = {}) {
           if (entry.topLevel && entry.tab && marker && !blockWithoutMarker) {
             setTabUrl(owner, entry.sessionId, entry.tab, marker);
           }
+          if (entry.tab) emitBlockedToReader(entry.tab, entry.url);
           entry.resolve?.(
             `error:${params.errorReason === 'BlockedByClient' ? 'BlockedByClient' : (params.errorReason ?? 'Aborted')}`
           );
@@ -756,5 +855,7 @@ export function cookiePlantFake(options = {}) {
     client: connect(),
     unguarded: connect(),
     cookies,
+    openPageTargets: () => [...tabs.keys()],
+    pageTargetCount: () => tabs.size,
   };
 }

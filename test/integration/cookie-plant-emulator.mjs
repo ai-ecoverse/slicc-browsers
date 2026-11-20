@@ -276,9 +276,11 @@ export function applyCookiePlant(client, options = {}) {
   );
   const hangClientAttach = options.hangClientAttach === true;
   const hangFetchEnable = options.hangFetchEnable === true;
+  const hangFetchEnableAfterOkSessions = Number(options.hangFetchEnableAfterOkSessions);
   const refuseFetchEnable = options.refuseFetchEnable === true;
   const sessionCutOnFetchEnable = options.sessionCutOnFetchEnable === true;
   const silentDropAllowed = options.silentDropAllowed === true;
+  const fetchEnableOkSessions = new Set();
   const refuseAfterProtectedTouch = options.refuseAfterProtectedTouch === true;
   const refuseAttachBeforeTrigger = options.refuseAttachBeforeTrigger === true;
   const refuseAttachAfterTrigger = options.refuseAttachAfterTrigger === true;
@@ -327,6 +329,14 @@ export function applyCookiePlant(client, options = {}) {
         if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) throwGuardRefusal();
       }
       if (hangFetchEnable && method === 'Fetch.enable') return new Promise(() => {});
+      if (
+        Number.isFinite(hangFetchEnableAfterOkSessions) &&
+        method === 'Fetch.enable' &&
+        sessionId &&
+        fetchEnableOkSessions.size >= hangFetchEnableAfterOkSessions &&
+        !fetchEnableOkSessions.has(sessionId)
+      )
+        return new Promise(() => {});
       if (sessionCutOnFetchEnable && method === 'Fetch.enable')
         throw new Error('slicc: refused: session cut on protected execution context');
       if (
@@ -399,7 +409,10 @@ export function applyCookiePlant(client, options = {}) {
       }
       const forward = silentDropAllowed ? stripSetCookieParams(method, params) : params;
       const result = await client.send(method, forward, sessionId);
-      if (method === 'Fetch.enable' && sessionId) fetchEnabledSessions.add(sessionId);
+      if (method === 'Fetch.enable' && sessionId) {
+        fetchEnabledSessions.add(sessionId);
+        fetchEnableOkSessions.add(sessionId);
+      }
       if (method === 'Target.attachToTarget' && result?.sessionId && params?.targetId)
         sessionTarget.set(result.sessionId, params.targetId);
       const url = navigationUrl(method, params ?? {});

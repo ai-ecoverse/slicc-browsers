@@ -156,6 +156,10 @@ export function cookiePlantFake(options = {}) {
   const defaultBlockedMarker = blockedMarkers[0] || 'chrome-error://chromewebdata/';
   const blockWithoutMarker = options.blockWithoutMarker === true;
   const failSilentKeepHome = options.failSilentKeepHome === true;
+  const keepHomeAfterFirstBlock = options.keepHomeAfterFirstBlock === true;
+  let blockedWithMarker = 0;
+  const injectOrphanLoadingFailed = options.injectOrphanLoadingFailed === true;
+  const injectNeighbourBlocked = options.injectNeighbourBlocked === true;
   const nullGuardHref = options.nullGuardHref === true;
   const supersedeAbort = options.supersedeAbort === true;
   const deadPageSession = options.deadPageSession === true;
@@ -326,13 +330,22 @@ export function cookiePlantFake(options = {}) {
     return skipHit ? '200 ok:nohit' : '200 ok';
   };
 
-  const emitBlockedToReader = (tab, url) => {
-    if (!tab) return;
-    const requestId = `NR${++next}`;
+  const readerSessionsFor = (tab) => {
+    const out = [];
+    if (!tab) return out;
     for (const [sid, targetId] of sessions.entries()) {
       if (targetId !== tab.targetId) continue;
       const owner = sessionConns.get(sid);
       if (!owner || owner === connections[0]) continue;
+      out.push({ sid, owner });
+    }
+    return out;
+  };
+
+  const emitBlockedToReader = (tab, url) => {
+    if (!tab) return;
+    const requestId = `NR${++next}`;
+    for (const { sid, owner } of readerSessionsFor(tab)) {
       emit(
         owner,
         'Network.requestWillBeSent',
@@ -350,6 +363,56 @@ export function cookiePlantFake(options = {}) {
         },
         sid
       );
+    }
+  };
+
+  const emitOrphanAndNeighbourNoise = (tab, url) => {
+    if (!tab || !url) return;
+    for (const { sid, owner } of readerSessionsFor(tab)) {
+      if (injectOrphanLoadingFailed) {
+        emit(
+          owner,
+          'Network.loadingFailed',
+          {
+            errorText: 'net::ERR_BLOCKED_BY_CLIENT',
+            blockedReason: 'inspector',
+            type: 'Document',
+          },
+          sid
+        );
+        emit(
+          owner,
+          'Network.loadingFailed',
+          {
+            requestId: `orphan-${++next}`,
+            errorText: 'net::ERR_BLOCKED_BY_CLIENT',
+            blockedReason: 'inspector',
+            type: 'Document',
+          },
+          sid
+        );
+      }
+      if (injectNeighbourBlocked) {
+        const neighbour = String(url).replace(/([?&]n=plant-)[^&]+/, '$1neighbour-other-tag');
+        const requestId = `NN${++next}`;
+        emit(
+          owner,
+          'Network.requestWillBeSent',
+          { requestId, request: { url: neighbour, method: 'GET' }, type: 'Document' },
+          sid
+        );
+        emit(
+          owner,
+          'Network.loadingFailed',
+          {
+            requestId,
+            errorText: 'net::ERR_BLOCKED_BY_CLIENT',
+            blockedReason: 'inspector',
+            type: 'Document',
+          },
+          sid
+        );
+      }
     }
   };
 
@@ -708,7 +771,8 @@ export function cookiePlantFake(options = {}) {
       const entry = paused.get(params.requestId);
       if (entry) {
         const owner = sessionConns.get(entry.sessionId) ?? conn;
-        if (failSilentKeepHome) {
+        if (failSilentKeepHome || (keepHomeAfterFirstBlock && blockedWithMarker >= 1)) {
+          if (entry.tab) emitOrphanAndNeighbourNoise(entry.tab, entry.url);
           entry.resolve?.('200 ok:nohit');
         } else if (settleAssignOk) {
           if (entry.tab && finalHref) setTabUrl(owner, entry.sessionId, entry.tab, finalHref);
@@ -722,6 +786,7 @@ export function cookiePlantFake(options = {}) {
             setTabUrl(owner, entry.sessionId, entry.tab, marker);
           }
           if (entry.tab) emitBlockedToReader(entry.tab, entry.url);
+          if (keepHomeAfterFirstBlock) blockedWithMarker += 1;
           entry.resolve?.(
             `error:${params.errorReason === 'BlockedByClient' ? 'BlockedByClient' : (params.errorReason ?? 'Aborted')}`
           );

@@ -367,21 +367,37 @@ async function readTabHref({ reader, pageTarget }) {
   return tabHrefFromReader(reader, pageTarget);
 }
 
+function pathRequestMatch(reqUrl, url) {
+  if (!reqUrl || !url) return false;
+  if (reqUrl === url || reqUrl.startsWith(`${url}&`) || reqUrl.startsWith(`${url}#`)) return true;
+  try {
+    const want = new URL(url);
+    const got = new URL(reqUrl);
+    if (want.origin !== got.origin || want.pathname !== got.pathname) return false;
+    for (const [key, value] of want.searchParams) {
+      if (got.searchParams.get(key) !== value) return false;
+    }
+    return want.searchParams.toString().length > 0 || got.searchParams.toString().length === 0;
+  } catch {
+    return false;
+  }
+}
+
 function readerNetworkBlocked(reader, sessionId, url, from = 0) {
-  if (!reader?.events || !url) return false;
+  if (!reader?.events || !url || !sessionId) return false;
   const events = reader.events.slice(Math.max(0, from));
   const requests = new Map();
-  const base = String(url).split('?')[0];
   for (const event of events) {
-    if (sessionId && event.sessionId && event.sessionId !== sessionId) continue;
+    if (event.sessionId !== sessionId) continue;
     if (event.method === 'Network.requestWillBeSent') {
+      const id = event.params?.requestId;
+      if (!id) continue;
       const reqUrl = String(event.params?.request?.url ?? '');
-      if (reqUrl === url || (base && reqUrl.startsWith(base)))
-        requests.set(event.params.requestId, reqUrl);
+      if (pathRequestMatch(reqUrl, url)) requests.set(id, reqUrl);
     }
     if (event.method === 'Network.loadingFailed') {
       const id = event.params?.requestId;
-      if (id && !requests.has(id)) continue;
+      if (!id || !requests.has(id)) continue;
       const err = String(event.params?.errorText ?? event.params?.blockedReason ?? '');
       if (/ERR_BLOCKED_BY_CLIENT|BlockedByClient/i.test(err)) return true;
     }
@@ -1773,11 +1789,10 @@ async function scoreUnpausedGuardedPlant(args) {
           hrefHint: waited.href,
         });
   if (evidence.planted === 'incomplete') handle.evidenceIncomplete = true;
-  const pageHref =
-    (await readTabHref({ reader: handle.reader, pageTarget: handle.pageTarget })) ??
-    evidence.page.href ??
-    waited.href ??
-    null;
+  const pageHref = await readTabHref({
+    reader: handle.reader,
+    pageTarget: handle.pageTarget,
+  });
   const readerBlocked = readerNetworkBlocked(
     handle.reader,
     handle.readerSession,

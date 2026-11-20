@@ -855,6 +855,75 @@ test('m16 guarded client href is null while the reader sees the marker => pass',
   );
 });
 
+test('loadingFailed without requestId or unknown id does not count as readerBlocked => incomplete', async () => {
+  const out = await rows({
+    fake: { failSilentKeepHome: true, injectOrphanLoadingFailed: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"readerBlocked":false/.test(n) &&
+        /"fixtureHits":0/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('neighbouring path blocked request on same base different tag does not count => incomplete', async () => {
+  const out = await rows({
+    fake: { failSilentKeepHome: true, injectNeighbourBlocked: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"readerBlocked":false/.test(n) &&
+        /"onMarker":false/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('earlier tab on chrome-error while this fresh tab stays home => incomplete', async () => {
+  const out = await rows({
+    fake: {
+      blockedMarker: 'chrome-error://chromewebdata/',
+      keepHomeAfterFirstBlock: true,
+    },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'fulfillLower'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillLowerPlanted, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"pageHref":"chrome-error:\/\/chromewebdata\/"/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillLower:/.test(n) &&
+        /"onMarker":false/.test(n) &&
+        /"fixtureHits":0/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
 test('Fetch.enable unanswered => incomplete', async () => {
   const out = await rows({
     hangFetchEnable: true,

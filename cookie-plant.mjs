@@ -954,6 +954,44 @@ function triggerRefusal(outcome) {
   );
 }
 
+function scoreRawOrDoorBranch({
+  evidence,
+  notes,
+  label,
+  planted,
+  rawDoor,
+  doorAbsent,
+  plantSurfaceRefused,
+}) {
+  if (rawDoor && !doorAbsentOf(rawDoor) && (rawDoor.incomplete || rawDoor.observed !== true)) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      incomplete: 'raw leg incomplete',
+    });
+    return {
+      answered: 'incomplete',
+      refused: 'incomplete',
+      planted: planted === true ? true : 'incomplete',
+    };
+  }
+  if (plantSurfaceRefused && planted !== true) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      answered: true,
+      refused: true,
+      note: 'Fetch.enable refused: interception plant surface refused',
+    });
+    return { answered: true, refused: true, planted: false };
+  }
+  if (!doorAbsent) return null;
+  note(notes, `cookie-plant.${label}`, {
+    ...evidence,
+    note: 'door not present on this browser',
+  });
+  if (planted === true) return { answered: true, refused: false, planted: true };
+  return { answered: true, refused: false, planted: false };
+}
+
 function scoreProtectedPlant({
   pauseCount,
   fixtureHits,
@@ -969,6 +1007,7 @@ function scoreProtectedPlant({
   fetchEnableOk = null,
   doorAbsent = false,
   rawDoor = null,
+  plantSurfaceRefused = false,
 }) {
   const href = pageHref == null ? null : String(pageHref);
   const onMarker = blockedMarkerHit(href, blockedMarkers);
@@ -995,22 +1034,35 @@ function scoreProtectedPlant({
     loadBlocked,
     fetchEnableOk,
     doorAbsent: Boolean(doorAbsent),
+    plantSurfaceRefused: Boolean(plantSurfaceRefused),
     ...(rawDoor
       ? {
           rawAnswered: rawDoor.answered,
           rawPlanted: rawDoor.planted,
           rawTimedOut: rawDoor.timedOut,
+          rawObserved: rawDoor.observed === true,
+          rawIncomplete: Boolean(rawDoor.incomplete),
         }
       : {}),
     ...timingOf(handle),
   };
-  if (doorAbsent) {
+  const early = scoreRawOrDoorBranch({
+    evidence,
+    notes,
+    label,
+    planted,
+    rawDoor,
+    doorAbsent,
+    plantSurfaceRefused,
+  });
+  if (early) return early;
+  if (planted === true) {
     note(notes, `cookie-plant.${label}`, {
       ...evidence,
-      note: 'door not present on this browser',
+      answered: true,
+      refused: pauseCount > 0 || sessionBlocked,
     });
-    if (planted === true) return { answered: true, refused: false, planted: true };
-    return { answered: true, refused: false, planted: false };
+    return { answered: true, refused: pauseCount > 0 || sessionBlocked, planted: true };
   }
   if (
     planted === 'incomplete' ||
@@ -1028,14 +1080,6 @@ function scoreProtectedPlant({
       refused: 'incomplete',
       planted: 'incomplete',
     };
-  }
-  if (planted === true) {
-    note(notes, `cookie-plant.${label}`, {
-      ...evidence,
-      answered: true,
-      refused: pauseCount > 0 || sessionBlocked,
-    });
-    return { answered: true, refused: pauseCount > 0 || sessionBlocked, planted: true };
   }
   if (pauseCount === 0 && loadBlocked === true && planted === false) {
     if (fetchEnableOk === false) {
@@ -1308,16 +1352,21 @@ async function scoreDoorAbsentPause({
   blockedMarkers,
   fetchEnableOk,
   rawDoor,
+  fixtureLog,
+  tag,
+  proofTag,
+  startedAt,
 }) {
   const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
+  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
   return markScored(
     handle,
     scoreProtectedPlant({
       pauseCount: pauseEvents(client.events, from, url, methods).length,
-      fixtureHits: 0,
+      fixtureHits,
       planted,
       pageHref: waited.href ?? null,
       notes,
@@ -1361,8 +1410,32 @@ async function scorePausedGuardedPlant(args) {
   } = args;
   const plantCap = doorAbsent ? Math.min(budget, 1500) : 1500;
   const out = await capped(build(state.paused).send(client, state.paused), plantCap, 'plant-send');
-  if (sessionCut(out))
-    return recordSessionCut({ reader, readerSession, cookie, notes, label, out });
+  if (sessionCut(out)) {
+    const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+    const planted = plantedOf(
+      jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+    );
+    const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
+    return markScored(
+      handle,
+      scoreProtectedPlant({
+        pauseCount: pauseEvents(client.events, from, url, methods).length,
+        fixtureHits,
+        planted,
+        pageHref: waited.href ?? null,
+        notes,
+        label,
+        triggerOutcome: out,
+        blockedMarkers,
+        handle,
+        postTriggerRefusal: true,
+        triggerIssued: true,
+        fetchEnableOk,
+        doorAbsent,
+        rawDoor,
+      })
+    );
+  }
   if (doorAbsent)
     return scoreDoorAbsentPause({
       handle,
@@ -1381,17 +1454,36 @@ async function scorePausedGuardedPlant(args) {
       blockedMarkers,
       fetchEnableOk,
       rawDoor,
+      fixtureLog,
+      tag,
+      proofTag,
+      startedAt,
     });
-  const plantedAttempt = await finishPlant({
-    reader,
-    readerSession,
-    out,
-    cookie,
-    notes,
-    label,
-    handle,
-  });
-  if (plantedAttempt.planted === true) return plantedAttempt;
+  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  if (planted === true) {
+    return markScored(
+      handle,
+      scoreProtectedPlant({
+        pauseCount: pauseEvents(client.events, from, url, methods).length,
+        fixtureHits: await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag),
+        planted: true,
+        pageHref: waited.href ?? null,
+        notes,
+        label,
+        triggerOutcome: out,
+        blockedMarkers,
+        handle,
+        postTriggerRefusal: state.postTriggerRefusal || refused(out),
+        triggerIssued: true,
+        fetchEnableOk,
+        doorAbsent,
+        rawDoor,
+      })
+    );
+  }
   const settled =
     waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
   const evidence = await evidenceAfterTrigger({
@@ -1409,7 +1501,7 @@ async function scorePausedGuardedPlant(args) {
     scoreProtectedPlant({
       pauseCount: pauseEvents(client.events, from, url, methods).length,
       fixtureHits: evidence.fixtureHits,
-      planted: plantedAttempt.planted,
+      planted: evidence.planted === true ? true : planted,
       pageHref: evidence.page.href ?? waited.href,
       notes,
       label,
@@ -1506,7 +1598,7 @@ async function runGuardedProtectedPlantBody({
   rawDoor = null,
 }) {
   const { client, reader, readerSession, transport } = handle;
-  const doorAbsent = Boolean(rawDoor && rawDoor.doorPresent === false);
+  const doorAbsent = doorAbsentOf(rawDoor);
   const fetchEnableOk = fetchEnableOkOf(handle);
   if (refused(handle.fetchEnable)) {
     handle.evidenceIncomplete = false;
@@ -1514,7 +1606,7 @@ async function runGuardedProtectedPlantBody({
     const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
     return scoreProtectedPlant({
       pauseCount: 0,
-      fixtureHits: 0,
+      fixtureHits: await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag),
       planted: plantedOf(jar),
       pageHref: null,
       notes,
@@ -1522,11 +1614,12 @@ async function runGuardedProtectedPlantBody({
       triggerOutcome: handle.fetchEnable,
       blockedMarkers,
       handle,
-      postTriggerRefusal: true,
-      triggerIssued: true,
+      postTriggerRefusal: false,
+      triggerIssued: false,
       fetchEnableOk: null,
       doorAbsent,
       rawDoor,
+      plantSurfaceRefused: true,
     });
   }
   if (!handle.pageSession) {
@@ -2280,161 +2373,226 @@ function fetchAttackSpecs(ctx, header, bareDomain) {
   ];
 }
 
+function doorAbsentOf(raw) {
+  if (raw?.observed !== true || raw?.incomplete) return false;
+  return raw.doorPresent === false;
+}
+
+function noteRawDoor(notes, label, raw, text) {
+  note(notes, `cookie-plant.raw.${label}`, { ...raw, note: text });
+  return raw;
+}
+
+function forcedRawDoor(forced, notes, label) {
+  if (forced === 'timeout') {
+    return noteRawDoor(
+      notes,
+      label,
+      {
+        observed: true,
+        answered: false,
+        planted: false,
+        timedOut: true,
+        doorPresent: false,
+      },
+      'door not present on this browser'
+    );
+  }
+  if (forced === 'plant') {
+    return noteRawDoor(
+      notes,
+      label,
+      {
+        observed: true,
+        answered: true,
+        planted: true,
+        timedOut: false,
+        doorPresent: true,
+      },
+      'raw leg planted: plant path'
+    );
+  }
+  const incompleteBy = {
+    unreadable: 'cookie jar unreadable',
+    'open-fail': 'raw open failed',
+    'enable-fail': 'raw Fetch.enable failed',
+    'no-pause': 'raw leg: no pause',
+    missing: 'raw leg missing',
+  };
+  if (!Object.hasOwn(incompleteBy, forced)) return null;
+  return noteRawDoor(
+    notes,
+    label,
+    {
+      observed: false,
+      answered: false,
+      planted: false,
+      timedOut: false,
+      doorPresent: false,
+      incomplete: incompleteBy[forced],
+    },
+    'raw leg incomplete'
+  );
+}
+
+function incompleteRaw(incomplete) {
+  return {
+    observed: false,
+    answered: false,
+    planted: false,
+    timedOut: false,
+    doorPresent: false,
+    incomplete,
+  };
+}
+
+async function observeRawPlantSend({
+  reader,
+  sessionId,
+  cookie,
+  plantUrl,
+  budget,
+  from,
+  spec,
+  notes,
+  label,
+  triggerHolder,
+}) {
+  await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
+  const enabled = await capped(
+    outcome(
+      reader.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            { urlPattern: '*', requestStage: 'Request' },
+            { urlPattern: '*', requestStage: 'Response' },
+          ],
+        },
+        sessionId
+      )
+    ),
+    800,
+    'raw-enable'
+  );
+  if (!enabled.ok) {
+    return noteRawDoor(
+      notes,
+      label,
+      incompleteRaw(String(enabled.error?.message ?? 'raw Fetch.enable failed')),
+      'raw leg incomplete'
+    );
+  }
+  triggerHolder.promise = triggerNavigate(reader, sessionId, plantUrl);
+  triggerHolder.paused = await waitPause(
+    reader,
+    from,
+    plantUrl,
+    ['Fetch.requestPaused'],
+    Math.min(budget, 2000)
+  );
+  if (!triggerHolder.paused) {
+    return noteRawDoor(notes, label, incompleteRaw('raw leg: no pause'), 'raw leg incomplete');
+  }
+  const out = await capped(
+    spec.build(triggerHolder.paused).send(reader, triggerHolder.paused),
+    Math.min(budget, 1500),
+    'raw-plant-send'
+  );
+  const timedOut = Boolean(out?.error?.message && /timeout/i.test(String(out.error.message)));
+  if (refused(out) || !out.ok) await releasePause(reader, triggerHolder.paused);
+  await settleTrigger(triggerHolder.promise, Math.min(budget, 500));
+  const jar = await capped(readJar(reader, sessionId, cookie), 1500, 'raw-jar');
+  if (
+    jar?.error?.message?.includes('timeout') ||
+    jar?.incomplete ||
+    plantedOf(jar) === 'incomplete'
+  ) {
+    return noteRawDoor(
+      notes,
+      label,
+      {
+        observed: true,
+        answered: answered(out),
+        planted: false,
+        timedOut,
+        doorPresent: false,
+        incomplete: 'cookie jar unreadable',
+      },
+      'raw leg incomplete'
+    );
+  }
+  const planted = plantedOf(jar) === true;
+  const answeredOk = answered(out);
+  const doorPresent = answeredOk === true && planted;
+  const raw = {
+    observed: true,
+    answered: answeredOk,
+    planted,
+    timedOut,
+    doorPresent,
+  };
+  noteRawDoor(
+    notes,
+    label,
+    { ...raw, via: jar?.via },
+    doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser'
+  );
+  await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
+  return raw;
+}
+
 async function measureRawDoor(ctx, spec) {
   const { reader, homeUrl, notes, internalSessions, budget, plantUrl, plantCookie, forcedRaw } =
     ctx;
-  const forced = forcedRaw?.[spec.label];
-  if (forced === 'timeout') {
-    const raw = {
-      answered: false,
-      planted: false,
-      timedOut: true,
-      doorPresent: false,
-    };
-    note(notes, `cookie-plant.raw.${spec.label}`, {
-      ...raw,
-      note: 'door not present on this browser',
-    });
-    return raw;
-  }
-  if (forced === 'plant') {
-    const raw = {
-      answered: true,
-      planted: true,
-      timedOut: false,
-      doorPresent: true,
-    };
-    note(notes, `cookie-plant.raw.${spec.label}`, {
-      ...raw,
-      note: 'raw leg planted: plant path',
-    });
-    return raw;
-  }
+  const forced = forcedRawDoor(forcedRaw?.[spec.label], notes, spec.label);
+  if (forced) return forced;
   const page = await openPage(reader, homeUrl, notes, internalSessions);
   if (!page.ok || page.result?.incomplete) {
-    const raw = {
-      answered: false,
-      planted: false,
-      timedOut: true,
-      doorPresent: false,
-    };
-    note(notes, `cookie-plant.raw.${spec.label}`, {
-      ...raw,
-      incomplete: page.result?.incomplete ?? page.error?.message,
-      note: 'door not present on this browser',
-    });
-    return raw;
+    return noteRawDoor(
+      notes,
+      spec.label,
+      incompleteRaw(page.result?.incomplete ?? page.error?.message ?? 'raw open failed'),
+      'raw leg incomplete'
+    );
   }
   const sessionId = page.result.sessionId;
   const targetId = page.result.targetId;
   const cookie = { ...plantCookie, value: spec.value };
-  let paused = null;
-  let triggerPromise = Promise.resolve();
+  const triggerHolder = { paused: null, promise: Promise.resolve() };
   const from = reader.events.length;
-  const pathBudget = pathCeiling(budget);
   try {
     return await withPathBudget(
-      (async () => {
-        await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
-        const enabled = await capped(
-          outcome(
-            reader.send(
-              'Fetch.enable',
-              {
-                patterns: [
-                  { urlPattern: '*', requestStage: 'Request' },
-                  { urlPattern: '*', requestStage: 'Response' },
-                ],
-              },
-              sessionId
-            )
-          ),
-          800,
-          'raw-enable'
-        );
-        if (!enabled.ok) {
-          const raw = {
-            answered: false,
-            planted: false,
-            timedOut: true,
-            doorPresent: false,
-          };
-          note(notes, `cookie-plant.raw.${spec.label}`, {
-            ...raw,
-            note: 'door not present on this browser',
-          });
-          return raw;
-        }
-        triggerPromise = triggerNavigate(reader, sessionId, plantUrl);
-        paused = await waitPause(
-          reader,
-          from,
-          plantUrl,
-          ['Fetch.requestPaused'],
-          Math.min(budget, 2000)
-        );
-        if (!paused) {
-          const raw = {
-            answered: false,
-            planted: false,
-            timedOut: true,
-            doorPresent: false,
-          };
-          note(notes, `cookie-plant.raw.${spec.label}`, {
-            ...raw,
-            note: 'door not present on this browser',
-          });
-          return raw;
-        }
-        const out = await capped(
-          spec.build(paused).send(reader, paused),
-          Math.min(budget, 1500),
-          'raw-plant-send'
-        );
-        const timedOut = Boolean(out?.error?.message && /timeout/i.test(String(out.error.message)));
-        if (refused(out) || !out.ok) await releasePause(reader, paused);
-        await settleTrigger(triggerPromise, Math.min(budget, 500));
-        const jar = await capped(readJar(reader, sessionId, cookie), 1500, 'raw-jar');
-        const planted = plantedOf(
-          jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
-        );
-        const answeredOk = answered(out);
-        const doorPresent = answeredOk === true && planted === true;
-        const raw = {
-          answered: answeredOk,
-          planted: planted === true,
-          timedOut,
-          doorPresent,
-        };
-        note(notes, `cookie-plant.raw.${spec.label}`, {
-          ...raw,
-          via: jar?.via,
-          note: doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser',
-        });
-        await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
-        return raw;
-      })(),
-      pathBudget,
+      observeRawPlantSend({
+        reader,
+        sessionId,
+        cookie,
+        plantUrl,
+        budget,
+        from,
+        spec,
+        notes,
+        label: spec.label,
+        triggerHolder,
+      }),
+      pathCeiling(budget),
       `raw:${spec.label}`
     );
   } catch (error) {
-    const raw = {
-      answered: false,
-      planted: false,
-      timedOut: /timeout/i.test(String(error?.message ?? error)),
-      doorPresent: false,
-    };
-    note(notes, `cookie-plant.raw.${spec.label}`, {
-      ...raw,
-      incomplete: String(error?.message ?? error),
-      note: 'door not present on this browser',
-    });
-    return raw;
+    return noteRawDoor(
+      notes,
+      spec.label,
+      {
+        ...incompleteRaw(String(error?.message ?? error)),
+        timedOut: /timeout/i.test(String(error?.message ?? error)),
+      },
+      'raw leg incomplete'
+    );
   } finally {
     try {
-      await releasePause(reader, paused);
+      await releasePause(reader, triggerHolder.paused);
       await drainPauses(reader, from);
-      await settleTrigger(triggerPromise, Math.min(budget, 500));
+      await settleTrigger(triggerHolder.promise, Math.min(budget, 500));
       await capped(
         disableInterception(reader, sessionId, { fetch: true, legacy: false }),
         800,
@@ -3161,24 +3319,85 @@ async function proveDoorOnOwnTab({
   internalSessions,
   plantName,
 }) {
-  const doorPage = await openPage(reader, homeUrl, notes, internalSessions);
-  if (!doorPage.ok)
-    return { incomplete: `open failed: ${doorPage.error?.message ?? doorPage.error}` };
-  if (doorPage.result?.incomplete) return { incomplete: doorPage.result.incomplete };
-  const doorSession = doorPage.result.sessionId;
-  const doorTarget = doorPage.result.targetId;
-  const readerTransport = await detectTransport(reader, doorSession, notes);
+  const host = hostOf(doorOrigin);
+  const domain = `.${host}`;
+  const value = `door-${tag}`;
+  const setCookie = cookieHeader(plantName, value, domain);
+  const probePage = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!probePage.ok)
+    return { incomplete: `open failed: ${probePage.error?.message ?? probePage.error}` };
+  if (probePage.result?.incomplete) return { incomplete: probePage.result.incomplete };
+  const probeSession = probePage.result.sessionId;
+  const probeTarget = probePage.result.targetId;
+  const readerTransport = await detectTransport(reader, probeSession, notes);
+  await capped(
+    outcome(reader.send('Target.closeTarget', { targetId: probeTarget })),
+    800,
+    'door-probe-close'
+  );
   if (!readerTransport.kind) {
-    await outcome(reader.send('Target.closeTarget', { targetId: doorTarget }));
     return {
       incomplete:
         'neither Fetch.enable nor Network.setRequestInterception is available on the unguarded session',
       live: false,
     };
   }
+  if (readerTransport.kind === 'fetch') {
+    const raw = await measureRawDoor(
+      {
+        reader,
+        homeUrl,
+        notes,
+        internalSessions,
+        budget,
+        plantUrl: `${doorOrigin}/data?n=door-${tag}`,
+        plantCookie: {
+          name: plantName,
+          value,
+          domain,
+          url: `${doorOrigin}/`,
+        },
+        forcedRaw: null,
+      },
+      {
+        label: 'door',
+        value,
+        build: (paused) => ({
+          send: (client, pause) =>
+            fulfillPaused(client, pause, {
+              responseCode: 200,
+              responseHeaders: [
+                { name: 'content-type', value: 'text/plain' },
+                { name: 'Set-Cookie', value: setCookie },
+              ],
+              body: b64text(value),
+            }),
+        }),
+      }
+    );
+    if (raw.incomplete || raw.observed !== true) {
+      return { live: false, incomplete: raw.incomplete ?? 'raw leg incomplete' };
+    }
+    if (!raw.doorPresent) {
+      return {
+        live: false,
+        incomplete: 'raw leg: Chrome did not store Domain=.<protected host> Set-Cookie',
+      };
+    }
+    note(notes, 'cookie-plant.door', {
+      answered: raw.answered,
+      planted: raw.planted,
+      domain,
+    });
+    return { live: true };
+  }
+  const doorPage = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!doorPage.ok)
+    return { incomplete: `open failed: ${doorPage.error?.message ?? doorPage.error}` };
+  if (doorPage.result?.incomplete) return { incomplete: doorPage.result.incomplete };
   const door = await proveDoor({
     reader,
-    sessionId: doorSession,
+    sessionId: doorPage.result.sessionId,
     protectedOrigin: doorOrigin,
     homeUrl,
     tag,
@@ -3188,7 +3407,7 @@ async function proveDoorOnOwnTab({
     plantName,
   });
   await capped(
-    outcome(reader.send('Target.closeTarget', { targetId: doorTarget })),
+    outcome(reader.send('Target.closeTarget', { targetId: doorPage.result.targetId })),
     800,
     'door-close'
   );
@@ -3341,7 +3560,7 @@ export async function cookiePlant({
     firstIncomplete: { noted: false },
     guardedProtected: !control && !credential,
     blockedMarkers: Array.isArray(blockedMarkers) ? blockedMarkers : [],
-    proofTag: `cookie-plant-${tag}`,
+    proofTag: tag,
     rawDoors: {},
     forcedRaw: forcedRaw && typeof forcedRaw === 'object' ? forcedRaw : null,
   });

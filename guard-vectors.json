@@ -36824,7 +36824,7 @@
         "chrome-error://chromewebdata/",
         "data:,blocked"
       ],
-      "timeoutMs": 19410
+      "timeoutMs": 360000
     },
     {
       "id": "C10.cookie-plant.credential",
@@ -37942,7 +37942,7 @@
         "chrome-error://chromewebdata/",
         "data:,blocked"
       ],
-      "timeoutMs": 13011
+      "timeoutMs": 180000
     }
   ]
 }

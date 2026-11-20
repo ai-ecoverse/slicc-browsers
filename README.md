@@ -253,7 +253,7 @@ GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 
 The run passes only when every row passes and none is missing. Forged skips and incomplete rows are counted on the line so it cannot overstate coverage.
 
-Read `guard-vectors.json` for steps, `means`, `live`, optional `timeoutMs` (row wall budget; else the runner global), and expected outcomes; [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
+Read `guard-vectors.json` for steps, `means`, `live`, optional `timeoutMs` (extends the runner global via `Math.max`, never shrinks it), and expected outcomes; [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 
 ## Development
 

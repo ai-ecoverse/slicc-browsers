@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureServer } from '../../fixture-server.mjs';
-import { run } from '../../guard-runner.mjs';
+import { rowBudgetMs, run } from '../../guard-runner.mjs';
 import { cookiePlantFake } from './cookie-plant-fake.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
@@ -471,12 +471,23 @@ test('blocking guard with replyDelay still passes', async () => {
   assert.equal(row.live, 'pass', JSON.stringify(row));
 });
 
-test('C10.cookie-plant declares timeoutMs from measured worst x 1.5', () => {
+test('C10.cookie-plant declares timeoutMs finite and at least the runner global', () => {
+  const global = 180000;
   for (const vector of vectors) {
     assert.ok(Number.isFinite(vector.timeoutMs) && vector.timeoutMs > 0, vector.id);
+    assert.ok(
+      vector.timeoutMs >= global,
+      `${vector.id} timeoutMs ${vector.timeoutMs} < global ${global}`
+    );
+    assert.equal(rowBudgetMs(vector, { rowTimeoutMs: global }), Math.max(vector.timeoutMs, global));
   }
-  assert.equal(protectedVectors[0].timeoutMs, 19410);
-  assert.equal(credentialVectors[0].timeoutMs, 13011);
+});
+
+test('vector timeoutMs below the global does not shrink the row budget', () => {
+  assert.equal(rowBudgetMs({ timeoutMs: 1000 }, { rowTimeoutMs: 90000 }), 90000);
+  assert.equal(rowBudgetMs({ timeoutMs: 19410 }, { rowTimeoutMs: 90000 }), 90000);
+  assert.equal(rowBudgetMs({ timeoutMs: 360000 }, { rowTimeoutMs: 90000 }), 360000);
+  assert.equal(rowBudgetMs({}, { rowTimeoutMs: 90000 }), 90000);
 });
 
 test('a correct cookiePlant guard passes the credential row', async () => {
@@ -613,7 +624,7 @@ test('m10 Fetch.enable unanswered => incomplete', async () => {
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
-test('m11 Fetch.enable refused is refusal evidence => pass', async () => {
+test('m11 Fetch.enable refused is refusal of the interception plant surface => pass', async () => {
   const out = await rows({
     refuseFetchEnable: true,
     oneTarget: true,
@@ -622,6 +633,12 @@ test('m11 Fetch.enable refused is refusal evidence => pass', async () => {
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.fulfillArray:/.test(n) && /interception plant surface refused/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
 });
 
 test('m12 raw leg timeout => door absent; guard that plants fails', async () => {
@@ -641,6 +658,45 @@ test('m12 raw leg timeout => door absent; guard that plants fails', async () => 
     ),
     JSON.stringify(row.notes)
   );
+});
+
+for (const [forced, needle] of [
+  ['missing', /raw leg missing|raw leg incomplete/],
+  ['unreadable', /cookie jar unreadable|raw leg incomplete/],
+  ['open-fail', /raw open failed|raw leg incomplete/],
+  ['enable-fail', /Fetch\.enable failed|raw leg incomplete/],
+  ['no-pause', /no pause|raw leg incomplete/],
+]) {
+  test(`raw leg ${forced} is incomplete, not door-absent`, async () => {
+    const out = await rows({
+      forcedRaw: { fulfillArray: forced },
+      oneTarget: true,
+      onlyPaths: ['fulfillArray'],
+    });
+    const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+    assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+    assert.ok(
+      (row.notes ?? []).some(
+        (n) => /cookie-plant\.(raw\.)?fulfillArray:/.test(n) && needle.test(n)
+      ),
+      JSON.stringify(row.notes)
+    );
+  });
+}
+
+test('door-absent path still fails when the guarded jar is planted', async () => {
+  const out = await rows({
+    forcedRaw: { fulfillArray: 'timeout' },
+    allowPlantPaths: ['fulfillArray'],
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayAnswered, true, JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayRefused, false, JSON.stringify(row));
 });
 
 test('raw leg plants => guarded must refuse; allow-through fails', async () => {

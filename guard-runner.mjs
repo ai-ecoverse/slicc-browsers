@@ -50,6 +50,14 @@ import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 
 export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
 
+export function rowBudgetMs(vector, opts) {
+  const declared =
+    Number.isFinite(vector?.timeoutMs) && vector.timeoutMs > 0 ? vector.timeoutMs : null;
+  const global = Number.isFinite(opts?.rowTimeoutMs) ? opts.rowTimeoutMs : null;
+  if (declared != null && global != null) return Math.max(declared, global);
+  return declared ?? global;
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
@@ -2707,10 +2715,7 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   flights.add({ flight, base, clients });
   opts.onStart?.(base);
   const sides = runLegs({ vector, opts, clients, set, job, slot, index, legs, renewed });
-  const rowTimeoutMs =
-    Number.isFinite(vector.timeoutMs) && vector.timeoutMs > 0
-      ? vector.timeoutMs
-      : opts.rowTimeoutMs;
+  const rowTimeoutMs = rowBudgetMs(vector, opts);
   const stuck = await watch(sides, rowTimeoutMs, () => view(flight, base, clients));
   for (const entry of flights) if (entry.flight === flight) flights.delete(entry);
   await closeAll(renewed);

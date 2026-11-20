@@ -244,6 +244,7 @@ async function leakDescendantIframeEvents(event, options, ctx, unguarded, catalo
 }
 
 function protectedHostList(options) {
+  if (!options.deriveProtectedHosts) return options.protectedHosts ?? [];
   if (options.protectedHosts?.length) return options.protectedHosts;
   const fromRules = options.protectedOrigins?.hosts ?? [];
   const fromExtra = (options.extraOrigins ?? [])

@@ -2277,7 +2277,10 @@ function credentialAttacks(ctx) {
     url: `${ctx.plantOrigin}/`,
   };
   const subHost = `x.${ctx.credentialHost}`;
-  const subUrl = `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/data?n=sub-${ctx.tag}`;
+  const idpFixture =
+    fixtureOriginFor(ctx.plantOrigin ?? ctx.ordinary, ctx.credentialHost) ??
+    fixtureOriginFor(ctx.ordinary, ctx.credentialHost);
+  const subUrl = `${fixtureOriginFor(idpFixture ?? ctx.ordinary, subHost) ?? `https://${subHost}`}/data?n=sub-${ctx.tag}`;
   const diag = {
     handle: ctx.handle,
     budget: ctx.budget,
@@ -2366,7 +2369,7 @@ function credentialAttacks(ctx) {
         name: ctx.names.ordinary,
         value: `sub-${ctx.tag}`,
         domain: `.${subHost}`,
-        url: `${fixtureOriginFor(ctx.ordinary, subHost) ?? `http://${subHost}`}/`,
+        url: `${fixtureOriginFor(idpFixture ?? ctx.ordinary, subHost) ?? `https://${subHost}`}/`,
       };
       return allowedHeaderAttempt({
         ...diag,

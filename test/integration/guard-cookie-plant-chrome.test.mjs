@@ -145,7 +145,6 @@ test('C10.cookie-plant.credential reaches live:pass in real Chrome with the cook
   const guard = emulatedGuard(browser, {
     protectedOrigins: catalog.protectedOrigins,
     credentialOrigins: catalog.credentialOrigins,
-    extraOrigins: [targets.idp, targets['idp-stg']],
     cookiePlant: true,
   });
   try {

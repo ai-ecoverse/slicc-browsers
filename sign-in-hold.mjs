@@ -516,6 +516,44 @@ function matchPopup(info, known, openerId, heldUrl, control) {
   return url === heldUrl || url.startsWith('about:blank#') || url.includes('/held');
 }
 
+function exactPopups(infos, known, openerId, markerUrl) {
+  return infos.filter(
+    (info) =>
+      info.type === 'page' &&
+      !known.has(info.targetId) &&
+      info.url === markerUrl &&
+      info.openerId === openerId
+  );
+}
+
+async function askedPopup(reader, { known, openerId, markerUrl, budget, notes }) {
+  let matched = 0;
+  let failed = null;
+  const popup = await until(async () => {
+    const listed = await outcome(reader.send('Target.getTargets', {}));
+    if (!listed.ok) {
+      failed = String(listed.error?.message ?? listed.error);
+      return null;
+    }
+    failed = null;
+    const found = exactPopups(listed.result?.targetInfos ?? [], known, openerId, markerUrl);
+    matched = found.length;
+    return matched === 1 ? found[0] : null;
+  }, budget);
+  note(notes, 'sign-in-hold.ask-cleanup', {
+    markerUrl,
+    openerId,
+    matched,
+    failed,
+    targetId: popup?.targetId ?? null,
+  });
+  if (popup) return { popup };
+  const why = failed
+    ? `Target.getTargets failed: ${failed}`
+    : `${matched} page targets at ${markerUrl} opened by ${openerId}`;
+  return { reason: `popup not identified exactly (${why}), nothing closed` };
+}
+
 async function moveHeldPopup(reader, raw, heldUrl, budget, internalSessions) {
   if (raw.url === heldUrl) return raw;
   const attached = await outcome(
@@ -591,23 +629,20 @@ async function heldPopup({
       notes,
     });
     if (askedHold.incomplete) {
-      const popup = await until(
-        async () => {
-          const listed = await outcome(reader.send('Target.getTargets', {}));
-          if (!listed.ok) return null;
-          return (
-            (listed.result?.targetInfos ?? []).find((info) =>
-              matchPopup(info, known, openerId, heldUrl, control)
-            ) ?? null
-          );
-        },
-        Math.min(budget, 1000)
-      );
+      const found = await askedPopup(reader, {
+        known,
+        openerId,
+        markerUrl: `about:blank#${MARK_PREFIX}${marker}`,
+        budget: Math.min(budget, 1000),
+        notes,
+      });
+      if (!found.popup)
+        return { live: false, incomplete: `${askedHold.incomplete}; ${found.reason}` };
       return {
         live: false,
         incomplete: askedHold.incomplete,
         openerId,
-        ...(popup?.targetId ? { targetId: popup.targetId } : {}),
+        targetId: found.popup.targetId,
       };
     }
     holdAnswer = askedHold.answer;

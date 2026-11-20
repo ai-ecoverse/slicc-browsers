@@ -173,6 +173,8 @@ export function cookiePlantFake(options = {}) {
   const nullGuardHref = options.nullGuardHref === true;
   const storageJarIgnoresBrowserContext = options.storageJarIgnoresBrowserContext === true;
   const storageGetIgnoresBrowserContext = options.storageGetIgnoresBrowserContext === true;
+  const storageGetCookiesFails = options.storageGetCookiesFails === true;
+  const networkOmitsCanary = options.networkOmitsCanary === true;
   const dropCanary = options.dropCanary === true;
   let ignoredContextCreates = 0;
   const ignoreContextCreates = Number(options.ignoreContextCreates ?? 0) || 0;
@@ -681,6 +683,8 @@ export function cookiePlantFake(options = {}) {
       method === 'Network.getAllCookies' ||
       method === 'Network.getCookies'
     ) {
+      if (method === 'Storage.getCookies' && storageGetCookiesFails)
+        throw new Error('Storage.getCookies failed');
       const jar =
         method === 'Storage.getCookies'
           ? jarOf(
@@ -703,10 +707,14 @@ export function cookiePlantFake(options = {}) {
         doorJarProofs += 1;
         if (doorJarProofs >= 1) rejectJarReads = true;
       }
+      const visible =
+        method !== 'Storage.getCookies' && networkOmitsCanary
+          ? jar.filter((cookie) => !String(cookie.name).startsWith('cplantcanary'))
+          : jar;
       if (method === 'Network.getCookies') {
         const hosts = (params.urls ?? []).map(hostOf);
         return {
-          cookies: jar.filter((cookie) =>
+          cookies: visible.filter((cookie) =>
             hosts.some(
               (host) =>
                 cookie.domain.replace(/^\./, '') === host ||
@@ -715,7 +723,7 @@ export function cookiePlantFake(options = {}) {
           ),
         };
       }
-      return { cookies: [...jar] };
+      return { cookies: [...visible] };
     }
     if (method === 'Storage.setCookies') {
       const jar = jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId);

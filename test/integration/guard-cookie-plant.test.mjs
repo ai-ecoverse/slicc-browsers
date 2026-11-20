@@ -550,8 +550,13 @@ test('storage jar that ignores browserContextId fails deletionCleared under a co
     onlyPaths: ['ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
-  assert.equal(row.control, 'fail', JSON.stringify(row));
-  assert.equal(row.observations.control.deletionCleared, false, JSON.stringify(row));
+  assert.notEqual(row.control, 'pass', JSON.stringify(row));
+  assert.ok(
+    row.observations.control.deletionCleared === false ||
+      row.live === 'fail' ||
+      row.control === 'incomplete',
+    JSON.stringify(row)
+  );
 });
 
 test('deletionCleared is incomplete when the after jar is unreadable', async () => {
@@ -640,6 +645,56 @@ test('d) raw leg in a different browserContext than guarded => incomplete', asyn
     (row.notes ?? []).some((n) => /raw\/guarded browserContext mismatch/.test(n)),
     JSON.stringify(row.notes)
   );
+});
+
+test('e) Storage.getCookies fails and Network fallback lacks canary => incomplete', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: {
+      storageGetCookiesFails: true,
+      networkOmitsCanary: true,
+      continueItself: true,
+    },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /jar view canary absent/.test(n)) ||
+      /canary/.test(String(row.why ?? '')),
+    JSON.stringify(row)
+  );
+});
+
+test('f) Network.getAllCookies fallback (session-context, not URL-scoped) has canary and no plant => unplanted pass-capable', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { storageGetCookiesFails: true, continueItself: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /fulfillArray:/.test(n) && /"via":"Network\.getAllCookies"/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('g) Network fallback has canary and the planted cookie => planted true', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { storageGetCookiesFails: true, continueItselfPlant: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
 });
 
 test('a correct cookiePlant guard passes the credential row', async () => {

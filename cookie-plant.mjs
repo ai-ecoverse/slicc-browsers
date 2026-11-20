@@ -710,87 +710,90 @@ async function clearCookie(reader, sessionId, { name, url, domain }, browserCont
   );
 }
 
-async function readJar(reader, sessionId, { name, domain, value, path }, browserContextId = null) {
-  const wantDomain = domain.replace(/^\./, '').toLowerCase();
-  const wantPath = path ?? '/';
-  const match = (cookie) => {
-    if (cookie.name !== name) return false;
-    const got = String(cookie.domain ?? '')
-      .replace(/^\./, '')
-      .toLowerCase();
-    if (got !== wantDomain && !wantDomain.endsWith(`.${got}`) && !got.endsWith(`.${wantDomain}`))
-      return false;
-    if ((cookie.path ?? '/') !== wantPath) return false;
-    if (value !== undefined && cookie.value !== value) return false;
-    return true;
-  };
-  let measured = false;
-  const storage = await outcome(
-    reader.send('Storage.getCookies', storageContextParams(browserContextId))
-  );
-  if (storage.ok && Array.isArray(storage.result?.cookies)) {
-    measured = true;
-    const hit = storage.result.cookies.find(match);
-    if (hit) return { via: 'Storage.getCookies', cookie: hit };
-  }
-  const all = await outcome(reader.send('Network.getAllCookies', {}, sessionId));
-  if (all.ok && Array.isArray(all.result?.cookies)) {
-    measured = true;
-    const hit = all.result.cookies.find(match);
-    if (hit) return { via: 'Network.getAllCookies', cookie: hit };
-  }
-  const byUrl = await outcome(
-    reader.send(
-      'Network.getCookies',
-      { urls: [`https://${wantDomain}/`, `http://${wantDomain}/`] },
-      sessionId
-    )
-  );
-  if (byUrl.ok && Array.isArray(byUrl.result?.cookies)) {
-    measured = true;
-    const hit = byUrl.result.cookies.find(match);
-    if (hit) return { via: 'Network.getCookies', cookie: hit };
-  }
-  if (!measured) return { incomplete: 'cookie jar unreadable' };
-  return { missing: true };
+function jarCookieMatch(cookie, { name, domain, value, path }) {
+  if (cookie.name !== name) return false;
+  const wantDomain = String(domain ?? '')
+    .replace(/^\./, '')
+    .toLowerCase();
+  const got = String(cookie.domain ?? '')
+    .replace(/^\./, '')
+    .toLowerCase();
+  if (got !== wantDomain && !wantDomain.endsWith(`.${got}`) && !got.endsWith(`.${wantDomain}`))
+    return false;
+  if ((cookie.path ?? '/') !== (path ?? '/')) return false;
+  if (value !== undefined && cookie.value !== value) return false;
+  return true;
 }
 
-async function readJarStorage(reader, { name, domain, value, path }, browserContextId = null) {
-  const wantDomain = domain.replace(/^\./, '').toLowerCase();
-  const wantPath = path ?? '/';
+function jarUrlHints(cookie, canary = null) {
+  const urls = [];
+  const pushHost = (host) => {
+    const name = String(host ?? '')
+      .replace(/^\./, '')
+      .toLowerCase();
+    if (!name) return;
+    urls.push(`https://${name}/`, `http://${name}/`);
+  };
+  if (cookie?.url) {
+    try {
+      urls.push(new URL(cookie.url).origin + '/');
+    } catch {
+      pushHost(cookie.domain);
+    }
+  } else pushHost(cookie?.domain);
+  if (canary?.url) {
+    try {
+      urls.push(new URL(canary.url).origin + '/');
+    } catch {
+      pushHost(canary.domain);
+    }
+  } else pushHost(canary?.domain);
+  return [...new Set(urls.filter(Boolean))];
+}
+
+async function readJarView(reader, sessionId, browserContextId = null, urlHints = []) {
   const storage = await outcome(
     reader.send('Storage.getCookies', storageContextParams(browserContextId))
   );
-  if (!storage.ok || !Array.isArray(storage.result?.cookies))
-    return { incomplete: 'cookie jar unreadable' };
-  const hit = storage.result.cookies.find((cookie) => {
-    if (cookie.name !== name) return false;
-    const got = String(cookie.domain ?? '')
-      .replace(/^\./, '')
-      .toLowerCase();
-    if (got !== wantDomain && !wantDomain.endsWith(`.${got}`) && !got.endsWith(`.${wantDomain}`))
-      return false;
-    if ((cookie.path ?? '/') !== wantPath) return false;
-    if (value !== undefined && cookie.value !== value) return false;
-    return true;
-  });
-  if (hit) return { via: 'Storage.getCookies', cookie: hit };
-  return { missing: true, via: 'Storage.getCookies' };
+  if (storage.ok && Array.isArray(storage.result?.cookies))
+    return { via: 'Storage.getCookies', cookies: storage.result.cookies };
+  const all = await outcome(reader.send('Network.getAllCookies', {}, sessionId));
+  if (all.ok && Array.isArray(all.result?.cookies))
+    return { via: 'Network.getAllCookies', cookies: all.result.cookies };
+  const urls = urlHints.length ? urlHints : ['https://example.invalid/', 'http://example.invalid/'];
+  const byUrl = await outcome(reader.send('Network.getCookies', { urls }, sessionId));
+  if (byUrl.ok && Array.isArray(byUrl.result?.cookies))
+    return { via: 'Network.getCookies', cookies: byUrl.result.cookies };
+  return { incomplete: 'cookie jar unreadable' };
+}
+
+async function readJar(
+  reader,
+  sessionId,
+  { name, domain, value, path },
+  browserContextId = null,
+  { urlHints = [] } = {}
+) {
+  const view = await readJarView(reader, sessionId, browserContextId, urlHints);
+  if (view.incomplete) return view;
+  const hit = view.cookies.find((cookie) => jarCookieMatch(cookie, { name, domain, value, path }));
+  if (hit) return { via: view.via, cookie: hit, cookies: view.cookies };
+  return { via: view.via, missing: true, cookies: view.cookies };
 }
 
 async function readJarWithCanary(reader, sessionId, cookie, canary, browserContextId = null) {
-  const jar = await readJar(reader, sessionId, cookie, browserContextId);
+  const urlHints = jarUrlHints(cookie, canary);
+  const jar = await readJar(reader, sessionId, cookie, browserContextId, { urlHints });
   if (!canary || jar?.incomplete) return jar;
-  const canaryCookie = {
-    name: canary.name,
-    domain: canary.domain,
-    value: canary.value,
-    path: canary.path ?? '/',
-  };
-  const canaryJar = browserContextId
-    ? await readJarStorage(reader, canaryCookie, browserContextId)
-    : await readJar(reader, sessionId, canaryCookie, browserContextId);
-  if (plantedOf(canaryJar) !== true)
+  const canaryHit = (jar.cookies ?? []).some((entry) =>
+    jarCookieMatch(entry, {
+      name: canary.name,
+      domain: canary.domain,
+      value: canary.value,
+      path: canary.path ?? '/',
+    })
+  );
+  if (!canaryHit)
     return { incomplete: 'jar view canary absent', via: jar?.via, canaryMissing: true };
   return { ...jar, canaryOk: true };
 }

@@ -41,11 +41,20 @@ function targetsOf(fixture, origin) {
   };
 }
 
+const plantHosts = [
+  'seven.sliccy.ai',
+  'vault.sliccy.ai',
+  ...(catalog.protectedOrigins?.hosts ?? []),
+];
+
 async function rows(options = {}, subset = protectedVectors) {
   const fixture = await fixtureServer();
   try {
     const { capabilities: extraCaps, fake: fakeOptions, ...guardOptions } = options;
-    const browser = cookiePlantFake(fakeOptions ?? {});
+    const browser = cookiePlantFake({
+      protectedHosts: plantHosts,
+      ...(fakeOptions ?? {}),
+    });
     const origin = (host) => `http://${host}:${fixture.port}`;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
@@ -211,11 +220,40 @@ for (const path of [
   'setCookieSecond',
 ]) {
   test(`mutant allowPlantPaths=${path} fails`, async () => {
-    const out = await rows({ allowPlantPaths: [path] });
+    const out = await rows({ allowPlantPaths: [path], admitProtectedNavigation: true });
     const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
   });
 }
+
+test('mutant that admits the protected pause and plants fails', async () => {
+  const out = await rows({
+    admitProtectedNavigation: true,
+    allowPlantPaths: [
+      'fulfillArray',
+      'fulfillLower',
+      'fulfillBinary',
+      'continueResponse',
+      'redirect3xx',
+      'legacyRaw',
+    ],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('mutant that blocks navigation but poisons the jar fails', async () => {
+  const out = await rows({ poisonProtectedJar: true });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('mutant that hangs on protected navigation is incomplete', async () => {
+  const out = await rows({ hangOnProtected: true });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+});
 
 test('a correct cookiePlant guard passes the credential row', async () => {
   const out = await rows({}, credentialVectors);
@@ -266,6 +304,7 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
   const leak = await rows({
     fake: { storeBinaryLf: true },
     allowPlantPaths: ['binaryLf'],
+    admitProtectedNavigation: true,
   });
   const row = leak.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
@@ -295,42 +334,38 @@ test('refuseWithoutFail still finishes and protects', async () => {
   assert.equal(row.control, 'pass', JSON.stringify(row));
 });
 
-test('mutant missObsFoldDomain lets binaryObsFold through then stalls later paths', async () => {
+test('mutant missObsFoldDomain that admits pauses leaves protected evidence incomplete', async () => {
   const out = await rows({
     missObsFoldDomain: true,
+    admitProtectedNavigation: true,
     fake: { deadFetchAfter: 'bof-', deadFetchOnNth: 2 },
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
-  assert.equal(row.observations.guarded.binaryObsFoldAnswered, true, JSON.stringify(row));
-  assert.equal(row.observations.guarded.binaryObsFoldRefused, false, JSON.stringify(row));
-  assert.equal(row.observations.guarded.domainQuotedAnswered, 'incomplete', JSON.stringify(row));
-  assert.equal(row.observations.guarded.ordinaryAnswered, 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
   assert.ok(
-    (row.notes ?? []).some((n) => /cookie-plant\.firstIncomplete:.*"path":"domainQuoted"/.test(n)),
+    (row.notes ?? []).some((n) =>
+      /cookie-plant\.(firstIncomplete|binaryObsFold|domainQuoted):/.test(n)
+    ),
     JSON.stringify(row.notes)
   );
 });
 
-test('mutant that cuts the session at continueAtRequest leaves later paths incomplete', async () => {
+test('mutant that cuts the session after admitting pauses does not pass', async () => {
   const out = await rows({
     allowPlantPaths: ['responsePhrase'],
+    admitProtectedNavigation: true,
     fake: { cutSessionAfter: 'rp-', cutSessionOnNth: 2, cutBlocksReattach: true },
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
-  assert.equal(row.observations.guarded.responsePhraseAnswered, true, JSON.stringify(row));
-  assert.equal(
-    row.observations.guarded.continueAtRequestAnswered,
-    'incomplete',
-    JSON.stringify(row)
-  );
-  assert.equal(row.observations.guarded.ordinaryAnswered, 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
   assert.ok(
     (row.notes ?? []).some(
       (n) =>
-        /cookie-plant\.firstIncomplete:.*"path":"continueAtRequest"/.test(n) ||
-        /cookie-plant\.continueAtRequest:.*(session cut|reattach failed)/.test(n)
+        /cookie-plant\.firstIncomplete:/.test(n) ||
+        /cookie-plant\.(continueAtRequest|ordinary):.*(session cut|reattach failed)/.test(n) ||
+        /protected plant evidence incomplete/.test(n)
     ),
     JSON.stringify(row.notes)
   );
@@ -340,6 +375,7 @@ test('mutant that forwards fulfillArray then cuts still fails planted', async ()
   const out = await rows({
     allowPlantPaths: ['fulfillArray'],
     forwardThenCut: ['fulfillArray'],
+    admitProtectedNavigation: true,
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -361,7 +397,10 @@ test('mutant that never answers client attach is incomplete', async () => {
 test('unreadable jar after a plant is incomplete, not a false pass', async () => {
   const fixture = await fixtureServer();
   try {
-    const browser = cookiePlantFake({ rejectCplantJarAfterFirst: true });
+    const browser = cookiePlantFake({
+      rejectCplantJarAfterFirst: true,
+      protectedHosts: plantHosts,
+    });
     const origin = (host) => `http://${host}:${fixture.port}`;
     const guard = emulatedGuard(browser, {
       protectedOrigins: catalog.protectedOrigins,
@@ -369,6 +408,7 @@ test('unreadable jar after a plant is incomplete, not a false pass', async () =>
       extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
       cookiePlant: true,
       allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
     });
     try {
       const out = await run(

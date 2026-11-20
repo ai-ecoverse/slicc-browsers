@@ -763,6 +763,86 @@ async function finishPlant({ reader, readerSession, out, cookie, notes, label })
   return attemptRecord(out, planted);
 }
 
+function scoreProtectedPlant({ pauseCount, fixtureHits, planted, pageHref, notes, label }) {
+  const href = pageHref == null ? null : String(pageHref);
+  const errorPage =
+    typeof href === 'string' &&
+    (/^chrome-error:/i.test(href) ||
+      /chromewebdata/i.test(href) ||
+      /data:text\/html.*blocked/i.test(href));
+  const loadBlocked =
+    fixtureHits === 'incomplete' ? 'incomplete' : fixtureHits === 0 || errorPage === true;
+  const evidence = {
+    pauseCount,
+    fixtureHits,
+    planted,
+    pageHref: href,
+    loadBlocked,
+  };
+  if (
+    planted === 'incomplete' ||
+    pauseCount === 'incomplete' ||
+    fixtureHits === 'incomplete' ||
+    loadBlocked === 'incomplete'
+  ) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      incomplete: 'protected plant evidence incomplete',
+    });
+    return {
+      answered: 'incomplete',
+      refused: 'incomplete',
+      planted: 'incomplete',
+    };
+  }
+  if (planted === true) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      answered: true,
+      refused: pauseCount > 0,
+    });
+    return { answered: true, refused: pauseCount > 0, planted: true };
+  }
+  if (pauseCount === 0 && loadBlocked === true && planted === false) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      answered: true,
+      refused: true,
+    });
+    return { answered: true, refused: true, planted: false };
+  }
+  note(notes, `cookie-plant.${label}`, {
+    ...evidence,
+    incomplete: 'protected plant evidence incomplete',
+  });
+  return {
+    answered: 'incomplete',
+    refused: 'incomplete',
+    planted: 'incomplete',
+  };
+}
+
+async function fixtureHitsFor(fixtureLog, url, since, tag) {
+  if (typeof fixtureLog !== 'function') return 'incomplete';
+  let entries;
+  try {
+    entries = await fixtureLog();
+  } catch {
+    return 'incomplete';
+  }
+  if (!Array.isArray(entries)) return 'incomplete';
+  const needle = tag ? String(tag) : '';
+  const matched = entries.filter((entry) => {
+    if (Number(entry?.time ?? 0) < since) return false;
+    const hit = String(entry?.url ?? '');
+    if (!(hit === url || hit.startsWith(url) || (url && hit.startsWith(String(url).split('?')[0]))))
+      return false;
+    if (!needle) return true;
+    return hit.includes(needle);
+  });
+  return matched.length;
+}
+
 async function recordSessionCut({ reader, readerSession, cookie, notes, label }) {
   return finishPlant({
     reader,
@@ -903,6 +983,76 @@ async function runPlantBody({
   return finishPlant({ reader, readerSession, out, cookie, notes, label });
 }
 
+async function runGuardedProtectedPlantBody({
+  handle,
+  url,
+  cookie,
+  build,
+  budget,
+  notes,
+  label,
+  topLevel,
+  fixtureLog,
+  tag,
+  from,
+  pauseMs,
+  startedAt,
+  state,
+}) {
+  const { client, reader, readerSession, transport } = handle;
+  await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+  const methods =
+    transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+  state.triggerPromise = topLevel
+    ? triggerNavigate(client, handle.pageSession, url)
+    : triggerFetch(client, handle.pageSession, url);
+  state.paused = await waitPause(client, from, url, methods, pauseMs);
+  if (state.paused) {
+    const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
+    if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
+    const plantedAttempt = await finishPlant({
+      reader,
+      readerSession,
+      out,
+      cookie,
+      notes,
+      label,
+    });
+    if (plantedAttempt.planted === true) return plantedAttempt;
+    const page = await pageSnapshot(client, handle.pageSession);
+    const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
+    return scoreProtectedPlant({
+      pauseCount: pauseEvents(client.events, from, url, methods).length,
+      fixtureHits,
+      planted: plantedAttempt.planted,
+      pageHref: page.href,
+      notes,
+      label,
+    });
+  }
+  const settled = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
+  const hung =
+    settled &&
+    settled.ok === false &&
+    /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
+  if (hung) handle.evidenceIncomplete = true;
+  const page = await pageSnapshot(client, handle.pageSession);
+  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
+  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  if (planted === 'incomplete') handle.evidenceIncomplete = true;
+  return scoreProtectedPlant({
+    pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
+    fixtureHits: hung ? 'incomplete' : fixtureHits,
+    planted: hung ? 'incomplete' : planted,
+    pageHref: page.href,
+    notes,
+    label,
+  });
+}
+
 async function runPlant({
   handle,
   url,
@@ -916,33 +1066,52 @@ async function runPlant({
   fixtureLog,
   legStartedAt,
   firstIncomplete,
+  protectedBlock = false,
+  tag,
 }) {
   const { client, transport } = handle;
   const state = { paused: null, triggerPromise: Promise.resolve() };
   const from = client.events.length;
-  const pauseMs = Math.min(budget, 2000);
+  const pauseMs = Math.min(budget, protectedBlock ? 1200 : 2000);
   const startedAt = Date.now();
   const legAt = legStartedAt ?? startedAt;
   try {
     return await withPathBudget(
-      runPlantBody({
-        handle,
-        url,
-        cookie,
-        build,
-        budget,
-        notes,
-        label,
-        stage,
-        topLevel,
-        fixtureLog,
-        legAt,
-        firstIncomplete,
-        from,
-        pauseMs,
-        startedAt,
-        state,
-      }),
+      protectedBlock
+        ? runGuardedProtectedPlantBody({
+            handle,
+            url,
+            cookie,
+            build,
+            budget,
+            notes,
+            label,
+            topLevel,
+            fixtureLog,
+            tag,
+            from,
+            pauseMs,
+            startedAt,
+            state,
+          })
+        : runPlantBody({
+            handle,
+            url,
+            cookie,
+            build,
+            budget,
+            notes,
+            label,
+            stage,
+            topLevel,
+            fixtureLog,
+            legAt,
+            firstIncomplete,
+            from,
+            pauseMs,
+            startedAt,
+            state,
+          }),
       pathCeiling(budget),
       label
     );
@@ -955,6 +1124,26 @@ async function runPlant({
         notes,
         label,
       });
+    if (protectedBlock) {
+      const page = await pageSnapshot(client, handle.pageSession);
+      const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
+      const jar = await capped(
+        readJar(handle.reader, handle.readerSession, cookie),
+        1500,
+        'readJar'
+      );
+      const planted = plantedOf(
+        jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+      );
+      return scoreProtectedPlant({
+        pauseCount: 'incomplete',
+        fixtureHits,
+        planted,
+        pageHref: page.href,
+        notes,
+        label,
+      });
+    }
     await diagnoseIncomplete({
       notes,
       label,
@@ -1464,6 +1653,8 @@ function fetchAttacks(ctx) {
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
+    protectedBlock: Boolean(ctx.guardedProtected),
+    tag: ctx.tag,
   };
   const header = (value, domain = ctx.domain, domainAttr = null) =>
     cookieHeader(ctx.names.plant, value, domain, '', domainAttr);
@@ -1522,6 +1713,8 @@ function legacyAttacks(ctx, legacyReady) {
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
+    protectedBlock: Boolean(ctx.guardedProtected),
+    tag: ctx.tag,
   };
   return {
     legacyHeaders: () =>
@@ -1783,12 +1976,6 @@ function controlAttacks(ctx) {
   };
   const ordinaryUrl = `${ctx.ordinary}/data?n=ctrl-${ctx.tag}`;
   const fetchReady = Boolean(ctx.transport.fetch);
-  const deleteCookie = {
-    name: ctx.names.delete,
-    value: `seed-${ctx.tag}`,
-    domain: ctx.domain,
-    url: `${ctx.plantOrigin}/`,
-  };
   const diag = {
     handle: ctx.handle,
     budget: ctx.budget,
@@ -1852,7 +2039,13 @@ function controlAttacks(ctx) {
       });
     },
     deletion: async () => {
-      const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteCookie);
+      const deleteOnOrdinary = {
+        name: ctx.names.delete,
+        value: `seed-${ctx.tag}`,
+        domain: hostOf(ctx.ordinary),
+        url: `${ctx.ordinary}/`,
+      };
+      const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteOnOrdinary);
       if (plantedOf(seeded) !== true) {
         note(ctx.notes, 'cookie-plant.deletion', { incomplete: 'seed failed' });
         return {
@@ -1864,16 +2057,16 @@ function controlAttacks(ctx) {
       }
       const attempt = await allowedHeaderAttempt({
         ...diag,
-        url: ctx.plantUrl,
+        url: ordinaryUrl,
         label: 'deletion',
-        header: cookieHeader(ctx.names.delete, '', ctx.domain, 'Max-Age=0'),
-        cookie: deleteCookie,
+        header: cookieHeader(ctx.names.delete, '', null, 'Max-Age=0'),
+        cookie: deleteOnOrdinary,
         fetchReady,
-        topLevel: true,
+        topLevel: false,
       });
       const after = await readJar(ctx.reader, ctx.readerSession, {
         name: ctx.names.delete,
-        domain: ctx.domain,
+        domain: deleteOnOrdinary.domain,
       });
       const cleared = plantedOf(after) === false;
       note(ctx.notes, 'cookie-plant.deletion.cleared', { cleared, via: after?.via });
@@ -2226,6 +2419,7 @@ export async function cookiePlant({
     fixtureLog,
     legStartedAt: Date.now(),
     firstIncomplete: { noted: false },
+    guardedProtected: !control && !credential,
   });
 
   const results = await runAttempts(
@@ -2248,13 +2442,27 @@ export async function cookiePlant({
     800,
     'close-final'
   );
+  return finishCookiePlant({
+    control,
+    credential,
+    fetch: enabled.transport.fetch,
+    legacy: enabled.legacyReady,
+    evidenceIncomplete: handle.evidenceIncomplete,
+    results,
+  });
+}
+
+function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncomplete, results }) {
   return Object.assign(
     {
       live: true,
       control: Boolean(control),
-      fetch: enabled.transport.fetch,
-      legacy: enabled.legacyReady,
+      fetch,
+      legacy,
       credential,
+      ...(evidenceIncomplete && !control
+        ? { incomplete: 'protected plant evidence incomplete' }
+        : {}),
     },
     ...Object.entries(results).map(([name, attempt]) => flattenAttempt(name, attempt))
   );

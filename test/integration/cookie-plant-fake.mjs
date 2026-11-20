@@ -130,6 +130,7 @@ function domainAllowed(requestHost, domain) {
 export function cookiePlantFake(options = {}) {
   const tabs = new Map();
   const sessions = new Map();
+  const sessionConns = new Map();
   const cookies = [];
   const connections = [];
   let next = 0;
@@ -147,6 +148,12 @@ export function cookiePlantFake(options = {}) {
   let cutSessionHits = 0;
   const cutBlocksReattach = options.cutBlocksReattach === true;
   const cutTargets = new Set();
+  const protectedHosts = (options.protectedHosts ?? []).map((h) => String(h).toLowerCase());
+  const guardedUrl = (url) => {
+    const host = hostOf(url);
+    if (!host || !protectedHosts.length) return false;
+    return protectedHosts.some((h) => host === h || host.endsWith(`.${h}`));
+  };
   const emitContexts = options.emitContexts !== false;
 
   const infoOf = (tab) => ({
@@ -232,6 +239,34 @@ export function cookiePlantFake(options = {}) {
     const requestId = `R${++next}`;
     const interceptionId = `I${++next}`;
     const { fetchOn, legacyOn } = sessionIntercepts(tab, sessionId);
+    const guardSessions = [...(tab.fetchSessions ?? [])].filter((id) => id !== sessionId);
+    if (guardSessions.length > 0 && guardedUrl(url)) {
+      return new Promise((resolve) => {
+        paused.set(requestId, {
+          url,
+          sessionId: guardSessions[0],
+          kind: 'fetch',
+          topLevel,
+          tab,
+          resolve,
+        });
+        for (const sid of guardSessions) {
+          const owner = sessionConns.get(sid);
+          if (!owner) continue;
+          emit(
+            owner,
+            'Fetch.requestPaused',
+            {
+              requestId,
+              request: { url, method: 'GET' },
+              resourceType: topLevel ? 'Document' : 'XHR',
+              networkId: requestId,
+            },
+            sid
+          );
+        }
+      });
+    }
     if (legacyOn && !fetchOn) {
       paused.set(interceptionId, { url, sessionId, kind: 'legacy', topLevel, tab });
       emit(
@@ -293,6 +328,7 @@ export function cookiePlantFake(options = {}) {
         throw new Error('slicc: refused: session cut on protected execution context');
       const id = `S${++next}`;
       sessions.set(id, tab.targetId);
+      sessionConns.set(id, conn);
       emit(conn, 'Target.attachedToTarget', {
         sessionId: id,
         targetInfo: infoOf(tab),
@@ -302,6 +338,7 @@ export function cookiePlantFake(options = {}) {
     }
     if (method === 'Target.detachFromTarget') {
       sessions.delete(params.sessionId);
+      sessionConns.delete(params.sessionId);
       return {};
     }
     if (method === 'Target.closeTarget') {
@@ -429,14 +466,35 @@ export function cookiePlantFake(options = {}) {
       return { cookies: [...cookies] };
     }
     if (method === 'Storage.setCookies') {
-      cookies.length = 0;
-      cookies.push(...(params.cookies ?? []));
+      for (const incoming of params.cookies ?? []) {
+        const domain = incoming.domain ?? (incoming.url ? hostOf(incoming.url) : '');
+        const storeDomain = domain
+          ? domain.startsWith('.')
+            ? domain
+            : `.${domain.replace(/^\./, '')}`
+          : hostOf(incoming.url);
+        const entry = {
+          name: incoming.name,
+          value: incoming.value ?? '',
+          domain: storeDomain,
+          path: incoming.path ?? '/',
+        };
+        const existing = cookies.findIndex(
+          (cookie) =>
+            cookie.name === entry.name &&
+            cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
+        );
+        if (existing >= 0) cookies[existing] = entry;
+        else cookies.push(entry);
+      }
       return {};
     }
     if (method === 'Page.navigate') {
       const tab = tabs.get(sessions.get(sessionId));
       if (!tab) return { frameId: sessions.get(sessionId) };
-      if (sessionIntercepts(tab, sessionId).any) {
+      const guardOwns =
+        [...(tab.fetchSessions ?? [])].some((id) => id !== sessionId) && guardedUrl(params.url);
+      if (sessionIntercepts(tab, sessionId).any || guardOwns) {
         const settled = await emitPause(conn, tab, sessionId, params.url, true);
         if (String(settled).startsWith('error:')) return { frameId: sessions.get(sessionId) };
         setTabUrl(conn, sessionId, tab, params.url);
@@ -454,10 +512,11 @@ export function cookiePlantFake(options = {}) {
         const url = assign[2] ?? assign[3];
         const tab = tabs.get(sessions.get(sessionId));
         if (!url || !tab) return { result: { type: 'string', value: 'error' } };
-        if (sessionIntercepts(tab, sessionId).any) {
-          void emitPause(conn, tab, sessionId, url, true).then((settled) => {
-            if (!String(settled).startsWith('error:') && tab) setTabUrl(conn, sessionId, tab, url);
-          });
+        const guardOwns =
+          [...(tab.fetchSessions ?? [])].some((id) => id !== sessionId) && guardedUrl(url);
+        if (sessionIntercepts(tab, sessionId).any || guardOwns) {
+          const settled = await emitPause(conn, tab, sessionId, url, true);
+          if (!String(settled).startsWith('error:') && tab) setTabUrl(conn, sessionId, tab, url);
           return { result: { type: 'undefined' } };
         }
         setTabUrl(conn, sessionId, tab, url);

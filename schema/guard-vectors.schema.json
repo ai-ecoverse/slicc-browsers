@@ -364,6 +364,15 @@
         "requires": {
           "$ref": "#/$defs/requires"
         },
+        "blockedMarkers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "observe": {
           "type": "object",
           "additionalProperties": {

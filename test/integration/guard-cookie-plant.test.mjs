@@ -53,7 +53,7 @@ async function rows(options = {}, subset = protectedVectors) {
     const { capabilities: extraCaps, fake: fakeOptions, ...guardOptions } = options;
     const browser = cookiePlantFake({
       protectedHosts: plantHosts,
-      blockedMarkers: catalog.protectedOrigins?.blockedMarkers ?? [],
+      blockedMarkers: protectedVectors[0]?.blockedMarkers ?? [],
       onNavigate: (url) => fixture.record?.(url),
       ...(fakeOptions ?? {}),
     });
@@ -246,7 +246,7 @@ test('empty fixture log without control proof => incomplete', async () => {
   try {
     const browser = cookiePlantFake({
       protectedHosts: plantHosts,
-      blockedMarkers: catalog.protectedOrigins?.blockedMarkers ?? [],
+      blockedMarkers: protectedVectors[0]?.blockedMarkers ?? [],
       blockedMarker: 'data:,blocked',
     });
     const origin = (host) => `http://${host}:${fixture.port}`;

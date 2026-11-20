@@ -1345,10 +1345,7 @@ class Execution {
         control: this.side === 'control',
         mode: step.cookiePlant,
         fixtureLog: () => this.options.fixture.log(),
-        blockedMarkers:
-          this.vector.blockedMarkers ??
-          this.options.catalog?.protectedOrigins?.blockedMarkers ??
-          [],
+        blockedMarkers: this.vector.blockedMarkers ?? [],
       })
     );
   }

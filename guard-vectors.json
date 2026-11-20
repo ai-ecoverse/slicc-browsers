@@ -9432,7 +9432,7 @@
           }
         }
       },
-      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; both legs ack every Page.screencastFrame event (Chrome reuses params.sessionId per cast); the control proves frames before and after a forced paint and records repaint-to-frame latency; the guarded wait is at least 3\u00d7 that latency (floor 1500ms) plus a drain; any post-insertion frame fails; a silent stop needs frames before insertion plus a confirmed post-insertion paint with none after; an explicit startScreencast refusal (castBeforeRefusal or castRefusal), ack refusal, or detach still passes without pre-frames; missing acks, no observer, never-streamed without those, a paint probe that times out (cannot confirm paint), or an unconfirmed paint are incomplete",
+      "live": "the observer confirms a chrome-extension: frame is in the ordinary tab after a screencast was started on the clean tab; both legs ack every Page.screencastFrame event (Chrome reuses params.sessionId per cast); the control proves frames before and after a forced paint and records repaint-to-frame latency; the guarded wait is at least 3× that latency (floor 1500ms) plus a drain; any post-insertion frame fails; a silent stop needs frames before insertion plus a confirmed post-insertion paint with none after; an explicit startScreencast refusal (castBeforeRefusal or castRefusal), ack refusal, or detach still passes without pre-frames; missing acks, no observer, never-streamed without those, a paint probe that times out (cannot confirm paint), or an unconfirmed paint are incomplete",
       "liveCheck": {
         "result": "frame",
         "path": "result.exists",
@@ -28446,7 +28446,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc\u2028fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
+            "source": "// slicc fetch(new URL('/doc?n=bound-ls-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ls-{tag}\n",
             "worldName": "slicc-bound-ls-{tag}"
           },
           "as": "boundLs",
@@ -28458,7 +28458,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "// slicc\u2029fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
+            "source": "// slicc fetch(new URL('/doc?n=bound-ps-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-ps-{tag}\n",
             "worldName": "slicc-bound-ps-{tag}"
           },
           "as": "boundPs",
@@ -28494,7 +28494,7 @@
         {
           "cdp": "Page.addScriptToEvaluateOnNewDocument",
           "params": {
-            "source": "\ufefffetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
+            "source": "﻿fetch(new URL('/doc?n=bound-bom-{tag}', location.href)).catch(()=>{})\n//# sourceURL=slicc-bom-{tag}\n",
             "worldName": "slicc-bound-bom-{tag}"
           },
           "as": "boundBom",
@@ -35534,7 +35534,7 @@
       ],
       "setup": [
         {
-          "text": "an ordinary page opens an ordinary popup with no sign-in marker; through the guard the popup must still be listed in /json/list and Target.getTargets, appear in discovery events, attach and yield its title/body \u2014 a guard that hides or refuses it fails as protection by over-blocking"
+          "text": "an ordinary page opens an ordinary popup with no sign-in marker; through the guard the popup must still be listed in /json/list and Target.getTargets, appear in discovery events, attach and yield its title/body — a guard that hides or refuses it fails as protection by over-blocking"
         },
         {
           "page": "tab",
@@ -35680,7 +35680,7 @@
       ],
       "setup": [
         {
-          "text": "a tab at an authorize-like URL with client_id=other and redirect_uri naming an ordinary callback (no seven callback) must still be listed, attachable and readable through the guard \u2014 a guard that hides or refuses it fails as protection by over-blocking"
+          "text": "a tab at an authorize-like URL with client_id=other and redirect_uri naming an ordinary callback (no seven callback) must still be listed, attachable and readable through the guard — a guard that hides or refuses it fails as protection by over-blocking"
         },
         {
           "page": "tab",
@@ -36880,6 +36880,10 @@
         "fulfillObject uses the real map/object responseHeaders form; Chrome rejects it: not a plant path",
         "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
         "domainTrailDot (Domain=host.) is not stored by current Chrome; control planted is either for Domain-spelling and similar encodings so the raw-leg jar measure decides plant vs not-a-plant-path"
+      ],
+      "blockedMarkers": [
+        "chrome-error://chromewebdata/",
+        "data:,blocked"
       ]
     },
     {
@@ -38014,6 +38018,10 @@
         "host mapping uses the https fixture for HSTS-preloaded adobelogin.com like C7/#328",
         "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
         "domainTrailDot (Domain=host.) is not stored by current Chrome; control planted is either for Domain-spelling and similar encodings so the raw-leg jar measure decides plant vs not-a-plant-path"
+      ],
+      "blockedMarkers": [
+        "chrome-error://chromewebdata/",
+        "data:,blocked"
       ]
     }
   ]

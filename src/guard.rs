@@ -100,6 +100,12 @@ pub struct Vector {
     pub targets: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    #[serde(
+        default,
+        rename = "blockedMarkers",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub blocked_markers: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observe: Option<BTreeMap<String, Observation>>,
     pub live: String,

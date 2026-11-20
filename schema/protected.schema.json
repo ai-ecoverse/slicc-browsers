@@ -26,12 +26,6 @@
         "redact": { "const": "origin" }
       }
     },
-    "blockedMarkers": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
-    },
     "unparseable": { "const": "protected" },
     "unparseableRefusal": {
       "const": "slicc: refused: slicc can't parse this URL, so it could be a protected page"

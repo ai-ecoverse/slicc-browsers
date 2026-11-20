@@ -241,6 +241,26 @@ test('m5 unknown href and no refusal => incomplete', async () => {
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
+test('trigger aborted by a superseding navigation, page on a non-marker URL => incomplete', async () => {
+  const out = await rows({
+    fake: {
+      supersedeAbort: true,
+      finalHref: 'https://ordinary.example.test/doc?n=home',
+    },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"triggerRefused":false/.test(n) &&
+        /"onMarker":false/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
 test('empty fixture log without control proof => incomplete', async () => {
   const fixture = await fixtureServer();
   try {

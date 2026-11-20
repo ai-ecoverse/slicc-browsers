@@ -152,6 +152,7 @@ export function cookiePlantFake(options = {}) {
   const blockedMarkers = (options.blockedMarkers ?? []).map(String).filter(Boolean);
   const defaultBlockedMarker = blockedMarkers[0] || 'chrome-error://chromewebdata/';
   const blockWithoutMarker = options.blockWithoutMarker === true;
+  const supersedeAbort = options.supersedeAbort === true;
   const deadPageSession = options.deadPageSession === true;
   const settleAssignOk = options.settleAssignOk === true;
   const finalHref = options.finalHref ? String(options.finalHref) : '';
@@ -559,6 +560,9 @@ export function cookiePlantFake(options = {}) {
         if (settleAssignOk) {
           if (entry.tab && finalHref) setTabUrl(owner, entry.sessionId, entry.tab, finalHref);
           entry.resolve?.('200 ok');
+        } else if (supersedeAbort) {
+          if (entry.tab && finalHref) setTabUrl(owner, entry.sessionId, entry.tab, finalHref);
+          entry.resolve?.('error:Aborted');
         } else {
           const marker = options.blockedMarker || defaultBlockedMarker;
           if (entry.topLevel && entry.tab && marker && !blockWithoutMarker) {

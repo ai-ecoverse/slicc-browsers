@@ -788,7 +788,7 @@ function triggerRefusal(outcome) {
   if (typeof outcome === 'object' && outcome.unresolved === true) return 'incomplete';
   const text = triggerText(outcome);
   if (text == null) return false;
-  return /slicc:\s*refused:|net::ERR_BLOCKED_BY_CLIENT|ERR_BLOCKED_BY_CLIENT|BlockedByClient|error:BlockedByClient|error:Aborted/i.test(
+  return /slicc:\s*refused:|net::ERR_BLOCKED_BY_CLIENT|ERR_BLOCKED_BY_CLIENT|BlockedByClient|error:BlockedByClient/i.test(
     text
   );
 }

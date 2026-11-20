@@ -277,6 +277,7 @@ export function applyCookiePlant(client, options = {}) {
   const hangClientAttach = options.hangClientAttach === true;
   const hangFetchEnable = options.hangFetchEnable === true;
   const refuseFetchEnable = options.refuseFetchEnable === true;
+  const sessionCutOnFetchEnable = options.sessionCutOnFetchEnable === true;
   const silentDropAllowed = options.silentDropAllowed === true;
   const refuseAfterProtectedTouch = options.refuseAfterProtectedTouch === true;
   const refuseAttachBeforeTrigger = options.refuseAttachBeforeTrigger === true;
@@ -326,6 +327,8 @@ export function applyCookiePlant(client, options = {}) {
         if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) throwGuardRefusal();
       }
       if (hangFetchEnable && method === 'Fetch.enable') return new Promise(() => {});
+      if (sessionCutOnFetchEnable && method === 'Fetch.enable')
+        throw new Error('slicc: refused: session cut on protected execution context');
       if (
         refuseFetchEnable &&
         method === 'Fetch.enable' &&

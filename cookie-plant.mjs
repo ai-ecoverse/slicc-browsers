@@ -1116,6 +1116,26 @@ function scoreProtectedPlant({
     });
     return { answered: true, refused: true, planted: false };
   }
+  if (
+    pauseCount === 0 &&
+    typeof fixtureHits === 'number' &&
+    fixtureHits >= 1 &&
+    planted === false
+  ) {
+    if (fetchEnableOk !== true) {
+      return incompletePlantedAttempt(notes, label, {
+        ...evidence,
+        incomplete: 'Fetch.enable unanswered for continue-itself',
+      });
+    }
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      answered: true,
+      refused: true,
+      note: 'continue-itself: guard continued the protected request',
+    });
+    return { answered: true, refused: true, planted: false };
+  }
   return incompletePlantedAttempt(notes, label, evidence);
 }
 
@@ -3334,10 +3354,28 @@ function credentialAttacks(ctx) {
   };
 }
 
-function sessionBlockedPlantResults(credential) {
+function sessionBlockedPlantResults(credential, notes = []) {
   const blocked = Object.fromEntries(
     ALL_PATH_NAMES.filter((name) => !['ordinary', 'adobe', 'deletion'].includes(name)).map(
-      (name) => [name, { answered: true, refused: true, planted: false }]
+      (name) => [
+        name,
+        scoreProtectedPlant({
+          pauseCount: 0,
+          fixtureHits: 0,
+          planted: 'incomplete',
+          pageHref: null,
+          notes,
+          label: name,
+          triggerOutcome: {
+            ok: false,
+            error: { message: 'slicc: refused: session cut on protected execution context' },
+          },
+          blockedMarkers: [],
+          triggerIssued: false,
+          fetchEnableOk: null,
+          plantSurfaceRefused: true,
+        }),
+      ]
     )
   );
   return finishCookiePlant({
@@ -3345,7 +3383,7 @@ function sessionBlockedPlantResults(credential) {
     credential,
     fetch: false,
     legacy: false,
-    evidenceIncomplete: false,
+    evidenceIncomplete: true,
     results: {
       ...Object.fromEntries(ALL_PATH_NAMES.map((name) => [name, EMPTY_ATTEMPT])),
       ...blocked,
@@ -3506,8 +3544,18 @@ async function openPlantClient({
   if (enabled.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
     if (sessionCut({ ok: false, error: { message: enabled.incomplete } }) && !control)
-      return { done: sessionBlockedPlantResults(credential) };
+      return { done: sessionBlockedPlantResults(credential, notes) };
     return { done: { live: true, incomplete: enabled.incomplete } };
+  }
+  if (
+    !control &&
+    enabled.fetchEnable &&
+    /session cut on protected execution context/i.test(
+      String(enabled.fetchEnable.error?.message ?? '')
+    )
+  ) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return { done: sessionBlockedPlantResults(credential, notes) };
   }
   return { readerSession, pageTarget, pageSession, enabled };
 }

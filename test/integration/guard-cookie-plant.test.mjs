@@ -614,7 +614,53 @@ test('fetch+request without legacyInterception skips legacy on both legs', async
   assert.equal(row.observations.control.legacyRawPlanted, 'not-supported');
 });
 
-test('m10 Fetch.enable unanswered => incomplete', async () => {
+test('m10 guard continues itself, zero pauses, unplanted => pass', async () => {
+  const out = await rows({
+    fake: { continueItself: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"fixtureHits":[1-9]/.test(n) &&
+        /"pauseCount":0/.test(n) &&
+        /continue-itself/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m11 continue-itself but trigger never issued (fixtureHits 0, no refusal, no marker) => incomplete', async () => {
+  const out = await rows({
+    fake: { continueItselfNoHit: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+});
+
+test('m12 guard continues itself but the client Set-Cookie is applied (planted) => fail', async () => {
+  const out = await rows({
+    fake: { continueItselfPlant: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('Fetch.enable unanswered => incomplete', async () => {
   const out = await rows({
     hangFetchEnable: true,
     oneTarget: true,
@@ -624,7 +670,27 @@ test('m10 Fetch.enable unanswered => incomplete', async () => {
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
-test('m11 Fetch.enable refused is refusal of the interception plant surface => pass', async () => {
+test('Fetch.enable unanswered + fixtureHits>=1 => incomplete', async () => {
+  const out = await rows({
+    hangFetchEnable: true,
+    fake: { continueItself: true },
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        (/Fetch\.enable unanswered for continue-itself/.test(n) || /"fixtureHits":[1-9]/.test(n))
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('Fetch.enable refused is refusal of the interception plant surface => pass', async () => {
   const out = await rows({
     refuseFetchEnable: true,
     oneTarget: true,
@@ -641,7 +707,7 @@ test('m11 Fetch.enable refused is refusal of the interception plant surface => p
   );
 });
 
-test('m12 raw leg timeout => door absent; guard that plants fails', async () => {
+test('raw leg timeout => door absent; guard that plants fails (owner-accepted residual)', async () => {
   const out = await rows({
     forcedRaw: { fulfillArray: 'timeout' },
     allowPlantPaths: ['fulfillArray'],
@@ -658,6 +724,17 @@ test('m12 raw leg timeout => door absent; guard that plants fails', async () => 
     ),
     JSON.stringify(row.notes)
   );
+});
+
+test('probe session-cut on Fetch.enable cannot become guarded=pass', async () => {
+  const out = await rows({
+    sessionCutOnFetchEnable: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
 for (const [forced, needle] of [
@@ -740,14 +817,15 @@ test('refusal-reply shape + unreadable jar stays incomplete, not unplanted pass'
 
 test('continue-itself shape + unreadable jar stays incomplete, not unplanted pass', async () => {
   const out = await rows({
-    forcedRaw: { fulfillArray: 'plant' },
-    fake: { rejectJarAfterDoorProof: true },
+    fake: { continueItself: true, rejectJarAfterDoorProof: true },
+    admitProtectedNavigation: true,
     oneTarget: true,
     onlyPaths: ['fulfillArray'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
   assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
 });
 
 test('raw leg plants => guarded must refuse; allow-through fails', async () => {

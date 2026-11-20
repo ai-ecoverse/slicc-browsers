@@ -159,6 +159,9 @@ export function cookiePlantFake(options = {}) {
   const deadPageSession = options.deadPageSession === true;
   const settleAssignOk = options.settleAssignOk === true;
   const finalHref = options.finalHref ? String(options.finalHref) : '';
+  const continueItself = options.continueItself === true;
+  const continueItselfNoHit = options.continueItselfNoHit === true;
+  const continueItselfPlant = options.continueItselfPlant === true;
   const guardedUrl = (url) => {
     const host = hostOf(url);
     if (!host || !protectedHosts.length) return false;
@@ -246,7 +249,40 @@ export function cookiePlantFake(options = {}) {
     return { fetchOn, legacyOn, any: fetchOn || legacyOn };
   };
 
+  const plantFromContinueItself = (url) => {
+    const plantTag = /[?&]n=plant-([^&]+)/.exec(url ?? '')?.[1];
+    const host = hostOf(url);
+    if (!plantTag || !host) return;
+    const id = String(plantTag)
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .slice(-20);
+    const entry = {
+      name: `cplant${id || 'x'}`,
+      value: `p-${plantTag}`,
+      domain: `.${host}`,
+      path: '/',
+    };
+    const existing = cookies.findIndex(
+      (cookie) =>
+        cookie.name === entry.name &&
+        cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
+    );
+    if (existing >= 0) cookies[existing] = entry;
+    else cookies.push(entry);
+  };
+
+  const continueItselfSettle = (conn, sessionId, tab, url) => {
+    if (!(continueItself || continueItselfNoHit || continueItselfPlant) || !guardedUrl(url))
+      return null;
+    if (connections[0] && conn !== connections[0]) return null;
+    if (continueItselfPlant) plantFromContinueItself(url);
+    if (!continueItselfNoHit) setTabUrl(conn, sessionId, tab, url);
+    return '200 ok';
+  };
+
   const emitPause = (conn, tab, sessionId, url, topLevel) => {
+    const continued = continueItselfSettle(conn, sessionId, tab, url);
+    if (continued != null) return Promise.resolve(continued);
     const requestId = `R${++next}`;
     const interceptionId = `I${++next}`;
     const { fetchOn, legacyOn } = sessionIntercepts(tab, sessionId);
@@ -511,9 +547,14 @@ export function cookiePlantFake(options = {}) {
       const guardOwns =
         [...(tab.fetchSessions ?? [])].some((id) => id !== sessionId) && guardedUrl(params.url);
       if (sessionIntercepts(tab, sessionId).any || guardOwns) {
+        const before = tab.url;
         const settled = await emitPause(conn, tab, sessionId, params.url, true);
         if (String(settled).startsWith('error:')) return { frameId: sessions.get(sessionId) };
-        setTabUrl(conn, sessionId, tab, params.url);
+        if (
+          tab.url === before &&
+          !(continueItselfNoHit && guardedUrl(params.url) && conn === connections[0])
+        )
+          setTabUrl(conn, sessionId, tab, params.url);
         return { frameId: sessions.get(sessionId) };
       }
       setTabUrl(conn, sessionId, tab, params.url);
@@ -537,10 +578,16 @@ export function cookiePlantFake(options = {}) {
         const guardOwns =
           [...(tab.fetchSessions ?? [])].some((id) => id !== sessionId) && guardedUrl(url);
         if (sessionIntercepts(tab, sessionId).any || guardOwns) {
+          const before = tab.url;
           const settled = await emitPause(conn, tab, sessionId, url, true);
           if (String(settled).startsWith('error:'))
             return { result: { type: 'string', value: settled } };
-          if (tab) setTabUrl(conn, sessionId, tab, url);
+          if (
+            tab &&
+            tab.url === before &&
+            !(continueItselfNoHit && guardedUrl(url) && conn === connections[0])
+          )
+            setTabUrl(conn, sessionId, tab, url);
           return { result: { type: 'undefined' } };
         }
         setTabUrl(conn, sessionId, tab, url);

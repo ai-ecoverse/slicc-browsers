@@ -2071,14 +2071,17 @@ function plantCtx(fields) {
   return { ...fields };
 }
 
-function timingOf(handle) {
+function timingOf(handle, pathStartedAt = null) {
   const t = handle?.timing ?? {};
   const elapsedMs =
     t.firstSent != null ? Math.max(0, (t.firstReply ?? Date.now()) - t.firstSent) : null;
+  const started = pathStartedAt ?? t.pathStartedAt ?? null;
   return {
     firstSentAt: t.firstSent ?? null,
     firstReplyAt: t.firstReply ?? null,
     elapsedMs,
+    pathStartedAt: started,
+    pathElapsedMs: started != null ? Math.max(0, Date.now() - started) : null,
   };
 }
 
@@ -2114,7 +2117,7 @@ async function withFreshAttemptTab(ctx, run) {
     return attemptRecord({ ok: false, error: { message: page.result.incomplete } }, 'incomplete');
   const readerSession = page.result.sessionId;
   const pageTarget = page.result.targetId;
-  const timing = {};
+  const timing = { pathStartedAt: Date.now() };
   const attached = await attachClientPage(client, pageTarget, internalSessions);
   if (attached.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
@@ -2378,12 +2381,17 @@ function doorAbsentOf(raw) {
   return raw.doorPresent === false;
 }
 
-function noteRawDoor(notes, label, raw, text) {
-  note(notes, `cookie-plant.raw.${label}`, { ...raw, note: text });
+function noteRawDoor(notes, label, raw, text, handle = null, pathStartedAt = null) {
+  note(notes, `cookie-plant.raw.${label}`, {
+    ...raw,
+    ...timingOf(handle, pathStartedAt),
+    note: text,
+  });
   return raw;
 }
 
 function forcedRawDoor(forced, notes, label) {
+  const pathStartedAt = Date.now();
   if (forced === 'timeout') {
     return noteRawDoor(
       notes,
@@ -2395,7 +2403,9 @@ function forcedRawDoor(forced, notes, label) {
         timedOut: true,
         doorPresent: false,
       },
-      'door not present on this browser'
+      'door not present on this browser',
+      null,
+      pathStartedAt
     );
   }
   if (forced === 'plant') {
@@ -2409,7 +2419,9 @@ function forcedRawDoor(forced, notes, label) {
         timedOut: false,
         doorPresent: true,
       },
-      'raw leg planted: plant path'
+      'raw leg planted: plant path',
+      null,
+      pathStartedAt
     );
   }
   const incompleteBy = {
@@ -2431,7 +2443,9 @@ function forcedRawDoor(forced, notes, label) {
       doorPresent: false,
       incomplete: incompleteBy[forced],
     },
-    'raw leg incomplete'
+    'raw leg incomplete',
+    null,
+    pathStartedAt
   );
 }
 
@@ -2457,6 +2471,8 @@ async function observeRawPlantSend({
   notes,
   label,
   triggerHolder,
+  handle,
+  pathStartedAt,
 }) {
   await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
   const enabled = await capped(
@@ -2480,7 +2496,9 @@ async function observeRawPlantSend({
       notes,
       label,
       incompleteRaw(String(enabled.error?.message ?? 'raw Fetch.enable failed')),
-      'raw leg incomplete'
+      'raw leg incomplete',
+      handle,
+      pathStartedAt
     );
   }
   triggerHolder.promise = triggerNavigate(reader, sessionId, plantUrl);
@@ -2492,7 +2510,14 @@ async function observeRawPlantSend({
     Math.min(budget, 2000)
   );
   if (!triggerHolder.paused) {
-    return noteRawDoor(notes, label, incompleteRaw('raw leg: no pause'), 'raw leg incomplete');
+    return noteRawDoor(
+      notes,
+      label,
+      incompleteRaw('raw leg: no pause'),
+      'raw leg incomplete',
+      handle,
+      pathStartedAt
+    );
   }
   const out = await capped(
     spec.build(triggerHolder.paused).send(reader, triggerHolder.paused),
@@ -2519,7 +2544,9 @@ async function observeRawPlantSend({
         doorPresent: false,
         incomplete: 'cookie jar unreadable',
       },
-      'raw leg incomplete'
+      'raw leg incomplete',
+      handle,
+      pathStartedAt
     );
   }
   const planted = plantedOf(jar) === true;
@@ -2536,7 +2563,9 @@ async function observeRawPlantSend({
     notes,
     label,
     { ...raw, via: jar?.via },
-    doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser'
+    doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser',
+    handle,
+    pathStartedAt
   );
   await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
   return raw;
@@ -2547,24 +2576,30 @@ async function measureRawDoor(ctx, spec) {
     ctx;
   const forced = forcedRawDoor(forcedRaw?.[spec.label], notes, spec.label);
   if (forced) return forced;
-  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  const pathStartedAt = Date.now();
+  const timing = { pathStartedAt };
+  const timedReader = timedClient(reader, timing);
+  const handle = { timing };
+  const page = await openPage(timedReader, homeUrl, notes, internalSessions);
   if (!page.ok || page.result?.incomplete) {
     return noteRawDoor(
       notes,
       spec.label,
       incompleteRaw(page.result?.incomplete ?? page.error?.message ?? 'raw open failed'),
-      'raw leg incomplete'
+      'raw leg incomplete',
+      handle,
+      pathStartedAt
     );
   }
   const sessionId = page.result.sessionId;
   const targetId = page.result.targetId;
   const cookie = { ...plantCookie, value: spec.value };
   const triggerHolder = { paused: null, promise: Promise.resolve() };
-  const from = reader.events.length;
+  const from = timedReader.events.length;
   try {
     return await withPathBudget(
       observeRawPlantSend({
-        reader,
+        reader: timedReader,
         sessionId,
         cookie,
         plantUrl,
@@ -2574,6 +2609,8 @@ async function measureRawDoor(ctx, spec) {
         notes,
         label: spec.label,
         triggerHolder,
+        handle,
+        pathStartedAt,
       }),
       pathCeiling(budget),
       `raw:${spec.label}`
@@ -2586,21 +2623,23 @@ async function measureRawDoor(ctx, spec) {
         ...incompleteRaw(String(error?.message ?? error)),
         timedOut: /timeout/i.test(String(error?.message ?? error)),
       },
-      'raw leg incomplete'
+      'raw leg incomplete',
+      handle,
+      pathStartedAt
     );
   } finally {
     try {
-      await releasePause(reader, triggerHolder.paused);
-      await drainPauses(reader, from);
+      await releasePause(timedReader, triggerHolder.paused);
+      await drainPauses(timedReader, from);
       await settleTrigger(triggerHolder.promise, Math.min(budget, 500));
       await capped(
-        disableInterception(reader, sessionId, { fetch: true, legacy: false }),
+        disableInterception(timedReader, sessionId, { fetch: true, legacy: false }),
         800,
         'raw-disable'
       );
-      await capped(outcome(reader.send('Target.closeTarget', { targetId })), 800, 'raw-close');
+      await capped(outcome(timedReader.send('Target.closeTarget', { targetId })), 800, 'raw-close');
     } catch {
-      await outcome(reader.send('Target.closeTarget', { targetId })).catch(() => {});
+      await outcome(timedReader.send('Target.closeTarget', { targetId })).catch(() => {});
     }
   }
 }

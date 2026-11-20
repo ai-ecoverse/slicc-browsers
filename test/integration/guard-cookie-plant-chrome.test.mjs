@@ -22,6 +22,7 @@ const credentialVectors = data.vectors
 const capabilities = {
   requestInterception: true,
   fetchInterception: true,
+  browserContexts: true,
 };
 const chromePlantPaths = [
   'fulfillArray',

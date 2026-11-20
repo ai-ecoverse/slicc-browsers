@@ -131,7 +131,17 @@ export function cookiePlantFake(options = {}) {
   const tabs = new Map();
   const sessions = new Map();
   const sessionConns = new Map();
-  const cookies = [];
+  const cookiesByContext = new Map([['B1', []]]);
+  const jarOf = (browserContextId) => {
+    const id = browserContextId || 'B1';
+    if (!cookiesByContext.has(id)) cookiesByContext.set(id, []);
+    return cookiesByContext.get(id);
+  };
+  const contextOfSession = (sessionId) => {
+    const tab = tabs.get(sessions.get(sessionId));
+    return tab?.browserContextId || 'B1';
+  };
+  const cookies = jarOf('B1');
   const connections = [];
   let next = 0;
   const paused = new Map();
@@ -161,6 +171,7 @@ export function cookiePlantFake(options = {}) {
   const injectOrphanLoadingFailed = options.injectOrphanLoadingFailed === true;
   const injectNeighbourBlocked = options.injectNeighbourBlocked === true;
   const nullGuardHref = options.nullGuardHref === true;
+  const storageJarIgnoresBrowserContext = options.storageJarIgnoresBrowserContext === true;
   const supersedeAbort = options.supersedeAbort === true;
   const deadPageSession = options.deadPageSession === true;
   const settleAssignOk = options.settleAssignOk === true;
@@ -241,6 +252,7 @@ export function cookiePlantFake(options = {}) {
   const plantFromHeaders = (tab, requestUrl, headers, topLevel) => {
     const requestHost = hostOf(requestUrl);
     if (!topLevel && !sameSite(tab?.url ?? '', requestUrl)) return;
+    const jar = jarOf(tab?.browserContextId);
     for (const line of cookieLines(headers)) {
       const parsed = parseSetCookie(line);
       if (!parsed.name || parsed.reject) continue;
@@ -248,13 +260,14 @@ export function cookiePlantFake(options = {}) {
       if (!domainAllowed(requestHost, domain)) continue;
       const normalized = domain.startsWith('.') ? domain : `.${domain.replace(/^\./, '')}`;
       const storeDomain = parsed.domain ? normalized : domain;
-      const existing = cookies.findIndex(
+      const existing = jar.findIndex(
         (cookie) =>
           cookie.name === parsed.name &&
-          cookie.domain.replace(/^\./, '') === storeDomain.replace(/^\./, '')
+          cookie.domain.replace(/^\./, '') === storeDomain.replace(/^\./, '') &&
+          (cookie.path ?? '/') === '/'
       );
       if (parsed.maxAge === 0) {
-        if (existing >= 0) cookies.splice(existing, 1);
+        if (existing >= 0) jar.splice(existing, 1);
         continue;
       }
       const entry = {
@@ -263,8 +276,8 @@ export function cookiePlantFake(options = {}) {
         domain: storeDomain,
         path: '/',
       };
-      if (existing >= 0) cookies[existing] = entry;
-      else cookies.push(entry);
+      if (existing >= 0) jar[existing] = entry;
+      else jar.push(entry);
     }
   };
 
@@ -274,26 +287,27 @@ export function cookiePlantFake(options = {}) {
     return { fetchOn, legacyOn, any: fetchOn || legacyOn };
   };
 
-  const plantFromContinueItself = (url) => {
+  const plantFromContinueItself = (url, tab = null) => {
     const plantTag = /[?&]n=plant-([^&]+)/.exec(url ?? '')?.[1];
     const host = hostOf(url);
     if (!plantTag || !host) return;
     const id = String(plantTag)
       .replace(/[^a-zA-Z0-9]/g, '')
       .slice(-20);
+    const jar = jarOf(tab?.browserContextId);
     const entry = {
       name: `cplant${id || 'x'}`,
       value: `p-${plantTag}`,
       domain: `.${host}`,
       path: '/',
     };
-    const existing = cookies.findIndex(
+    const existing = jar.findIndex(
       (cookie) =>
         cookie.name === entry.name &&
         cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
     );
-    if (existing >= 0) cookies[existing] = entry;
-    else cookies.push(entry);
+    if (existing >= 0) jar[existing] = entry;
+    else jar.push(entry);
   };
 
   const continueItselfSkipHit = () =>
@@ -314,7 +328,7 @@ export function cookiePlantFake(options = {}) {
       return null;
     if (connections[0] && conn !== connections[0]) return null;
     if (continueItselfPlant) {
-      plantFromContinueItself(url);
+      plantFromContinueItself(url, tab);
       options.onNavigate?.(url);
       const marker = options.blockedMarker || defaultBlockedMarker;
       if (marker) setTabUrl(conn, sessionId, tab, marker);
@@ -496,6 +510,7 @@ export function cookiePlantFake(options = {}) {
     if (method === 'Target.createBrowserContext') {
       const id = `C${++next}`;
       contexts.set(id, true);
+      jarOf(id);
       return { browserContextId: id };
     }
     if (method === 'Target.disposeBrowserContext') {
@@ -606,6 +621,7 @@ export function cookiePlantFake(options = {}) {
       return {};
     }
     if (method === 'Network.setCookie') {
+      const jar = jarOf(contextOfSession(sessionId));
       const domain = params.domain ?? (params.url ? hostOf(params.url) : '');
       const storeDomain = domain
         ? domain.startsWith('.')
@@ -618,21 +634,23 @@ export function cookiePlantFake(options = {}) {
         domain: storeDomain,
         path: params.path ?? '/',
       };
-      const existing = cookies.findIndex(
+      const existing = jar.findIndex(
         (cookie) =>
           cookie.name === entry.name &&
-          cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
+          cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '') &&
+          (cookie.path ?? '/') === entry.path
       );
-      if (existing >= 0) cookies[existing] = entry;
-      else cookies.push(entry);
+      if (existing >= 0) jar[existing] = entry;
+      else jar.push(entry);
       return { success: true };
     }
     if (method === 'Network.deleteCookies') {
       const tab = tabs.get(sessions.get(sessionId));
       recordPreTriggerPlantHit(tab);
+      const jar = jarOf(tab?.browserContextId || contextOfSession(sessionId));
       const host = params.url ? hostOf(params.url) : (params.domain ?? '').replace(/^\./, '');
-      for (let i = cookies.length - 1; i >= 0; i -= 1) {
-        const cookie = cookies[i];
+      for (let i = jar.length - 1; i >= 0; i -= 1) {
+        const cookie = jar[i];
         if (cookie.name !== params.name) continue;
         if (
           host &&
@@ -640,7 +658,7 @@ export function cookiePlantFake(options = {}) {
           !host.endsWith(`.${cookie.domain.replace(/^\./, '')}`)
         )
           continue;
-        cookies.splice(i, 1);
+        jar.splice(i, 1);
       }
       return {};
     }
@@ -649,8 +667,12 @@ export function cookiePlantFake(options = {}) {
       method === 'Network.getAllCookies' ||
       method === 'Network.getCookies'
     ) {
+      const jar =
+        method === 'Storage.getCookies'
+          ? jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId)
+          : jarOf(contextOfSession(sessionId));
       if (rejectJarAfterDoorProof && rejectJarReads) throw new Error('jar read rejected');
-      const hasCplant = cookies.some((cookie) => String(cookie.name).startsWith('cplant'));
+      const hasCplant = jar.some((cookie) => String(cookie.name).startsWith('cplant'));
       if (rejectCplantJarAfterFirst && hasCplant && sawCplantJar)
         throw new Error('jar read rejected');
       if (hasCplant) sawCplantJar = true;
@@ -661,7 +683,7 @@ export function cookiePlantFake(options = {}) {
       if (method === 'Network.getCookies') {
         const hosts = (params.urls ?? []).map(hostOf);
         return {
-          cookies: cookies.filter((cookie) =>
+          cookies: jar.filter((cookie) =>
             hosts.some(
               (host) =>
                 cookie.domain.replace(/^\./, '') === host ||
@@ -670,15 +692,18 @@ export function cookiePlantFake(options = {}) {
           ),
         };
       }
-      return { cookies: [...cookies] };
+      return { cookies: [...jar] };
     }
     if (method === 'Storage.setCookies') {
+      const jar = jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId);
       for (const incoming of params.cookies ?? []) {
         const domain = incoming.domain ?? (incoming.url ? hostOf(incoming.url) : '');
         const storeDomain = domain
           ? domain.startsWith('.')
             ? domain
-            : `.${domain.replace(/^\./, '')}`
+            : domain.includes('.')
+              ? domain
+              : `.${domain}`
           : hostOf(incoming.url);
         const entry = {
           name: incoming.name,
@@ -686,13 +711,14 @@ export function cookiePlantFake(options = {}) {
           domain: storeDomain,
           path: incoming.path ?? '/',
         };
-        const existing = cookies.findIndex(
+        const existing = jar.findIndex(
           (cookie) =>
             cookie.name === entry.name &&
-            cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
+            cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '') &&
+            (cookie.path ?? '/') === entry.path
         );
-        if (existing >= 0) cookies[existing] = entry;
-        else cookies.push(entry);
+        if (existing >= 0) jar[existing] = entry;
+        else jar.push(entry);
       }
       return {};
     }
@@ -919,7 +945,8 @@ export function cookiePlantFake(options = {}) {
     connect,
     client: connect(),
     unguarded: connect(),
-    cookies,
+    cookies: jarOf('B1'),
+    jarOf,
     openPageTargets: () => [...tabs.keys()],
     pageTargetCount: () => tabs.size,
   };

@@ -520,6 +520,52 @@ test('leaking a tab on session-cut fails the isolation check', async () => {
   );
 });
 
+test('deletionCleared with browserContexts seeds and clears in the tab context (regression)', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    oneTarget: true,
+    onlyPaths: ['ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.control.deletionCleared, true, JSON.stringify(row));
+  assert.equal(row.observations.guarded.deletionCleared, true, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.deletion\.cleared:/.test(n) &&
+        /"cleared":true/.test(n) &&
+        /"browserContextId":"C/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('storage jar that ignores browserContextId fails deletionCleared under a correct guard (pre-fix repro)', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { storageJarIgnoresBrowserContext: true },
+    oneTarget: true,
+    onlyPaths: ['ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.control.deletionCleared, false, JSON.stringify(row));
+});
+
+test('deletionCleared is incomplete when the after jar is unreadable', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { rejectJarAfterDoorProof: true },
+    oneTarget: true,
+    onlyPaths: ['deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.deletionCleared, 'incomplete', JSON.stringify(row));
+});
+
 test('C10.cookie-plant declares timeoutMs finite and at least the runner global', () => {
   const global = 180000;
   for (const vector of vectors) {

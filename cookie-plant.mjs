@@ -450,11 +450,16 @@ async function continueItselfEvidence({
   cookie,
   reader,
   readerSession,
+  browserContextId = null,
 }) {
   if (!fixtureLog || !url || !cookie || !reader || !readerSession) return null;
   const hits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
   if (typeof hits !== 'number' || hits < 1) return null;
-  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const jar = await capped(
+    readJar(reader, readerSession, cookie, browserContextId),
+    1500,
+    'readJar'
+  );
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -542,6 +547,7 @@ async function waitPauseOrBlocked({
       cookie,
       reader,
       readerSession: handle?.readerSession,
+      browserContextId: handle?.browserContextId,
     });
     if (bios) {
       fixtureHits = bios.fixtureHits;
@@ -598,7 +604,11 @@ async function evidenceAfterTrigger({
     };
   }
   const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
-  const jar = await capped(readJar(handle.reader, handle.readerSession, cookie), 1500, 'readJar');
+  const jar = await capped(
+    readJar(handle.reader, handle.readerSession, cookie, handle.browserContextId ?? null),
+    1500,
+    'readJar'
+  );
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -613,7 +623,11 @@ async function evidenceAfterTrigger({
   return { page, fixtureHits, planted, afterTriggerAt };
 }
 
-async function clearCookie(reader, sessionId, { name, url, domain }) {
+function storageContextParams(browserContextId) {
+  return browserContextId ? { browserContextId } : {};
+}
+
+async function clearCookie(reader, sessionId, { name, url, domain }, browserContextId = null) {
   await outcome(
     reader.send(
       'Network.deleteCookies',
@@ -626,7 +640,7 @@ async function clearCookie(reader, sessionId, { name, url, domain }) {
     )
   );
   await outcome(
-    reader.send('Storage.getCookies', {}).then(async (all) => {
+    reader.send('Storage.getCookies', storageContextParams(browserContextId)).then(async (all) => {
       const cookies = (all?.cookies ?? []).filter(
         (cookie) =>
           cookie.name === name &&
@@ -636,14 +650,16 @@ async function clearCookie(reader, sessionId, { name, url, domain }) {
       );
       if (!cookies.length) return;
       await reader.send('Storage.setCookies', {
+        ...storageContextParams(browserContextId),
         cookies: (all.cookies ?? []).filter((cookie) => !cookies.includes(cookie)),
       });
     })
   );
 }
 
-async function readJar(reader, sessionId, { name, domain, value }) {
+async function readJar(reader, sessionId, { name, domain, value, path }, browserContextId = null) {
   const wantDomain = domain.replace(/^\./, '').toLowerCase();
+  const wantPath = path ?? '/';
   const match = (cookie) => {
     if (cookie.name !== name) return false;
     const got = String(cookie.domain ?? '')
@@ -651,11 +667,14 @@ async function readJar(reader, sessionId, { name, domain, value }) {
       .toLowerCase();
     if (got !== wantDomain && !wantDomain.endsWith(`.${got}`) && !got.endsWith(`.${wantDomain}`))
       return false;
+    if ((cookie.path ?? '/') !== wantPath) return false;
     if (value !== undefined && cookie.value !== value) return false;
     return true;
   };
   let measured = false;
-  const storage = await outcome(reader.send('Storage.getCookies', {}));
+  const storage = await outcome(
+    reader.send('Storage.getCookies', storageContextParams(browserContextId))
+  );
   if (storage.ok && Array.isArray(storage.result?.cookies)) {
     measured = true;
     const hit = storage.result.cookies.find(match);
@@ -1047,7 +1066,11 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
 }
 
 async function finishPlant({ reader, readerSession, out, cookie, notes, label, handle }) {
-  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const jar = await capped(
+    readJar(reader, readerSession, cookie, handle?.browserContextId ?? null),
+    1500,
+    'readJar'
+  );
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -1440,7 +1463,11 @@ async function runPlantBody({
   state,
 }) {
   const { client, reader, readerSession, transport } = handle;
-  await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+  await capped(
+    clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
+    800,
+    'clearCookie'
+  );
   const ensure = await ensureInterceptionLive(handle);
   const pageSession = handle.pageSession;
   if (sessionCut(ensure)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
@@ -1581,7 +1608,11 @@ async function scoreDoorAbsentPause({
   proofTag,
   startedAt,
 }) {
-  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const jar = await capped(
+    readJar(reader, readerSession, cookie, handle.browserContextId ?? null),
+    1500,
+    'readJar'
+  );
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -1635,7 +1666,11 @@ async function scorePausedGuardedPlant(args) {
   const plantCap = doorAbsent ? Math.min(budget, 1500) : 1500;
   const out = await capped(build(state.paused).send(client, state.paused), plantCap, 'plant-send');
   if (sessionCut(out)) {
-    const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+    const jar = await capped(
+      readJar(reader, readerSession, cookie, handle.browserContextId ?? null),
+      1500,
+      'readJar'
+    );
     const planted = plantedOf(
       jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
     );
@@ -1683,7 +1718,11 @@ async function scorePausedGuardedPlant(args) {
       proofTag,
       startedAt,
     });
-  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const jar = await capped(
+    readJar(reader, readerSession, cookie, handle.browserContextId ?? null),
+    1500,
+    'readJar'
+  );
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -1844,8 +1883,16 @@ async function runGuardedProtectedPlantBody({
   const fetchEnableOk = fetchEnableOkOf(handle);
   if (refused(handle.fetchEnable)) {
     handle.evidenceIncomplete = false;
-    await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
-    const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+    await capped(
+      clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
+      800,
+      'clearCookie'
+    );
+    const jar = await capped(
+      readJar(reader, readerSession, cookie, handle.browserContextId ?? null),
+      1500,
+      'readJar'
+    );
     return scoreProtectedPlant({
       pauseCount: 0,
       fixtureHits: await fixtureHitsFor(fixtureLog, url, Number.POSITIVE_INFINITY, tag, proofTag),
@@ -1881,7 +1928,11 @@ async function runGuardedProtectedPlantBody({
       rawDoor,
     });
   }
-  await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+  await capped(
+    clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
+    800,
+    'clearCookie'
+  );
   const methods =
     transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
   state.triggerIssued = true;
@@ -2020,7 +2071,7 @@ async function runPlant({
       const since = handle.triggerSentAt ?? Number.POSITIVE_INFINITY;
       const fixtureHits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
       const jar = await capped(
-        readJar(handle.reader, handle.readerSession, cookie),
+        readJar(handle.reader, handle.readerSession, cookie, handle.browserContextId ?? null),
         1500,
         'readJar'
       );
@@ -2408,6 +2459,7 @@ async function withFreshAttemptTab(ctx, run) {
     readerSession,
     pageTarget,
     homeUrl,
+    browserContextId: browserContextId ?? null,
     transport: enabled.transport,
     fetchEnable: enabled.fetchEnable ?? null,
     internalSessions,
@@ -3195,29 +3247,46 @@ async function allowedHeaderAttempt({
   }
 }
 
-async function seedCookie(reader, sessionId, cookie) {
-  await clearCookie(reader, sessionId, cookie);
-  const all = await outcome(reader.send('Storage.getCookies', {}));
+function seedProof(jar, cookie) {
+  if (plantedOf(jar) !== true || !jar?.cookie) return false;
+  const got = jar.cookie;
+  if (got.name !== cookie.name) return false;
+  if (got.domain.replace(/^\./, '') !== String(cookie.domain ?? '').replace(/^\./, ''))
+    return false;
+  if ((got.path ?? '/') !== (cookie.path ?? '/')) return false;
+  if (cookie.value !== undefined && got.value !== cookie.value) return false;
+  return true;
+}
+
+async function seedCookie(reader, sessionId, cookie, browserContextId = null) {
+  const path = cookie.path ?? '/';
+  await clearCookie(reader, sessionId, { ...cookie, path }, browserContextId);
+  const all = await outcome(
+    reader.send('Storage.getCookies', storageContextParams(browserContextId))
+  );
   const rest = (all.result?.cookies ?? []).filter(
     (entry) =>
       !(
         entry.name === cookie.name &&
-        entry.domain.replace(/^\./, '') === cookie.domain.replace(/^\./, '')
+        entry.domain.replace(/^\./, '') === cookie.domain.replace(/^\./, '') &&
+        (entry.path ?? '/') === path
       )
   );
+  const seeded = cookie.url
+    ? { name: cookie.name, value: cookie.value, url: cookie.url, path }
+    : { name: cookie.name, value: cookie.value, domain: cookie.domain, path };
   await outcome(
     reader.send('Storage.setCookies', {
-      cookies: [
-        ...rest,
-        { name: cookie.name, value: cookie.value, domain: cookie.domain, path: '/' },
-      ],
+      ...storageContextParams(browserContextId),
+      cookies: [...rest, seeded],
     })
   );
-  return readJar(reader, sessionId, {
-    name: cookie.name,
-    domain: cookie.domain,
-    value: cookie.value,
-  });
+  return readJar(
+    reader,
+    sessionId,
+    { name: cookie.name, domain: cookie.domain, value: cookie.value, path },
+    browserContextId
+  );
 }
 
 function controlAttacks(ctx) {
@@ -3298,16 +3367,18 @@ function controlAttacks(ctx) {
     deletion: () =>
       withFreshAttemptTab(ctx, async (handle) => {
         const fetchReady = Boolean(handle.transport?.fetch);
+        const browserContextId = handle.browserContextId ?? null;
         const deleteOnOrdinary = {
           name: ctx.names.delete,
           value: `seed-${ctx.tag}`,
           domain: hostOf(ctx.ordinary),
+          path: '/',
           url: `${ctx.ordinary}/`,
         };
-        const seeded = await seedCookie(handle.reader, handle.readerSession, deleteOnOrdinary);
-        if (plantedOf(seeded) !== true) {
+        const incompleteDeletion = (reason) => {
           note(ctx.notes, 'cookie-plant.deletion', {
-            incomplete: 'seed failed',
+            incomplete: reason,
+            browserContextId,
             ...timingOf(handle),
           });
           return {
@@ -3316,7 +3387,17 @@ function controlAttacks(ctx) {
             planted: 'incomplete',
             cleared: 'incomplete',
           };
-        }
+        };
+        const seeded = await seedCookie(
+          handle.reader,
+          handle.readerSession,
+          deleteOnOrdinary,
+          browserContextId
+        );
+        if (!seedProof(seeded, deleteOnOrdinary))
+          return incompleteDeletion(
+            seeded?.incomplete ? 'seed jar unreadable' : 'seed missing exact name+domain+path'
+          );
         const attempt = await allowedHeaderAttempt({
           ...diag(handle),
           url: ordinaryUrl,
@@ -3326,14 +3407,41 @@ function controlAttacks(ctx) {
           fetchReady,
           topLevel: false,
         });
-        const after = await readJar(handle.reader, handle.readerSession, {
-          name: ctx.names.delete,
-          domain: deleteOnOrdinary.domain,
-        });
-        const cleared = plantedOf(after) === false;
+        if (attempt.answered === 'incomplete' || attempt.planted === 'incomplete') {
+          note(ctx.notes, 'cookie-plant.deletion.cleared', {
+            cleared: 'incomplete',
+            incomplete: 'delete attempt incomplete',
+            browserContextId,
+            ...timingOf(handle),
+          });
+          return { ...attempt, cleared: 'incomplete' };
+        }
+        const after = await readJar(
+          handle.reader,
+          handle.readerSession,
+          {
+            name: ctx.names.delete,
+            domain: deleteOnOrdinary.domain,
+            path: deleteOnOrdinary.path,
+          },
+          browserContextId
+        );
+        const afterPlanted = plantedOf(after);
+        if (afterPlanted === 'incomplete') {
+          note(ctx.notes, 'cookie-plant.deletion.cleared', {
+            cleared: 'incomplete',
+            incomplete: 'after jar unreadable',
+            browserContextId,
+            ...timingOf(handle),
+          });
+          return { ...attempt, cleared: 'incomplete' };
+        }
+        const cleared = afterPlanted === false;
         note(ctx.notes, 'cookie-plant.deletion.cleared', {
           cleared,
           via: after?.via,
+          browserContextId,
+          seedVia: seeded?.via,
           ...timingOf(handle),
         });
         return { ...attempt, cleared };

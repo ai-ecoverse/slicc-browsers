@@ -149,6 +149,12 @@ export function cookiePlantFake(options = {}) {
   const cutBlocksReattach = options.cutBlocksReattach === true;
   const cutTargets = new Set();
   const protectedHosts = (options.protectedHosts ?? []).map((h) => String(h).toLowerCase());
+  const blockedMarkers = (options.blockedMarkers ?? []).map(String).filter(Boolean);
+  const defaultBlockedMarker = blockedMarkers[0] || 'chrome-error://chromewebdata/';
+  const blockWithoutMarker = options.blockWithoutMarker === true;
+  const deadPageSession = options.deadPageSession === true;
+  const settleAssignOk = options.settleAssignOk === true;
+  const finalHref = options.finalHref ? String(options.finalHref) : '';
   const guardedUrl = (url) => {
     const host = hostOf(url);
     if (!host || !protectedHosts.length) return false;
@@ -197,6 +203,7 @@ export function cookiePlantFake(options = {}) {
     tab.url = url;
     tab.title = url;
     emitContext(conn, sessionId, url);
+    if (/^https?:/i.test(url)) options.onNavigate?.(url);
   };
 
   const plantFromHeaders = (tab, requestUrl, headers, topLevel) => {
@@ -507,16 +514,24 @@ export function cookiePlantFake(options = {}) {
       const expression = params.expression ?? '';
       if (expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
+      if (expression === 'location.href') {
+        const tab = tabs.get(sessions.get(sessionId));
+        return { result: { type: 'string', value: tab?.url ?? '' } };
+      }
       const assign = /location\.assign\(("([^"]+)"|'([^']+)')\)/.exec(expression);
       if (assign) {
         const url = assign[2] ?? assign[3];
         const tab = tabs.get(sessions.get(sessionId));
         if (!url || !tab) return { result: { type: 'string', value: 'error' } };
+        if (deadPageSession && guardedUrl(url) && conn === connections[0])
+          return new Promise(() => {});
         const guardOwns =
           [...(tab.fetchSessions ?? [])].some((id) => id !== sessionId) && guardedUrl(url);
         if (sessionIntercepts(tab, sessionId).any || guardOwns) {
           const settled = await emitPause(conn, tab, sessionId, url, true);
-          if (!String(settled).startsWith('error:') && tab) setTabUrl(conn, sessionId, tab, url);
+          if (String(settled).startsWith('error:'))
+            return { result: { type: 'string', value: settled } };
+          if (tab) setTabUrl(conn, sessionId, tab, url);
           return { result: { type: 'undefined' } };
         }
         setTabUrl(conn, sessionId, tab, url);
@@ -527,6 +542,8 @@ export function cookiePlantFake(options = {}) {
         const url = match?.[2] ?? match?.[3];
         const tab = tabs.get(sessions.get(sessionId));
         if (!url || !tab) return { result: { type: 'string', value: 'error' } };
+        if (deadPageSession && guardedUrl(url) && conn === connections[0])
+          return new Promise(() => {});
         if (sessionIntercepts(tab, sessionId).any) {
           const settled = await emitPause(conn, tab, sessionId, url, false);
           return { result: { type: 'string', value: settled } };
@@ -538,7 +555,19 @@ export function cookiePlantFake(options = {}) {
     if (method === 'Fetch.failRequest') {
       const entry = paused.get(params.requestId);
       if (entry) {
-        entry.resolve?.('error:Aborted');
+        const owner = sessionConns.get(entry.sessionId) ?? conn;
+        if (settleAssignOk) {
+          if (entry.tab && finalHref) setTabUrl(owner, entry.sessionId, entry.tab, finalHref);
+          entry.resolve?.('200 ok');
+        } else {
+          const marker = options.blockedMarker || defaultBlockedMarker;
+          if (entry.topLevel && entry.tab && marker && !blockWithoutMarker) {
+            setTabUrl(owner, entry.sessionId, entry.tab, marker);
+          }
+          entry.resolve?.(
+            `error:${params.errorReason === 'BlockedByClient' ? 'BlockedByClient' : (params.errorReason ?? 'Aborted')}`
+          );
+        }
         paused.delete(params.requestId);
       }
       return {};

@@ -204,6 +204,8 @@ pub struct ExtensionFrameRule {
 pub struct ProtectedOrigins {
     #[serde(default)]
     pub error_page: ErrorPageRule,
+    #[serde(default)]
+    pub blocked_markers: Vec<String>,
     pub domains: Vec<String>,
     pub hosts: Vec<String>,
     pub schemes: Vec<String>,

@@ -53,6 +53,8 @@ async function rows(options = {}, subset = protectedVectors) {
     const { capabilities: extraCaps, fake: fakeOptions, ...guardOptions } = options;
     const browser = cookiePlantFake({
       protectedHosts: plantHosts,
+      blockedMarkers: catalog.protectedOrigins?.blockedMarkers ?? [],
+      onNavigate: (url) => fixture.record?.(url),
       ...(fakeOptions ?? {}),
     });
     const origin = (host) => `http://${host}:${fixture.port}`;
@@ -183,6 +185,96 @@ test('a correct cookiePlant guard passes the row', async () => {
     assert.equal(row.control, 'pass', `${target} control ${JSON.stringify(row)}`);
     assert.equal(row.guarded, 'pass', `${target} guarded ${JSON.stringify(row)}`);
     assert.equal(row.live, 'pass', `${target} live ${JSON.stringify(row)}`);
+  }
+});
+
+test('m1 guarded trigger never fires (dead session) => incomplete, not pass', async () => {
+  const out = await rows({ fake: { deadPageSession: true } });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+});
+
+test('m2 guard blocks and the page ends on data:,blocked (bios shape) => pass', async () => {
+  const out = await rows({ fake: { blockedMarker: 'data:,blocked' } });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /"pageHref":"data:,blocked"/.test(n)),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m3 guard blocks and the page ends on chrome-error (slicc shape) => pass', async () => {
+  const out = await rows({ fake: { blockedMarker: 'chrome-error://chromewebdata/' } });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /"pageHref":"chrome-error:\/\/chromewebdata\/"/.test(n)),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m4 trigger refused by reply but the page left on the home URL => pass', async () => {
+  const out = await rows({ fake: { blockWithoutMarker: true } });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) =>
+        /cookie-plant\.fulfillArray:/.test(n) &&
+        /"triggerRefused":true/.test(n) &&
+        /"onMarker":false/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m5 unknown href and no refusal => incomplete', async () => {
+  const out = await rows({
+    fake: {
+      blockWithoutMarker: true,
+      settleAssignOk: true,
+      finalHref: 'https://unknown.example.test/done',
+    },
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+});
+
+test('empty fixture log without control proof => incomplete', async () => {
+  const fixture = await fixtureServer();
+  try {
+    const browser = cookiePlantFake({
+      protectedHosts: plantHosts,
+      blockedMarkers: catalog.protectedOrigins?.blockedMarkers ?? [],
+      blockedMarker: 'data:,blocked',
+    });
+    const origin = (host) => `http://${host}:${fixture.port}`;
+    const guard = emulatedGuard(browser, {
+      protectedOrigins: catalog.protectedOrigins,
+      extraOrigins: [origin('seven.sliccy.ai'), origin('vault.sliccy.ai')],
+      cookiePlant: true,
+    });
+    try {
+      const out = await run(
+        { ...set, vectors: protectedVectors, variants: { prompt: 0 } },
+        {
+          client: guard.client,
+          unguarded: browser.unguarded,
+          fixture: { ...fixture, log: () => [] },
+          settleScale: 0.1,
+          capabilities: caps,
+          targets: targetsOf(fixture, origin),
+          catalog,
+        }
+      );
+      const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+      assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+    } finally {
+      await guard.stop?.();
+    }
+  } finally {
+    await fixture.close();
   }
 });
 

@@ -41,7 +41,7 @@ async function tlsFixture() {
   return { fixture: await fixtureServer({ tls }), spki };
 }
 
-test('C5-correct emulator passes C5.document, C5.fulfill and C10.cookie-plant in real Chrome', {
+test('C5-correct emulator without cookiePlant layer passes C5.document, C5.fulfill and C10.cookie-plant in real Chrome', {
   timeout: 300000,
 }, async () => {
   const { fixture, spki } = await tlsFixture();
@@ -50,7 +50,6 @@ test('C5-correct emulator passes C5.document, C5.fulfill and C10.cookie-plant in
   const guard = emulatedGuard(browser, {
     protectedOrigins: catalog.protectedOrigins,
     extraOrigins: [targets.seven, targets.vault],
-    cookiePlant: true,
   });
   try {
     const c5 = await run(

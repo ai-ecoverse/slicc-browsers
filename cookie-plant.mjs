@@ -763,27 +763,71 @@ async function finishPlant({ reader, readerSession, out, cookie, notes, label })
   return attemptRecord(out, planted);
 }
 
-function scoreProtectedPlant({ pauseCount, fixtureHits, planted, pageHref, notes, label }) {
+function blockedMarkerHit(href, markers) {
+  if (typeof href !== 'string' || !href) return false;
+  const list = Array.isArray(markers) ? markers : [];
+  return list.some((marker) => {
+    const m = String(marker ?? '');
+    return m && (href === m || href.startsWith(m));
+  });
+}
+
+function triggerText(outcome) {
+  if (!outcome || typeof outcome !== 'object') return null;
+  if (outcome.unresolved === true) return null;
+  const value = outcome.result?.result?.value ?? outcome.result?.value;
+  if (typeof value === 'string' && value) return value;
+  if (outcome.ok === false && outcome.error)
+    return String(outcome.error?.message ?? outcome.error ?? '');
+  return null;
+}
+
+function triggerRefusal(outcome) {
+  if (outcome == null) return 'incomplete';
+  if (outcome === 'incomplete') return 'incomplete';
+  if (typeof outcome === 'object' && outcome.unresolved === true) return 'incomplete';
+  const text = triggerText(outcome);
+  if (text == null) return false;
+  return /slicc:\s*refused:|net::ERR_BLOCKED_BY_CLIENT|ERR_BLOCKED_BY_CLIENT|BlockedByClient|error:BlockedByClient|error:Aborted/i.test(
+    text
+  );
+}
+
+function scoreProtectedPlant({
+  pauseCount,
+  fixtureHits,
+  planted,
+  pageHref,
+  notes,
+  label,
+  triggerOutcome,
+  blockedMarkers,
+}) {
   const href = pageHref == null ? null : String(pageHref);
-  const errorPage =
-    typeof href === 'string' &&
-    (/^chrome-error:/i.test(href) ||
-      /chromewebdata/i.test(href) ||
-      /data:text\/html.*blocked/i.test(href));
+  const onMarker = blockedMarkerHit(href, blockedMarkers);
+  const refusal = triggerRefusal(triggerOutcome);
+  const issuedAndBlocked =
+    refusal === 'incomplete' ? 'incomplete' : Boolean(onMarker === true || refusal === true);
   const loadBlocked =
-    fixtureHits === 'incomplete' ? 'incomplete' : fixtureHits === 0 || errorPage === true;
+    fixtureHits === 'incomplete' || issuedAndBlocked === 'incomplete'
+      ? 'incomplete'
+      : issuedAndBlocked === true && fixtureHits === 0;
   const evidence = {
     pauseCount,
     fixtureHits,
     planted,
     pageHref: href,
+    onMarker,
+    triggerRefused: refusal,
+    issuedAndBlocked,
     loadBlocked,
   };
   if (
     planted === 'incomplete' ||
     pauseCount === 'incomplete' ||
     fixtureHits === 'incomplete' ||
-    loadBlocked === 'incomplete'
+    loadBlocked === 'incomplete' ||
+    issuedAndBlocked === 'incomplete'
   ) {
     note(notes, `cookie-plant.${label}`, {
       ...evidence,
@@ -822,7 +866,7 @@ function scoreProtectedPlant({ pauseCount, fixtureHits, planted, pageHref, notes
   };
 }
 
-async function fixtureHitsFor(fixtureLog, url, since, tag) {
+async function fixtureHitsFor(fixtureLog, url, since, tag, proofTag) {
   if (typeof fixtureLog !== 'function') return 'incomplete';
   let entries;
   try {
@@ -831,9 +875,15 @@ async function fixtureHitsFor(fixtureLog, url, since, tag) {
     return 'incomplete';
   }
   if (!Array.isArray(entries)) return 'incomplete';
+  if (entries.length === 0) return 'incomplete';
+  const proof = proofTag ? String(proofTag) : '';
+  if (proof) {
+    const seen = entries.some((entry) => String(entry?.url ?? '').includes(proof));
+    if (!seen) return 'incomplete';
+  }
+  const afterSince = entries.filter((entry) => Number(entry?.time ?? 0) >= since);
   const needle = tag ? String(tag) : '';
-  const matched = entries.filter((entry) => {
-    if (Number(entry?.time ?? 0) < since) return false;
+  const matched = afterSince.filter((entry) => {
     const hit = String(entry?.url ?? '');
     if (!(hit === url || hit.startsWith(url) || (url && hit.startsWith(String(url).split('?')[0]))))
       return false;
@@ -998,8 +1048,23 @@ async function runGuardedProtectedPlantBody({
   pauseMs,
   startedAt,
   state,
+  blockedMarkers,
+  proofTag,
 }) {
   const { client, reader, readerSession, transport } = handle;
+  if (!handle.pageSession) {
+    handle.evidenceIncomplete = true;
+    return scoreProtectedPlant({
+      pauseCount: 'incomplete',
+      fixtureHits: 'incomplete',
+      planted: 'incomplete',
+      pageHref: null,
+      notes,
+      label,
+      triggerOutcome: { unresolved: true },
+      blockedMarkers,
+    });
+  }
   await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
   const methods =
     transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
@@ -1019,16 +1084,21 @@ async function runGuardedProtectedPlantBody({
       label,
     });
     if (plantedAttempt.planted === true) return plantedAttempt;
+    const settled = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
     const page = await pageSnapshot(client, handle.pageSession);
-    const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
-    return scoreProtectedPlant({
+    const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
+    const scored = scoreProtectedPlant({
       pauseCount: pauseEvents(client.events, from, url, methods).length,
       fixtureHits,
       planted: plantedAttempt.planted,
       pageHref: page.href,
       notes,
       label,
+      triggerOutcome: settled,
+      blockedMarkers,
     });
+    if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
+    return scored;
   }
   const settled = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
   const hung =
@@ -1037,20 +1107,24 @@ async function runGuardedProtectedPlantBody({
     /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
   if (hung) handle.evidenceIncomplete = true;
   const page = await pageSnapshot(client, handle.pageSession);
-  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
+  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
   const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
   if (planted === 'incomplete') handle.evidenceIncomplete = true;
-  return scoreProtectedPlant({
+  const scored = scoreProtectedPlant({
     pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
     fixtureHits: hung ? 'incomplete' : fixtureHits,
     planted: hung ? 'incomplete' : planted,
     pageHref: page.href,
     notes,
     label,
+    triggerOutcome: hung ? { unresolved: true } : settled,
+    blockedMarkers,
   });
+  if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
+  return scored;
 }
 
 async function runPlant({
@@ -1068,6 +1142,8 @@ async function runPlant({
   firstIncomplete,
   protectedBlock = false,
   tag,
+  blockedMarkers,
+  proofTag,
 }) {
   const { client, transport } = handle;
   const state = { paused: null, triggerPromise: Promise.resolve() };
@@ -1093,6 +1169,8 @@ async function runPlant({
             pauseMs,
             startedAt,
             state,
+            blockedMarkers,
+            proofTag,
           })
         : runPlantBody({
             handle,
@@ -1126,7 +1204,7 @@ async function runPlant({
       });
     if (protectedBlock) {
       const page = await pageSnapshot(client, handle.pageSession);
-      const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag);
+      const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
       const jar = await capped(
         readJar(handle.reader, handle.readerSession, cookie),
         1500,
@@ -1135,14 +1213,18 @@ async function runPlant({
       const planted = plantedOf(
         jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
       );
-      return scoreProtectedPlant({
+      const scored = scoreProtectedPlant({
         pauseCount: 'incomplete',
         fixtureHits,
         planted,
         pageHref: page.href,
         notes,
         label,
+        triggerOutcome: { unresolved: true },
+        blockedMarkers,
       });
+      if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
+      return scored;
     }
     await diagnoseIncomplete({
       notes,
@@ -1655,6 +1737,8 @@ function fetchAttacks(ctx) {
     firstIncomplete: ctx.firstIncomplete,
     protectedBlock: Boolean(ctx.guardedProtected),
     tag: ctx.tag,
+    blockedMarkers: ctx.blockedMarkers,
+    proofTag: ctx.proofTag,
   };
   const header = (value, domain = ctx.domain, domainAttr = null) =>
     cookieHeader(ctx.names.plant, value, domain, '', domainAttr);
@@ -1715,6 +1799,8 @@ function legacyAttacks(ctx, legacyReady) {
     firstIncomplete: ctx.firstIncomplete,
     protectedBlock: Boolean(ctx.guardedProtected),
     tag: ctx.tag,
+    blockedMarkers: ctx.blockedMarkers,
+    proofTag: ctx.proofTag,
   };
   return {
     legacyHeaders: () =>
@@ -2308,6 +2394,7 @@ export async function cookiePlant({
   mode = 'set-cookie',
   credentialOrigin,
   fixtureLog,
+  blockedMarkers,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -2420,6 +2507,8 @@ export async function cookiePlant({
     legStartedAt: Date.now(),
     firstIncomplete: { noted: false },
     guardedProtected: !control && !credential,
+    blockedMarkers: Array.isArray(blockedMarkers) ? blockedMarkers : [],
+    proofTag: `cookie-plant-${tag}`,
   });
 
   const results = await runAttempts(

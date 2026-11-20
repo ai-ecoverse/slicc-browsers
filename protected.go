@@ -14,9 +14,11 @@ var protectedJSON []byte
 var protectedSchemaJSON []byte
 
 const (
-	OpenerProtected   = "protected"
-	OpenerUnprotected = "unprotected"
-	OpenerUnknown     = "unknown"
+	OpenerProtected          = "protected"
+	OpenerUnprotected        = "unprotected"
+	OpenerUnknown            = "unknown"
+	BlockedMarkerChromeError = "chrome-error://chromewebdata/"
+	BlockedMarkerBiosScrub   = "data:,blocked"
 )
 
 type ErrorPageRule struct {
@@ -35,6 +37,7 @@ type ExtensionFrameRule struct {
 
 type ProtectedOrigins struct {
 	ErrorPage          ErrorPageRule      `json:"errorPage"`
+	BlockedMarkers     []string           `json:"blockedMarkers,omitempty"`
 	Domains            []string           `json:"domains"`
 	Hosts              []string           `json:"hosts"`
 	Schemes            []string           `json:"schemes"`
@@ -53,6 +56,7 @@ type ProtectedOrigins struct {
 
 type ProtectedVectors struct {
 	ErrorPage          ErrorPageRule  `json:"errorPage"`
+	BlockedMarkers     []string       `json:"blockedMarkers,omitempty"`
 	Unparseable        string         `json:"unparseable"`
 	UnparseableRefusal string         `json:"unparseableRefusal"`
 	Schema             int            `json:"schema"`

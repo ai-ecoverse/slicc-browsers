@@ -743,6 +743,7 @@
       "target": "previous",
       "redact": "origin"
     },
+    "blockedMarkers": ["chrome-error://chromewebdata/", "data:,blocked"],
     "unparseable": "protected",
     "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
     "extensionFrames": {

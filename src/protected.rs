@@ -3,12 +3,16 @@ use serde::{Deserialize, Serialize};
 pub const OPENER_PROTECTED: &str = "protected";
 pub const OPENER_UNPROTECTED: &str = "unprotected";
 pub const OPENER_UNKNOWN: &str = "unknown";
+pub const BLOCKED_MARKER_CHROME_ERROR: &str = "chrome-error://chromewebdata/";
+pub const BLOCKED_MARKER_BIOS_SCRUB: &str = "data:,blocked";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Vectors {
     #[serde(default)]
     pub error_page: crate::ErrorPageRule,
+    #[serde(default)]
+    pub blocked_markers: Vec<String>,
     pub schema: u32,
     pub unparseable: String,
     pub unparseable_refusal: String,

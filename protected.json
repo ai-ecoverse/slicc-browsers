@@ -1,6 +1,7 @@
 {
   "schema": 1,
   "errorPage": { "url": "chrome-error://chromewebdata/", "target": "previous", "redact": "origin" },
+  "blockedMarkers": ["chrome-error://chromewebdata/", "data:,blocked"],
   "unparseable": "protected",
   "unparseableRefusal": "slicc: refused: slicc can't parse this URL, so it could be a protected page",
   "origins": ["http://127.0.0.1:5710", "https://seven.example.test"],

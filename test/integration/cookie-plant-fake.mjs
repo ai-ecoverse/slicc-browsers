@@ -306,19 +306,22 @@ export function cookiePlantFake(options = {}) {
       .replace(/[^a-zA-Z0-9]/g, '')
       .slice(-20);
     const jar = jarOf(tab?.browserContextId);
-    const entry = {
-      name: `cplant${id || 'x'}`,
-      value: `p-${plantTag}`,
-      domain: `.${host}`,
-      path: '/',
-    };
-    const existing = jar.findIndex(
-      (cookie) =>
-        cookie.name === entry.name &&
-        cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '')
-    );
-    if (existing >= 0) jar[existing] = entry;
-    else jar.push(entry);
+    const name = `cplant${id || 'x'}`;
+    const values = [`p-${plantTag}`, `ho-${plantTag}`, `dc-${plantTag}`];
+    const domains = [`.${host}`, host];
+    for (const domain of domains) {
+      for (const value of values) {
+        const entry = { name, value, domain, path: '/' };
+        const existing = jar.findIndex(
+          (cookie) =>
+            cookie.name === entry.name &&
+            cookie.domain.replace(/^\./, '') === entry.domain.replace(/^\./, '') &&
+            cookie.value === entry.value
+        );
+        if (existing >= 0) jar[existing] = entry;
+        else jar.push(entry);
+      }
+    }
   };
 
   const continueItselfSkipHit = () =>

@@ -441,30 +441,44 @@ function leftHome(href, homeUrl) {
   return true;
 }
 
-async function continueItselfEvidence({
+async function continueItselfEvidence({ fixtureLog, url, since, tag, proofTag, cookie, handle }) {
+  requireAttemptHandle(handle, 'continueItselfEvidence');
+  if (!fixtureLog || !url || !cookie || !handle.readerSession) return null;
+  const hits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
+  if (typeof hits !== 'number' || hits < 1) return null;
+  const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  return { fixtureHits: hits, planted };
+}
+
+async function pollHandleEvidence({
+  handle,
   fixtureLog,
   url,
   since,
   tag,
   proofTag,
   cookie,
-  reader,
-  readerSession,
-  browserContextId = null,
-  canary = null,
+  settled,
+  probedRefusal,
 }) {
-  if (!fixtureLog || !url || !cookie || !reader || !readerSession) return null;
-  const hits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
-  if (typeof hits !== 'number' || hits < 1) return null;
-  const jar = await capped(
-    readJarWithCanary(reader, readerSession, cookie, canary, browserContextId),
-    1500,
-    'readJar'
-  );
-  const planted = plantedOf(
-    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
-  );
-  return { fixtureHits: hits, planted };
+  if (!handle) return { probedRefusal, postTriggerRefusal: null, bios: null };
+  const bios = await continueItselfEvidence({
+    fixtureLog,
+    url,
+    since,
+    tag,
+    proofTag,
+    cookie,
+    handle,
+  });
+  if (bios) return { probedRefusal, postTriggerRefusal: null, bios };
+  if (settled == null || probedRefusal)
+    return { probedRefusal, postTriggerRefusal: null, bios: null };
+  const postTriggerRefusal = await probePostTriggerRefusal(handle);
+  return { probedRefusal: true, postTriggerRefusal, bios: null };
 }
 
 async function waitPauseOrBlocked({
@@ -539,26 +553,25 @@ async function waitPauseOrBlocked({
       await Promise.race([triggerDone, pause(50)]);
       return finish(null, true);
     }
-    const bios = await continueItselfEvidence({
+    const polled = await pollHandleEvidence({
+      handle,
       fixtureLog,
       url,
       since,
       tag,
       proofTag,
       cookie,
-      reader,
-      readerSession: handle?.readerSession,
-      browserContextId: handle?.browserContextId,
-      canary: handle?.canary,
+      settled,
+      probedRefusal,
     });
-    if (bios) {
-      fixtureHits = bios.fixtureHits;
-      planted = bios.planted;
+    probedRefusal = polled.probedRefusal;
+    if (polled.bios) {
+      fixtureHits = polled.bios.fixtureHits;
+      planted = polled.bios.planted;
       return finish(null, true, { skipRefusalProbe: true, skipQuiet: true });
     }
-    if (settled != null && !probedRefusal && handle) {
-      postTriggerRefusal = await probePostTriggerRefusal(handle);
-      probedRefusal = true;
+    if (polled.postTriggerRefusal) {
+      postTriggerRefusal = polled.postTriggerRefusal;
       if (refused(postTriggerRefusal)) return finish(null, true);
     }
     if (settled != null && leftHome(href, homeUrl)) return finish(null, true);
@@ -578,6 +591,7 @@ async function evidenceAfterTrigger({
   startedAt,
   hrefHint,
 }) {
+  requireAttemptHandle(handle, 'evidenceAfterTrigger');
   const readerHref =
     hrefHint != null ? hrefHint : await tabHrefFromReader(handle.reader, handle.pageTarget);
   const page = { href: readerHref, ready: readerHref != null };
@@ -606,17 +620,7 @@ async function evidenceAfterTrigger({
     };
   }
   const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
-  const jar = await capped(
-    readJarWithCanary(
-      handle.reader,
-      handle.readerSession,
-      cookie,
-      handle.canary,
-      handle.browserContextId ?? null
-    ),
-    1500,
-    'readJar'
-  );
+  const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -665,12 +669,23 @@ function canarySpec({ tag, homeUrl }) {
   };
 }
 
-async function plantCanary(reader, canary, browserContextId) {
-  if (!canary) return;
+function requireAttemptHandle(handle, where) {
+  if (handle == null || typeof handle !== 'object')
+    throw new Error(`cookie-plant.${where}: attempt handle required`);
+  if (!Object.prototype.hasOwnProperty.call(handle, 'browserContextId'))
+    throw new Error(`cookie-plant.${where}: handle.browserContextId required`);
+  if (!handle.reader) throw new Error(`cookie-plant.${where}: handle.reader required`);
+  return handle;
+}
+
+async function plantCanary(handle) {
+  requireAttemptHandle(handle, 'plantCanary');
+  const canary = handle.canary;
+  if (!canary) throw new Error('cookie-plant.plantCanary: handle.canary required');
   const path = canary.path ?? '/';
   await outcome(
-    reader.send('Storage.setCookies', {
-      ...storageContextParams(browserContextId),
+    handle.reader.send('Storage.setCookies', {
+      ...storageContextParams(handle.browserContextId),
       cookies: [
         canary.url
           ? { name: canary.name, value: canary.value, url: canary.url, path }
@@ -680,7 +695,9 @@ async function plantCanary(reader, canary, browserContextId) {
   );
 }
 
-async function clearCookie(reader, sessionId, { name, url, domain }, browserContextId = null) {
+async function clearCookie(handle, { name, url, domain }) {
+  requireAttemptHandle(handle, 'clearCookie');
+  const { reader, readerSession: sessionId, browserContextId } = handle;
   await outcome(
     reader.send(
       'Network.deleteCookies',
@@ -751,7 +768,9 @@ function jarUrlHints(cookie, canary = null) {
   return [...new Set(urls.filter(Boolean))];
 }
 
-async function readJarView(reader, sessionId, browserContextId = null, urlHints = []) {
+async function readJarView(handle, urlHints = []) {
+  requireAttemptHandle(handle, 'readJarView');
+  const { reader, readerSession: sessionId, browserContextId } = handle;
   const storage = await outcome(
     reader.send('Storage.getCookies', storageContextParams(browserContextId))
   );
@@ -767,24 +786,22 @@ async function readJarView(reader, sessionId, browserContextId = null, urlHints 
   return { incomplete: 'cookie jar unreadable' };
 }
 
-async function readJar(
-  reader,
-  sessionId,
-  { name, domain, value, path },
-  browserContextId = null,
-  { urlHints = [] } = {}
-) {
-  const view = await readJarView(reader, sessionId, browserContextId, urlHints);
+async function readJar(handle, { name, domain, value, path }, { urlHints = [] } = {}) {
+  requireAttemptHandle(handle, 'readJar');
+  const view = await readJarView(handle, urlHints);
   if (view.incomplete) return view;
   const hit = view.cookies.find((cookie) => jarCookieMatch(cookie, { name, domain, value, path }));
   if (hit) return { via: view.via, cookie: hit, cookies: view.cookies };
   return { via: view.via, missing: true, cookies: view.cookies };
 }
 
-async function readJarWithCanary(reader, sessionId, cookie, canary, browserContextId = null) {
+async function readJarWithCanary(handle, cookie) {
+  requireAttemptHandle(handle, 'readJarWithCanary');
+  const canary = handle.canary;
+  if (!canary) throw new Error('cookie-plant.readJarWithCanary: handle.canary required');
   const urlHints = jarUrlHints(cookie, canary);
-  const jar = await readJar(reader, sessionId, cookie, browserContextId, { urlHints });
-  if (!canary || jar?.incomplete) return jar;
+  const jar = await readJar(handle, cookie, { urlHints });
+  if (jar?.incomplete) return jar;
   const canaryHit = (jar.cookies ?? []).some((entry) =>
     jarCookieMatch(entry, {
       name: canary.name,
@@ -1161,18 +1178,9 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
   return { ok: true };
 }
 
-async function finishPlant({ reader, readerSession, out, cookie, notes, label, handle }) {
-  const jar = await capped(
-    readJarWithCanary(
-      reader,
-      readerSession,
-      cookie,
-      handle?.canary,
-      handle?.browserContextId ?? null
-    ),
-    1500,
-    'readJar'
-  );
+async function finishPlant({ out, cookie, notes, label, handle }) {
+  requireAttemptHandle(handle, 'finishPlant');
+  const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -1507,10 +1515,10 @@ async function fixtureHitsFor(fixtureLog, url, since, tag, proofTag) {
   return matched.length;
 }
 
-async function recordSessionCut({ reader, readerSession, cookie, notes, label, out }) {
+async function recordSessionCut({ handle, cookie, notes, label, out }) {
+  requireAttemptHandle(handle, 'recordSessionCut');
   return finishPlant({
-    reader,
-    readerSession,
+    handle,
     out: out ?? {
       ok: false,
       error: { message: 'slicc: refused: session cut on protected execution context' },
@@ -1584,15 +1592,11 @@ async function runPlantBody({
   startedAt,
   state,
 }) {
-  const { client, reader, readerSession, transport } = handle;
-  await capped(
-    clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
-    800,
-    'clearCookie'
-  );
+  const { client, transport } = handle;
+  await capped(clearCookie(handle, cookie), 800, 'clearCookie');
   const ensure = await ensureInterceptionLive(handle);
   const pageSession = handle.pageSession;
-  if (sessionCut(ensure)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
+  if (sessionCut(ensure)) return recordSessionCut({ handle, cookie, notes, label });
   if (!ensure.ok) {
     await diagnoseIncomplete({
       notes,
@@ -1692,8 +1696,8 @@ async function runPlantBody({
     state.paused = again;
   }
   const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
-  if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
-  return finishPlant({ reader, readerSession, out, cookie, notes, label, handle });
+  if (sessionCut(out)) return recordSessionCut({ handle, cookie, notes, label });
+  return finishPlant({ out, cookie, notes, label, handle });
 }
 
 function fetchEnableOkOf(handle) {
@@ -1730,17 +1734,7 @@ async function scoreDoorAbsentPause({
   proofTag,
   startedAt,
 }) {
-  const jar = await capped(
-    readJarWithCanary(
-      reader,
-      readerSession,
-      cookie,
-      handle.canary,
-      handle.browserContextId ?? null
-    ),
-    1500,
-    'readJar'
-  );
+  const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -1794,17 +1788,7 @@ async function scorePausedGuardedPlant(args) {
   const plantCap = doorAbsent ? Math.min(budget, 1500) : 1500;
   const out = await capped(build(state.paused).send(client, state.paused), plantCap, 'plant-send');
   if (sessionCut(out)) {
-    const jar = await capped(
-      readJarWithCanary(
-        reader,
-        readerSession,
-        cookie,
-        handle.canary,
-        handle.browserContextId ?? null
-      ),
-      1500,
-      'readJar'
-    );
+    const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
     const planted = plantedOf(
       jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
     );
@@ -1852,17 +1836,7 @@ async function scorePausedGuardedPlant(args) {
       proofTag,
       startedAt,
     });
-  const jar = await capped(
-    readJarWithCanary(
-      reader,
-      readerSession,
-      cookie,
-      handle.canary,
-      handle.browserContextId ?? null
-    ),
-    1500,
-    'readJar'
-  );
+  const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
@@ -2023,22 +1997,8 @@ async function runGuardedProtectedPlantBody({
   const fetchEnableOk = fetchEnableOkOf(handle);
   if (refused(handle.fetchEnable)) {
     handle.evidenceIncomplete = false;
-    await capped(
-      clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
-      800,
-      'clearCookie'
-    );
-    const jar = await capped(
-      readJarWithCanary(
-        reader,
-        readerSession,
-        cookie,
-        handle.canary,
-        handle.browserContextId ?? null
-      ),
-      1500,
-      'readJar'
-    );
+    await capped(clearCookie(handle, cookie), 800, 'clearCookie');
+    const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
     return scoreProtectedPlant({
       pauseCount: 0,
       fixtureHits: await fixtureHitsFor(fixtureLog, url, Number.POSITIVE_INFINITY, tag, proofTag),
@@ -2074,11 +2034,7 @@ async function runGuardedProtectedPlantBody({
       rawDoor,
     });
   }
-  await capped(
-    clearCookie(reader, readerSession, cookie, handle.browserContextId ?? null),
-    800,
-    'clearCookie'
-  );
+  await capped(clearCookie(handle, cookie), 800, 'clearCookie');
   const methods =
     transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
   state.triggerIssued = true;
@@ -2205,28 +2161,11 @@ async function runPlant({
       label
     );
   } catch (error) {
-    if (sessionCut({ ok: false, error }))
-      return recordSessionCut({
-        reader: handle.reader,
-        readerSession: handle.readerSession,
-        cookie,
-        notes,
-        label,
-      });
+    if (sessionCut({ ok: false, error })) return recordSessionCut({ handle, cookie, notes, label });
     if (protectedBlock) {
       const since = handle.triggerSentAt ?? Number.POSITIVE_INFINITY;
       const fixtureHits = await fixtureHitsFor(fixtureLog, url, since, tag, proofTag);
-      const jar = await capped(
-        readJarWithCanary(
-          handle.reader,
-          handle.readerSession,
-          cookie,
-          handle.canary,
-          handle.browserContextId ?? null
-        ),
-        1500,
-        'readJar'
-      );
+      const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
       const planted = plantedOf(
         jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
       );
@@ -2382,11 +2321,18 @@ async function proveDoor({
     url: `${protectedOrigin}/`,
   };
   const canary = canarySpec({ tag, homeUrl });
+  const jarHandle = {
+    reader,
+    readerSession: sessionId,
+    browserContextId,
+    canary,
+  };
+  requireAttemptHandle(jarHandle, 'proveDoor');
   try {
     return await withPathBudget(
       (async () => {
-        await capped(clearCookie(reader, sessionId, cookie, browserContextId), 800, 'door-clear');
-        await plantCanary(reader, canary, browserContextId);
+        await capped(clearCookie(jarHandle, cookie), 800, 'door-clear');
+        await plantCanary(jarHandle);
         if (transport.kind === 'fetch') {
           await capped(
             outcome(
@@ -2429,11 +2375,7 @@ async function proveDoor({
         );
         if (refused(out) || !out.ok) await releasePause(reader, paused);
         await settleTrigger(triggerPromise, Math.min(budget, 500));
-        const jar = await capped(
-          readJarWithCanary(reader, sessionId, cookie, canary, browserContextId),
-          1500,
-          'door-jar'
-        );
+        const jar = await capped(readJarWithCanary(jarHandle, cookie), 1500, 'door-jar');
         const planted = plantedOf(
           jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
         );
@@ -2444,7 +2386,7 @@ async function proveDoor({
           domain,
           browserContextId,
         });
-        await capped(clearCookie(reader, sessionId, cookie, browserContextId), 800, 'door-clear');
+        await capped(clearCookie(jarHandle, cookie), 800, 'door-clear');
         if (!answered(out))
           return { live: false, incomplete: `raw leg: fulfill unanswered: ${out.error?.message}` };
         if (planted === 'incomplete')
@@ -2619,7 +2561,6 @@ async function withFreshAttemptTab(ctx, run) {
   }
   const tabContextId = await resolveTabContextId(reader, pageTarget, browserContextId ?? null);
   const canary = canarySpec({ tag: ctx.tag, homeUrl });
-  await plantCanary(reader, canary, tabContextId);
   const handle = {
     client: timedClient(client, timing),
     reader,
@@ -2636,6 +2577,7 @@ async function withFreshAttemptTab(ctx, run) {
     timing,
     evidenceIncomplete: false,
   };
+  await plantCanary(handle);
   try {
     return await run(handle, enabled);
   } finally {
@@ -2955,11 +2897,19 @@ async function observeRawPlantSend({
   triggerHolder,
   handle,
   pathStartedAt,
-  browserContextId = null,
-  canary = null,
+  browserContextId,
+  canary,
 }) {
-  await capped(clearCookie(reader, sessionId, cookie, browserContextId), 800, 'raw-clear');
-  await plantCanary(reader, canary, browserContextId);
+  const jarHandle = {
+    reader,
+    readerSession: sessionId,
+    browserContextId,
+    canary,
+  };
+  requireAttemptHandle(jarHandle, 'observeRawPlantSend');
+  if (!canary) throw new Error('cookie-plant.observeRawPlantSend: canary required');
+  await capped(clearCookie(jarHandle, cookie), 800, 'raw-clear');
+  await plantCanary(jarHandle);
   const enabled = await capped(
     outcome(
       reader.send(
@@ -3015,11 +2965,7 @@ async function observeRawPlantSend({
   const timedOut = Boolean(out?.error?.message && /timeout/i.test(String(out.error.message)));
   if (refused(out) || !out.ok) await releasePause(reader, triggerHolder.paused);
   await settleTrigger(triggerHolder.promise, Math.min(budget, 500));
-  const jar = await capped(
-    readJarWithCanary(reader, sessionId, cookie, canary, browserContextId),
-    1500,
-    'raw-jar'
-  );
+  const jar = await capped(readJarWithCanary(jarHandle, cookie), 1500, 'raw-jar');
   if (
     jar?.error?.message?.includes('timeout') ||
     jar?.incomplete ||
@@ -3061,7 +3007,7 @@ async function observeRawPlantSend({
     handle,
     pathStartedAt
   );
-  await capped(clearCookie(reader, sessionId, cookie, browserContextId), 800, 'raw-clear');
+  await capped(clearCookie(jarHandle, cookie), 800, 'raw-clear');
   return raw;
 }
 
@@ -3278,7 +3224,7 @@ async function allowedHeaderAttempt({
   legStartedAt,
   firstIncomplete,
 }) {
-  const { client, reader, readerSession, transport } = handle;
+  const { client, transport } = handle;
   let pageSession = handle.pageSession;
   let paused = null;
   let triggerPromise = Promise.resolve();
@@ -3288,7 +3234,7 @@ async function allowedHeaderAttempt({
   const legAt = legStartedAt ?? startedAt;
   const finish = (out) =>
     cookie
-      ? finishPlant({ reader, readerSession, out, cookie, notes, label, handle })
+      ? finishPlant({ out, cookie, notes, label, handle })
       : (() => {
           note(notes, `cookie-plant.${label}`, {
             answered: answered(out),
@@ -3307,7 +3253,7 @@ async function allowedHeaderAttempt({
         pageSession = handle.pageSession;
         if (sessionCut(ensure))
           return cookie
-            ? recordSessionCut({ reader, readerSession, cookie, notes, label })
+            ? recordSessionCut({ handle, cookie, notes, label })
             : finish({
                 ok: false,
                 error: { message: 'slicc: refused: session cut on protected execution context' },
@@ -3390,9 +3336,7 @@ async function allowedHeaderAttempt({
           'allowed-send'
         );
         if (sessionCut(out))
-          return cookie
-            ? recordSessionCut({ reader, readerSession, cookie, notes, label })
-            : finish(out);
+          return cookie ? recordSessionCut({ handle, cookie, notes, label }) : finish(out);
         return finish(out);
       })(),
       pathCeiling(budget),
@@ -3401,7 +3345,7 @@ async function allowedHeaderAttempt({
   } catch (error) {
     if (sessionCut({ ok: false, error }))
       return cookie
-        ? recordSessionCut({ reader, readerSession, cookie, notes, label })
+        ? recordSessionCut({ handle, cookie, notes, label })
         : finish({
             ok: false,
             error: { message: 'slicc: refused: session cut on protected execution context' },
@@ -3443,11 +3387,12 @@ function seedProof(jar, cookie) {
   return true;
 }
 
-async function seedCookie(reader, sessionId, cookie, browserContextId = null) {
+async function seedCookie(handle, cookie) {
+  requireAttemptHandle(handle, 'seedCookie');
   const path = cookie.path ?? '/';
-  await clearCookie(reader, sessionId, { ...cookie, path }, browserContextId);
+  await clearCookie(handle, { ...cookie, path });
   const all = await outcome(
-    reader.send('Storage.getCookies', storageContextParams(browserContextId))
+    handle.reader.send('Storage.getCookies', storageContextParams(handle.browserContextId))
   );
   const rest = (all.result?.cookies ?? []).filter(
     (entry) =>
@@ -3461,17 +3406,17 @@ async function seedCookie(reader, sessionId, cookie, browserContextId = null) {
     ? { name: cookie.name, value: cookie.value, url: cookie.url, path }
     : { name: cookie.name, value: cookie.value, domain: cookie.domain, path };
   await outcome(
-    reader.send('Storage.setCookies', {
-      ...storageContextParams(browserContextId),
+    handle.reader.send('Storage.setCookies', {
+      ...storageContextParams(handle.browserContextId),
       cookies: [...rest, seeded],
     })
   );
-  return readJar(
-    reader,
-    sessionId,
-    { name: cookie.name, domain: cookie.domain, value: cookie.value, path },
-    browserContextId
-  );
+  return readJar(handle, {
+    name: cookie.name,
+    domain: cookie.domain,
+    value: cookie.value,
+    path,
+  });
 }
 
 function controlAttacks(ctx) {
@@ -3573,12 +3518,7 @@ function controlAttacks(ctx) {
             cleared: 'incomplete',
           };
         };
-        const seeded = await seedCookie(
-          handle.reader,
-          handle.readerSession,
-          deleteOnOrdinary,
-          browserContextId
-        );
+        const seeded = await seedCookie(handle, deleteOnOrdinary);
         if (!seedProof(seeded, deleteOnOrdinary))
           return incompleteDeletion(
             seeded?.incomplete ? 'seed jar unreadable' : 'seed missing exact name+domain+path'
@@ -3601,17 +3541,11 @@ function controlAttacks(ctx) {
           });
           return { ...attempt, cleared: 'incomplete' };
         }
-        const after = await readJarWithCanary(
-          handle.reader,
-          handle.readerSession,
-          {
-            name: ctx.names.delete,
-            domain: deleteOnOrdinary.domain,
-            path: deleteOnOrdinary.path,
-          },
-          handle.canary,
-          browserContextId
-        );
+        const after = await readJarWithCanary(handle, {
+          name: ctx.names.delete,
+          domain: deleteOnOrdinary.domain,
+          path: deleteOnOrdinary.path,
+        });
         const afterPlanted = plantedOf(after);
         if (afterPlanted === 'incomplete') {
           note(ctx.notes, 'cookie-plant.deletion.cleared', {
@@ -4262,3 +4196,17 @@ function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncompl
 }
 
 export { cookieNames };
+
+export const cookiePlantHandleApi = {
+  requireAttemptHandle,
+  plantCanary,
+  clearCookie,
+  readJar,
+  readJarView,
+  readJarWithCanary,
+  seedCookie,
+  finishPlant,
+  recordSessionCut,
+  continueItselfEvidence,
+  evidenceAfterTrigger,
+};

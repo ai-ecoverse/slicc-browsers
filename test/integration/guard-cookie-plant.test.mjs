@@ -1545,3 +1545,502 @@ test('sweep caps omit legacyInterception so Chrome-unavailable legacy is not for
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
   assert.deepEqual(out.summary({ guard: 'cookie-plant', sha: 'test' }).forged, []);
 });
+
+const { cookiePlantHandleApi } = await import('../../cookie-plant.mjs');
+
+test('jar/score helpers throw when attempt handle is missing', async () => {
+  const {
+    requireAttemptHandle,
+    clearCookie,
+    plantCanary,
+    readJar,
+    readJarWithCanary,
+    seedCookie,
+    finishPlant,
+    recordSessionCut,
+    continueItselfEvidence,
+    evidenceAfterTrigger,
+  } = cookiePlantHandleApi;
+  assert.throws(() => requireAttemptHandle(null, 't'), /attempt handle required/);
+  assert.throws(() => requireAttemptHandle({}, 't'), /browserContextId required/);
+  assert.throws(() => requireAttemptHandle({ browserContextId: null }, 't'), /reader required/);
+  requireAttemptHandle({ reader: {}, browserContextId: null }, 't');
+  await assert.rejects(() => clearCookie(null, { name: 'x' }), /attempt handle required/);
+  await assert.rejects(
+    () => clearCookie({ reader: {} }, { name: 'x' }),
+    /browserContextId required/
+  );
+  await assert.rejects(
+    () => plantCanary({ reader: {}, browserContextId: null }),
+    /canary required/
+  );
+  await assert.rejects(
+    () => readJar(null, { name: 'x', domain: 'a.test' }),
+    /attempt handle required/
+  );
+  await assert.rejects(
+    () =>
+      readJarWithCanary({ reader: {}, browserContextId: null }, { name: 'x', domain: 'a.test' }),
+    /canary required/
+  );
+  await assert.rejects(
+    () => seedCookie(null, { name: 'x', domain: 'a.test', value: '1' }),
+    /attempt handle required/
+  );
+  await assert.rejects(
+    () => finishPlant({ out: { ok: true }, cookie: { name: 'x' }, notes: [], label: 't' }),
+    /attempt handle required/
+  );
+  await assert.rejects(
+    () => recordSessionCut({ cookie: { name: 'x' }, notes: [], label: 't' }),
+    /attempt handle required/
+  );
+  await assert.rejects(
+    () =>
+      continueItselfEvidence({
+        fixtureLog: async () => [],
+        url: 'http://a.test/',
+        since: 0,
+        cookie: { name: 'x' },
+      }),
+    /attempt handle required/
+  );
+  await assert.rejects(
+    () =>
+      evidenceAfterTrigger({
+        cookie: { name: 'x' },
+        fixtureLog: async () => [],
+        url: 'http://a.test/',
+        startedAt: Date.now(),
+      }),
+    /attempt handle required/
+  );
+});
+
+test('jar/score call sites always pass attempt handle (static)', async () => {
+  const source = await readFile(join(root, 'cookie-plant.mjs'), 'utf8');
+  assert.match(source, /function requireAttemptHandle\(/);
+  for (const name of [
+    'clearCookie',
+    'seedCookie',
+    'readJar',
+    'readJarView',
+    'readJarWithCanary',
+    'plantCanary',
+    'finishPlant',
+    'recordSessionCut',
+    'continueItselfEvidence',
+    'evidenceAfterTrigger',
+  ]) {
+    assert.match(
+      source,
+      new RegExp(
+        `(?:async )?function ${name}\\([\\s\\S]*?requireAttemptHandle\\(handle, '${name}'\\)`
+      ),
+      name
+    );
+  }
+  assert.doesNotMatch(
+    source,
+    /async function (?:clearCookie|seedCookie|readJar|readJarView|readJarWithCanary)\([^)]*=\s*null/
+  );
+  const calls = [
+    ...source.matchAll(/\brecordSessionCut\(\{([\s\S]*?)\}\)/g),
+    ...source.matchAll(/\bfinishPlant\(\{([\s\S]*?)\}\)/g),
+  ];
+  assert.ok(calls.length >= 6, `expected finish/cut calls, got ${calls.length}`);
+  for (const m of calls) {
+    if (/^[\s]*out,/.test(m[1]) || /\bhandle\b/.test(m[1])) {
+      assert.match(m[1], /\bhandle\b/, m[0].slice(0, 120));
+      continue;
+    }
+    assert.fail(`call missing handle: ${m[0].slice(0, 160)}`);
+  }
+  for (const m of source.matchAll(
+    /\b(?:clearCookie|plantCanary|readJarWithCanary|seedCookie)\(([^)]*)\)/g
+  )) {
+    const args = m[1];
+    if (
+      /^(?:handle|jarHandle)\b/.test(args.trim()) ||
+      args.includes('handle,') ||
+      args.trim() === 'handle' ||
+      args.trim() === 'jarHandle'
+    )
+      continue;
+    if (/function |=>/.test(m[0])) continue;
+    assert.fail(`call must pass handle first: ${m[0].slice(0, 120)}`);
+  }
+});
+
+const MUTANT_MATRIX = [
+  {
+    id: 'correct',
+    options: {},
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm1',
+    options: { fake: { deadPageSession: true } },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'pass', on: 'pass' },
+    },
+  },
+  {
+    id: 'm2',
+    options: { fake: { blockedMarker: 'data:,blocked' } },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm3',
+    options: { fake: { blockedMarker: 'chrome-error://chromewebdata/' } },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm4',
+    options: { fake: { blockWithoutMarker: true } },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm5',
+    options: {
+      fake: {
+        blockWithoutMarker: true,
+        settleAssignOk: true,
+        finalHref: 'https://unknown.example.test/done',
+      },
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'pass', on: 'pass' },
+    },
+  },
+  {
+    id: 'm6',
+    options: { refuseAttachAfterTrigger: true },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm7',
+    options: { refuseAttachBeforeTrigger: true },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+  },
+  {
+    id: 'm8',
+    options: { refuseAttachAfterTrigger: true, poisonProtectedJar: true },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm9',
+    options: { refuseAfterProtectedTouch: true },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm10',
+    options: { fake: { continueItself: true }, admitProtectedNavigation: true },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm11',
+    options: { fake: { continueItselfNoHit: true }, admitProtectedNavigation: true },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'pass', on: 'pass' },
+    },
+  },
+  {
+    id: 'm12',
+    options: { fake: { continueItselfPlant: true }, admitProtectedNavigation: true },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm13',
+    options: { fake: { blockedMarker: 'chrome-error://chromewebdata/' } },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm14',
+    options: { fake: { failSilentKeepHome: true } },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'pass', on: 'pass' },
+    },
+  },
+  {
+    id: 'm15',
+    options: {
+      fake: { continueItselfPlant: true, blockedMarker: 'chrome-error://chromewebdata/' },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'm16',
+    options: {
+      fake: { blockedMarker: 'chrome-error://chromewebdata/', nullGuardHref: true },
+    },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'a',
+    options: {
+      fake: { storageGetIgnoresBrowserContext: true, continueItself: true },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'pass', on: 'not-pass' },
+      credential: { off: 'pass', on: 'not-pass' },
+    },
+  },
+  {
+    id: 'b',
+    options: { fake: { dropCanary: true, continueItself: true }, admitProtectedNavigation: true },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'not-pass', on: 'not-pass' },
+      credential: { off: 'not-pass', on: 'not-pass' },
+    },
+  },
+  {
+    id: 'c',
+    options: { fake: { continueItselfPlant: true }, admitProtectedNavigation: true },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'd',
+    options: { fake: { staggerContexts: true } },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'pass', on: 'incomplete' },
+      credential: { off: 'pass', on: 'pass' },
+    },
+  },
+  {
+    id: 'e',
+    options: {
+      fake: { storageGetCookiesFails: true, networkOmitsCanary: true, continueItself: true },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'not-pass', on: 'not-pass' },
+      credential: { off: 'not-pass', on: 'not-pass' },
+    },
+  },
+  {
+    id: 'f',
+    options: {
+      fake: { storageGetCookiesFails: true, continueItself: true },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'g',
+    options: {
+      fake: { storageGetCookiesFails: true, continueItselfPlant: true },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'h',
+    options: {
+      fake: {
+        storageGetCookiesFails: true,
+        networkGetAllCookiesFails: true,
+        getCookiesPlantDomainOnly: true,
+        continueItself: true,
+      },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'not-pass', on: 'not-pass' },
+      credential: { off: 'not-pass', on: 'not-pass' },
+    },
+  },
+  {
+    id: 'i',
+    options: {
+      fake: {
+        storageGetCookiesFails: true,
+        networkGetAllCookiesFails: true,
+        continueItself: true,
+      },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'j',
+    options: {
+      fake: { canarySetIgnoresBrowserContext: true, continueItself: true },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'pass', on: 'not-pass' },
+      credential: { off: 'pass', on: 'not-pass' },
+    },
+  },
+  {
+    id: 'admit-plant',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'fail', on: 'fail' } },
+    allowMap: { fulfillArray: 'hostOnly' },
+  },
+  {
+    id: 'poison-jar',
+    options: { poisonProtectedJar: true },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+  {
+    id: 'session-cut-admit',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
+      forcedRaw: { fulfillArray: 'plant' },
+      fake: { cutSessionAfter: 'p-', cutSessionOnNth: 2, cutBlocksReattach: true },
+    },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: {
+      protected: { off: 'not-pass', on: 'not-pass' },
+      credential: { off: 'not-pass', on: 'not-pass' },
+    },
+    allowMap: { fulfillArray: 'hostOnly' },
+    forcedMap: { fulfillArray: 'hostOnly' },
+  },
+  {
+    id: 'forward-then-cut',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      forwardThenCut: ['fulfillArray'],
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'fail', on: 'fail' } },
+    allowMap: { fulfillArray: 'hostOnly' },
+    forwardMap: { fulfillArray: 'hostOnly' },
+  },
+  {
+    id: 'hang-attach',
+    options: { hangClientAttach: true },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+  },
+  {
+    id: 'refuseWithoutFail',
+    options: { refuseWithoutFail: true },
+    plant: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    expected: { protected: { off: 'pass', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+  },
+];
+
+function mapPlantPaths(paths, rowKind) {
+  if (rowKind === 'protected') return paths;
+  return paths
+    .map((p) => {
+      if (p === 'fulfillArray') return 'hostOnly';
+      if (p === 'fulfillLower') return 'domainCover';
+      if (p === 'binaryLf' || p === 'legacyHeaders' || p === 'legacyRaw') return null;
+      return p;
+    })
+    .filter(Boolean);
+}
+
+function mapAllowPaths(paths, rowKind, allowMap) {
+  if (rowKind === 'protected') return paths;
+  return (paths ?? []).map((p) => allowMap?.[p] ?? (p === 'fulfillArray' ? 'hostOnly' : p));
+}
+
+function assertGuardedVerdict(row, expected, label) {
+  if (expected === 'not-pass') {
+    assert.notEqual(row.guarded, 'pass', label);
+    return;
+  }
+  assert.equal(row.guarded, expected, label);
+}
+
+for (const mutant of MUTANT_MATRIX) {
+  for (const browserContexts of [false, true]) {
+    for (const rowKind of ['protected', 'credential']) {
+      const mode = browserContexts ? 'on' : 'off';
+      const expected = mutant.expected[rowKind][mode];
+      test(`matrix ${mutant.id} browserContexts=${mode} ${rowKind} => ${expected}`, async () => {
+        const onlyPaths = mapPlantPaths(mutant.plant, rowKind);
+        const options = {
+          ...mutant.options,
+          oneTarget: true,
+          onlyPaths,
+          capabilities: {
+            ...(mutant.options.capabilities ?? {}),
+            ...(browserContexts ? { browserContexts: true } : {}),
+          },
+        };
+        if (Array.isArray(options.allowPlantPaths)) {
+          options.allowPlantPaths = mapAllowPaths(
+            options.allowPlantPaths,
+            rowKind,
+            mutant.allowMap
+          );
+        }
+        if (Array.isArray(options.forwardThenCut)) {
+          options.forwardThenCut = mapAllowPaths(
+            options.forwardThenCut,
+            rowKind,
+            mutant.forwardMap
+          );
+        }
+        if (options.forcedRaw && rowKind === 'credential' && mutant.forcedMap) {
+          options.forcedRaw = Object.fromEntries(
+            Object.entries(options.forcedRaw).map(([k, v]) => [mutant.forcedMap[k] ?? k, v])
+          );
+        }
+        const subset = rowKind === 'protected' ? protectedVectors : credentialVectors;
+        const out = await rows(options, subset);
+        const rowId = rowKind === 'protected' ? 'C10.cookie-plant' : 'C10.cookie-plant.credential';
+        const row = out.results.find((r) => r.id === rowId);
+        assert.ok(row, `${rowId} missing ${JSON.stringify(out.results)}`);
+        assertGuardedVerdict(
+          row,
+          expected,
+          `matrix ${mutant.id} ${mode} ${rowKind}: ${JSON.stringify(row)}`
+        );
+      });
+    }
+  }
+}

@@ -76,6 +76,7 @@ async function rows(options = {}, subset = protectedVectors) {
       fake: fakeOptions,
       oneTarget = false,
       onlyPaths = null,
+      forcedRaw = null,
       ...guardOptions
     } = options;
     const browser = cookiePlantFake({
@@ -112,6 +113,7 @@ async function rows(options = {}, subset = protectedVectors) {
           catalog,
           credentialOrigins: catalog.credentialOrigins,
           cookiePlantOnlyPaths: onlyPaths,
+          cookiePlantForcedRaw: forcedRaw,
         }
       );
     } finally {
@@ -532,16 +534,138 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
   assert.equal(row.observations.guarded.binaryLfPlanted, true, JSON.stringify(row));
 });
 
-test('mutant that refuses sessions after protected-origin touch passes', async () => {
+test('m6 session-level refusal on attach after trigger => pass', async () => {
   const out = await rows({
-    refuseAfterProtectedTouch: true,
+    refuseAttachAfterTrigger: true,
     oneTarget: true,
     onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
-  assert.equal(row.live, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.fulfillArray:/.test(n) && /"postTriggerRefusal":true/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('m7 same refusal before trigger never issued => incomplete', async () => {
+  const out = await rows({
+    refuseAttachBeforeTrigger: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+});
+
+test('m8 post-trigger refusal with planted jar => fail', async () => {
+  const out = await rows({
+    refuseAttachAfterTrigger: true,
+    poisonProtectedJar: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+});
+
+test('m9 refuse-after-first-touch does not change later path verdicts', async () => {
+  const out = await rows({
+    refuseAfterProtectedTouch: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'fulfillLower', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillLowerPlanted, false, JSON.stringify(row));
+});
+
+test('fetch+request without legacyInterception skips legacy on both legs', async () => {
+  const out = await rows({
+    capabilities: {
+      requestInterception: true,
+      fetchInterception: true,
+      legacyInterception: false,
+    },
+    oneTarget: true,
+    onlyPaths: ['legacyHeaders', 'legacyRaw', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.legacyRawPlanted, 'not-supported');
+  assert.equal(row.observations.guarded.legacyHeadersPlanted, 'not-supported');
+  assert.equal(row.observations.control.legacyRawPlanted, 'not-supported');
+});
+
+test('m10 Fetch.enable unanswered => incomplete', async () => {
+  const out = await rows({
+    hangFetchEnable: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+});
+
+test('m11 Fetch.enable refused is refusal evidence => pass', async () => {
+  const out = await rows({
+    refuseFetchEnable: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+});
+
+test('m12 raw leg timeout => door absent; guard that plants fails', async () => {
+  const out = await rows({
+    forcedRaw: { fulfillArray: 'timeout' },
+    allowPlantPaths: ['fulfillArray'],
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.raw\.fulfillArray:/.test(n) && /door not present/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('raw leg plants => guarded must refuse; allow-through fails', async () => {
+  const out = await rows({
+    forcedRaw: { fulfillArray: 'plant' },
+    allowPlantPaths: ['fulfillArray'],
+    admitProtectedNavigation: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('history-lock after protected nav does not change fresh-tab guarded verdicts', async () => {
+  const out = await rows({
+    historyLockAfterProtected: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
 });
 
 test('refuse-all interception fails the controls', async () => {
@@ -583,6 +707,7 @@ test('mutant missObsFoldDomain that admits pauses leaves protected evidence inco
   const out = await rows({
     missObsFoldDomain: true,
     admitProtectedNavigation: true,
+    forcedRaw: { binaryObsFold: 'plant', domainQuoted: 'plant' },
     fake: { deadFetchAfter: 'bof-', deadFetchOnNth: 2 },
     oneTarget: true,
     onlyPaths: ['binaryObsFold', 'domainQuoted', 'ordinary', 'adobe', 'deletion'],
@@ -600,11 +725,12 @@ test('mutant missObsFoldDomain that admits pauses leaves protected evidence inco
 
 test('mutant that cuts the session after admitting pauses does not pass', async () => {
   const out = await rows({
-    allowPlantPaths: ['responsePhrase'],
+    allowPlantPaths: ['fulfillArray'],
     admitProtectedNavigation: true,
-    fake: { cutSessionAfter: 'rp-', cutSessionOnNth: 2, cutBlocksReattach: true },
+    forcedRaw: { fulfillArray: 'plant' },
+    fake: { cutSessionAfter: 'p-', cutSessionOnNth: 2, cutBlocksReattach: true },
     oneTarget: true,
-    onlyPaths: ['responsePhrase', 'continueAtRequest', 'ordinary', 'adobe', 'deletion'],
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
@@ -613,8 +739,9 @@ test('mutant that cuts the session after admitting pauses does not pass', async 
     (row.notes ?? []).some(
       (n) =>
         /cookie-plant\.firstIncomplete:/.test(n) ||
-        /cookie-plant\.(continueAtRequest|ordinary):.*(session cut|reattach failed)/.test(n) ||
-        /protected plant evidence incomplete/.test(n)
+        (/cookie-plant\.fulfillArray:/.test(n) &&
+          (/"planted":true/.test(n) ||
+            /session cut|reattach failed|protected plant evidence incomplete/.test(n)))
     ),
     JSON.stringify(row.notes)
   );

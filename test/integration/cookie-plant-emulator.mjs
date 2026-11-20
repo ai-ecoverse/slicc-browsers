@@ -275,9 +275,23 @@ export function applyCookiePlant(client, options = {}) {
         : []
   );
   const hangClientAttach = options.hangClientAttach === true;
+  const hangFetchEnable = options.hangFetchEnable === true;
+  const refuseFetchEnable = options.refuseFetchEnable === true;
   const silentDropAllowed = options.silentDropAllowed === true;
   const refuseAfterProtectedTouch = options.refuseAfterProtectedTouch === true;
+  const refuseAttachBeforeTrigger = options.refuseAttachBeforeTrigger === true;
+  const refuseAttachAfterTrigger = options.refuseAttachAfterTrigger === true;
+  const refuseThenPlantJar = options.refuseThenPlantJar === true;
+  const historyLockAfterProtected = options.historyLockAfterProtected === true;
+  const guardRefusal =
+    options.guardRefusal ??
+    options.protectedOrigins?.refusal ??
+    "slicc: refused: target is on seven's origin";
+  const refusalText = String(guardRefusal).replace(/^slicc:\s*refused:\s*/i, '');
   const poisonedTargets = new Set();
+  const triggeredTargets = new Set();
+  const historyLockedTargets = new Set();
+  const fetchEnabledSessions = new Set();
   const sessionTarget = new Map();
   const sessionMethods = new Set([
     'Page.enable',
@@ -291,6 +305,11 @@ export function applyCookiePlant(client, options = {}) {
   ]);
   const protectedUrl = (url) =>
     Boolean(url) && (Boolean(catalog?.url?.(url)) || Boolean(cred?.url?.(url)));
+  const throwGuardRefusal = () => {
+    throw new Error(
+      /^slicc:\s*refused:/i.test(guardRefusal) ? guardRefusal : `slicc: refused: ${refusalText}`
+    );
+  };
   return {
     ...client,
     send: async (method, params, sessionId) => {
@@ -300,12 +319,52 @@ export function applyCookiePlant(client, options = {}) {
           .catch(() => null);
         if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) return new Promise(() => {});
       }
+      if (refuseAttachBeforeTrigger && method === 'Target.attachToTarget' && params?.targetId) {
+        const info = await client
+          .send('Target.getTargetInfo', { targetId: params.targetId })
+          .catch(() => null);
+        if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) throwGuardRefusal();
+      }
+      if (hangFetchEnable && method === 'Fetch.enable') return new Promise(() => {});
+      if (
+        refuseFetchEnable &&
+        method === 'Fetch.enable' &&
+        sessionId &&
+        fetchEnabledSessions.has(sessionId)
+      )
+        throwGuardRefusal();
+      if (historyLockAfterProtected && method === 'Network.setBypassServiceWorker') {
+        const targetId = sessionId ? sessionTarget.get(sessionId) : params?.targetId;
+        if (targetId && historyLockedTargets.has(targetId))
+          throw new Error("slicc: refused: the target's history may restore a protected document");
+      }
+      if (historyLockAfterProtected && method === 'Page.resetNavigationHistory') {
+        const targetId = sessionId ? sessionTarget.get(sessionId) : null;
+        if (targetId && historyLockedTargets.has(targetId))
+          throw new Error("slicc: refused: the target's history may restore a protected document");
+      }
+      if (refuseAttachAfterTrigger || refuseThenPlantJar) {
+        const targetId =
+          method === 'Target.attachToTarget'
+            ? params?.targetId
+            : sessionId
+              ? sessionTarget.get(sessionId)
+              : null;
+        if (
+          targetId &&
+          triggeredTargets.has(targetId) &&
+          (method === 'Target.attachToTarget' ||
+            method === 'Page.enable' ||
+            method === 'Fetch.enable')
+        )
+          throwGuardRefusal();
+      }
       if (refuseAfterProtectedTouch) {
         if (method === 'Target.attachToTarget' && poisonedTargets.has(params?.targetId))
-          throw refusal("target is on seven's origin");
+          throwGuardRefusal();
         const targetId = sessionId ? sessionTarget.get(sessionId) : null;
         if (targetId && poisonedTargets.has(targetId) && sessionMethods.has(method))
-          throw refusal("target is on seven's origin");
+          throwGuardRefusal();
       }
       const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options, client);
       if (blocked) {
@@ -337,14 +396,20 @@ export function applyCookiePlant(client, options = {}) {
       }
       const forward = silentDropAllowed ? stripSetCookieParams(method, params) : params;
       const result = await client.send(method, forward, sessionId);
+      if (method === 'Fetch.enable' && sessionId) fetchEnabledSessions.add(sessionId);
       if (method === 'Target.attachToTarget' && result?.sessionId && params?.targetId)
         sessionTarget.set(result.sessionId, params.targetId);
-      if (refuseAfterProtectedTouch) {
-        const url = navigationUrl(method, params ?? {});
-        if (protectedUrl(url)) {
-          const targetId = sessionId ? sessionTarget.get(sessionId) : params?.targetId;
-          if (targetId) poisonedTargets.add(targetId);
+      const url = navigationUrl(method, params ?? {});
+      if (protectedUrl(url)) {
+        const targetId = sessionId ? sessionTarget.get(sessionId) : params?.targetId;
+        if (targetId) {
+          if (refuseAfterProtectedTouch) poisonedTargets.add(targetId);
+          if (refuseAttachAfterTrigger || refuseThenPlantJar) triggeredTargets.add(targetId);
+          if (historyLockAfterProtected) historyLockedTargets.add(targetId);
         }
+      }
+      if (refuseThenPlantJar && protectedUrl(url) && options.poisonJar) {
+        await options.poisonJar().catch?.(() => {});
       }
       const kind = pathKind(method, params ?? {});
       if (kind && forwardThenCut.has(kind)) {

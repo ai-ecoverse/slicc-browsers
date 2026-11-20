@@ -44,10 +44,7 @@ function refused(out) {
 }
 
 function sessionCut(out) {
-  if (!out || out.ok) return false;
-  return /slicc:\s*refused:.*(session cut on protected execution context|target is on seven'?s? origin)/i.test(
-    String(out.error?.message ?? out.error ?? '')
-  );
+  return refused(out);
 }
 
 function note(notes, label, evidence) {
@@ -129,6 +126,7 @@ async function diagnoseIncomplete({
   ensure,
   trigger,
   firstIncomplete,
+  handle,
 }) {
   const elapsedMs = Date.now() - startedAt;
   const legElapsedMs = Date.now() - legStartedAt;
@@ -137,6 +135,7 @@ async function diagnoseIncomplete({
   const pauses = pauseEvents(since, 0, url, methods);
   const anyPaused = since.filter((event) => methods.includes(event.method)).length;
   const server = await serverHitsFor(fixtureLog, url, startedAt);
+  const timing = timingOf(handle);
   const evidence = {
     incomplete,
     path: label,
@@ -151,6 +150,7 @@ async function diagnoseIncomplete({
     pauseHits: pauses.length,
     anyPaused,
     server,
+    ...timing,
   };
   note(notes, `cookie-plant.${label}`, evidence);
   if (firstIncomplete && !firstIncomplete.noted) {
@@ -292,7 +292,14 @@ async function detectTransport(client, sessionId, notes) {
   );
   if (fetchEnable.ok) {
     note(notes, 'cookie-plant.transport', { kind: 'fetch' });
-    return { kind: 'fetch', fetch: true, legacy: false };
+    return { kind: 'fetch', fetch: true, legacy: false, fetchEnable };
+  }
+  if (refused(fetchEnable) || /timeout/i.test(String(fetchEnable.error?.message ?? ''))) {
+    note(notes, 'cookie-plant.transport', {
+      kind: 'fetch',
+      enable: refused(fetchEnable) ? 'refused' : 'unanswered',
+    });
+    return { kind: 'fetch', fetch: true, legacy: false, fetchEnable };
   }
   const legacyEnable = await capped(
     outcome(
@@ -303,14 +310,14 @@ async function detectTransport(client, sessionId, notes) {
   );
   if (legacyEnable.ok) {
     note(notes, 'cookie-plant.transport', { kind: 'legacy' });
-    return { kind: 'legacy', fetch: false, legacy: true };
+    return { kind: 'legacy', fetch: false, legacy: true, fetchEnable: null };
   }
   note(notes, 'cookie-plant.transport', {
     kind: null,
     fetchError: String(fetchEnable.error?.message ?? fetchEnable.error),
     legacyError: String(legacyEnable.error?.message ?? legacyEnable.error),
   });
-  return { kind: null, fetch: false, legacy: false };
+  return { kind: null, fetch: false, legacy: false, fetchEnable: null };
 }
 
 async function enableLegacy(client, sessionId) {
@@ -705,9 +712,14 @@ async function enableFetch(client, pageSession) {
   );
 }
 
-async function ensureInterception(client, pageSession, transport) {
+async function ensureInterception(client, pageSession, transport, fetchEnable = null) {
   if (!pageSession || !transport?.kind) return { ok: true };
-  if (transport.fetch) return enableFetch(client, pageSession);
+  if (transport.fetch) {
+    if (fetchEnable && (fetchEnable.ok === true || refused(fetchEnable))) return fetchEnable;
+    if (fetchEnable && /timeout/i.test(String(fetchEnable.error?.message ?? '')))
+      return fetchEnable;
+    return enableFetch(client, pageSession);
+  }
   if (transport.legacy) return capped(enableLegacy(client, pageSession), 800, 'enableLegacy');
   return { ok: true };
 }
@@ -766,7 +778,12 @@ async function ensureLiveSession(handle) {
 async function ensureInterceptionLive(handle) {
   const live = await ensureLiveSession(handle);
   if (!live.ok) return live;
-  const ensure = await ensureInterception(handle.client, handle.pageSession, handle.transport);
+  const ensure = await ensureInterception(
+    handle.client,
+    handle.pageSession,
+    handle.transport,
+    handle.fetchEnable
+  );
   if (ensure.ok) return ensure;
   if (
     !sessionCut(ensure) &&
@@ -775,16 +792,19 @@ async function ensureInterceptionLive(handle) {
     return ensure;
   const recovered = await reattachClient(handle);
   if (!recovered.ok) return ensure;
-  return ensureInterception(handle.client, handle.pageSession, handle.transport);
+  return ensureInterception(
+    handle.client,
+    handle.pageSession,
+    handle.transport,
+    handle.fetchEnable
+  );
 }
 
 async function cleanupPath({ handle, paused, from, triggerPromise, budget }) {
-  const { client, reader, homeUrl, transport, readerSession } = handle;
+  const { client } = handle;
   await releasePause(client, paused);
   await drainPauses(client, from);
   await settleTrigger(triggerPromise, Math.min(budget, 500));
-  await restorePage(client, handle.pageSession, homeUrl, transport, reader, readerSession);
-  await ensureLiveSession(handle);
 }
 
 function attemptRecord(out, planted) {
@@ -887,7 +907,7 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
   return { ok: true };
 }
 
-async function finishPlant({ reader, readerSession, out, cookie, notes, label }) {
+async function finishPlant({ reader, readerSession, out, cookie, notes, label, handle }) {
   const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
@@ -898,11 +918,8 @@ async function finishPlant({ reader, readerSession, out, cookie, notes, label })
     planted,
     via: jar?.via,
     jarIncomplete: jar?.incomplete,
+    ...timingOf(handle),
   };
-  if (planted === false && answered(out) && !refused(out) && CHROME_NO_STORE.has(label))
-    evidence.note = 'Chrome does not store it: not a plant path';
-  else if (planted === true && CHROME_NO_STORE.has(label))
-    evidence.note = 'raw leg stored it: plant path';
   note(notes, `cookie-plant.${label}`, evidence);
   return attemptRecord(out, planted);
 }
@@ -946,12 +963,21 @@ function scoreProtectedPlant({
   label,
   triggerOutcome,
   blockedMarkers,
+  postTriggerRefusal = false,
+  triggerIssued = false,
+  handle,
+  fetchEnableOk = null,
+  doorAbsent = false,
+  rawDoor = null,
 }) {
   const href = pageHref == null ? null : String(pageHref);
   const onMarker = blockedMarkerHit(href, blockedMarkers);
   const refusal = triggerRefusal(triggerOutcome);
+  const sessionBlocked = Boolean(triggerIssued && postTriggerRefusal === true);
   const issuedAndBlocked =
-    refusal === 'incomplete' ? 'incomplete' : Boolean(onMarker === true || refusal === true);
+    refusal === 'incomplete'
+      ? 'incomplete'
+      : Boolean(onMarker === true || refusal === true || sessionBlocked);
   const loadBlocked =
     fixtureHits === 'incomplete' || issuedAndBlocked === 'incomplete'
       ? 'incomplete'
@@ -963,9 +989,29 @@ function scoreProtectedPlant({
     pageHref: href,
     onMarker,
     triggerRefused: refusal,
+    postTriggerRefusal: sessionBlocked,
+    triggerIssued: Boolean(triggerIssued),
     issuedAndBlocked,
     loadBlocked,
+    fetchEnableOk,
+    doorAbsent: Boolean(doorAbsent),
+    ...(rawDoor
+      ? {
+          rawAnswered: rawDoor.answered,
+          rawPlanted: rawDoor.planted,
+          rawTimedOut: rawDoor.timedOut,
+        }
+      : {}),
+    ...timingOf(handle),
   };
+  if (doorAbsent) {
+    note(notes, `cookie-plant.${label}`, {
+      ...evidence,
+      note: 'door not present on this browser',
+    });
+    if (planted === true) return { answered: true, refused: false, planted: true };
+    return { answered: true, refused: false, planted: false };
+  }
   if (
     planted === 'incomplete' ||
     pauseCount === 'incomplete' ||
@@ -987,11 +1033,22 @@ function scoreProtectedPlant({
     note(notes, `cookie-plant.${label}`, {
       ...evidence,
       answered: true,
-      refused: pauseCount > 0,
+      refused: pauseCount > 0 || sessionBlocked,
     });
-    return { answered: true, refused: pauseCount > 0, planted: true };
+    return { answered: true, refused: pauseCount > 0 || sessionBlocked, planted: true };
   }
   if (pauseCount === 0 && loadBlocked === true && planted === false) {
+    if (fetchEnableOk === false) {
+      note(notes, `cookie-plant.${label}`, {
+        ...evidence,
+        incomplete: 'Fetch.enable unanswered for bios-shape',
+      });
+      return {
+        answered: 'incomplete',
+        refused: 'incomplete',
+        planted: 'incomplete',
+      };
+    }
     note(notes, `cookie-plant.${label}`, {
       ...evidence,
       answered: true,
@@ -1037,11 +1094,11 @@ async function fixtureHitsFor(fixtureLog, url, since, tag, proofTag) {
   return matched.length;
 }
 
-async function recordSessionCut({ reader, readerSession, cookie, notes, label }) {
+async function recordSessionCut({ reader, readerSession, cookie, notes, label, out }) {
   return finishPlant({
     reader,
     readerSession,
-    out: {
+    out: out ?? {
       ok: false,
       error: { message: 'slicc: refused: session cut on protected execution context' },
     },
@@ -1049,6 +1106,51 @@ async function recordSessionCut({ reader, readerSession, cookie, notes, label })
     notes,
     label,
   });
+}
+
+async function probePostTriggerRefusal(handle) {
+  const { client, pageTarget, pageSession, internalSessions } = handle;
+  if (pageSession) {
+    const enabled = await capped(
+      outcome(client.send('Page.enable', {}, pageSession)),
+      800,
+      'post-Page.enable'
+    );
+    if (refused(enabled)) return enabled;
+    const fetchEnabled = await capped(
+      outcome(
+        client.send(
+          'Fetch.enable',
+          {
+            patterns: [
+              { urlPattern: '*', requestStage: 'Request' },
+              { urlPattern: '*', requestStage: 'Response' },
+            ],
+          },
+          pageSession
+        )
+      ),
+      800,
+      'post-Fetch.enable'
+    );
+    if (refused(fetchEnabled)) return fetchEnabled;
+  }
+  if (!pageTarget) return null;
+  const attached = await capped(
+    outcome(client.send('Target.attachToTarget', { targetId: pageTarget, flatten: true })),
+    800,
+    'post-attach'
+  );
+  if (refused(attached)) return attached;
+  const sessionId = attached.result?.sessionId;
+  if (!sessionId) return null;
+  internalSessions?.add(sessionId);
+  const enabled = await capped(
+    outcome(client.send('Page.enable', {}, sessionId)),
+    800,
+    'post-attach-Page.enable'
+  );
+  return refused(enabled) ? enabled : null;
 }
 
 async function runPlantBody({
@@ -1174,7 +1276,214 @@ async function runPlantBody({
   }
   const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
   if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
-  return finishPlant({ reader, readerSession, out, cookie, notes, label });
+  return finishPlant({ reader, readerSession, out, cookie, notes, label, handle });
+}
+
+function fetchEnableOkOf(handle) {
+  if (handle.fetchEnable == null) return null;
+  if (handle.fetchEnable.ok === true) return true;
+  if (refused(handle.fetchEnable)) return null;
+  return false;
+}
+
+function markScored(handle, scored) {
+  if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
+  return scored;
+}
+
+async function scoreDoorAbsentPause({
+  handle,
+  client,
+  reader,
+  readerSession,
+  cookie,
+  notes,
+  label,
+  from,
+  url,
+  methods,
+  waited,
+  out,
+  state,
+  blockedMarkers,
+  fetchEnableOk,
+  rawDoor,
+}) {
+  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  return markScored(
+    handle,
+    scoreProtectedPlant({
+      pauseCount: pauseEvents(client.events, from, url, methods).length,
+      fixtureHits: 0,
+      planted,
+      pageHref: waited.href ?? null,
+      notes,
+      label,
+      triggerOutcome: out,
+      blockedMarkers,
+      handle,
+      postTriggerRefusal: state.postTriggerRefusal || refused(out),
+      triggerIssued: true,
+      fetchEnableOk,
+      doorAbsent: true,
+      rawDoor,
+    })
+  );
+}
+
+async function scorePausedGuardedPlant(args) {
+  const {
+    handle,
+    client,
+    reader,
+    readerSession,
+    cookie,
+    build,
+    budget,
+    notes,
+    label,
+    from,
+    url,
+    methods,
+    waited,
+    state,
+    blockedMarkers,
+    fetchEnableOk,
+    doorAbsent,
+    rawDoor,
+    fixtureLog,
+    tag,
+    proofTag,
+    startedAt,
+  } = args;
+  const plantCap = doorAbsent ? Math.min(budget, 1500) : 1500;
+  const out = await capped(build(state.paused).send(client, state.paused), plantCap, 'plant-send');
+  if (sessionCut(out))
+    return recordSessionCut({ reader, readerSession, cookie, notes, label, out });
+  if (doorAbsent)
+    return scoreDoorAbsentPause({
+      handle,
+      client,
+      reader,
+      readerSession,
+      cookie,
+      notes,
+      label,
+      from,
+      url,
+      methods,
+      waited,
+      out,
+      state,
+      blockedMarkers,
+      fetchEnableOk,
+      rawDoor,
+    });
+  const plantedAttempt = await finishPlant({
+    reader,
+    readerSession,
+    out,
+    cookie,
+    notes,
+    label,
+    handle,
+  });
+  if (plantedAttempt.planted === true) return plantedAttempt;
+  const settled =
+    waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
+  const evidence = await evidenceAfterTrigger({
+    handle,
+    cookie,
+    fixtureLog,
+    url,
+    tag,
+    proofTag,
+    startedAt,
+    hrefHint: waited.href,
+  });
+  return markScored(
+    handle,
+    scoreProtectedPlant({
+      pauseCount: pauseEvents(client.events, from, url, methods).length,
+      fixtureHits: evidence.fixtureHits,
+      planted: plantedAttempt.planted,
+      pageHref: evidence.page.href ?? waited.href,
+      notes,
+      label,
+      triggerOutcome: settled,
+      blockedMarkers,
+      handle,
+      postTriggerRefusal: state.postTriggerRefusal || refused(out),
+      triggerIssued: true,
+      fetchEnableOk,
+      doorAbsent,
+      rawDoor,
+    })
+  );
+}
+
+async function scoreUnpausedGuardedPlant(args) {
+  const {
+    handle,
+    client,
+    cookie,
+    budget,
+    notes,
+    label,
+    from,
+    url,
+    methods,
+    waited,
+    state,
+    blockedMarkers,
+    fetchEnableOk,
+    doorAbsent,
+    rawDoor,
+    fixtureLog,
+    tag,
+    proofTag,
+    startedAt,
+  } = args;
+  const settled =
+    waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
+  const hung =
+    settled &&
+    settled.ok === false &&
+    /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
+  if (hung) handle.evidenceIncomplete = true;
+  const evidence = await evidenceAfterTrigger({
+    handle,
+    cookie,
+    fixtureLog,
+    url,
+    tag,
+    proofTag,
+    startedAt,
+    hrefHint: waited.href,
+  });
+  if (evidence.planted === 'incomplete') handle.evidenceIncomplete = true;
+  return markScored(
+    handle,
+    scoreProtectedPlant({
+      pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
+      fixtureHits: hung ? 'incomplete' : evidence.fixtureHits,
+      planted: hung ? 'incomplete' : evidence.planted,
+      pageHref: evidence.page.href ?? waited.href,
+      notes,
+      label,
+      triggerOutcome: hung ? { unresolved: true } : settled,
+      blockedMarkers,
+      handle,
+      postTriggerRefusal: state.postTriggerRefusal,
+      triggerIssued: true,
+      fetchEnableOk,
+      doorAbsent,
+      rawDoor,
+    })
+  );
 }
 
 async function runGuardedProtectedPlantBody({
@@ -1194,8 +1503,32 @@ async function runGuardedProtectedPlantBody({
   state,
   blockedMarkers,
   proofTag,
+  rawDoor = null,
 }) {
   const { client, reader, readerSession, transport } = handle;
+  const doorAbsent = Boolean(rawDoor && rawDoor.doorPresent === false);
+  const fetchEnableOk = fetchEnableOkOf(handle);
+  if (refused(handle.fetchEnable)) {
+    handle.evidenceIncomplete = false;
+    await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
+    const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
+    return scoreProtectedPlant({
+      pauseCount: 0,
+      fixtureHits: 0,
+      planted: plantedOf(jar),
+      pageHref: null,
+      notes,
+      label,
+      triggerOutcome: handle.fetchEnable,
+      blockedMarkers,
+      handle,
+      postTriggerRefusal: true,
+      triggerIssued: true,
+      fetchEnableOk: null,
+      doorAbsent,
+      rawDoor,
+    });
+  }
   if (!handle.pageSession) {
     handle.evidenceIncomplete = true;
     return scoreProtectedPlant({
@@ -1207,14 +1540,21 @@ async function runGuardedProtectedPlantBody({
       label,
       triggerOutcome: { unresolved: true },
       blockedMarkers,
+      handle,
+      fetchEnableOk,
+      doorAbsent,
+      rawDoor,
     });
   }
   await capped(clearCookie(reader, readerSession, cookie), 800, 'clearCookie');
   const methods =
     transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
+  state.triggerIssued = true;
   state.triggerPromise = topLevel
     ? triggerNavigate(client, handle.pageSession, url)
     : triggerFetch(client, handle.pageSession, url);
+  const postRefusal = await probePostTriggerRefusal(handle);
+  state.postTriggerRefusal = refused(postRefusal);
   const waited = await waitPauseOrBlocked({
     client,
     pageSession: handle.pageSession,
@@ -1227,73 +1567,32 @@ async function runGuardedProtectedPlantBody({
     fixtureLog,
   });
   state.paused = waited.paused;
-  if (state.paused) {
-    const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
-    if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
-    const plantedAttempt = await finishPlant({
-      reader,
-      readerSession,
-      out,
-      cookie,
-      notes,
-      label,
-    });
-    if (plantedAttempt.planted === true) return plantedAttempt;
-    const settled =
-      waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
-    const evidence = await evidenceAfterTrigger({
-      handle,
-      cookie,
-      fixtureLog,
-      url,
-      tag,
-      proofTag,
-      startedAt,
-      hrefHint: waited.href,
-    });
-    const scored = scoreProtectedPlant({
-      pauseCount: pauseEvents(client.events, from, url, methods).length,
-      fixtureHits: evidence.fixtureHits,
-      planted: plantedAttempt.planted,
-      pageHref: evidence.page.href ?? waited.href,
-      notes,
-      label,
-      triggerOutcome: settled,
-      blockedMarkers,
-    });
-    if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
-    return scored;
-  }
-  const settled =
-    waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
-  const hung =
-    settled &&
-    settled.ok === false &&
-    /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
-  if (hung) handle.evidenceIncomplete = true;
-  const evidence = await evidenceAfterTrigger({
+  const shared = {
     handle,
+    client,
+    reader,
+    readerSession,
     cookie,
-    fixtureLog,
+    build,
+    budget,
+    notes,
+    label,
+    from,
     url,
+    methods,
+    waited,
+    state,
+    blockedMarkers,
+    fetchEnableOk,
+    doorAbsent,
+    rawDoor,
+    fixtureLog,
     tag,
     proofTag,
     startedAt,
-    hrefHint: waited.href,
-  });
-  if (evidence.planted === 'incomplete') handle.evidenceIncomplete = true;
-  const scored = scoreProtectedPlant({
-    pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
-    fixtureHits: hung ? 'incomplete' : evidence.fixtureHits,
-    planted: hung ? 'incomplete' : evidence.planted,
-    pageHref: evidence.page.href ?? waited.href,
-    notes,
-    label,
-    triggerOutcome: hung ? { unresolved: true } : settled,
-    blockedMarkers,
-  });
-  if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
-  return scored;
+  };
+  if (state.paused) return scorePausedGuardedPlant(shared);
+  return scoreUnpausedGuardedPlant(shared);
 }
 
 async function runPlant({
@@ -1313,6 +1612,7 @@ async function runPlant({
   tag,
   blockedMarkers,
   proofTag,
+  rawDoor = null,
 }) {
   const { client, transport } = handle;
   const state = { paused: null, triggerPromise: Promise.resolve() };
@@ -1340,6 +1640,7 @@ async function runPlant({
             state,
             blockedMarkers,
             proofTag,
+            rawDoor,
           })
         : runPlantBody({
             handle,
@@ -1391,6 +1692,7 @@ async function runPlant({
         label,
         triggerOutcome: { unresolved: true },
         blockedMarkers,
+        handle,
       });
       if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
       return scored;
@@ -1654,25 +1956,6 @@ const ALL_PATH_NAMES = [
   'adobe',
 ];
 
-const CHROME_NO_STORE = new Set([
-  'fulfillObject',
-  'fulfillSetCookie2',
-  'fulfillNewline',
-  'continueResponse',
-  'binaryLf',
-  'binaryObsFold',
-  'domainQuoted',
-  'domainUpper',
-  'domainTrailDot',
-  'domainRepeated',
-  'domainWs',
-  'headerPadded',
-  'setCookieSecond',
-  'responsePhrase',
-  'continueAtRequest',
-  'hostOnly',
-]);
-
 function incompletePaths() {
   return Object.fromEntries(
     ALL_PATH_NAMES.flatMap((name) => [
@@ -1683,8 +1966,112 @@ function incompletePaths() {
   );
 }
 
+function notSupportedAttempt() {
+  return {
+    answered: 'not-supported',
+    refused: 'not-supported',
+    planted: 'not-supported',
+  };
+}
+
 function plantCtx(fields) {
   return { ...fields };
+}
+
+function timingOf(handle) {
+  const t = handle?.timing ?? {};
+  const elapsedMs =
+    t.firstSent != null ? Math.max(0, (t.firstReply ?? Date.now()) - t.firstSent) : null;
+  return {
+    firstSentAt: t.firstSent ?? null,
+    firstReplyAt: t.firstReply ?? null,
+    elapsedMs,
+  };
+}
+
+function timedClient(client, timing) {
+  return {
+    ...client,
+    get events() {
+      return client.events;
+    },
+    send: async (method, params, sessionId) => {
+      if (timing.firstSent == null) timing.firstSent = Date.now();
+      try {
+        const result = await client.send(method, params, sessionId);
+        if (timing.firstReply == null) timing.firstReply = Date.now();
+        return result;
+      } catch (error) {
+        if (timing.firstReply == null) timing.firstReply = Date.now();
+        throw error;
+      }
+    },
+  };
+}
+
+async function withFreshAttemptTab(ctx, run) {
+  const { client, reader, homeUrl, notes, internalSessions } = ctx;
+  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!page.ok)
+    return attemptRecord(
+      { ok: false, error: { message: `open failed: ${page.error?.message ?? page.error}` } },
+      'incomplete'
+    );
+  if (page.result?.incomplete)
+    return attemptRecord({ ok: false, error: { message: page.result.incomplete } }, 'incomplete');
+  const readerSession = page.result.sessionId;
+  const pageTarget = page.result.targetId;
+  const timing = {};
+  const attached = await attachClientPage(client, pageTarget, internalSessions);
+  if (attached.incomplete) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return attemptRecord({ ok: false, error: { message: attached.incomplete } }, 'incomplete');
+  }
+  if (attached.refused && refused(attached.refused)) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return attemptRecord(attached.refused, 'incomplete');
+  }
+  const pageSession = attached.pageSession;
+  if (!pageSession) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return attemptRecord(
+      { ok: false, error: { message: 'client has no page session for interception attempts' } },
+      'incomplete'
+    );
+  }
+  const enabled = await enableClientTransport(client, pageSession, notes);
+  if (enabled.incomplete) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return attemptRecord({ ok: false, error: { message: enabled.incomplete } }, 'incomplete');
+  }
+  const handle = {
+    client: timedClient(client, timing),
+    reader,
+    pageSession,
+    readerSession,
+    pageTarget,
+    homeUrl,
+    transport: enabled.transport,
+    fetchEnable: enabled.fetchEnable ?? null,
+    internalSessions,
+    notes,
+    timing,
+    evidenceIncomplete: false,
+  };
+  try {
+    return await run(handle, enabled);
+  } finally {
+    await capped(
+      disableInterception(client, pageSession, enabled.transport),
+      800,
+      'attempt-disable'
+    );
+    await capped(
+      outcome(reader.send('Target.closeTarget', { targetId: pageTarget })),
+      800,
+      'attempt-close'
+    );
+  }
 }
 
 function fetchAttackSpecs(ctx, header, bareDomain) {
@@ -1893,39 +2280,209 @@ function fetchAttackSpecs(ctx, header, bareDomain) {
   ];
 }
 
+async function measureRawDoor(ctx, spec) {
+  const { reader, homeUrl, notes, internalSessions, budget, plantUrl, plantCookie, forcedRaw } =
+    ctx;
+  const forced = forcedRaw?.[spec.label];
+  if (forced === 'timeout') {
+    const raw = {
+      answered: false,
+      planted: false,
+      timedOut: true,
+      doorPresent: false,
+    };
+    note(notes, `cookie-plant.raw.${spec.label}`, {
+      ...raw,
+      note: 'door not present on this browser',
+    });
+    return raw;
+  }
+  if (forced === 'plant') {
+    const raw = {
+      answered: true,
+      planted: true,
+      timedOut: false,
+      doorPresent: true,
+    };
+    note(notes, `cookie-plant.raw.${spec.label}`, {
+      ...raw,
+      note: 'raw leg planted: plant path',
+    });
+    return raw;
+  }
+  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!page.ok || page.result?.incomplete) {
+    const raw = {
+      answered: false,
+      planted: false,
+      timedOut: true,
+      doorPresent: false,
+    };
+    note(notes, `cookie-plant.raw.${spec.label}`, {
+      ...raw,
+      incomplete: page.result?.incomplete ?? page.error?.message,
+      note: 'door not present on this browser',
+    });
+    return raw;
+  }
+  const sessionId = page.result.sessionId;
+  const targetId = page.result.targetId;
+  const cookie = { ...plantCookie, value: spec.value };
+  let paused = null;
+  let triggerPromise = Promise.resolve();
+  const from = reader.events.length;
+  const pathBudget = pathCeiling(budget);
+  try {
+    return await withPathBudget(
+      (async () => {
+        await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
+        const enabled = await capped(
+          outcome(
+            reader.send(
+              'Fetch.enable',
+              {
+                patterns: [
+                  { urlPattern: '*', requestStage: 'Request' },
+                  { urlPattern: '*', requestStage: 'Response' },
+                ],
+              },
+              sessionId
+            )
+          ),
+          800,
+          'raw-enable'
+        );
+        if (!enabled.ok) {
+          const raw = {
+            answered: false,
+            planted: false,
+            timedOut: true,
+            doorPresent: false,
+          };
+          note(notes, `cookie-plant.raw.${spec.label}`, {
+            ...raw,
+            note: 'door not present on this browser',
+          });
+          return raw;
+        }
+        triggerPromise = triggerNavigate(reader, sessionId, plantUrl);
+        paused = await waitPause(
+          reader,
+          from,
+          plantUrl,
+          ['Fetch.requestPaused'],
+          Math.min(budget, 2000)
+        );
+        if (!paused) {
+          const raw = {
+            answered: false,
+            planted: false,
+            timedOut: true,
+            doorPresent: false,
+          };
+          note(notes, `cookie-plant.raw.${spec.label}`, {
+            ...raw,
+            note: 'door not present on this browser',
+          });
+          return raw;
+        }
+        const out = await capped(
+          spec.build(paused).send(reader, paused),
+          Math.min(budget, 1500),
+          'raw-plant-send'
+        );
+        const timedOut = Boolean(out?.error?.message && /timeout/i.test(String(out.error.message)));
+        if (refused(out) || !out.ok) await releasePause(reader, paused);
+        await settleTrigger(triggerPromise, Math.min(budget, 500));
+        const jar = await capped(readJar(reader, sessionId, cookie), 1500, 'raw-jar');
+        const planted = plantedOf(
+          jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+        );
+        const answeredOk = answered(out);
+        const doorPresent = answeredOk === true && planted === true;
+        const raw = {
+          answered: answeredOk,
+          planted: planted === true,
+          timedOut,
+          doorPresent,
+        };
+        note(notes, `cookie-plant.raw.${spec.label}`, {
+          ...raw,
+          via: jar?.via,
+          note: doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser',
+        });
+        await capped(clearCookie(reader, sessionId, cookie), 800, 'raw-clear');
+        return raw;
+      })(),
+      pathBudget,
+      `raw:${spec.label}`
+    );
+  } catch (error) {
+    const raw = {
+      answered: false,
+      planted: false,
+      timedOut: /timeout/i.test(String(error?.message ?? error)),
+      doorPresent: false,
+    };
+    note(notes, `cookie-plant.raw.${spec.label}`, {
+      ...raw,
+      incomplete: String(error?.message ?? error),
+      note: 'door not present on this browser',
+    });
+    return raw;
+  } finally {
+    try {
+      await releasePause(reader, paused);
+      await drainPauses(reader, from);
+      await settleTrigger(triggerPromise, Math.min(budget, 500));
+      await capped(
+        disableInterception(reader, sessionId, { fetch: true, legacy: false }),
+        800,
+        'raw-disable'
+      );
+      await capped(outcome(reader.send('Target.closeTarget', { targetId })), 800, 'raw-close');
+    } catch {
+      await outcome(reader.send('Target.closeTarget', { targetId })).catch(() => {});
+    }
+  }
+}
+
 function fetchAttacks(ctx) {
-  if (!ctx.transport.fetch) return null;
-  const base = {
-    handle: ctx.handle,
-    url: ctx.plantUrl,
-    budget: ctx.budget,
-    notes: ctx.notes,
-    topLevel: true,
-    fixtureLog: ctx.fixtureLog,
-    legStartedAt: ctx.legStartedAt,
-    firstIncomplete: ctx.firstIncomplete,
-    protectedBlock: Boolean(ctx.guardedProtected),
-    tag: ctx.tag,
-    blockedMarkers: ctx.blockedMarkers,
-    proofTag: ctx.proofTag,
-  };
+  if (!ctx.transport?.fetch) return null;
   const header = (value, domain = ctx.domain, domainAttr = null) =>
     cookieHeader(ctx.names.plant, value, domain, '', domainAttr);
   const bareDomain = ctx.domain.replace(/^\./, '');
   const out = {};
   for (const spec of fetchAttackSpecs(ctx, header, bareDomain)) {
     out[spec.label] = () =>
-      runPlant({
-        ...base,
-        cookie: {
-          ...ctx.plantCookie,
-          value: spec.value,
-          ...(spec.label === 'fulfillArray' ? {} : {}),
-        },
-        label: spec.label,
-        stage: spec.stage ?? 'Request',
-        build: spec.build,
-      });
+      (async () => {
+        let rawDoor = ctx.rawDoors?.[spec.label] ?? null;
+        if (ctx.guardedProtected && !rawDoor) {
+          rawDoor = await measureRawDoor(ctx, spec);
+          ctx.rawDoors = { ...(ctx.rawDoors ?? {}), [spec.label]: rawDoor };
+        }
+        return withFreshAttemptTab(ctx, (handle) =>
+          runPlant({
+            handle,
+            url: ctx.plantUrl,
+            budget: ctx.budget,
+            notes: ctx.notes,
+            topLevel: true,
+            fixtureLog: ctx.fixtureLog,
+            legStartedAt: ctx.legStartedAt,
+            firstIncomplete: ctx.firstIncomplete,
+            protectedBlock: Boolean(ctx.guardedProtected),
+            tag: ctx.tag,
+            blockedMarkers: ctx.blockedMarkers,
+            proofTag: ctx.proofTag,
+            cookie: { ...ctx.plantCookie, value: spec.value },
+            label: spec.label,
+            stage: spec.stage ?? 'Request',
+            build: spec.build,
+            rawDoor,
+          })
+        );
+      })();
   }
   return out;
 }
@@ -1957,75 +2514,49 @@ async function withLegacyOnly(handle, transport, run) {
 function legacyAttacks(ctx, legacyReady) {
   if (!legacyReady) return null;
   const legacyTransport = { kind: 'legacy', fetch: false, legacy: true };
-  const base = {
-    handle: ctx.handle,
-    url: ctx.plantUrl,
-    budget: ctx.budget,
-    notes: ctx.notes,
-    topLevel: true,
-    fixtureLog: ctx.fixtureLog,
-    legStartedAt: ctx.legStartedAt,
-    firstIncomplete: ctx.firstIncomplete,
-    protectedBlock: Boolean(ctx.guardedProtected),
-    tag: ctx.tag,
-    blockedMarkers: ctx.blockedMarkers,
-    proofTag: ctx.proofTag,
-  };
+  const runLegacy = (label, value) => () =>
+    withFreshAttemptTab(ctx, (handle) =>
+      withLegacyOnly(handle, handle.transport, () => {
+        const prior = handle.transport;
+        handle.transport = legacyTransport;
+        return runPlant({
+          handle,
+          url: ctx.plantUrl,
+          budget: ctx.budget,
+          notes: ctx.notes,
+          topLevel: true,
+          fixtureLog: ctx.fixtureLog,
+          legStartedAt: ctx.legStartedAt,
+          firstIncomplete: ctx.firstIncomplete,
+          protectedBlock: Boolean(ctx.guardedProtected),
+          tag: ctx.tag,
+          blockedMarkers: ctx.blockedMarkers,
+          proofTag: ctx.proofTag,
+          cookie: { ...ctx.plantCookie, value },
+          label,
+          build: () =>
+            legacyContinue({
+              rawResponse: rawHttpResponse({
+                code: 200,
+                phrase: 'OK',
+                headers: [
+                  { name: 'content-type', value: 'text/plain' },
+                  {
+                    name: 'Set-Cookie',
+                    value: cookieHeader(ctx.names.plant, value, ctx.domain),
+                  },
+                ],
+                body: 'ok',
+              }),
+            }),
+        }).finally(() => {
+          handle.transport = prior;
+        });
+      })
+    );
   return {
-    legacyHeaders: () =>
-      withLegacyOnly(ctx.handle, ctx.transport, () => {
-        const prior = ctx.handle.transport;
-        ctx.handle.transport = legacyTransport;
-        return runPlant({
-          ...base,
-          cookie: { ...ctx.plantCookie, value: `lh-${ctx.tag}` },
-          label: 'legacyHeaders',
-          build: () =>
-            legacyContinue({
-              rawResponse: rawHttpResponse({
-                code: 200,
-                phrase: 'OK',
-                headers: [
-                  { name: 'content-type', value: 'text/plain' },
-                  {
-                    name: 'Set-Cookie',
-                    value: cookieHeader(ctx.names.plant, `lh-${ctx.tag}`, ctx.domain),
-                  },
-                ],
-                body: 'ok',
-              }),
-            }),
-        }).finally(() => {
-          ctx.handle.transport = prior;
-        });
-      }),
-    legacyRaw: () =>
-      withLegacyOnly(ctx.handle, ctx.transport, () => {
-        const prior = ctx.handle.transport;
-        ctx.handle.transport = legacyTransport;
-        return runPlant({
-          ...base,
-          cookie: { ...ctx.plantCookie, value: `lr-${ctx.tag}` },
-          label: 'legacyRaw',
-          build: () =>
-            legacyContinue({
-              rawResponse: rawHttpResponse({
-                code: 200,
-                phrase: 'OK',
-                headers: [
-                  { name: 'content-type', value: 'text/plain' },
-                  {
-                    name: 'Set-Cookie',
-                    value: cookieHeader(ctx.names.plant, `lr-${ctx.tag}`, ctx.domain),
-                  },
-                ],
-                body: 'ok',
-              }),
-            }),
-        }).finally(() => {
-          ctx.handle.transport = prior;
-        });
-      }),
+    legacyHeaders: runLegacy('legacyHeaders', `lh-${ctx.tag}`),
+    legacyRaw: runLegacy('legacyRaw', `lr-${ctx.tag}`),
   };
 }
 
@@ -2053,7 +2584,7 @@ async function allowedHeaderAttempt({
   const legAt = legStartedAt ?? startedAt;
   const finish = (out) =>
     cookie
-      ? finishPlant({ reader, readerSession, out, cookie, notes, label })
+      ? finishPlant({ reader, readerSession, out, cookie, notes, label, handle })
       : (() => {
           note(notes, `cookie-plant.${label}`, {
             answered: answered(out),
@@ -2230,126 +2761,160 @@ function controlAttacks(ctx) {
     url: `${ctx.ordinary}/`,
   };
   const ordinaryUrl = `${ctx.ordinary}/data?n=ctrl-${ctx.tag}`;
-  const fetchReady = Boolean(ctx.transport.fetch);
-  const diag = {
-    handle: ctx.handle,
+  const diag = (handle) => ({
+    handle,
     budget: ctx.budget,
     notes: ctx.notes,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
-  };
+  });
   return {
     ordinary: () =>
-      runPlant({
-        ...diag,
-        url: ordinaryUrl,
-        cookie: ordinaryCookie,
-        label: 'ordinary',
-        topLevel: false,
-        build: () =>
-          fetchReady
-            ? fetchFulfill({
-                responseHeaders: [
-                  { name: 'content-type', value: 'text/plain' },
-                  {
-                    name: 'Set-Cookie',
-                    value: cookieHeader(ctx.names.ordinary, ordinaryCookie.value, null),
-                  },
-                ],
-                body: b64text('ok'),
-              })
-            : legacyContinue({
-                rawResponse: rawHttpResponse({
-                  code: 200,
-                  phrase: 'OK',
-                  headers: [
+      withFreshAttemptTab(ctx, (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        return runPlant({
+          ...diag(handle),
+          url: ordinaryUrl,
+          cookie: ordinaryCookie,
+          label: 'ordinary',
+          topLevel: false,
+          build: () =>
+            fetchReady
+              ? fetchFulfill({
+                  responseHeaders: [
                     { name: 'content-type', value: 'text/plain' },
                     {
                       name: 'Set-Cookie',
                       value: cookieHeader(ctx.names.ordinary, ordinaryCookie.value, null),
                     },
                   ],
-                  body: 'ok',
+                  body: b64text('ok'),
+                })
+              : legacyContinue({
+                  rawResponse: rawHttpResponse({
+                    code: 200,
+                    phrase: 'OK',
+                    headers: [
+                      { name: 'content-type', value: 'text/plain' },
+                      {
+                        name: 'Set-Cookie',
+                        value: cookieHeader(ctx.names.ordinary, ordinaryCookie.value, null),
+                      },
+                    ],
+                    body: 'ok',
+                  }),
                 }),
-              }),
+        });
       }),
-    adobe: () => {
-      const adobeOrigin =
-        fixtureOriginFor(ctx.ordinary, 'www.adobe.com') ?? 'https://www.adobe.com';
-      const adobeCookie = {
-        name: ctx.names.adobe,
-        value: `a-${ctx.tag}`,
-        domain: '.adobe.com',
-        url: `${adobeOrigin}/`,
-      };
-      return allowedHeaderAttempt({
-        ...diag,
-        url: `${adobeOrigin}/data?n=adobe-${ctx.tag}`,
-        label: 'adobe',
-        header: cookieHeader(ctx.names.adobe, adobeCookie.value, '.adobe.com'),
-        cookie: adobeCookie,
-        fetchReady,
-        topLevel: true,
-      });
-    },
-    deletion: async () => {
-      const deleteOnOrdinary = {
-        name: ctx.names.delete,
-        value: `seed-${ctx.tag}`,
-        domain: hostOf(ctx.ordinary),
-        url: `${ctx.ordinary}/`,
-      };
-      const seeded = await seedCookie(ctx.reader, ctx.readerSession, deleteOnOrdinary);
-      if (plantedOf(seeded) !== true) {
-        note(ctx.notes, 'cookie-plant.deletion', { incomplete: 'seed failed' });
-        return {
-          answered: 'incomplete',
-          refused: 'incomplete',
-          planted: 'incomplete',
-          cleared: 'incomplete',
+    adobe: () =>
+      withFreshAttemptTab(ctx, (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        const adobeOrigin =
+          fixtureOriginFor(ctx.ordinary, 'www.adobe.com') ?? 'https://www.adobe.com';
+        const adobeCookie = {
+          name: ctx.names.adobe,
+          value: `a-${ctx.tag}`,
+          domain: '.adobe.com',
+          url: `${adobeOrigin}/`,
         };
-      }
-      const attempt = await allowedHeaderAttempt({
-        ...diag,
-        url: ordinaryUrl,
-        label: 'deletion',
-        header: cookieHeader(ctx.names.delete, '', null, 'Max-Age=0'),
-        cookie: deleteOnOrdinary,
-        fetchReady,
-        topLevel: false,
-      });
-      const after = await readJar(ctx.reader, ctx.readerSession, {
-        name: ctx.names.delete,
-        domain: deleteOnOrdinary.domain,
-      });
-      const cleared = plantedOf(after) === false;
-      note(ctx.notes, 'cookie-plant.deletion.cleared', { cleared, via: after?.via });
-      return { ...attempt, cleared };
-    },
+        return allowedHeaderAttempt({
+          ...diag(handle),
+          url: `${adobeOrigin}/data?n=adobe-${ctx.tag}`,
+          label: 'adobe',
+          header: cookieHeader(ctx.names.adobe, adobeCookie.value, '.adobe.com'),
+          cookie: adobeCookie,
+          fetchReady,
+          topLevel: true,
+        });
+      }),
+    deletion: () =>
+      withFreshAttemptTab(ctx, async (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        const deleteOnOrdinary = {
+          name: ctx.names.delete,
+          value: `seed-${ctx.tag}`,
+          domain: hostOf(ctx.ordinary),
+          url: `${ctx.ordinary}/`,
+        };
+        const seeded = await seedCookie(handle.reader, handle.readerSession, deleteOnOrdinary);
+        if (plantedOf(seeded) !== true) {
+          note(ctx.notes, 'cookie-plant.deletion', {
+            incomplete: 'seed failed',
+            ...timingOf(handle),
+          });
+          return {
+            answered: 'incomplete',
+            refused: 'incomplete',
+            planted: 'incomplete',
+            cleared: 'incomplete',
+          };
+        }
+        const attempt = await allowedHeaderAttempt({
+          ...diag(handle),
+          url: ordinaryUrl,
+          label: 'deletion',
+          header: cookieHeader(ctx.names.delete, '', null, 'Max-Age=0'),
+          cookie: deleteOnOrdinary,
+          fetchReady,
+          topLevel: false,
+        });
+        const after = await readJar(handle.reader, handle.readerSession, {
+          name: ctx.names.delete,
+          domain: deleteOnOrdinary.domain,
+        });
+        const cleared = plantedOf(after) === false;
+        note(ctx.notes, 'cookie-plant.deletion.cleared', {
+          cleared,
+          via: after?.via,
+          ...timingOf(handle),
+        });
+        return { ...attempt, cleared };
+      }),
   };
 }
 
-async function runAttempts(groups, budget = 5000, onlyPaths = null) {
+function fillMissingAttempts(results, legacyReady) {
+  for (const name of ALL_PATH_NAMES) {
+    if (results[name]) continue;
+    if (!legacyReady && (name === 'legacyHeaders' || name === 'legacyRaw'))
+      results[name] = notSupportedAttempt();
+    else if (CREDENTIAL_PATH_NAMES.includes(name)) results[name] = notSupportedAttempt();
+    else results[name] = EMPTY_ATTEMPT;
+  }
+}
+
+async function runOneAttempt(name, run, ceiling, legacyReady, results, ran) {
+  if (!legacyReady && (name === 'legacyHeaders' || name === 'legacyRaw')) {
+    results[name] = notSupportedAttempt();
+    ran.add(name);
+    return;
+  }
+  try {
+    results[name] = await withPathBudget(run(), ceiling, name);
+  } catch (error) {
+    results[name] = attemptRecord(
+      { ok: false, error: { message: String(error?.message ?? error) } },
+      'incomplete'
+    );
+  }
+  ran.add(name);
+}
+
+async function runAttempts(groups, budget = 5000, onlyPaths = null, legacyReady = true) {
   const results = {};
+  const ran = new Set();
   const ceiling = pathCeiling(budget) + cleanupCeiling(budget) + Math.min(budget, 500);
   const allow =
     Array.isArray(onlyPaths) && onlyPaths.length ? new Set(onlyPaths.map(String)) : null;
   for (const group of groups) {
     for (const [name, run] of Object.entries(group ?? {})) {
       if (allow && !allow.has(name)) continue;
-      try {
-        results[name] = await withPathBudget(run(), ceiling, name);
-      } catch (error) {
-        results[name] = attemptRecord(
-          { ok: false, error: { message: String(error?.message ?? error) } },
-          'incomplete'
-        );
-      }
+      await runOneAttempt(name, run, ceiling, legacyReady, results, ran);
     }
   }
-  for (const name of ALL_PATH_NAMES) if (!results[name]) results[name] = EMPTY_ATTEMPT;
-  return results;
+  fillMissingAttempts(results, legacyReady);
+  return { results, ran };
 }
 
 async function attachClientPage(client, pageTarget, internalSessions) {
@@ -2391,22 +2956,13 @@ async function enableClientTransport(client, pageSession, notes) {
       incomplete:
         'neither Fetch.enable nor Network.setRequestInterception is available on the guarded client',
     };
-  if (transport.fetch) {
-    await outcome(
-      client.send(
-        'Fetch.enable',
-        {
-          patterns: [
-            { urlPattern: '*', requestStage: 'Request' },
-            { urlPattern: '*', requestStage: 'Response' },
-          ],
-        },
-        pageSession
-      )
-    );
-  }
+  let fetchEnable = transport.fetchEnable ?? null;
+  if (transport.fetch && refused(fetchEnable))
+    return { transport, legacyReady: false, fetchEnable };
+  if (transport.fetch && fetchEnable && !fetchEnable.ok)
+    return { transport, legacyReady: false, fetchEnable };
   let legacyReady = transport.legacy;
-  if (!legacyReady && transport.fetch) {
+  if (!legacyReady && transport.fetch && fetchEnable?.ok) {
     await outcome(client.send('Fetch.disable', {}, pageSession));
     const legacy = await enableLegacy(client, pageSession);
     legacyReady = legacy.ok;
@@ -2414,18 +2970,24 @@ async function enableClientTransport(client, pageSession, notes) {
       transport.legacy = true;
       await outcome(client.send('Network.setRequestInterception', { patterns: [] }, pageSession));
     }
-    await outcome(
-      client.send(
-        'Fetch.enable',
-        {
-          patterns: [
-            { urlPattern: '*', requestStage: 'Request' },
-            { urlPattern: '*', requestStage: 'Response' },
-          ],
-        },
-        pageSession
-      )
+    fetchEnable = await capped(
+      outcome(
+        client.send(
+          'Fetch.enable',
+          {
+            patterns: [
+              { urlPattern: '*', requestStage: 'Request' },
+              { urlPattern: '*', requestStage: 'Response' },
+            ],
+          },
+          pageSession
+        )
+      ),
+      800,
+      'Fetch.enable'
     );
+    if (refused(fetchEnable)) return { transport, legacyReady, fetchEnable };
+    if (!fetchEnable.ok) return { transport, legacyReady, fetchEnable };
     if (legacyReady) note(notes, 'cookie-plant.legacyProbe', { ready: true });
     else
       note(notes, 'cookie-plant.legacyProbe', {
@@ -2433,12 +2995,11 @@ async function enableClientTransport(client, pageSession, notes) {
         note: 'legacy unsupported in this Chrome',
       });
   }
-  return { transport, legacyReady };
+  return { transport, legacyReady, fetchEnable };
 }
 
 function credentialAttacks(ctx) {
   if (!ctx.credential) return null;
-  const fetchReady = Boolean(ctx.transport.fetch);
   const hostOnlyUrl = ctx.plantUrl;
   const hostOnlyCookie = {
     name: ctx.names.plant,
@@ -2457,76 +3018,65 @@ function credentialAttacks(ctx) {
     fixtureOriginFor(ctx.plantOrigin ?? ctx.ordinary, ctx.credentialHost) ??
     fixtureOriginFor(ctx.ordinary, ctx.credentialHost);
   const subUrl = `${fixtureOriginFor(idpFixture ?? ctx.ordinary, subHost) ?? `https://${subHost}`}/data?n=sub-${ctx.tag}`;
-  const diag = {
-    handle: ctx.handle,
+  const diag = (handle) => ({
+    handle,
     budget: ctx.budget,
     notes: ctx.notes,
     fixtureLog: ctx.fixtureLog,
     legStartedAt: ctx.legStartedAt,
     firstIncomplete: ctx.firstIncomplete,
-  };
+  });
   return {
     hostOnly: () =>
-      runPlant({
-        ...diag,
-        url: hostOnlyUrl,
-        cookie: hostOnlyCookie,
-        label: 'hostOnly',
-        topLevel: true,
-        build: () =>
-          fetchReady
-            ? fetchFulfill({
-                responseHeaders: [
-                  { name: 'content-type', value: 'text/plain' },
-                  {
-                    name: 'Set-Cookie',
-                    value: cookieHeader(ctx.names.plant, hostOnlyCookie.value, null),
-                  },
-                ],
-                body: b64text('ok'),
-              })
-            : legacyContinue({
-                rawResponse: rawHttpResponse({
-                  code: 200,
-                  phrase: 'OK',
-                  headers: [
+      withFreshAttemptTab(ctx, (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        return runPlant({
+          ...diag(handle),
+          url: hostOnlyUrl,
+          cookie: hostOnlyCookie,
+          label: 'hostOnly',
+          topLevel: true,
+          build: () =>
+            fetchReady
+              ? fetchFulfill({
+                  responseHeaders: [
+                    { name: 'content-type', value: 'text/plain' },
                     {
                       name: 'Set-Cookie',
                       value: cookieHeader(ctx.names.plant, hostOnlyCookie.value, null),
                     },
                   ],
-                  body: 'ok',
+                  body: b64text('ok'),
+                })
+              : legacyContinue({
+                  rawResponse: rawHttpResponse({
+                    code: 200,
+                    phrase: 'OK',
+                    headers: [
+                      {
+                        name: 'Set-Cookie',
+                        value: cookieHeader(ctx.names.plant, hostOnlyCookie.value, null),
+                      },
+                    ],
+                    body: 'ok',
+                  }),
                 }),
-              }),
+        });
       }),
     domainCover: () =>
-      runPlant({
-        ...diag,
-        url: subUrl,
-        cookie: coverCookie,
-        label: 'domainCover',
-        topLevel: true,
-        build: () =>
-          fetchReady
-            ? fetchFulfill({
-                responseHeaders: [
-                  { name: 'content-type', value: 'text/plain' },
-                  {
-                    name: 'Set-Cookie',
-                    value: cookieHeader(
-                      ctx.names.plant,
-                      coverCookie.value,
-                      ctx.credentialSiteDomain
-                    ),
-                  },
-                ],
-                body: b64text('ok'),
-              })
-            : legacyContinue({
-                rawResponse: rawHttpResponse({
-                  code: 200,
-                  phrase: 'OK',
-                  headers: [
+      withFreshAttemptTab(ctx, (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        return runPlant({
+          ...diag(handle),
+          url: subUrl,
+          cookie: coverCookie,
+          label: 'domainCover',
+          topLevel: true,
+          build: () =>
+            fetchReady
+              ? fetchFulfill({
+                  responseHeaders: [
+                    { name: 'content-type', value: 'text/plain' },
                     {
                       name: 'Set-Cookie',
                       value: cookieHeader(
@@ -2536,27 +3086,46 @@ function credentialAttacks(ctx) {
                       ),
                     },
                   ],
-                  body: 'ok',
+                  body: b64text('ok'),
+                })
+              : legacyContinue({
+                  rawResponse: rawHttpResponse({
+                    code: 200,
+                    phrase: 'OK',
+                    headers: [
+                      {
+                        name: 'Set-Cookie',
+                        value: cookieHeader(
+                          ctx.names.plant,
+                          coverCookie.value,
+                          ctx.credentialSiteDomain
+                        ),
+                      },
+                    ],
+                    body: 'ok',
+                  }),
                 }),
-              }),
+        });
       }),
-    subHost: () => {
-      const subCookie = {
-        name: ctx.names.ordinary,
-        value: `sub-${ctx.tag}`,
-        domain: `.${subHost}`,
-        url: `${fixtureOriginFor(idpFixture ?? ctx.ordinary, subHost) ?? `https://${subHost}`}/`,
-      };
-      return allowedHeaderAttempt({
-        ...diag,
-        url: subUrl,
-        label: 'subHost',
-        header: cookieHeader(ctx.names.ordinary, subCookie.value, `.${subHost}`),
-        cookie: subCookie,
-        fetchReady,
-        topLevel: true,
-      });
-    },
+    subHost: () =>
+      withFreshAttemptTab(ctx, (handle) => {
+        const fetchReady = Boolean(handle.transport?.fetch);
+        const subCookie = {
+          name: ctx.names.ordinary,
+          value: `sub-${ctx.tag}`,
+          domain: `.${subHost}`,
+          url: `${fixtureOriginFor(idpFixture ?? ctx.ordinary, subHost) ?? `https://${subHost}`}/`,
+        };
+        return allowedHeaderAttempt({
+          ...diag(handle),
+          url: subUrl,
+          label: 'subHost',
+          header: cookieHeader(ctx.names.ordinary, subCookie.value, `.${subHost}`),
+          cookie: subCookie,
+          fetchReady,
+          topLevel: true,
+        });
+      }),
   };
 }
 
@@ -2648,15 +3217,13 @@ async function openPlantClient({
   }
   if (attached.refused && sessionCut(attached.refused)) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    if (control)
-      return {
-        done: {
-          live: true,
-          incomplete: String(attached.refused.error?.message ?? 'session refused'),
-          ...incompletePaths(),
-        },
-      };
-    return { done: sessionBlockedPlantResults(credential) };
+    return {
+      done: {
+        live: true,
+        incomplete: String(attached.refused.error?.message ?? 'session refused before trigger'),
+        ...incompletePaths(),
+      },
+    };
   }
   const pageSession = attached.pageSession;
   if (!pageSession) {
@@ -2694,6 +3261,7 @@ export async function cookiePlant({
   fixtureLog,
   blockedMarkers,
   onlyPaths = null,
+  forcedRaw = null,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -2725,7 +3293,7 @@ export async function cookiePlant({
   });
   if (!door.live) return door;
 
-  const plant = await openPlantClient({
+  const probe = await openPlantClient({
     client,
     reader,
     homeUrl,
@@ -2734,26 +3302,19 @@ export async function cookiePlant({
     control,
     credential,
   });
-  if (plant.done) return plant.done;
+  if (probe.done) return probe.done;
+  const transport = probe.enabled.transport;
+  const legacyReady = probe.enabled.legacyReady;
+  await capped(disableInterception(client, probe.pageSession, transport), 800, 'probe-disable');
+  await capped(
+    outcome(reader.send('Target.closeTarget', { targetId: probe.pageTarget })),
+    800,
+    'probe-close'
+  );
 
-  const { readerSession, pageTarget, pageSession, enabled } = plant;
-  const handle = {
-    client,
-    reader,
-    pageSession,
-    readerSession,
-    pageTarget,
-    homeUrl,
-    transport: enabled.transport,
-    internalSessions,
-    notes,
-  };
   const ctx = plantCtx({
     client,
     reader,
-    pageSession,
-    readerSession,
-    handle,
     plantUrl: `${plantOrigin}/data?n=plant-${tag}`,
     plantCookie: {
       name: names.plant,
@@ -2768,9 +3329,10 @@ export async function cookiePlant({
     protectedOrigin: sourceOrigin,
     ordinary,
     homeUrl,
-    transport: enabled.transport,
+    transport,
     budget,
     notes,
+    internalSessions,
     credential,
     credentialHost,
     credentialSiteDomain,
@@ -2780,37 +3342,42 @@ export async function cookiePlant({
     guardedProtected: !control && !credential,
     blockedMarkers: Array.isArray(blockedMarkers) ? blockedMarkers : [],
     proofTag: `cookie-plant-${tag}`,
+    rawDoors: {},
+    forcedRaw: forcedRaw && typeof forcedRaw === 'object' ? forcedRaw : null,
   });
 
-  const results = await runAttempts(
+  const { results, ran } = await runAttempts(
     control
       ? [controlAttacks(ctx)]
       : [
           controlAttacks(ctx),
           fetchAttacks(ctx),
-          legacyAttacks(ctx, enabled.legacyReady),
+          legacyAttacks(ctx, legacyReady),
           credential ? credentialAttacks(ctx) : null,
         ],
     budget,
-    onlyPaths
+    onlyPaths,
+    legacyReady
   );
 
-  await capped(
-    disableInterception(client, handle.pageSession, enabled.transport),
-    800,
-    'disable-final'
-  );
-  await capped(
-    outcome(reader.send('Target.closeTarget', { targetId: pageTarget })),
-    800,
-    'close-final'
-  );
+  const evidenceIncomplete =
+    !control &&
+    [...ran].some((name) => {
+      const attempt = results[name];
+      if (!attempt || attempt.answered === 'not-supported') return false;
+      return (
+        attempt.planted === 'incomplete' ||
+        attempt.answered === 'incomplete' ||
+        attempt.refused === 'incomplete'
+      );
+    });
+
   return finishCookiePlant({
     control,
     credential,
-    fetch: enabled.transport.fetch,
-    legacy: enabled.legacyReady,
-    evidenceIncomplete: handle.evidenceIncomplete,
+    fetch: Boolean(transport.fetch),
+    legacy: Boolean(legacyReady),
+    evidenceIncomplete,
     results,
   });
 }

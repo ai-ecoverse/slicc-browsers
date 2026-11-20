@@ -108,7 +108,7 @@ const withCookiePlantCaps = (capabilities, probe) => {
   if (probe.fetch === true && asObject.fetchInterception !== false)
     asObject.fetchInterception = true;
   else delete asObject.fetchInterception;
-  if (probe.legacy === true && asObject.legacyInterception !== false)
+  if (probe.legacy === true && asObject.legacyInterception === true)
     asObject.legacyInterception = true;
   else delete asObject.legacyInterception;
   return Array.isArray(capabilities)
@@ -1347,6 +1347,7 @@ class Execution {
         fixtureLog: () => this.options.fixture.log(),
         blockedMarkers: this.vector.blockedMarkers ?? [],
         onlyPaths: this.options.cookiePlantOnlyPaths ?? null,
+        forcedRaw: this.options.cookiePlantForcedRaw ?? null,
       })
     );
   }

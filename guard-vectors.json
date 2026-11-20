@@ -36723,7 +36723,9 @@
         "responsePhraseRefused",
         "continueAtRequestRefused",
         "legacyHeadersRefused",
-        "legacyRawRefused"
+        "legacyRawRefused",
+        "fulfillNewlineAnswered",
+        "headerPaddedAnswered"
       ],
       "control": {
         "origin": "ordinary",
@@ -36753,7 +36755,7 @@
         "fulfillSetCookie2Answered": true,
         "fulfillSetCookie2Refused": "either",
         "fulfillNewlinePlanted": false,
-        "fulfillNewlineAnswered": true,
+        "fulfillNewlineAnswered": "either",
         "fulfillNewlineRefused": "either",
         "fulfillBinaryPlanted": false,
         "fulfillBinaryAnswered": true,
@@ -36786,7 +36788,7 @@
         "domainWsAnswered": true,
         "domainWsRefused": "either",
         "headerPaddedPlanted": false,
-        "headerPaddedAnswered": true,
+        "headerPaddedAnswered": "either",
         "headerPaddedRefused": "either",
         "setCookieSecondPlanted": false,
         "setCookieSecondAnswered": true,
@@ -37836,7 +37838,9 @@
         "legacyHeadersRefused",
         "legacyRawRefused",
         "hostOnlyRefused",
-        "domainCoverRefused"
+        "domainCoverRefused",
+        "fulfillNewlineAnswered",
+        "headerPaddedAnswered"
       ],
       "control": {
         "origin": "ordinary",
@@ -37866,7 +37870,7 @@
         "fulfillSetCookie2Answered": true,
         "fulfillSetCookie2Refused": "either",
         "fulfillNewlinePlanted": false,
-        "fulfillNewlineAnswered": true,
+        "fulfillNewlineAnswered": "either",
         "fulfillNewlineRefused": "either",
         "fulfillBinaryPlanted": false,
         "fulfillBinaryAnswered": true,
@@ -37899,7 +37903,7 @@
         "domainWsAnswered": true,
         "domainWsRefused": "either",
         "headerPaddedPlanted": false,
-        "headerPaddedAnswered": true,
+        "headerPaddedAnswered": "either",
         "headerPaddedRefused": "either",
         "setCookieSecondPlanted": false,
         "setCookieSecondAnswered": true,

@@ -699,6 +699,57 @@ test('door-absent path still fails when the guarded jar is planted', async () =>
   assert.equal(row.observations.guarded.fulfillArrayRefused, false, JSON.stringify(row));
 });
 
+test('doorAbsent + unreadable jar stays incomplete, not unplanted pass', async () => {
+  const out = await rows({
+    forcedRaw: { fulfillArray: 'timeout' },
+    fake: { rejectJarAfterDoorProof: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+});
+
+test('plantSurfaceRefused + unreadable jar stays incomplete, not unplanted pass', async () => {
+  const out = await rows({
+    refuseFetchEnable: true,
+    forcedRaw: { fulfillArray: 'plant' },
+    fake: { rejectJarAfterDoorProof: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+});
+
+test('refusal-reply shape + unreadable jar stays incomplete, not unplanted pass', async () => {
+  const out = await rows({
+    refuseAttachAfterTrigger: true,
+    forcedRaw: { fulfillArray: 'plant' },
+    fake: { rejectJarAfterDoorProof: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+});
+
+test('continue-itself shape + unreadable jar stays incomplete, not unplanted pass', async () => {
+  const out = await rows({
+    forcedRaw: { fulfillArray: 'plant' },
+    fake: { rejectJarAfterDoorProof: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, 'incomplete', JSON.stringify(row));
+});
+
 test('raw leg plants => guarded must refuse; allow-through fails', async () => {
   const out = await rows({
     forcedRaw: { fulfillArray: 'plant' },

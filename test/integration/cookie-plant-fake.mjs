@@ -141,6 +141,9 @@ export function cookiePlantFake(options = {}) {
   let contextId = 1;
   const cutSessions = new Set();
   const rejectCplantJarAfterFirst = options.rejectCplantJarAfterFirst === true;
+  const rejectJarAfterDoorProof = options.rejectJarAfterDoorProof === true;
+  let doorJarProofs = 0;
+  let rejectJarReads = false;
   const deadFetchAfter = options.deadFetchAfter ? String(options.deadFetchAfter) : '';
   const deadFetchOnNth = Number(options.deadFetchOnNth ?? 1) || 1;
   const cutSessionAfter = options.cutSessionAfter ? String(options.cutSessionAfter) : '';
@@ -455,10 +458,15 @@ export function cookiePlantFake(options = {}) {
       method === 'Network.getAllCookies' ||
       method === 'Network.getCookies'
     ) {
+      if (rejectJarAfterDoorProof && rejectJarReads) throw new Error('jar read rejected');
       const hasCplant = cookies.some((cookie) => String(cookie.name).startsWith('cplant'));
       if (rejectCplantJarAfterFirst && hasCplant && sawCplantJar)
         throw new Error('jar read rejected');
       if (hasCplant) sawCplantJar = true;
+      if (rejectJarAfterDoorProof && hasCplant) {
+        doorJarProofs += 1;
+        if (doorJarProofs >= 2) rejectJarReads = true;
+      }
       if (method === 'Network.getCookies') {
         const hosts = (params.urls ?? []).map(hostOf);
         return {

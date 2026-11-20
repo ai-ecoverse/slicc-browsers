@@ -814,10 +814,23 @@ function attemptRecord(out, planted) {
       refused: 'incomplete',
       planted: 'incomplete',
     };
+  const plantedOut = planted === true ? true : planted === false ? false : 'incomplete';
   return {
     answered: true,
     refused: refused(out),
-    planted: planted === 'incomplete' ? 'incomplete' : Boolean(planted),
+    planted: plantedOut,
+  };
+}
+
+function incompletePlantedAttempt(notes, label, evidence) {
+  note(notes, `cookie-plant.${label}`, {
+    ...evidence,
+    incomplete: evidence?.incomplete ?? 'protected plant evidence incomplete',
+  });
+  return {
+    answered: 'incomplete',
+    refused: 'incomplete',
+    planted: 'incomplete',
   };
 }
 
@@ -974,14 +987,29 @@ function scoreRawOrDoorBranch({
       planted: planted === true ? true : 'incomplete',
     };
   }
-  if (plantSurfaceRefused && planted !== true) {
-    note(notes, `cookie-plant.${label}`, {
+  if (plantSurfaceRefused) {
+    if (planted === true) {
+      note(notes, `cookie-plant.${label}`, {
+        ...evidence,
+        answered: true,
+        refused: true,
+        note: 'Fetch.enable refused: interception plant surface refused',
+      });
+      return { answered: true, refused: true, planted: true };
+    }
+    if (planted === false) {
+      note(notes, `cookie-plant.${label}`, {
+        ...evidence,
+        answered: true,
+        refused: true,
+        note: 'Fetch.enable refused: interception plant surface refused',
+      });
+      return { answered: true, refused: true, planted: false };
+    }
+    return incompletePlantedAttempt(notes, label, {
       ...evidence,
-      answered: true,
-      refused: true,
       note: 'Fetch.enable refused: interception plant surface refused',
     });
-    return { answered: true, refused: true, planted: false };
   }
   if (!doorAbsent) return null;
   note(notes, `cookie-plant.${label}`, {
@@ -989,7 +1017,8 @@ function scoreRawOrDoorBranch({
     note: 'door not present on this browser',
   });
   if (planted === true) return { answered: true, refused: false, planted: true };
-  return { answered: true, refused: false, planted: false };
+  if (planted === false) return { answered: true, refused: false, planted: false };
+  return incompletePlantedAttempt(notes, label, evidence);
 }
 
 function scoreProtectedPlant({
@@ -1065,33 +1094,20 @@ function scoreProtectedPlant({
     return { answered: true, refused: pauseCount > 0 || sessionBlocked, planted: true };
   }
   if (
-    planted === 'incomplete' ||
+    (planted !== true && planted !== false) ||
     pauseCount === 'incomplete' ||
     fixtureHits === 'incomplete' ||
     loadBlocked === 'incomplete' ||
     issuedAndBlocked === 'incomplete'
   ) {
-    note(notes, `cookie-plant.${label}`, {
-      ...evidence,
-      incomplete: 'protected plant evidence incomplete',
-    });
-    return {
-      answered: 'incomplete',
-      refused: 'incomplete',
-      planted: 'incomplete',
-    };
+    return incompletePlantedAttempt(notes, label, evidence);
   }
   if (pauseCount === 0 && loadBlocked === true && planted === false) {
     if (fetchEnableOk === false) {
-      note(notes, `cookie-plant.${label}`, {
+      return incompletePlantedAttempt(notes, label, {
         ...evidence,
         incomplete: 'Fetch.enable unanswered for bios-shape',
       });
-      return {
-        answered: 'incomplete',
-        refused: 'incomplete',
-        planted: 'incomplete',
-      };
     }
     note(notes, `cookie-plant.${label}`, {
       ...evidence,
@@ -1100,15 +1116,7 @@ function scoreProtectedPlant({
     });
     return { answered: true, refused: true, planted: false };
   }
-  note(notes, `cookie-plant.${label}`, {
-    ...evidence,
-    incomplete: 'protected plant evidence incomplete',
-  });
-  return {
-    answered: 'incomplete',
-    refused: 'incomplete',
-    planted: 'incomplete',
-  };
+  return incompletePlantedAttempt(notes, label, evidence);
 }
 
 async function fixtureHitsFor(fixtureLog, url, since, tag, proofTag) {

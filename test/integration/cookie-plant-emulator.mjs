@@ -251,9 +251,21 @@ function stripSetCookieParams(method, params) {
   return next;
 }
 
+function navigationUrl(method, params) {
+  if (method === 'Page.navigate') return params?.url ?? null;
+  if (method === 'Runtime.evaluate' && typeof params?.expression === 'string') {
+    const match = /location\.(?:assign|replace)\(\s*['"]([^'"]+)['"]\s*\)/.exec(params.expression);
+    if (match) return match[1];
+    const href = /location\.href\s*=\s*['"]([^'"]+)['"]/.exec(params.expression);
+    if (href) return href[1];
+  }
+  return null;
+}
+
 export function applyCookiePlant(client, options = {}) {
   if (!options.cookiePlant) return client;
   const catalog = protectedOrigins(options.protectedOrigins, options.extraOrigins ?? []);
+  const cred = options.credentialOrigins ? credentialOrigins(options.credentialOrigins) : null;
   const refusal = (what) => new Error(`slicc: refused: ${what}`);
   const forwardThenCut = new Set(
     Array.isArray(options.forwardThenCut)
@@ -264,6 +276,21 @@ export function applyCookiePlant(client, options = {}) {
   );
   const hangClientAttach = options.hangClientAttach === true;
   const silentDropAllowed = options.silentDropAllowed === true;
+  const refuseAfterProtectedTouch = options.refuseAfterProtectedTouch === true;
+  const poisonedTargets = new Set();
+  const sessionTarget = new Map();
+  const sessionMethods = new Set([
+    'Page.enable',
+    'Runtime.enable',
+    'Network.enable',
+    'Fetch.enable',
+    'Fetch.disable',
+    'Network.setRequestInterception',
+    'Runtime.evaluate',
+    'Page.navigate',
+  ]);
+  const protectedUrl = (url) =>
+    Boolean(url) && (Boolean(catalog?.url?.(url)) || Boolean(cred?.url?.(url)));
   return {
     ...client,
     send: async (method, params, sessionId) => {
@@ -272,6 +299,13 @@ export function applyCookiePlant(client, options = {}) {
           .send('Target.getTargetInfo', { targetId: params.targetId })
           .catch(() => null);
         if (/cookie-plant-/.test(String(info?.targetInfo?.url ?? ''))) return new Promise(() => {});
+      }
+      if (refuseAfterProtectedTouch) {
+        if (method === 'Target.attachToTarget' && poisonedTargets.has(params?.targetId))
+          throw refusal("target is on seven's origin");
+        const targetId = sessionId ? sessionTarget.get(sessionId) : null;
+        if (targetId && poisonedTargets.has(targetId) && sessionMethods.has(method))
+          throw refusal("target is on seven's origin");
       }
       const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options, client);
       if (blocked) {
@@ -303,6 +337,15 @@ export function applyCookiePlant(client, options = {}) {
       }
       const forward = silentDropAllowed ? stripSetCookieParams(method, params) : params;
       const result = await client.send(method, forward, sessionId);
+      if (method === 'Target.attachToTarget' && result?.sessionId && params?.targetId)
+        sessionTarget.set(result.sessionId, params.targetId);
+      if (refuseAfterProtectedTouch) {
+        const url = navigationUrl(method, params ?? {});
+        if (protectedUrl(url)) {
+          const targetId = sessionId ? sessionTarget.get(sessionId) : params?.targetId;
+          if (targetId) poisonedTargets.add(targetId);
+        }
+      }
       const kind = pathKind(method, params ?? {});
       if (kind && forwardThenCut.has(kind)) {
         const blob = JSON.stringify(params ?? {});

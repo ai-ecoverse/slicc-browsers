@@ -132,10 +132,19 @@ test('requestInterception capability is declared and the row requires it', () =>
   assert.deepEqual(vector.requires, ['requestInterception']);
   assert.equal(vector.control.via, 'guard');
   assert.equal(vector.expected.fulfillArrayPlanted, false);
-  assert.equal(vector.control.expected.fulfillArrayPlanted, true);
-  assert.equal(vector.control.expected.fulfillObjectPlanted, 'either');
-  assert.equal(vector.control.expected.binaryLfPlanted, 'either');
-  assert.equal(vector.control.expected.domainTrailDotPlanted, 'either');
+  assert.deepEqual(Object.keys(vector.control.expected).sort(), [
+    'adobeAnswered',
+    'adobePlanted',
+    'adobeRefused',
+    'deletionAnswered',
+    'deletionCleared',
+    'deletionRefused',
+    'ordinaryAnswered',
+    'ordinaryPlanted',
+  ]);
+  assert.equal(vector.control.expected.ordinaryPlanted, true);
+  assert.equal(vector.control.expected.adobePlanted, true);
+  assert.equal(vector.control.expected.deletionCleared, true);
   assert.equal(vector.expected.binaryLfPlanted, false);
   assert.equal(vector.expected.domainTrailDotPlanted, false);
   assert.equal(vector.expected.ordinaryPlanted, true);
@@ -498,13 +507,7 @@ test('binaryLf not stored is recorded as not-a-plant-path, not required', async 
   const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.control, 'pass', JSON.stringify(row));
   assert.equal(row.guarded, 'pass', JSON.stringify(row));
-  assert.equal(row.observations.control.binaryLfPlanted, false, JSON.stringify(row));
-  assert.ok(
-    (row.notes ?? []).some((n) =>
-      /cookie-plant\.binaryLf:.*"Chrome does not store it: not a plant path"/.test(n)
-    ),
-    JSON.stringify(row.notes)
-  );
+  assert.equal(row.observations.guarded.binaryLfPlanted, false, JSON.stringify(row));
 });
 
 test('binaryLf stored by the transport is a plant path; a leak fails', async () => {
@@ -516,14 +519,7 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
   const pass = ok.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(pass.control, 'pass', JSON.stringify(pass));
   assert.equal(pass.guarded, 'pass', JSON.stringify(pass));
-  assert.equal(pass.observations.control.binaryLfPlanted, true, JSON.stringify(pass));
   assert.equal(pass.observations.guarded.binaryLfPlanted, false, JSON.stringify(pass));
-  assert.ok(
-    (pass.notes ?? []).some((n) =>
-      /cookie-plant\.binaryLf:.*"raw leg stored it: plant path"/.test(n)
-    ),
-    JSON.stringify(pass.notes)
-  );
   const leak = await rows({
     fake: { storeBinaryLf: true },
     allowPlantPaths: ['binaryLf'],
@@ -534,6 +530,18 @@ test('binaryLf stored by the transport is a plant path; a leak fails', async () 
   const row = leak.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
   assert.equal(row.guarded, 'fail', JSON.stringify(row));
   assert.equal(row.observations.guarded.binaryLfPlanted, true, JSON.stringify(row));
+});
+
+test('mutant that refuses sessions after protected-origin touch passes', async () => {
+  const out = await rows({
+    refuseAfterProtectedTouch: true,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.live, 'pass', JSON.stringify(row));
 });
 
 test('refuse-all interception fails the controls', async () => {

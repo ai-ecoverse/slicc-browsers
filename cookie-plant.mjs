@@ -45,7 +45,7 @@ function refused(out) {
 
 function sessionCut(out) {
   if (!out || out.ok) return false;
-  return /slicc: refused: session cut on protected execution context/i.test(
+  return /slicc:\s*refused:.*(session cut on protected execution context|target is on seven'?s? origin)/i.test(
     String(out.error?.message ?? out.error ?? '')
   );
 }
@@ -2358,10 +2358,12 @@ async function attachClientPage(client, pageTarget, internalSessions) {
     800,
     'attachToTarget'
   );
-  if (!attached.ok && !refused(attached))
+  if (!attached.ok) {
+    if (sessionCut(attached) || refused(attached)) return { refused: attached, pageSession: null };
     return {
       incomplete: `client attach failed: ${attached.error?.message ?? attached.error}`,
     };
+  }
   const pageSession = attached.result?.sessionId;
   if (pageSession) {
     internalSessions.add(pageSession);
@@ -2371,10 +2373,12 @@ async function attachClientPage(client, pageTarget, internalSessions) {
       ['Network.enable', 'Network.enable'],
     ]) {
       const enabled = await capped(outcome(client.send(method, {}, pageSession)), 800, label);
-      if (!enabled.ok && !refused(enabled))
+      if (!enabled.ok) {
+        if (sessionCut(enabled) || refused(enabled)) return { refused: enabled, pageSession };
         return {
           incomplete: `client ${label} failed: ${enabled.error?.message ?? enabled.error}`,
         };
+      }
     }
   }
   return { pageSession };
@@ -2556,6 +2560,125 @@ function credentialAttacks(ctx) {
   };
 }
 
+function sessionBlockedPlantResults(credential) {
+  const blocked = Object.fromEntries(
+    ALL_PATH_NAMES.filter((name) => !['ordinary', 'adobe', 'deletion'].includes(name)).map(
+      (name) => [name, { answered: true, refused: true, planted: false }]
+    )
+  );
+  return finishCookiePlant({
+    control: false,
+    credential,
+    fetch: false,
+    legacy: false,
+    evidenceIncomplete: false,
+    results: {
+      ...Object.fromEntries(ALL_PATH_NAMES.map((name) => [name, EMPTY_ATTEMPT])),
+      ...blocked,
+      ordinary: EMPTY_ATTEMPT,
+      adobe: EMPTY_ATTEMPT,
+      deletion: EMPTY_ATTEMPT,
+    },
+  });
+}
+
+async function proveDoorOnOwnTab({
+  reader,
+  homeUrl,
+  doorOrigin,
+  tag,
+  budget,
+  notes,
+  internalSessions,
+  plantName,
+}) {
+  const doorPage = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!doorPage.ok)
+    return { incomplete: `open failed: ${doorPage.error?.message ?? doorPage.error}` };
+  if (doorPage.result?.incomplete) return { incomplete: doorPage.result.incomplete };
+  const doorSession = doorPage.result.sessionId;
+  const doorTarget = doorPage.result.targetId;
+  const readerTransport = await detectTransport(reader, doorSession, notes);
+  if (!readerTransport.kind) {
+    await outcome(reader.send('Target.closeTarget', { targetId: doorTarget }));
+    return {
+      incomplete:
+        'neither Fetch.enable nor Network.setRequestInterception is available on the unguarded session',
+      live: false,
+    };
+  }
+  const door = await proveDoor({
+    reader,
+    sessionId: doorSession,
+    protectedOrigin: doorOrigin,
+    homeUrl,
+    tag,
+    budget,
+    notes,
+    transport: readerTransport,
+    plantName,
+  });
+  await capped(
+    outcome(reader.send('Target.closeTarget', { targetId: doorTarget })),
+    800,
+    'door-close'
+  );
+  return door.live ? { live: true, doorVia: door.doorVia } : { ...door, live: false };
+}
+
+async function openPlantClient({
+  client,
+  reader,
+  homeUrl,
+  notes,
+  internalSessions,
+  control,
+  credential,
+}) {
+  const page = await openPage(reader, homeUrl, notes, internalSessions);
+  if (!page.ok)
+    return { done: { incomplete: `open failed: ${page.error?.message ?? page.error}` } };
+  if (page.result?.incomplete) return { done: { incomplete: page.result.incomplete } };
+  const readerSession = page.result.sessionId;
+  const pageTarget = page.result.targetId;
+  const attached = await attachClientPage(client, pageTarget, internalSessions);
+  if (attached.incomplete) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return { done: { incomplete: attached.incomplete, live: true } };
+  }
+  if (attached.refused && sessionCut(attached.refused)) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    if (control)
+      return {
+        done: {
+          live: true,
+          incomplete: String(attached.refused.error?.message ?? 'session refused'),
+          ...incompletePaths(),
+        },
+      };
+    return { done: sessionBlockedPlantResults(credential) };
+  }
+  const pageSession = attached.pageSession;
+  if (!pageSession) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return {
+      done: {
+        live: true,
+        incomplete: 'client has no page session for interception attempts',
+        ...incompletePaths(),
+      },
+    };
+  }
+  const enabled = await enableClientTransport(client, pageSession, notes);
+  if (enabled.incomplete) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    if (sessionCut({ ok: false, error: { message: enabled.incomplete } }) && !control)
+      return { done: sessionBlockedPlantResults(credential) };
+    return { done: { live: true, incomplete: enabled.incomplete } };
+  }
+  return { readerSession, pageTarget, pageSession, enabled };
+}
+
 export async function cookiePlant({
   client,
   reader,
@@ -2589,59 +2712,31 @@ export async function cookiePlant({
       : credentialSiteDomain
     : `.${hostOf(plantOrigin)}`;
   const homeUrl = `${ordinary}/doc?n=cookie-plant-${tag}`;
-  const page = await openPage(reader, homeUrl, notes, internalSessions);
-  if (!page.ok) return { incomplete: `open failed: ${page.error?.message ?? page.error}` };
-  if (page.result?.incomplete) return { incomplete: page.result.incomplete };
-  const readerSession = page.result.sessionId;
-  const pageTarget = page.result.targetId;
 
-  const readerTransport = await detectTransport(reader, readerSession, notes);
-  if (!readerTransport.kind)
-    return {
-      incomplete:
-        'neither Fetch.enable nor Network.setRequestInterception is available on the unguarded session',
-      live: false,
-    };
-
-  const doorOrigin = credential ? mappedOrigin : sourceOrigin;
-  const door = await proveDoor({
+  const door = await proveDoorOnOwnTab({
     reader,
-    sessionId: readerSession,
-    protectedOrigin: doorOrigin,
     homeUrl,
+    doorOrigin: credential ? mappedOrigin : sourceOrigin,
     tag,
     budget,
     notes,
-    transport: readerTransport,
+    internalSessions,
     plantName: names.plant,
   });
-  if (!door.live) {
-    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return { ...door, live: false };
-  }
+  if (!door.live) return door;
 
-  const attached = await attachClientPage(client, pageTarget, internalSessions);
-  if (attached.incomplete) {
-    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return { incomplete: attached.incomplete, live: true };
-  }
-  const pageSession = attached.pageSession;
+  const plant = await openPlantClient({
+    client,
+    reader,
+    homeUrl,
+    notes,
+    internalSessions,
+    control,
+    credential,
+  });
+  if (plant.done) return plant.done;
 
-  if (!pageSession) {
-    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return {
-      live: true,
-      incomplete: 'client has no page session for interception attempts',
-      ...incompletePaths(),
-    };
-  }
-
-  const enabled = await enableClientTransport(client, pageSession, notes);
-  if (enabled.incomplete) {
-    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return { live: true, incomplete: enabled.incomplete };
-  }
-
+  const { readerSession, pageTarget, pageSession, enabled } = plant;
   const handle = {
     client,
     reader,
@@ -2688,12 +2783,14 @@ export async function cookiePlant({
   });
 
   const results = await runAttempts(
-    [
-      fetchAttacks(ctx),
-      legacyAttacks(ctx, enabled.legacyReady),
-      credential ? credentialAttacks(ctx) : null,
-      controlAttacks(ctx),
-    ],
+    control
+      ? [controlAttacks(ctx)]
+      : [
+          controlAttacks(ctx),
+          fetchAttacks(ctx),
+          legacyAttacks(ctx, enabled.legacyReady),
+          credential ? credentialAttacks(ctx) : null,
+        ],
     budget,
     onlyPaths
   );

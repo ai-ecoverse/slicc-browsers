@@ -106,8 +106,6 @@ pub struct Vector {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub blocked_markers: Vec<String>,
-    #[serde(default, rename = "timeoutMs", skip_serializing_if = "Option::is_none")]
-    pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observe: Option<BTreeMap<String, Observation>>,
     pub live: String,

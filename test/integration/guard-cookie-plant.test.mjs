@@ -7,7 +7,7 @@ import test from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { fixtureServer } from '../../fixture-server.mjs';
-import { rowBudgetMs, run } from '../../guard-runner.mjs';
+import { run } from '../../guard-runner.mjs';
 import { cookiePlantFake } from './cookie-plant-fake.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
@@ -566,23 +566,80 @@ test('deletionCleared is incomplete when the after jar is unreadable', async () 
   assert.equal(row.observations.guarded.deletionCleared, 'incomplete', JSON.stringify(row));
 });
 
-test('C10.cookie-plant declares timeoutMs finite and at least the runner global', () => {
-  const global = 180000;
-  for (const vector of vectors) {
-    assert.ok(Number.isFinite(vector.timeoutMs) && vector.timeoutMs > 0, vector.id);
-    assert.ok(
-      vector.timeoutMs >= global,
-      `${vector.id} timeoutMs ${vector.timeoutMs} < global ${global}`
-    );
-    assert.equal(rowBudgetMs(vector, { rowTimeoutMs: global }), Math.max(vector.timeoutMs, global));
-  }
+test('default context: tab Set-Cookie and Storage jar read agree', async () => {
+  const out = await rows({
+    oneTarget: true,
+    onlyPaths: ['ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.control.deletionCleared, true, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some(
+      (n) => /cookie-plant\.deletion\.cleared:/.test(n) && /"cleared":true/.test(n)
+    ),
+    JSON.stringify(row.notes)
+  );
 });
 
-test('vector timeoutMs below the global does not shrink the row budget', () => {
-  assert.equal(rowBudgetMs({ timeoutMs: 1000 }, { rowTimeoutMs: 90000 }), 90000);
-  assert.equal(rowBudgetMs({ timeoutMs: 19410 }, { rowTimeoutMs: 90000 }), 90000);
-  assert.equal(rowBudgetMs({ timeoutMs: 360000 }, { rowTimeoutMs: 90000 }), 360000);
-  assert.equal(rowBudgetMs({}, { rowTimeoutMs: 90000 }), 90000);
+test('a) jar read that ignores browserContextId cannot pass planted:false (canary)', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { storageGetIgnoresBrowserContext: true, continueItself: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    row.guarded === 'incomplete' ||
+      row.live === 'fail' ||
+      (row.notes ?? []).some((n) => /jar view canary absent/.test(n)),
+    JSON.stringify(row)
+  );
+});
+
+test('b) canary absent => incomplete', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { dropCanary: true, continueItself: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /jar view canary absent/.test(n)) ||
+      /canary/.test(String(row.why ?? '')),
+    JSON.stringify(row)
+  );
+});
+
+test('c) right context with plant landed => fail', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { continueItselfPlant: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
+});
+
+test('d) raw leg in a different browserContext than guarded => incomplete', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { staggerContexts: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /raw\/guarded browserContext mismatch/.test(n)),
+    JSON.stringify(row.notes)
+  );
 });
 
 test('a correct cookiePlant guard passes the credential row', async () => {

@@ -172,6 +172,12 @@ export function cookiePlantFake(options = {}) {
   const injectNeighbourBlocked = options.injectNeighbourBlocked === true;
   const nullGuardHref = options.nullGuardHref === true;
   const storageJarIgnoresBrowserContext = options.storageJarIgnoresBrowserContext === true;
+  const storageGetIgnoresBrowserContext = options.storageGetIgnoresBrowserContext === true;
+  const dropCanary = options.dropCanary === true;
+  let ignoredContextCreates = 0;
+  const ignoreContextCreates = Number(options.ignoreContextCreates ?? 0) || 0;
+  const staggerContexts = options.staggerContexts === true;
+  let contextCreateCount = 0;
   const supersedeAbort = options.supersedeAbort === true;
   const deadPageSession = options.deadPageSession === true;
   const settleAssignOk = options.settleAssignOk === true;
@@ -521,13 +527,21 @@ export function cookiePlantFake(options = {}) {
       return {};
     }
     if (method === 'Target.createTarget') {
+      let browserContextId = params.browserContextId ?? 'B1';
+      if (params.browserContextId && ignoredContextCreates < ignoreContextCreates) {
+        ignoredContextCreates += 1;
+        browserContextId = 'B1';
+      } else if (params.browserContextId && staggerContexts) {
+        contextCreateCount += 1;
+        if (contextCreateCount % 2 === 0) browserContextId = 'B1';
+      }
       const tab = {
         targetId: `T${++next}`,
         url: params.url ?? 'about:blank',
         title: params.url ?? 'about:blank',
         fetch: false,
         legacy: false,
-        browserContextId: params.browserContextId ?? 'B1',
+        browserContextId,
       };
       tabs.set(tab.targetId, tab);
       return { targetId: tab.targetId };
@@ -669,16 +683,25 @@ export function cookiePlantFake(options = {}) {
     ) {
       const jar =
         method === 'Storage.getCookies'
-          ? jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId)
+          ? jarOf(
+              storageGetIgnoresBrowserContext || storageJarIgnoresBrowserContext
+                ? 'B1'
+                : params?.browserContextId
+            )
           : jarOf(contextOfSession(sessionId));
-      if (rejectJarAfterDoorProof && rejectJarReads) throw new Error('jar read rejected');
-      const hasCplant = jar.some((cookie) => String(cookie.name).startsWith('cplant'));
-      if (rejectCplantJarAfterFirst && hasCplant && sawCplantJar)
+      const hasPlant = jar.some(
+        (cookie) =>
+          String(cookie.name).startsWith('cplant') &&
+          !String(cookie.name).startsWith('cplantcanary')
+      );
+      if (rejectJarAfterDoorProof && rejectJarReads && !hasPlant)
         throw new Error('jar read rejected');
-      if (hasCplant) sawCplantJar = true;
-      if (rejectJarAfterDoorProof && hasCplant) {
+      if (rejectCplantJarAfterFirst && hasPlant && sawCplantJar)
+        throw new Error('jar read rejected');
+      if (hasPlant) sawCplantJar = true;
+      if (rejectJarAfterDoorProof && hasPlant) {
         doorJarProofs += 1;
-        if (doorJarProofs >= 2) rejectJarReads = true;
+        if (doorJarProofs >= 1) rejectJarReads = true;
       }
       if (method === 'Network.getCookies') {
         const hosts = (params.urls ?? []).map(hostOf);
@@ -696,7 +719,10 @@ export function cookiePlantFake(options = {}) {
     }
     if (method === 'Storage.setCookies') {
       const jar = jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId);
-      for (const incoming of params.cookies ?? []) {
+      const incomingCookies = dropCanary
+        ? (params.cookies ?? []).filter((c) => !String(c.name).startsWith('cplantcanary'))
+        : (params.cookies ?? []);
+      for (const incoming of incomingCookies) {
         const domain = incoming.domain ?? (incoming.url ? hostOf(incoming.url) : '');
         const storeDomain = domain
           ? domain.startsWith('.')

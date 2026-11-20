@@ -27,6 +27,7 @@ function castTransport({
   hangPaintAfterInsert = false,
   hangAck = false,
   failAck = false,
+  ackOnlyFirst = false,
   noObserver = false,
   refuseStartScreencast = false,
   embedLoads = true,
@@ -35,7 +36,8 @@ function castTransport({
   let next = 0;
   let attaches = 0;
   let castSession;
-  let frameSeq = 0;
+  let castFrameSessionId;
+  let ackCount = 0;
   let inserted = false;
   let lateArmed = false;
   let lateAt;
@@ -45,10 +47,9 @@ function castTransport({
     return { sessionId };
   };
   const pushFrame = (sessionId, data = 'frame') => {
-    frameSeq += 1;
     client.events.push({
       method: 'Page.screencastFrame',
-      params: { data, sessionId: frameSeq },
+      params: { data, sessionId: castFrameSessionId },
       sessionId,
     });
   };
@@ -160,10 +161,14 @@ function castTransport({
           'slicc: refused: this tab holds a browser extension frame so it cannot be streamed'
         );
       castSession = sessionId;
+      castFrameSessionId = 1;
+      ackCount = 0;
       if (emitBeforeInsert && emitStartFrame) pushFrame(sessionId);
       return {};
     }
     if (method === 'Page.screencastFrameAck') {
+      ackCount += 1;
+      if (ackOnlyFirst && ackCount > 1) await new Promise(() => {});
       if (hangAck) await new Promise(() => {});
       if (failAck) throw new Error('ack transport failed');
       return {};
@@ -338,10 +343,20 @@ test('a stalled cast whose paint cannot be confirmed is incomplete', async () =>
   assert.equal(result.castBefore, true, JSON.stringify(result));
   assert.equal(result.castLeak, undefined, JSON.stringify(result));
   assert.equal(result.castStopped, undefined, JSON.stringify(result));
-  assert.match(
-    result.incomplete ?? '',
-    /cast stalled: no frame after insertion and paint was not confirmed/
-  );
+  assert.match(result.incomplete ?? '', /cannot confirm paint/);
+});
+
+test('a never-resolving paint evaluate is incomplete', async () => {
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    hangPaint: true,
+  });
+  const result = await probe(transport, {
+    frameMs: 20,
+    castControls: { repaintToFrameMs: 5 },
+  });
+  assert.match(result.incomplete ?? '', /cannot confirm paint/);
 });
 
 test('a pre-insertion paint alone does not pass without post-insertion confirmation', async () => {
@@ -357,10 +372,19 @@ test('a pre-insertion paint alone does not pass without post-insertion confirmat
   });
   assert.equal(result.castLeak, undefined, JSON.stringify(result));
   assert.equal(result.castStopped, undefined, JSON.stringify(result));
-  assert.match(
-    result.incomplete ?? '',
-    /cast stalled: no frame after insertion and paint was not confirmed/
-  );
+  assert.match(result.incomplete ?? '', /cannot confirm paint/);
+});
+
+test('acking only the first frame of a shared screencast session is incomplete', async () => {
+  const notes = [];
+  const transport = castTransport({
+    emitBeforeInsert: true,
+    emitAfterInsert: false,
+    ackOnlyFirst: true,
+  });
+  const result = await probe(transport, { notes, frameMs: 20 });
+  assert.match(result.incomplete ?? '', /cast ack unanswered|cast ack incomplete/);
+  assert.match(notes.join('; '), /cast acked 1 of [2-9]/);
 });
 
 test('an unanswered screencast ack is incomplete', async () => {

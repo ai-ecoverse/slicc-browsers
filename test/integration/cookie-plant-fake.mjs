@@ -174,7 +174,10 @@ export function cookiePlantFake(options = {}) {
   const storageJarIgnoresBrowserContext = options.storageJarIgnoresBrowserContext === true;
   const storageGetIgnoresBrowserContext = options.storageGetIgnoresBrowserContext === true;
   const storageGetCookiesFails = options.storageGetCookiesFails === true;
+  const networkGetAllCookiesFails = options.networkGetAllCookiesFails === true;
   const networkOmitsCanary = options.networkOmitsCanary === true;
+  const getCookiesPlantDomainOnly = options.getCookiesPlantDomainOnly === true;
+  const canarySetIgnoresBrowserContext = options.canarySetIgnoresBrowserContext === true;
   const dropCanary = options.dropCanary === true;
   let ignoredContextCreates = 0;
   const ignoreContextCreates = Number(options.ignoreContextCreates ?? 0) || 0;
@@ -685,6 +688,8 @@ export function cookiePlantFake(options = {}) {
     ) {
       if (method === 'Storage.getCookies' && storageGetCookiesFails)
         throw new Error('Storage.getCookies failed');
+      if (method === 'Network.getAllCookies' && networkGetAllCookiesFails)
+        throw new Error('Network.getAllCookies failed');
       const jar =
         method === 'Storage.getCookies'
           ? jarOf(
@@ -712,7 +717,15 @@ export function cookiePlantFake(options = {}) {
           ? jar.filter((cookie) => !String(cookie.name).startsWith('cplantcanary'))
           : jar;
       if (method === 'Network.getCookies') {
-        const hosts = (params.urls ?? []).map(hostOf);
+        let hosts = (params.urls ?? []).map(hostOf);
+        if (getCookiesPlantDomainOnly)
+          hosts = hosts.filter(
+            (host) =>
+              host.includes('sliccy') ||
+              host.includes('adobe') ||
+              host.includes('adobelogin') ||
+              host.includes('vault')
+          );
         return {
           cookies: visible.filter((cookie) =>
             hosts.some(
@@ -726,7 +739,14 @@ export function cookiePlantFake(options = {}) {
       return { cookies: [...visible] };
     }
     if (method === 'Storage.setCookies') {
-      const jar = jarOf(storageJarIgnoresBrowserContext ? 'B1' : params?.browserContextId);
+      const canaryOnly = (params.cookies ?? []).every((c) =>
+        String(c.name).startsWith('cplantcanary')
+      );
+      const jar = jarOf(
+        storageJarIgnoresBrowserContext || (canarySetIgnoresBrowserContext && canaryOnly)
+          ? 'B1'
+          : params?.browserContextId
+      );
       const incomingCookies = dropCanary
         ? (params.cookies ?? []).filter((c) => !String(c.name).startsWith('cplantcanary'))
         : (params.cookies ?? []);

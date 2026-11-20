@@ -697,6 +697,63 @@ test('g) Network fallback has canary and the planted cookie => planted true', as
   assert.equal(row.observations.guarded.fulfillArrayPlanted, true, JSON.stringify(row));
 });
 
+test('h) getCookies fallback URL scope excludes canary home host => incomplete', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: {
+      storageGetCookiesFails: true,
+      networkGetAllCookiesFails: true,
+      getCookiesPlantDomainOnly: true,
+      continueItself: true,
+    },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /jar view canary absent/.test(n)) ||
+      /canary/.test(String(row.why ?? '')),
+    JSON.stringify(row)
+  );
+});
+
+test('i) getCookies fallback URL scope includes canary origin => unplanted pass-capable', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: {
+      storageGetCookiesFails: true,
+      networkGetAllCookiesFails: true,
+      continueItself: true,
+    },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.observations.guarded.fulfillArrayPlanted, false, JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /fulfillArray:/.test(n) && /"via":"Network\.getCookies"/.test(n)),
+    JSON.stringify(row.notes)
+  );
+});
+
+test('j) canary only in a foreign browserContext does not satisfy the tab-context canary check', async () => {
+  const out = await rows({
+    capabilities: { browserContexts: true },
+    fake: { canarySetIgnoresBrowserContext: true, continueItself: true },
+    oneTarget: true,
+    onlyPaths: ['fulfillArray'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.notEqual(row.guarded, 'pass', JSON.stringify(row));
+  assert.ok(
+    (row.notes ?? []).some((n) => /jar view canary absent/.test(n)) ||
+      /canary/.test(String(row.why ?? '')),
+    JSON.stringify(row)
+  );
+});
+
 test('a correct cookiePlant guard passes the credential row', async () => {
   const out = await rows({}, credentialVectors);
   for (const target of ['idp', 'idp-stg']) {

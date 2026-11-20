@@ -448,6 +448,26 @@ test('mutant that hangs on protected navigation is incomplete', async () => {
   assert.equal(row.guarded, 'incomplete', JSON.stringify(row));
 });
 
+test('blocking guard with replyDelay still passes', async () => {
+  const out = await rows({
+    replyDelayMs: 200,
+    oneTarget: true,
+    onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+  });
+  const row = out.results.find((r) => r.id === 'C10.cookie-plant' && r.target === 'seven');
+  assert.equal(row.control, 'pass', JSON.stringify(row));
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(row.live, 'pass', JSON.stringify(row));
+});
+
+test('C10.cookie-plant declares timeoutMs from measured worst x 1.5', () => {
+  for (const vector of vectors) {
+    assert.ok(Number.isFinite(vector.timeoutMs) && vector.timeoutMs > 0, vector.id);
+  }
+  assert.equal(protectedVectors[0].timeoutMs, 19410);
+  assert.equal(credentialVectors[0].timeoutMs, 13011);
+});
+
 test('a correct cookiePlant guard passes the credential row', async () => {
   const out = await rows({}, credentialVectors);
   for (const target of ['idp', 'idp-stg']) {

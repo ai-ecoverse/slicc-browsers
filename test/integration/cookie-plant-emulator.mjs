@@ -275,6 +275,9 @@ export function applyCookiePlant(client, options = {}) {
       }
       const blocked = cookiePlantBlocked(method, params ?? {}, catalog, options, client);
       if (blocked) {
+        const delay = Number(options.replyDelayMs);
+        if (Number.isFinite(delay) && delay > 0)
+          await new Promise((resolve) => setTimeout(resolve, delay));
         if (!options.refuseWithoutFail) {
           if (
             (method === 'Fetch.fulfillRequest' || method === 'Fetch.continueResponse') &&

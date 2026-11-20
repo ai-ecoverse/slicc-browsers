@@ -36884,7 +36884,8 @@
       "blockedMarkers": [
         "chrome-error://chromewebdata/",
         "data:,blocked"
-      ]
+      ],
+      "timeoutMs": 19410
     },
     {
       "id": "C10.cookie-plant.credential",
@@ -38022,7 +38023,8 @@
       "blockedMarkers": [
         "chrome-error://chromewebdata/",
         "data:,blocked"
-      ]
+      ],
+      "timeoutMs": 13011
     }
   ]
 }

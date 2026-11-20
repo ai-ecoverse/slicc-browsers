@@ -103,6 +103,7 @@ type GuardVector struct {
 	Targets         []string                    `json:"targets"`
 	Requires        []string                    `json:"requires,omitempty"`
 	BlockedMarkers  []string                    `json:"blockedMarkers,omitempty"`
+	TimeoutMs       int                         `json:"timeoutMs,omitempty"`
 	Observe         map[string]GuardObservation `json:"observe,omitempty"`
 	Live            string                      `json:"live"`
 	LiveCheck       json.RawMessage             `json:"liveCheck,omitempty"`

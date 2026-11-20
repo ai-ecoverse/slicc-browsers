@@ -1,13 +1,6 @@
 # slicc-browsers
 
-The browser knowledge SLICC's tools share. SLICC drives Chromium over the Chrome DevTools Protocol (CDP), and several programs in different languages must agree on facts:
-
-- which browsers exist, where they are installed, and how to launch them for SLICC;
-- how to find a browser that is already running with a debugging port, and which one to pick;
-- which origins browser control must never touch, starting with seven and the vault;
-- how to prove a CDP guard keeps clients away from them.
-
-One catalog, four vector sets and schemas, shared as a Go module, Rust crate and npm package at one version.
+Browser facts SLICC's tools share over CDP: which browsers exist and how to launch them, how to find a running debug endpoint, which origins must stay untouched (seven and the vault), and how to prove a CDP guard. One catalog, four vector sets and schemas — Go, Rust and npm at one version.
 
 | who | uses it for |
 | --- | --- |
@@ -20,12 +13,12 @@ One catalog, four vector sets and schemas, shared as a Go module, Rust crate and
 
 | file | what it is |
 | --- | --- |
-| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations, protected and credential origins |
+| [`catalog.json`](catalog.json) | Chromium/Electron apps, install paths, discovery/ranking, seven launch flags/prefs, protected and credential origins |
 | [`corpus/`](corpus), `corpus.json` | discovery conformance cases: a fake machine each, with the ranked browser list it must produce |
 | [`protected.json`](protected.json), [`protected.mjs`](protected.mjs) | protected-origin test vectors, and a reference matcher in JavaScript |
 | [`guard-vectors.json`](guard-vectors.json) | the CDP scenarios every guard must pass |
 | [`debugger-stage1.json`](debugger-stage1.json) | shared Stage 1 debugger conformance data |
-| [`guard-runner.mjs`](guard-runner.mjs), [`guard-driver.mjs`](guard-driver.mjs), [`fixture-server.mjs`](fixture-server.mjs) | a reference runner for the guard vectors, its helpers, and the test server they run against |
+| [`guard-runner.mjs`](guard-runner.mjs), [`guard-driver.mjs`](guard-driver.mjs), [`fixture-server.mjs`](fixture-server.mjs) | reference guard-vector runner, helpers, and test server |
 | [`schema/`](schema) | JSON Schema (2020-12) for each file above, and for the `--json` output of `slicc browsers` and `playwright-cli list` |
 
 ## Install
@@ -65,7 +58,7 @@ slicc-browsers = { version = "1", features = ["corpus"] }
 | `serde` | typed `Catalog`, `catalog()`, `Catalog::browser` and `Catalog::priority` |
 | `corpus` | the vectors (`CORPUS`, `PROTECTED`, `GUARD_VECTORS`, `DEBUGGER_STAGE1`) and the modules `corpus`, `protected`, `guard` and `debugger_stage1`, for tests |
 
-Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` so it stays out of release builds.
+Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` out of release builds.
 
 ### npm
 
@@ -248,7 +241,7 @@ You supply:
 | `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); missing → not-supported, or incomplete if declared |
 | `requestInterception`, `fetchInterception`, `legacyInterception` | response interception |
 
-`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
+`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; else the page channel. The raw observer waits for a committed document, then reads the fixture mark.
 
 ### Reading the result
 
@@ -258,13 +251,13 @@ Each row reports `control`, `guarded` and `live` as `pass`, `fail`, `skip`, `inc
 GUARD-PASS my-guard@1a2b3c4 (vectors @ai-ecoverse/slicc-browsers@1.18.5)
 ```
 
-The run passes only when every row passes and none is missing. A skip with a reason the runner would never give is forged; skipped and incomplete rows are counted on the line, so it can't overstate what was tested.
+The run passes only when every row passes and none is missing. Forged skips and incomplete rows are counted on the line so it cannot overstate coverage.
 
-To find out what a vector checks, read it in `guard-vectors.json`: each one lists its steps, each observation's `means`, its `live` condition and its expected outcome. [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
+Read `guard-vectors.json` for steps, `means`, `live`, optional `timeoutMs` (row wall budget; else the runner global), and expected outcomes; [`schema/guard-vectors.schema.json`](schema/guard-vectors.schema.json) defines the format.
 
 ## Development
 
-You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome or Chromium for the browser tests: they take `CHROME_PATH`, or Chrome for Testing from `npx slicc-cdp install-browser`, and run headless unless `CI` is set (`SLICC_HEADLESS=1` or `0` overrides).
+Need Go 1.26, Rust stable (`wasm32-wasip1`), Node 24+, and Chrome/Chromium for browser tests (`CHROME_PATH` or `npx slicc-cdp install-browser`; headless unless `CI`, override with `SLICC_HEADLESS`).
 
 | command | what it does |
 | --- | --- |
@@ -274,13 +267,11 @@ You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome or Chro
 | `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
 | `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
 
-A new discovery behaviour gets a corpus case, and a new guard behaviour gets a guard vector.
+A new discovery behaviour gets a corpus case; a new guard behaviour gets a guard vector.
 
 ## CI and releases
 
-CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), called from `.github/workflows/ci.yml`. A pull request gets lint, then `npm test` split over shards by timing, then a Claude and a Codex review; the merge queue runs lint and the tests again. Tests run on Linux only.
-
-Every merge to `main` that warrants it is released by semantic-release as one version for all three packages. Pushed tags are never moved or deleted: a bad release is fixed by the next one.
+CI is [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline) via `.github/workflows/ci.yml`: lint, sharded `npm test`, Claude and Codex review; merge queue re-runs lint and tests (Linux). Releases from `main` via semantic-release; never move or delete a pushed tag—fix forward.
 
 ## License
 

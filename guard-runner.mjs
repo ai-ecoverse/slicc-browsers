@@ -2614,18 +2614,19 @@ async function watch(work, ms, snapshot) {
   return stuck;
 }
 
-async function timedOut(stuck, base, made, work, opts) {
+async function timedOut(stuck, base, made, work, opts, rowTimeoutMs) {
   const close = made.close;
   made.close = undefined;
   await close?.call(made);
   work.catch(() => {});
+  const ms = rowTimeoutMs ?? opts.rowTimeoutMs;
   const failed = {
     ...base,
     control: 'fail',
     guarded: 'fail',
     live: 'fail',
-    why: `row timed out after ${opts.rowTimeoutMs}ms`,
-    errors: [`row timed out after ${opts.rowTimeoutMs}ms: ${JSON.stringify(stuck)}`],
+    why: `row timed out after ${ms}ms`,
+    errors: [`row timed out after ${ms}ms: ${JSON.stringify(stuck)}`],
     inFlight: stuck,
   };
   opts.log?.(failed);
@@ -2705,12 +2706,16 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   flights.add({ flight, base, clients });
   opts.onStart?.(base);
   const sides = runLegs({ vector, opts, clients, set, job, slot, index, legs, renewed });
-  const stuck = await watch(sides, opts.rowTimeoutMs, () => view(flight, base, clients));
+  const rowTimeoutMs =
+    Number.isFinite(vector.timeoutMs) && vector.timeoutMs > 0
+      ? vector.timeoutMs
+      : opts.rowTimeoutMs;
+  const stuck = await watch(sides, rowTimeoutMs, () => view(flight, base, clients));
   for (const entry of flights) if (entry.flight === flight) flights.delete(entry);
   await closeAll(renewed);
   if (stuck) {
     flight.abandoned = true;
-    return timedOut(stuck, base, made, sides, opts);
+    return timedOut(stuck, base, made, sides, opts, rowTimeoutMs);
   }
   if (legs.control.unsupported === 'trustedEmulation')
     return skipRow(base, 'not-supported:trustedEmulation');

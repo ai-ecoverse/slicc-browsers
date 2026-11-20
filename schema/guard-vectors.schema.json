@@ -373,6 +373,10 @@
             "minLength": 1
           }
         },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
         "observe": {
           "type": "object",
           "additionalProperties": {

@@ -579,6 +579,9 @@ function emulatedGuardPlain(browser, options = {}) {
     }
     if (failDocument) failedDocumentTargets.add(owner.targetId);
     if (options.hangOnProtected) return;
+    const replyDelay = Number(options.replyDelayMs);
+    if (Number.isFinite(replyDelay) && replyDelay > 0)
+      await new Promise((resolve) => setTimeout(resolve, replyDelay));
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});
@@ -1881,6 +1884,9 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
     }
     if (failDocument) failedDocumentTargets.add(owner.targetId);
     if (options.hangOnProtected) return;
+    const replyDelay = Number(options.replyDelayMs);
+    if (Number.isFinite(replyDelay) && replyDelay > 0)
+      await new Promise((resolve) => setTimeout(resolve, replyDelay));
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});

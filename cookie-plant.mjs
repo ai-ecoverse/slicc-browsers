@@ -340,6 +340,146 @@ async function waitPause(client, from, url, methods, budget) {
   }, budget);
 }
 
+async function hrefOf(client, pageSession) {
+  if (!pageSession) return null;
+  const href = await capped(
+    outcome(
+      client.send(
+        'Runtime.evaluate',
+        { expression: 'location.href', returnByValue: true },
+        pageSession
+      )
+    ),
+    400,
+    'href'
+  );
+  if (!href.ok) return null;
+  const value = href.result?.result?.value ?? href.result?.value;
+  return typeof value === 'string' ? value : null;
+}
+
+async function quietFixture(fixtureLog, ms) {
+  const quiet = Math.max(25, Number(ms) || 100);
+  if (typeof fixtureLog !== 'function') {
+    await pause(quiet);
+    return;
+  }
+  const deadline = Date.now() + quiet * 8;
+  let last = -1;
+  while (Date.now() < deadline) {
+    let length = 0;
+    try {
+      const entries = await fixtureLog();
+      length = Array.isArray(entries) ? entries.length : 0;
+    } catch {
+      length = Math.max(last, 0);
+    }
+    if (last >= 0 && length === last) return;
+    last = length;
+    await pause(quiet);
+  }
+}
+
+async function waitPauseOrBlocked({
+  client,
+  pageSession,
+  from,
+  url,
+  methods,
+  pauseMs,
+  triggerPromise,
+  blockedMarkers,
+  fixtureLog,
+}) {
+  let settled = null;
+  let href = null;
+  const quietMs = Math.min(150, Math.max(50, Math.floor(pauseMs / 8)));
+  const triggerDone = Promise.resolve(triggerPromise).then(
+    (value) => {
+      settled = value;
+      return value;
+    },
+    (error) => {
+      settled = { ok: false, error: { message: String(error?.message ?? error) } };
+      return settled;
+    }
+  );
+  const deadline = Date.now() + pauseMs;
+  while (Date.now() < deadline) {
+    const paused = pauseEvents(client.events, from, url, methods).at(-1) ?? null;
+    if (paused) return { paused, settled, href, early: false };
+    if (settled != null && triggerRefusal(settled) === true) {
+      await quietFixture(fixtureLog, quietMs);
+      href = await hrefOf(client, pageSession);
+      return { paused: null, settled, href, early: true };
+    }
+    href = await hrefOf(client, pageSession);
+    if (blockedMarkerHit(href, blockedMarkers)) {
+      await quietFixture(fixtureLog, quietMs);
+      await Promise.race([triggerDone, pause(50)]);
+      return { paused: null, settled, href, early: true };
+    }
+    await Promise.race([triggerDone.then(() => null), pause(25)]);
+  }
+  settled = settled ?? (await settleTrigger(triggerDone, Math.min(pauseMs, 500)));
+  href = href ?? (await hrefOf(client, pageSession));
+  return { paused: null, settled, href, early: false };
+}
+
+async function evidenceAfterTrigger({
+  handle,
+  cookie,
+  fixtureLog,
+  url,
+  tag,
+  proofTag,
+  startedAt,
+  hrefHint,
+}) {
+  const page =
+    hrefHint != null
+      ? { href: hrefHint, ready: true }
+      : await pageSnapshot(handle.client, handle.pageSession);
+  const afterTriggerAt = Date.now();
+  if (afterTriggerAt < startedAt) {
+    return {
+      page,
+      fixtureHits: await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag),
+      planted: 'incomplete',
+      afterTriggerAt,
+    };
+  }
+  const cached = handle.blockedEvidence;
+  const reusable =
+    cached &&
+    cached.afterTriggerAt >= startedAt &&
+    cached.cookieName === cookie?.name &&
+    cached.cookieDomain === cookie?.domain &&
+    cached.href === (page.href ?? hrefHint);
+  if (reusable) {
+    return {
+      page: { href: cached.href, ready: true },
+      fixtureHits: cached.fixtureHits,
+      planted: cached.planted,
+      afterTriggerAt: cached.afterTriggerAt,
+    };
+  }
+  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
+  const jar = await capped(readJar(handle.reader, handle.readerSession, cookie), 1500, 'readJar');
+  const planted = plantedOf(
+    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
+  );
+  handle.blockedEvidence = {
+    afterTriggerAt,
+    cookieName: cookie?.name,
+    cookieDomain: cookie?.domain,
+    href: page.href ?? hrefHint ?? null,
+    fixtureHits,
+    planted,
+  };
+  return { page, fixtureHits, planted, afterTriggerAt };
+}
+
 async function clearCookie(reader, sessionId, { name, url, domain }) {
   await outcome(
     reader.send(
@@ -1075,7 +1215,18 @@ async function runGuardedProtectedPlantBody({
   state.triggerPromise = topLevel
     ? triggerNavigate(client, handle.pageSession, url)
     : triggerFetch(client, handle.pageSession, url);
-  state.paused = await waitPause(client, from, url, methods, pauseMs);
+  const waited = await waitPauseOrBlocked({
+    client,
+    pageSession: handle.pageSession,
+    from,
+    url,
+    methods,
+    pauseMs,
+    triggerPromise: state.triggerPromise,
+    blockedMarkers,
+    fixtureLog,
+  });
+  state.paused = waited.paused;
   if (state.paused) {
     const out = await capped(build(state.paused).send(client, state.paused), 1500, 'plant-send');
     if (sessionCut(out)) return recordSessionCut({ reader, readerSession, cookie, notes, label });
@@ -1088,14 +1239,23 @@ async function runGuardedProtectedPlantBody({
       label,
     });
     if (plantedAttempt.planted === true) return plantedAttempt;
-    const settled = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
-    const page = await pageSnapshot(client, handle.pageSession);
-    const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
+    const settled =
+      waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
+    const evidence = await evidenceAfterTrigger({
+      handle,
+      cookie,
+      fixtureLog,
+      url,
+      tag,
+      proofTag,
+      startedAt,
+      hrefHint: waited.href,
+    });
     const scored = scoreProtectedPlant({
       pauseCount: pauseEvents(client.events, from, url, methods).length,
-      fixtureHits,
+      fixtureHits: evidence.fixtureHits,
       planted: plantedAttempt.planted,
-      pageHref: page.href,
+      pageHref: evidence.page.href ?? waited.href,
       notes,
       label,
       triggerOutcome: settled,
@@ -1104,24 +1264,29 @@ async function runGuardedProtectedPlantBody({
     if (scored.planted === 'incomplete') handle.evidenceIncomplete = true;
     return scored;
   }
-  const settled = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
+  const settled =
+    waited.settled ?? (await settleTrigger(state.triggerPromise, Math.min(budget, 500)));
   const hung =
     settled &&
     settled.ok === false &&
     /trigger settle timeout/i.test(String(settled.error?.message ?? ''));
   if (hung) handle.evidenceIncomplete = true;
-  const page = await pageSnapshot(client, handle.pageSession);
-  const fixtureHits = await fixtureHitsFor(fixtureLog, url, startedAt, tag, proofTag);
-  const jar = await capped(readJar(reader, readerSession, cookie), 1500, 'readJar');
-  const planted = plantedOf(
-    jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
-  );
-  if (planted === 'incomplete') handle.evidenceIncomplete = true;
+  const evidence = await evidenceAfterTrigger({
+    handle,
+    cookie,
+    fixtureLog,
+    url,
+    tag,
+    proofTag,
+    startedAt,
+    hrefHint: waited.href,
+  });
+  if (evidence.planted === 'incomplete') handle.evidenceIncomplete = true;
   const scored = scoreProtectedPlant({
     pauseCount: hung ? 'incomplete' : pauseEvents(client.events, from, url, methods).length,
-    fixtureHits: hung ? 'incomplete' : fixtureHits,
-    planted: hung ? 'incomplete' : planted,
-    pageHref: page.href,
+    fixtureHits: hung ? 'incomplete' : evidence.fixtureHits,
+    planted: hung ? 'incomplete' : evidence.planted,
+    pageHref: evidence.page.href ?? waited.href,
     notes,
     label,
     triggerOutcome: hung ? { unresolved: true } : settled,

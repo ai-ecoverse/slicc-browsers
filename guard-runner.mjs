@@ -155,8 +155,10 @@ const stateCheck = (check) =>
   [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])]
     .map(stateCheck)
     .find(Boolean);
-const refusedOut = (step, out) =>
-  step.refusable ? isRefusal(out, step) : /refused/.test(String(out.error?.message ?? out.error));
+const refusedOut = (step, out, gone = false) =>
+  step.refusable
+    ? isRefusal(out, step)
+    : !gone && /refused/.test(String(out.error?.message ?? out.error));
 
 function pageExpression(step, url) {
   let expression;
@@ -892,7 +894,7 @@ class Execution {
   }
 
   record(step, out, session, phase, gone) {
-    const refused = !gone && refusedOut(step, out);
+    const refused = refusedOut(step, out, gone);
     this.trace.push({
       phase,
       declared: Boolean(step.refusable),

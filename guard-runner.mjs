@@ -4,6 +4,7 @@ export { fixtureClient };
 
 import { bfcacheRestore } from './bfcache-restore.mjs';
 import { closeProtectedShape } from './close-protected-shape.mjs';
+import { cookiePlant } from './cookie-plant.mjs';
 import { credentialExport } from './credential-export.mjs';
 import { extensionFrame } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
@@ -98,6 +99,22 @@ const declared = (capability, capabilities) =>
 const gatedOut = (observation, capabilities) =>
   !supported(observation?.requires, capabilities) ||
   (observation?.unless ?? []).some((capability) => declared(capability, capabilities));
+const withCookiePlantCaps = (capabilities, probe) => {
+  const asObject = Array.isArray(capabilities)
+    ? Object.fromEntries(capabilities.map((name) => [name, true]))
+    : { ...capabilities };
+  if (!declared('requestInterception', asObject)) return capabilities;
+  if (!probe) return capabilities;
+  if (probe.fetch === true && asObject.fetchInterception !== false)
+    asObject.fetchInterception = true;
+  else delete asObject.fetchInterception;
+  if (probe.legacy === true && asObject.legacyInterception === true)
+    asObject.legacyInterception = true;
+  else delete asObject.legacyInterception;
+  return Array.isArray(capabilities)
+    ? Object.keys(asObject).filter((name) => asObject[name] === true)
+    : asObject;
+};
 const matches = (value, predicate) => {
   if (predicate === null || typeof predicate !== 'object') return value === predicate;
   return Object.entries(predicate).every(([key, want]) => {
@@ -908,6 +925,7 @@ class Execution {
       'protectedParentIframes',
       'credentialExport',
       'signInHold',
+      'cookiePlant',
       'extensionWorld',
       'extensionFrame',
       'frameRead',
@@ -922,6 +940,7 @@ class Execution {
         'protectedParentIframes',
         'credentialExport',
         'signInHold',
+        'cookiePlant',
         'redirectSecret',
         'extensionFrame',
         'frameRead',
@@ -1029,6 +1048,7 @@ class Execution {
       step.protectedParentIframes ||
       step.credentialExport ||
       step.signInHold ||
+      step.cookiePlant ||
       step.spawnWorker ||
       step.probeSessions
     )
@@ -1181,6 +1201,7 @@ class Execution {
     if (step.protectedParentIframes) return this.runProtectedParentIframes(step);
     if (step.credentialExport) return this.runCredentialExport(step);
     if (step.signInHold) return this.runSignInHold(step);
+    if (step.cookiePlant) return this.runCookiePlant(step);
     if (step.spawnWorker) return this.spawnWorker(step);
     return this.probeSessions(step);
   }
@@ -1307,6 +1328,30 @@ class Execution {
     if (out.ok && out.result?.openerId) this.targets.push(out.result.openerId);
     if (out.ok && out.result?.targetId) this.targets.push(out.result.targetId);
     return out;
+  }
+
+  async runCookiePlant(step) {
+    return outcome(
+      cookiePlant({
+        client: this.client,
+        reader: this.reader,
+        protectedOrigin: this.vars.protectedTarget,
+        credentialOrigin: this.vars.idp ?? this.options.targets?.idp ?? this.vars.protectedTarget,
+        ordinary: this.vars.ordinary,
+        tag: this.vars.tag,
+        internalSessions: this.internalSessions,
+        notes: this.notes,
+        budget: this.bound(5000),
+        control: this.side === 'control',
+        mode: step.cookiePlant,
+        fixtureLog: () => this.options.fixture.log(),
+        blockedMarkers: this.vector.blockedMarkers ?? [],
+        onlyPaths: this.options.cookiePlantOnlyPaths ?? null,
+        forcedRaw: this.options.cookiePlantForcedRaw ?? null,
+        browserContextId: this.vars.context ?? null,
+        browserContexts: supported(['browserContexts'], this.options.capabilities),
+      })
+    );
   }
 
   spawnWorkerKind() {
@@ -2131,10 +2176,11 @@ class Execution {
   async observeAll(unseen) {
     const observed = { ...this.refused };
     const incomplete = [];
+    const capabilities = withCookiePlantCaps(this.options.capabilities, this.calls.probe?.result);
     let measured = 0;
     let excused = 0;
     for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
-      if (gatedOut(observation, this.options.capabilities)) {
+      if (gatedOut(observation, capabilities)) {
         observed[name] = 'not-supported';
         continue;
       }
@@ -2344,7 +2390,8 @@ const needsObserver = (vector) =>
       step.closeProtectedShape ||
       step.protectedParentIframes ||
       step.credentialExport ||
-      step.signInHold
+      step.signInHold ||
+      step.cookiePlant
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
@@ -2570,18 +2617,19 @@ async function watch(work, ms, snapshot) {
   return stuck;
 }
 
-async function timedOut(stuck, base, made, work, opts) {
+async function timedOut(stuck, base, made, work, opts, rowTimeoutMs) {
   const close = made.close;
   made.close = undefined;
   await close?.call(made);
   work.catch(() => {});
+  const ms = rowTimeoutMs ?? opts.rowTimeoutMs;
   const failed = {
     ...base,
     control: 'fail',
     guarded: 'fail',
     live: 'fail',
-    why: `row timed out after ${opts.rowTimeoutMs}ms`,
-    errors: [`row timed out after ${opts.rowTimeoutMs}ms: ${JSON.stringify(stuck)}`],
+    why: `row timed out after ${ms}ms`,
+    errors: [`row timed out after ${ms}ms: ${JSON.stringify(stuck)}`],
     inFlight: stuck,
   };
   opts.log?.(failed);
@@ -2661,12 +2709,13 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
   flights.add({ flight, base, clients });
   opts.onStart?.(base);
   const sides = runLegs({ vector, opts, clients, set, job, slot, index, legs, renewed });
-  const stuck = await watch(sides, opts.rowTimeoutMs, () => view(flight, base, clients));
+  const rowTimeoutMs = Number.isFinite(opts.rowTimeoutMs) ? opts.rowTimeoutMs : undefined;
+  const stuck = await watch(sides, rowTimeoutMs, () => view(flight, base, clients));
   for (const entry of flights) if (entry.flight === flight) flights.delete(entry);
   await closeAll(renewed);
   if (stuck) {
     flight.abandoned = true;
-    return timedOut(stuck, base, made, sides, opts);
+    return timedOut(stuck, base, made, sides, opts, rowTimeoutMs);
   }
   if (legs.control.unsupported === 'trustedEmulation')
     return skipRow(base, 'not-supported:trustedEmulation');

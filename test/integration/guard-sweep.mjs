@@ -45,6 +45,8 @@ export const capabilities = {
   closeProtected: true,
   signInHold: true,
   iframeAutoAttach: true,
+  requestInterception: true,
+  fetchInterception: true,
   errorFrameClass: true,
   jsonList: true,
 };

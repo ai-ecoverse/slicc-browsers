@@ -170,6 +170,18 @@
         "jsonList": {
           "type": "string",
           "minLength": 1
+        },
+        "requestInterception": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fetchInterception": {
+          "type": "string",
+          "minLength": 1
+        },
+        "legacyInterception": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -212,7 +224,10 @@
         "signInHold",
         "iframeAutoAttach",
         "errorFrameClass",
-        "jsonList"
+        "jsonList",
+        "requestInterception",
+        "fetchInterception",
+        "legacyInterception"
       ]
     },
     "requires": {
@@ -320,7 +335,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[CEBX][1-9](\\.[A-Za-z0-9-]+)*$"
+          "pattern": "^[CEBX][1-9][0-9]*(\\.[A-Za-z0-9-]+)*$"
         },
         "family": {
           "enum": ["C", "E", "B", "X"]
@@ -348,6 +363,15 @@
         },
         "requires": {
           "$ref": "#/$defs/requires"
+        },
+        "blockedMarkers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "observe": {
           "type": "object",
@@ -1231,6 +1255,22 @@
           "else": {
             "not": {
               "required": ["url"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cookiePlant", "as"],
+          "properties": {
+            "cookiePlant": {
+              "enum": ["set-cookie", "credential"]
+            },
+            "as": {
+              "$ref": "#/$defs/name"
+            },
+            "requires": {
+              "$ref": "#/$defs/requires"
             }
           }
         }

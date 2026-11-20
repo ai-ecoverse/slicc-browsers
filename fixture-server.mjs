@@ -304,6 +304,16 @@ export async function fixtureServer({ host = '127.0.0.1', port = 0, tls, latency
     port: address.port,
     origin: `${scheme}://${host}:${address.port}`,
     log: () => structuredClone(entries),
+    record: (url) => {
+      const entry = {
+        time: Date.now(),
+        url: String(url ?? ''),
+        method: 'GET',
+        headers: {},
+      };
+      entries.push(entry);
+      history.push(entry);
+    },
     reset: () => {
       entries = [];
     },

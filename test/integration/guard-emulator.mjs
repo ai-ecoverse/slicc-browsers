@@ -2,6 +2,7 @@ import { unclosableShape } from '../../close-protected-shape.mjs';
 import { outcome, parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 import { redactProtectedURLs } from '../../redirect-redaction.mjs';
+import { applyCookiePlant } from './cookie-plant-emulator.mjs';
 import { applySignInHold } from './sign-in-hold-emulator.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -242,9 +243,25 @@ async function leakDescendantIframeEvents(event, options, ctx, unguarded, catalo
   }
 }
 
+function protectedHostList(options) {
+  if (!options.deriveProtectedHosts) return options.protectedHosts ?? [];
+  if (options.protectedHosts?.length) return options.protectedHosts;
+  const fromRules = options.protectedOrigins?.hosts ?? [];
+  const fromExtra = (options.extraOrigins ?? [])
+    .map((origin) => {
+      try {
+        return new URL(origin).host;
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean);
+  return [...new Set([...fromRules, ...fromExtra])];
+}
+
 function emulatedGuardPlain(browser, options = {}) {
   const { client, unguarded } = browser;
-  const hosts = options.protectedHosts ?? [];
+  const hosts = protectedHostList(options);
   const catalog = options.protectedOrigins
     ? protectedOrigins(options.protectedOrigins, options.extraOrigins ?? [])
     : null;
@@ -510,22 +527,25 @@ function emulatedGuardPlain(browser, options = {}) {
     await unguarded.send('Page.enable', {}, sessionId);
     const { frameTree } = await unguarded.send('Page.getFrameTree', {}, sessionId);
     frames.set(targetId, frameTree.frame);
-    await unguarded.send(
-      'Fetch.enable',
-      {
-        patterns: [
-          {
-            urlPattern: '*',
-            ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
-            requestStage: 'Request',
-          },
-        ],
-      },
-      sessionId
-    );
+    if (!options.admitProtectedNavigation) {
+      await unguarded.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            {
+              urlPattern: '*',
+              ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
+              requestStage: 'Request',
+            },
+          ],
+        },
+        sessionId
+      );
+    }
     if (waiting) await unguarded.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
   };
   const decide = async (event) => {
+    if (options.admitProtectedNavigation) return;
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
@@ -558,9 +578,34 @@ function emulatedGuardPlain(browser, options = {}) {
       return;
     }
     if (failDocument) failedDocumentTargets.add(owner.targetId);
+    if (options.hangOnProtected) return;
+    const replyDelay = Number(options.replyDelayMs);
+    if (Number.isFinite(replyDelay) && replyDelay > 0)
+      await new Promise((resolve) => setTimeout(resolve, replyDelay));
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});
+    if (options.poisonProtectedJar) {
+      const plantTag = /[?&]n=plant-([^&]+)/.exec(request.url ?? '')?.[1];
+      const host = parseURL(request.url)?.hostname;
+      if (plantTag && host) {
+        const id = String(plantTag)
+          .replace(/[^a-zA-Z0-9]/g, '')
+          .slice(-20);
+        await unguarded
+          .send('Storage.setCookies', {
+            cookies: [
+              {
+                name: `cplant${id || 'x'}`,
+                value: `p-${plantTag}`,
+                domain: `.${host}`,
+                path: '/',
+              },
+            ],
+          })
+          .catch(() => {});
+      }
+    }
     if (owner.child && options.closeChildOnBlock) {
       closed.add(owner.child);
       await unguarded.send('Target.closeTarget', { targetId: owner.targetId }).catch(() => {});
@@ -750,7 +795,10 @@ function emulatedGuardPlain(browser, options = {}) {
               }
             : event
         );
-        if (!mentions(event) && !hidden(event)) {
+        const admitPause =
+          options.admitProtectedNavigation &&
+          (event.method === 'Fetch.requestPaused' || event.method === 'Network.requestIntercepted');
+        if ((!mentions(event) || admitPause) && !hidden(event)) {
           messages.push(JSON.stringify(exposed));
           events.push(exposed);
           for (const waiter of waiters)
@@ -1548,7 +1596,7 @@ async function timedSend(client, method, params, sessionId, ms, label) {
 
 function emulatedGuardWithWorkerRules(browser, options = {}) {
   const { client, unguarded } = browser;
-  const hosts = options.protectedHosts ?? [];
+  const hosts = protectedHostList(options);
   const catalog = options.protectedOrigins
     ? protectedOrigins(options.protectedOrigins, options.extraOrigins ?? [])
     : null;
@@ -1784,22 +1832,25 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
     await unguarded.send('Page.enable', {}, sessionId);
     const { frameTree } = await unguarded.send('Page.getFrameTree', {}, sessionId);
     frames.set(targetId, frameTree.frame);
-    await unguarded.send(
-      'Fetch.enable',
-      {
-        patterns: [
-          {
-            urlPattern: '*',
-            ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
-            requestStage: 'Request',
-          },
-        ],
-      },
-      sessionId
-    );
+    if (!options.admitProtectedNavigation) {
+      await unguarded.send(
+        'Fetch.enable',
+        {
+          patterns: [
+            {
+              urlPattern: '*',
+              ...(options.redirectSecrets ? {} : { resourceType: 'Document' }),
+              requestStage: 'Request',
+            },
+          ],
+        },
+        sessionId
+      );
+    }
     if (waiting) await unguarded.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
   };
   const decide = async (event) => {
+    if (options.admitProtectedNavigation) return;
     const owner = shields.get(event.sessionId);
     if (!owner) return;
     const { requestId, request } = event.params;
@@ -1832,9 +1883,34 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
       return;
     }
     if (failDocument) failedDocumentTargets.add(owner.targetId);
+    if (options.hangOnProtected) return;
+    const replyDelay = Number(options.replyDelayMs);
+    if (Number.isFinite(replyDelay) && replyDelay > 0)
+      await new Promise((resolve) => setTimeout(resolve, replyDelay));
     await unguarded
       .send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' }, event.sessionId)
       .catch(() => {});
+    if (options.poisonProtectedJar) {
+      const plantTag = /[?&]n=plant-([^&]+)/.exec(request.url ?? '')?.[1];
+      const host = parseURL(request.url)?.hostname;
+      if (plantTag && host) {
+        const id = String(plantTag)
+          .replace(/[^a-zA-Z0-9]/g, '')
+          .slice(-20);
+        await unguarded
+          .send('Storage.setCookies', {
+            cookies: [
+              {
+                name: `cplant${id || 'x'}`,
+                value: `p-${plantTag}`,
+                domain: `.${host}`,
+                path: '/',
+              },
+            ],
+          })
+          .catch(() => {});
+      }
+    }
     if (owner.child && options.closeChildOnBlock) {
       closed.add(owner.child);
       await unguarded.send('Target.closeTarget', { targetId: owner.targetId }).catch(() => {});
@@ -2022,7 +2098,10 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
               }
             : event
         );
-        if (!mentions(event) && !hidden(event)) {
+        const admitPause =
+          options.admitProtectedNavigation &&
+          (event.method === 'Fetch.requestPaused' || event.method === 'Network.requestIntercepted');
+        if ((!mentions(event) || admitPause) && !hidden(event)) {
           messages.push(JSON.stringify(exposed));
           events.push(exposed);
           for (const waiter of waiters)
@@ -2698,11 +2777,11 @@ export function emulatedGuard(browser, options = {}) {
   const guard = options.workerRules
     ? emulatedGuardWithWorkerRules(browser, options)
     : emulatedGuardPlain(browser, options);
-  if (!options.signInHold) return guard;
-  return {
-    ...guard,
-    client: applySignInHold(guard.client, browser, options),
-  };
+  let client = guard.client;
+  if (options.signInHold) client = applySignInHold(client, browser, options);
+  if (options.cookiePlant) client = applyCookiePlant(client, options);
+  if (client === guard.client) return guard;
+  return { ...guard, client };
 }
 
 export function withPausedSharedWorkerStall(client) {

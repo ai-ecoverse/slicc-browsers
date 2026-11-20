@@ -42,6 +42,9 @@ pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";
 pub const CAP_SIGN_IN_HOLD: &str = "signInHold";
 pub const CAP_IFRAME_AUTO_ATTACH: &str = "iframeAutoAttach";
+pub const CAP_REQUEST_INTERCEPTION: &str = "requestInterception";
+pub const CAP_FETCH_INTERCEPTION: &str = "fetchInterception";
+pub const CAP_LEGACY_INTERCEPTION: &str = "legacyInterception";
 pub const CAP_ERROR_FRAME_CLASS: &str = "errorFrameClass";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
@@ -97,6 +100,12 @@ pub struct Vector {
     pub targets: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    #[serde(
+        default,
+        rename = "blockedMarkers",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub blocked_markers: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub observe: Option<BTreeMap<String, Observation>>,
     pub live: String,
@@ -237,6 +246,8 @@ pub struct Step {
     pub credential_export: bool,
     #[serde(rename = "signInHold", skip_serializing_if = "Option::is_none")]
     pub sign_in_hold: Option<String>,
+    #[serde(rename = "cookiePlant", skip_serializing_if = "Option::is_none")]
+    pub cookie_plant: Option<String>,
     #[serde(rename = "spawnWorker", skip_serializing_if = "Option::is_none")]
     pub spawn_worker: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -39,32 +39,35 @@ const (
 	GuardControl                   = "control"
 	GuardGuarded                   = "guarded"
 
-	GuardCapAutoAttach       = "autoAttach"
-	GuardCapBrowserSession   = "browserSession"
-	GuardCapBrowserContexts  = "browserContexts"
-	GuardCapChromeURLsAttach = "chromeUrlsAttach"
-	GuardCapExtensionWorld   = "extensionWorld"
-	GuardCapExtensionFrame   = "extensionFrame"
-	GuardCapDiscovery        = "discovery"
-	GuardCapClientExit       = "clientExit"
-	GuardCapSiteIsolationOff = "siteIsolationOff"
-	GuardCapInboundDelay     = "inboundDelay"
-	GuardCapSecureOrigin     = "secureOrigin"
-	GuardCapForwardAudit     = "forwardAudit"
-	GuardCapStockSetup       = "stockSetup"
-	GuardCapSyntheticAttach  = "syntheticAutoAttach"
-	GuardCapCloseProtected   = "closeProtected"
-	GuardCapSignInHold       = "signInHold"
-	GuardCapIframeAutoAttach = "iframeAutoAttach"
-	GuardCapErrorFrameClass  = "errorFrameClass"
-	GuardObserverWatch       = "watch"
-	GuardObserverFail        = "fail"
-	GuardClientExit          = "exit"
-	GuardPageScript          = "script"
-	GuardSessionPage         = "page"
-	GuardSessionBrowser      = "browser"
-	GuardSessionEither       = "page-or-browser"
-	GuardSessionChild        = "child"
+	GuardCapAutoAttach          = "autoAttach"
+	GuardCapBrowserSession      = "browserSession"
+	GuardCapBrowserContexts     = "browserContexts"
+	GuardCapChromeURLsAttach    = "chromeUrlsAttach"
+	GuardCapExtensionWorld      = "extensionWorld"
+	GuardCapExtensionFrame      = "extensionFrame"
+	GuardCapDiscovery           = "discovery"
+	GuardCapClientExit          = "clientExit"
+	GuardCapSiteIsolationOff    = "siteIsolationOff"
+	GuardCapInboundDelay        = "inboundDelay"
+	GuardCapSecureOrigin        = "secureOrigin"
+	GuardCapForwardAudit        = "forwardAudit"
+	GuardCapStockSetup          = "stockSetup"
+	GuardCapSyntheticAttach     = "syntheticAutoAttach"
+	GuardCapCloseProtected      = "closeProtected"
+	GuardCapSignInHold          = "signInHold"
+	GuardCapIframeAutoAttach    = "iframeAutoAttach"
+	GuardCapErrorFrameClass     = "errorFrameClass"
+	GuardCapRequestInterception = "requestInterception"
+	GuardCapFetchInterception   = "fetchInterception"
+	GuardCapLegacyInterception  = "legacyInterception"
+	GuardObserverWatch          = "watch"
+	GuardObserverFail           = "fail"
+	GuardClientExit             = "exit"
+	GuardPageScript             = "script"
+	GuardSessionPage            = "page"
+	GuardSessionBrowser         = "browser"
+	GuardSessionEither          = "page-or-browser"
+	GuardSessionChild           = "child"
 )
 
 type GuardVectors struct {
@@ -99,6 +102,7 @@ type GuardVector struct {
 	Trigger         []GuardStep                 `json:"trigger"`
 	Targets         []string                    `json:"targets"`
 	Requires        []string                    `json:"requires,omitempty"`
+	BlockedMarkers  []string                    `json:"blockedMarkers,omitempty"`
 	Observe         map[string]GuardObservation `json:"observe,omitempty"`
 	Live            string                      `json:"live"`
 	LiveCheck       json.RawMessage             `json:"liveCheck,omitempty"`
@@ -192,6 +196,7 @@ type GuardStep struct {
 	ProtectedParentIframes string          `json:"protectedParentIframes,omitempty"`
 	CredentialExport       bool            `json:"credentialExport,omitempty"`
 	SignInHold             string          `json:"signInHold,omitempty"`
+	CookiePlant            string          `json:"cookiePlant,omitempty"`
 	SpawnWorker            string          `json:"spawnWorker,omitempty"`
 	Frame                  string          `json:"frame,omitempty"`
 	ProbeSessions          json.RawMessage `json:"probeSessions,omitempty"`

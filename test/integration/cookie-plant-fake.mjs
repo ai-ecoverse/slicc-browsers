@@ -197,6 +197,26 @@ export function cookiePlantFake(options = {}) {
   const leakCloseCount = Math.max(0, Number(options.leakCloseCount ?? 0) || 0);
   let leakedCloses = 0;
   const contexts = new Map();
+  const assertStorageCookieContext = (method, params) => {
+    if (staggerContexts) return;
+    if (storageGetIgnoresBrowserContext || storageJarIgnoresBrowserContext) return;
+    if (canarySetIgnoresBrowserContext && method === 'Storage.setCookies') {
+      const canaryOnly = (params?.cookies ?? []).every((c) =>
+        String(c.name).startsWith('cplantcanary')
+      );
+      if (canaryOnly) return;
+    }
+    const attemptTabs = [...tabs.values()].filter(
+      (tab) => tab.browserContextId && tab.browserContextId !== 'B1'
+    );
+    if (!attemptTabs.length) return;
+    const want = [...new Set(attemptTabs.map((tab) => tab.browserContextId))];
+    const got = params?.browserContextId;
+    if (!got || !want.includes(got))
+      throw new Error(
+        `cookie-plant-fake: ${method} context ${got ?? 'missing'} !== attempt tab context(s) ${want.join(',')}`
+      );
+  };
   const recordPreTriggerPlantHit = (tab) => {
     if (!preTriggerPlantHit || !tab || preTriggerHitTabs.has(tab.targetId)) return;
     const m = /cookie-plant-([^&/?#]+)/.exec(String(tab.url ?? ''));
@@ -689,6 +709,7 @@ export function cookiePlantFake(options = {}) {
       method === 'Network.getAllCookies' ||
       method === 'Network.getCookies'
     ) {
+      if (method === 'Storage.getCookies') assertStorageCookieContext(method, params);
       if (method === 'Storage.getCookies' && storageGetCookiesFails)
         throw new Error('Storage.getCookies failed');
       if (method === 'Network.getAllCookies' && networkGetAllCookiesFails)
@@ -742,6 +763,7 @@ export function cookiePlantFake(options = {}) {
       return { cookies: [...visible] };
     }
     if (method === 'Storage.setCookies') {
+      assertStorageCookieContext(method, params);
       const canaryOnly = (params.cookies ?? []).every((c) =>
         String(c.name).startsWith('cplantcanary')
       );

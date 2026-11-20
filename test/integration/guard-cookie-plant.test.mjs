@@ -571,7 +571,7 @@ test('deletionCleared is incomplete when the after jar is unreadable', async () 
   assert.equal(row.observations.guarded.deletionCleared, 'incomplete', JSON.stringify(row));
 });
 
-test('default context: tab Set-Cookie and Storage jar read agree', async () => {
+test('default jar legitimate only when browserContexts is not declared: tab and read agree', async () => {
   const out = await rows({
     oneTarget: true,
     onlyPaths: ['ordinary', 'adobe', 'deletion'],
@@ -584,6 +584,10 @@ test('default context: tab Set-Cookie and Storage jar read agree', async () => {
       (n) => /cookie-plant\.deletion\.cleared:/.test(n) && /"cleared":true/.test(n)
     ),
     JSON.stringify(row.notes)
+  );
+  assert.ok(
+    !(row.notes ?? []).some((n) => /"browserContextId":"C/.test(n)),
+    `contexts-off must use default jar, got ${JSON.stringify(row.notes)}`
   );
 });
 
@@ -1551,9 +1555,11 @@ const { cookiePlantHandleApi } = await import('../../cookie-plant.mjs');
 test('jar/score helpers throw when attempt handle is missing', async () => {
   const {
     requireAttemptHandle,
+    jarContextIncomplete,
     clearCookie,
     plantCanary,
     readJar,
+    readJarView,
     readJarWithCanary,
     seedCookie,
     finishPlant,
@@ -1565,6 +1571,19 @@ test('jar/score helpers throw when attempt handle is missing', async () => {
   assert.throws(() => requireAttemptHandle({}, 't'), /browserContextId required/);
   assert.throws(() => requireAttemptHandle({ browserContextId: null }, 't'), /reader required/);
   requireAttemptHandle({ reader: {}, browserContextId: null }, 't');
+  assert.deepEqual(
+    jarContextIncomplete({ reader: {}, browserContextId: null, browserContexts: true }),
+    { incomplete: 'unknown context' }
+  );
+  assert.equal(jarContextIncomplete({ reader: {}, browserContextId: null }), null);
+  assert.equal(
+    jarContextIncomplete({ reader: {}, browserContextId: 'C1', browserContexts: true }),
+    null
+  );
+  assert.deepEqual(
+    await readJarView({ reader: {}, browserContextId: null, browserContexts: true }),
+    { incomplete: 'unknown context' }
+  );
   await assert.rejects(() => clearCookie(null, { name: 'x' }), /attempt handle required/);
   await assert.rejects(
     () => clearCookie({ reader: {} }, { name: 'x' }),
@@ -1573,6 +1592,15 @@ test('jar/score helpers throw when attempt handle is missing', async () => {
   await assert.rejects(
     () => plantCanary({ reader: {}, browserContextId: null }),
     /canary required/
+  );
+  assert.deepEqual(
+    await plantCanary({
+      reader: {},
+      browserContextId: null,
+      browserContexts: true,
+      canary: { name: 'c', value: 'v', domain: 'a.test' },
+    }),
+    { incomplete: 'unknown context' }
   );
   await assert.rejects(
     () => readJar(null, { name: 'x', domain: 'a.test' }),
@@ -1620,6 +1648,7 @@ test('jar/score helpers throw when attempt handle is missing', async () => {
 test('jar/score call sites always pass attempt handle (static)', async () => {
   const source = await readFile(join(root, 'cookie-plant.mjs'), 'utf8');
   assert.match(source, /function requireAttemptHandle\(/);
+  assert.match(source, /function jarContextIncomplete\(/);
   for (const name of [
     'clearCookie',
     'seedCookie',
@@ -1671,6 +1700,28 @@ test('jar/score call sites always pass attempt handle (static)', async () => {
     assert.fail(`call must pass handle first: ${m[0].slice(0, 120)}`);
   }
 });
+
+test('no default-handle wrapper invents a null/B1 context (static)', async () => {
+  const source = await readFile(join(root, 'cookie-plant.mjs'), 'utf8');
+  assert.doesNotMatch(source, /function makeDefaultHandle\b/);
+  assert.doesNotMatch(source, /browserContextId\s*:\s*['"]B1['"]/);
+  assert.doesNotMatch(
+    source,
+    /browserContextId\s*:\s*(?:browserContextId|\w+)\s*\|\|\s*['"]B1['"]/
+  );
+  assert.doesNotMatch(
+    source,
+    /browserContextId\s*:\s*(?:browserContextId|\w+)\s*\?\?\s*['"]B1['"]/
+  );
+  assert.match(source, /jarContextIncomplete\(/);
+  assert.match(source, /unknown context/);
+});
+
+const FOREIGN_CONTEXT_RESIDUAL =
+  'foreign-context residual: a client-issued cookie write into the default jar is not a C10 path (C10 scores plants through client-answered interception in the issuing tab context); covered by C6.write-cookies / C6.setCookie (protected targets seven, vault, vault-x, apex) and C7.credential-export (credential targets idp, idp-stg)';
+const CONTINUE_ITSELF_PROTECTED_ONLY = 'continue-itself applies only to protected hosts';
+const POISON_VALUE_SCORING_INERT =
+  'poison-jar plants p-; credential hostOnly scores ho- (scoring-inert)';
 
 const MUTANT_MATRIX = [
   {
@@ -1740,7 +1791,13 @@ const MUTANT_MATRIX = [
     id: 'm8',
     options: { refuseAttachAfterTrigger: true, poisonProtectedJar: true },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: { na: FOREIGN_CONTEXT_RESIDUAL } },
+      credential: {
+        off: { na: POISON_VALUE_SCORING_INERT },
+        on: { na: FOREIGN_CONTEXT_RESIDUAL },
+      },
+    },
   },
   {
     id: 'm9',
@@ -1767,7 +1824,13 @@ const MUTANT_MATRIX = [
     id: 'm12',
     options: { fake: { continueItselfPlant: true }, admitProtectedNavigation: true },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: 'fail' },
+      credential: {
+        off: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+        on: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+      },
+    },
   },
   {
     id: 'm13',
@@ -1791,7 +1854,13 @@ const MUTANT_MATRIX = [
       admitProtectedNavigation: true,
     },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: 'fail' },
+      credential: {
+        off: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+        on: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+      },
+    },
   },
   {
     id: 'm16',
@@ -1826,7 +1895,13 @@ const MUTANT_MATRIX = [
     id: 'c',
     options: { fake: { continueItselfPlant: true }, admitProtectedNavigation: true },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: 'fail' },
+      credential: {
+        off: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+        on: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+      },
+    },
   },
   {
     id: 'd',
@@ -1865,7 +1940,13 @@ const MUTANT_MATRIX = [
       admitProtectedNavigation: true,
     },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: 'fail' },
+      credential: {
+        off: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+        on: { na: CONTINUE_ITSELF_PROTECTED_ONLY },
+      },
+    },
   },
   {
     id: 'h',
@@ -1923,7 +2004,13 @@ const MUTANT_MATRIX = [
     id: 'poison-jar',
     options: { poisonProtectedJar: true },
     plant: ['fulfillArray'],
-    expected: { protected: { off: 'fail', on: 'pass' }, credential: { off: 'pass', on: 'pass' } },
+    expected: {
+      protected: { off: 'fail', on: { na: FOREIGN_CONTEXT_RESIDUAL } },
+      credential: {
+        off: { na: POISON_VALUE_SCORING_INERT },
+        on: { na: FOREIGN_CONTEXT_RESIDUAL },
+      },
+    },
   },
   {
     id: 'session-cut-admit',
@@ -1987,6 +2074,20 @@ function mapAllowPaths(paths, rowKind, allowMap) {
   return (paths ?? []).map((p) => allowMap?.[p] ?? (p === 'fulfillArray' ? 'hostOnly' : p));
 }
 
+function isPlantingMutant(mutant) {
+  return Boolean(
+    mutant.options?.poisonProtectedJar ||
+      mutant.options?.fake?.continueItselfPlant ||
+      Array.isArray(mutant.options?.allowPlantPaths) ||
+      Array.isArray(mutant.options?.forwardThenCut)
+  );
+}
+
+function cellLabel(expected) {
+  if (expected && typeof expected === 'object' && expected.na) return `n/a: ${expected.na}`;
+  return String(expected);
+}
+
 function assertGuardedVerdict(row, expected, label) {
   if (expected === 'not-pass') {
     assert.notEqual(row.guarded, 'pass', label);
@@ -1995,12 +2096,38 @@ function assertGuardedVerdict(row, expected, label) {
   assert.equal(row.guarded, expected, label);
 }
 
+test('planting mutants never expect pass', () => {
+  for (const mutant of MUTANT_MATRIX) {
+    if (!isPlantingMutant(mutant)) continue;
+    for (const rowKind of ['protected', 'credential']) {
+      for (const mode of ['off', 'on']) {
+        const expected = mutant.expected[rowKind][mode];
+        assert.notEqual(
+          expected,
+          'pass',
+          `planting mutant ${mutant.id} ${rowKind} ${mode} must not expect pass`
+        );
+        if (expected && typeof expected === 'object')
+          assert.ok(
+            expected.na,
+            `planting mutant ${mutant.id} ${rowKind} ${mode} n/a needs reason`
+          );
+      }
+    }
+  }
+});
+
 for (const mutant of MUTANT_MATRIX) {
   for (const browserContexts of [false, true]) {
     for (const rowKind of ['protected', 'credential']) {
       const mode = browserContexts ? 'on' : 'off';
       const expected = mutant.expected[rowKind][mode];
-      test(`matrix ${mutant.id} browserContexts=${mode} ${rowKind} => ${expected}`, async () => {
+      const title = `matrix ${mutant.id} browserContexts=${mode} ${rowKind} => ${cellLabel(expected)}`;
+      test(title, async () => {
+        if (expected && typeof expected === 'object' && expected.na) {
+          assert.ok(expected.na.length > 0, title);
+          return;
+        }
         const onlyPaths = mapPlantPaths(mutant.plant, rowKind);
         const options = {
           ...mutant.options,

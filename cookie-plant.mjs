@@ -643,6 +643,13 @@ function contextKey(browserContextId) {
   return browserContextId || null;
 }
 
+function jarContextIncomplete(handle) {
+  if (!handle?.browserContexts) return null;
+  if (handle.browserContextId == null || handle.browserContextId === '')
+    return { incomplete: 'unknown context' };
+  return null;
+}
+
 async function resolveTabContextId(reader, targetId, fallback = null) {
   if (!targetId) return fallback ?? null;
   const info = await outcome(reader.send('Target.getTargetInfo', { targetId }));
@@ -680,6 +687,8 @@ function requireAttemptHandle(handle, where) {
 
 async function plantCanary(handle) {
   requireAttemptHandle(handle, 'plantCanary');
+  const unknown = jarContextIncomplete(handle);
+  if (unknown) return unknown;
   const canary = handle.canary;
   if (!canary) throw new Error('cookie-plant.plantCanary: handle.canary required');
   const path = canary.path ?? '/';
@@ -697,6 +706,8 @@ async function plantCanary(handle) {
 
 async function clearCookie(handle, { name, url, domain }) {
   requireAttemptHandle(handle, 'clearCookie');
+  const unknown = jarContextIncomplete(handle);
+  if (unknown) return unknown;
   const { reader, readerSession: sessionId, browserContextId } = handle;
   await outcome(
     reader.send(
@@ -770,6 +781,8 @@ function jarUrlHints(cookie, canary = null) {
 
 async function readJarView(handle, urlHints = []) {
   requireAttemptHandle(handle, 'readJarView');
+  const unknown = jarContextIncomplete(handle);
+  if (unknown) return unknown;
   const { reader, readerSession: sessionId, browserContextId } = handle;
   const storage = await outcome(
     reader.send('Storage.getCookies', storageContextParams(browserContextId))
@@ -1180,6 +1193,11 @@ async function restorePage(client, pageSession, homeUrl, transport, reader, read
 
 async function finishPlant({ out, cookie, notes, label, handle }) {
   requireAttemptHandle(handle, 'finishPlant');
+  const unknown = jarContextIncomplete(handle);
+  if (unknown) {
+    note(notes, `cookie-plant.${label}`, { ...unknown, ...timingOf(handle) });
+    return attemptRecord(out, 'incomplete');
+  }
   const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
@@ -2307,6 +2325,7 @@ async function proveDoor({
   transport,
   plantName,
   browserContextId = null,
+  browserContexts = false,
 }) {
   let paused = null;
   let triggerPromise = Promise.resolve();
@@ -2325,9 +2344,12 @@ async function proveDoor({
     reader,
     readerSession: sessionId,
     browserContextId,
+    browserContexts: Boolean(browserContexts),
     canary,
   };
   requireAttemptHandle(jarHandle, 'proveDoor');
+  if (jarContextIncomplete(jarHandle))
+    return { incomplete: 'unknown context', browserContextId: browserContextId ?? null };
   try {
     return await withPathBudget(
       (async () => {
@@ -2560,6 +2582,10 @@ async function withFreshAttemptTab(ctx, run) {
     return attemptRecord({ ok: false, error: { message: enabled.incomplete } }, 'incomplete');
   }
   const tabContextId = await resolveTabContextId(reader, pageTarget, browserContextId ?? null);
+  if (ctx.browserContexts && (tabContextId == null || tabContextId === '')) {
+    await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
+    return attemptRecord({ ok: false, error: { message: 'unknown context' } }, 'incomplete');
+  }
   const canary = canarySpec({ tag: ctx.tag, homeUrl });
   const handle = {
     client: timedClient(client, timing),
@@ -2569,6 +2595,7 @@ async function withFreshAttemptTab(ctx, run) {
     pageTarget,
     homeUrl,
     browserContextId: tabContextId,
+    browserContexts: Boolean(ctx.browserContexts),
     canary,
     transport: enabled.transport,
     fetchEnable: enabled.fetchEnable ?? null,
@@ -2904,10 +2931,20 @@ async function observeRawPlantSend({
     reader,
     readerSession: sessionId,
     browserContextId,
+    browserContexts: Boolean(handle?.browserContexts),
     canary,
   };
   requireAttemptHandle(jarHandle, 'observeRawPlantSend');
   if (!canary) throw new Error('cookie-plant.observeRawPlantSend: canary required');
+  if (jarContextIncomplete(jarHandle))
+    return noteRawDoor(
+      notes,
+      label,
+      { ...incompleteRaw('unknown context'), browserContextId },
+      'unknown context',
+      handle,
+      pathStartedAt
+    );
   await capped(clearCookie(jarHandle, cookie), 800, 'raw-clear');
   await plantCanary(jarHandle);
   const enabled = await capped(
@@ -3043,10 +3080,23 @@ async function measureRawDoor(ctx, spec) {
   const sessionId = page.result.sessionId;
   const targetId = page.result.targetId;
   const tabContextId = await resolveTabContextId(timedReader, targetId, browserContextId ?? null);
+  if (ctx.browserContexts && (tabContextId == null || tabContextId === '')) {
+    await outcome(timedReader.send('Target.closeTarget', { targetId }));
+    return noteRawDoor(
+      notes,
+      spec.label,
+      incompleteRaw('unknown context'),
+      'unknown context',
+      handle,
+      pathStartedAt
+    );
+  }
   const canary = canarySpec({ tag: ctx.tag, homeUrl });
   const cookie = { ...plantCookie, value: spec.value };
   const triggerHolder = { paused: null, promise: Promise.resolve() };
   const from = timedReader.events.length;
+  handle.browserContexts = Boolean(ctx.browserContexts);
+  handle.browserContextId = tabContextId;
   try {
     return await withPathBudget(
       observeRawPlantSend({
@@ -3389,6 +3439,8 @@ function seedProof(jar, cookie) {
 
 async function seedCookie(handle, cookie) {
   requireAttemptHandle(handle, 'seedCookie');
+  const unknown = jarContextIncomplete(handle);
+  if (unknown) return unknown;
   const path = cookie.path ?? '/';
   await clearCookie(handle, { ...cookie, path });
   const all = await outcome(
@@ -3874,6 +3926,7 @@ async function proveDoorOnOwnTab({
   internalSessions,
   plantName,
   browserContextId = null,
+  browserContexts = false,
 }) {
   const host = hostOf(doorOrigin);
   const domain = `.${host}`;
@@ -3907,6 +3960,7 @@ async function proveDoorOnOwnTab({
         internalSessions,
         budget,
         browserContextId,
+        browserContexts,
         plantUrl: `${doorOrigin}/data?n=door-${tag}`,
         plantCookie: {
           name: plantName,
@@ -3957,6 +4011,8 @@ async function proveDoorOnOwnTab({
     doorPage.result.targetId,
     browserContextId ?? null
   );
+  if (browserContexts && (doorContextId == null || doorContextId === ''))
+    return { incomplete: 'unknown context', browserContextId: null };
   const door = await proveDoor({
     reader,
     sessionId: doorPage.result.sessionId,
@@ -3968,6 +4024,7 @@ async function proveDoorOnOwnTab({
     transport: readerTransport,
     plantName,
     browserContextId: doorContextId,
+    browserContexts,
   });
   await capped(
     outcome(reader.send('Target.closeTarget', { targetId: doorPage.result.targetId })),
@@ -4056,6 +4113,7 @@ export async function cookiePlant({
   onlyPaths = null,
   forcedRaw = null,
   browserContextId = null,
+  browserContexts = false,
 }) {
   if (!reader) return { incomplete: 'missing unguarded reader' };
   const credential = mode === 'credential' || mode === 'credential-set-cookie';
@@ -4085,6 +4143,7 @@ export async function cookiePlant({
     internalSessions,
     plantName: names.plant,
     browserContextId,
+    browserContexts,
   });
   if (!door.live) return door;
 
@@ -4141,6 +4200,7 @@ export async function cookiePlant({
     rawDoors: {},
     forcedRaw: forcedRaw && typeof forcedRaw === 'object' ? forcedRaw : null,
     browserContextId,
+    browserContexts: Boolean(browserContexts),
   });
 
   const { results, ran } = await runAttempts(
@@ -4199,6 +4259,7 @@ export { cookieNames };
 
 export const cookiePlantHandleApi = {
   requireAttemptHandle,
+  jarContextIncomplete,
   plantCanary,
   clearCookie,
   readJar,

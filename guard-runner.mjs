@@ -1349,6 +1349,7 @@ class Execution {
         onlyPaths: this.options.cookiePlantOnlyPaths ?? null,
         forcedRaw: this.options.cookiePlantForcedRaw ?? null,
         browserContextId: this.vars.context ?? null,
+        browserContexts: supported(['browserContexts'], this.options.capabilities),
       })
     );
   }

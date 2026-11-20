@@ -52,6 +52,7 @@ export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeFo
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const namedResultMs = 10000;
 const observeMs = 5000;
+const premises = { chainStarted: 'first hop not observed' };
 
 function autoAttachSession(events, start, targetId) {
   return events
@@ -2130,6 +2131,8 @@ class Execution {
   async observeAll(unseen) {
     const observed = { ...this.refused };
     const incomplete = [];
+    let measured = 0;
+    let excused = 0;
     for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
       if (gatedOut(observation, this.options.capabilities)) {
         observed[name] = 'not-supported';
@@ -2140,7 +2143,11 @@ class Execution {
         observed[name] = 'incomplete';
         continue;
       }
-      if (dependencies.some((dep) => this.refused[dep] === true)) continue;
+      if (dependencies.some((dep) => this.refused[dep] === true)) {
+        excused++;
+        continue;
+      }
+      measured++;
       observed[name] = await this.observe(name, observation.check);
       if (observed[name] === 'unwatched') {
         observed[name] = 'incomplete';
@@ -2155,7 +2162,25 @@ class Execution {
       observed[`${name}.either`] = holds;
       if (holds === 'incomplete') incomplete.push(name);
     }
+    this.premises(observed);
+    if (this.side === 'control' && excused && !measured) this.incomplete.push('measured nothing');
     return { observed, incomplete };
+  }
+
+  premises(observed) {
+    const want = this.side === 'control' ? this.vector.control.expected : this.vector.expected;
+    const observe = this.vector.observe ?? {};
+    const missing = Object.keys(premises).filter(
+      (name) =>
+        Object.hasOwn(observe, name) &&
+        !(observe[name].dependsOn ?? []).length &&
+        want?.[name] === true &&
+        observed[name] === false
+    );
+    if (!missing.length) return;
+    for (const name of missing) this.incomplete.push(`${name}: ${premises[name]}`);
+    for (const name of Object.keys(observe))
+      if (want?.[name] === true && observed[name] === false) observed[name] = 'incomplete';
   }
 
   async either(check, value, name, unseen) {

@@ -417,6 +417,12 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
     },
     { name: 'HeadlessExperimental gate', beginFrame: true },
     {
+      name: 'silent frame attach',
+      silentFrameAttach: true,
+      incomplete: true,
+      incompleteMatch: /the guarded leg saw neither an attach event nor a refusal/,
+    },
+    {
       name: 'foreign MHTML refusal',
       mhtmlMessage: 'slicc: refused: mhtml disabled here',
       observation: 'archiveRefusal',
@@ -458,6 +464,12 @@ test('extension-frame rows reject missing evidence and unsafe capture or attachm
             return { documents: [] };
           if (mode.mhtmlMessage && method === 'Page.captureSnapshot')
             throw new Error(mode.mhtmlMessage);
+          if (mode.silentFrameAttach && method === 'Target.attachToTarget') {
+            const { targetInfo } = await browser.unguarded.send('Target.getTargetInfo', {
+              targetId: params.targetId,
+            });
+            if (targetInfo?.type === 'iframe') throw new Error('Target.attachToTarget dropped');
+          }
           if (mode.secondFrameAttach && method === 'Target.attachToTarget') {
             const { targetInfo } = await browser.unguarded.send('Target.getTargetInfo', {
               targetId: params.targetId,

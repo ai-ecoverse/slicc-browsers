@@ -1358,6 +1358,7 @@ class Execution {
           capabilities: this.options.capabilities,
           notes: this.notes,
           castControls: (this.clients.castControls ??= {}),
+          attachControls: (this.clients.attachControls ??= {}),
         })
       );
     if (step.rawTarget) return outcome(this.rawTarget(step.rawTarget));

@@ -87,6 +87,26 @@ const broken = {
     },
     /C3\.tab-attach\.explicit: an explicitAttach row has no rawTarget step/,
   ],
+  'an explicit row without the observer raw-id use': [
+    (find) => {
+      const vector = attach(find);
+      vector.trigger = vector.trigger.filter((entry) => entry.as !== 'mapped');
+    },
+    /C3\.tab-attach\.explicit: an explicitAttach row lists before the observer uses the raw target id/,
+  ],
+  'an explicit row that lists before the observer uses the raw target id': [
+    (find) => {
+      const vector = guarded(find);
+      const mapped = vector.trigger.findIndex((entry) => entry.as === 'mapped');
+      const [moved] = vector.trigger.splice(mapped, 1);
+      vector.trigger.splice(
+        vector.trigger.findIndex((entry) => entry.as === 'listed') + 1,
+        0,
+        moved
+      );
+    },
+    /C3\.tab-protected\.explicit: an explicitAttach row lists before the observer uses the raw target id/,
+  ],
   'an explicit row that never binds the child session': [
     (find) => {
       delete step(attach(find), 'attach').bindSession;

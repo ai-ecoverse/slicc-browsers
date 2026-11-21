@@ -127,6 +127,7 @@ async function diagnoseIncomplete({
   trigger,
   firstIncomplete,
   handle,
+  wait = null,
 }) {
   const elapsedMs = Date.now() - startedAt;
   const legElapsedMs = Date.now() - legStartedAt;
@@ -150,6 +151,7 @@ async function diagnoseIncomplete({
     pauseHits: pauses.length,
     anyPaused,
     server,
+    ...(wait ? { wait } : {}),
     ...timing,
   };
   note(notes, `cookie-plant.${label}`, evidence);
@@ -349,6 +351,40 @@ async function waitPause(client, from, url, methods, budget) {
     const hits = pauseEvents(client.events, from, url, methods);
     return hits.at(-1) ?? null;
   }, budget);
+}
+
+async function waitIssuedPause(client, from, url, methods, triggerPromise, pauseMs, settleMs) {
+  const startedAt = Date.now();
+  let settledAt = null;
+  let issued = false;
+  Promise.resolve(triggerPromise).then(
+    (out) => {
+      settledAt = Date.now();
+      issued = out?.ok === true && !out.result?.exceptionDetails;
+    },
+    () => {
+      settledAt = Date.now();
+    }
+  );
+  for (;;) {
+    const paused = pauseEvents(client.events, from, url, methods).at(-1) ?? null;
+    const now = Date.now();
+    const origin = settledAt == null ? startedAt : Math.min(settledAt, startedAt + settleMs);
+    if (paused || now - origin > pauseMs)
+      return {
+        paused,
+        wait: {
+          pauseMs,
+          settleMs,
+          waitMs: now - startedAt,
+          triggerSettled: settledAt != null,
+          triggerSettledMs: settledAt == null ? null : settledAt - startedAt,
+          triggerIssued: issued,
+          pauseSeen: Boolean(paused),
+        },
+      };
+    await pause(25);
+  }
 }
 
 async function tabHrefFromReader(reader, pageTarget) {
@@ -1703,7 +1739,16 @@ async function runPlantBody({
   state.triggerPromise = topLevel
     ? triggerNavigate(client, pageSession, url)
     : triggerFetch(client, pageSession, url);
-  state.paused = await waitPause(client, from, url, methods, pauseMs);
+  const waited = await waitIssuedPause(
+    client,
+    from,
+    url,
+    methods,
+    state.triggerPromise,
+    pauseMs,
+    Math.min(budget, 500)
+  );
+  state.paused = waited.paused;
   if (!state.paused) {
     const trigger = await settleTrigger(state.triggerPromise, Math.min(budget, 500));
     state.triggerPromise = Promise.resolve(trigger);
@@ -1723,6 +1768,7 @@ async function runPlantBody({
       ensure,
       trigger,
       firstIncomplete,
+      wait: waited.wait,
     });
     return attemptRecord({ ok: false, error: { message: 'timeout: no pause' } }, 'incomplete');
   }
@@ -2444,8 +2490,21 @@ async function proveDoor({
         triggerPromise = triggerNavigate(reader, sessionId, url);
         const methods =
           transport.kind === 'legacy' ? ['Network.requestIntercepted'] : ['Fetch.requestPaused'];
-        paused = await waitPause(reader, from, url, methods, Math.min(budget, 2000));
+        const waited = await waitIssuedPause(
+          reader,
+          from,
+          url,
+          methods,
+          triggerPromise,
+          Math.min(budget, 2000),
+          Math.min(budget, 500)
+        );
+        paused = waited.paused;
         if (!paused) {
+          note(notes, 'cookie-plant.door', {
+            incomplete: 'raw leg: no pause for top-level plant navigation',
+            ...waited.wait,
+          });
           return { live: false, incomplete: 'raw leg: no pause for top-level plant navigation' };
         }
         const setCookie = cookieHeader(plantName, cookie.value, domain);
@@ -3043,18 +3102,22 @@ async function observeRawPlantSend({
     );
   }
   triggerHolder.promise = triggerNavigate(reader, sessionId, plantUrl);
-  triggerHolder.paused = await waitPause(
+  const waited = await waitIssuedPause(
     reader,
     from,
     plantUrl,
     ['Fetch.requestPaused'],
-    Math.min(budget, 2000)
+    triggerHolder.promise,
+    Math.min(budget, 2000),
+    Math.min(budget, 500)
   );
+  const { wait } = waited;
+  triggerHolder.paused = waited.paused;
   if (!triggerHolder.paused) {
     return noteRawDoor(
       notes,
       label,
-      { ...incompleteRaw('raw leg: no pause'), browserContextId },
+      { ...incompleteRaw('raw leg: no pause'), browserContextId, ...wait },
       'raw leg incomplete',
       handle,
       pathStartedAt
@@ -3085,6 +3148,7 @@ async function observeRawPlantSend({
         doorPresent: false,
         incomplete: jar?.canaryMissing ? 'jar view canary absent' : 'cookie jar unreadable',
         ...jarAuditFields(jarHandle, jar),
+        ...wait,
       },
       'raw leg incomplete',
       handle,
@@ -3102,7 +3166,7 @@ async function observeRawPlantSend({
     doorPresent,
     browserContextId,
   };
-  const audited = { ...raw, ...jarAuditFields(jarHandle, jar) };
+  const audited = { ...raw, ...jarAuditFields(jarHandle, jar), ...wait };
   noteRawDoor(
     notes,
     label,
@@ -3406,7 +3470,16 @@ async function allowedHeaderAttempt({
         triggerPromise = topLevel
           ? triggerNavigate(client, pageSession, url)
           : triggerFetch(client, pageSession, url);
-        paused = await waitPause(client, from, url, methods, pauseMs);
+        const waited = await waitIssuedPause(
+          client,
+          from,
+          url,
+          methods,
+          triggerPromise,
+          pauseMs,
+          Math.min(budget, 500)
+        );
+        paused = waited.paused;
         if (!paused) {
           const trigger = await settleTrigger(triggerPromise, Math.min(budget, 500));
           triggerPromise = Promise.resolve(trigger);
@@ -3426,6 +3499,7 @@ async function allowedHeaderAttempt({
             ensure,
             trigger,
             firstIncomplete,
+            wait: waited.wait,
           });
           return attemptRecord(
             { ok: false, error: { message: 'timeout: no pause' } },
@@ -4223,7 +4297,7 @@ export async function cookiePlant({
     browserContextId,
     browserContexts,
   });
-  if (!door.live) return door;
+  if (!door.live) return doorPremiseMissed(door);
 
   const probe = await openPlantClient({
     client,
@@ -4315,6 +4389,13 @@ export async function cookiePlant({
     evidenceIncomplete,
     results,
   });
+}
+
+function doorPremiseMissed(door) {
+  return {
+    incomplete: door.incomplete ?? 'raw leg incomplete',
+    ...(Object.hasOwn(door, 'browserContextId') ? { browserContextId: door.browserContextId } : {}),
+  };
 }
 
 function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncomplete, results }) {

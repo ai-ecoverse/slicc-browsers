@@ -136,9 +136,27 @@ const hostOnly = (text) =>
 const beyondOrigin = (url) => !['', '/'].includes(url.pathname) || Boolean(url.search || url.hash);
 
 const nonBlankAbout = (text) => parseURL(text)?.protocol === 'about:' && text !== 'about:blank';
+const aboutParts = /[?#&=]+/;
+const aboutName = /^[^/?#]*/;
+const leadsWith = (text, path) => Boolean(path) && (text === path || text.startsWith(`${path}/`));
+const aboutCarries = (text, check) => {
+  const rest = text.slice('about:'.length);
+  const [first, ...others] = rest.split(aboutParts);
+  const parts = [first, first.replace(aboutName, ''), ...others];
+  const bareName = (part) => part.replace(/^\/+/, '');
+  return (
+    Boolean(check.secret && rest.includes(check.secret)) ||
+    parts.some(
+      (part) =>
+        check.protectedHost(check.hostToken(bareName(part))) ||
+        (part.startsWith('/') && leadsWith(bareName(part), check.path))
+    )
+  );
+};
 
 const layerRule = (text, check) => {
-  if (nonBlankAbout(text)) return 'about: non-bare';
+  if (nonBlankAbout(text) && (!check.aboutContent || aboutCarries(text, check)))
+    return 'about: non-bare';
   if (check.relative && text.startsWith('//') && check.protectedHost(asURL(text)?.host))
     return 'scheme-relative url';
   const urlHost = parseURL(text)?.host;
@@ -157,7 +175,7 @@ const namingRule = (all, check) => {
 
 export function redactionLeak(
   info,
-  { targetId, origin, tag },
+  { targetId, origin, path, tag },
   {
     normalize = normalizeHost,
     hostToken = leadingHost,
@@ -166,13 +184,23 @@ export function redactionLeak(
     embedded = true,
     relative = true,
     fold = foldNFKC,
+    aboutContent = true,
   } = {}
 ) {
   const exact = parseURL(origin)?.host;
   const host = normalize(exact ?? '');
   const protectedHost = (candidate) => Boolean(host && candidate) && normalize(candidate) === host;
-  const check = { exact, protectedHost, hostToken, relative };
   const prepared = (value) => fold(unwrapped(fold(String(value ?? ''))));
+  const secret = String(tag).toLowerCase();
+  const check = {
+    exact,
+    protectedHost,
+    hostToken,
+    relative,
+    aboutContent,
+    secret,
+    path: prepared(path).replace(/^\/+/, ''),
+  };
   const texts = (value) => layers(prepared(value), schemes).map((text) => trim(fold(text)));
   const embeds = (value) =>
     embedded &&
@@ -199,7 +227,6 @@ export function redactionLeak(
   }
   const embedding = names.find((field) => embeds(fields[field]));
   if (embedding) return { field: embedding, rule: 'embedded url with path' };
-  const secret = String(tag).toLowerCase();
   const tagged = names.find((field) => unwrapped(fields[field]).includes(secret));
   return tagged ? { field: tagged, rule: 'tag' } : undefined;
 }
@@ -2470,7 +2497,12 @@ class Execution {
                 }))
               : [];
           });
-    const scope = { targetId: this.vars.rawTarget, origin, tag: this.vars.tag };
+    const scope = {
+      targetId: this.vars.rawTarget,
+      origin,
+      path: parseURL(this.vars.rawTargetUrl)?.pathname,
+      tag: this.vars.tag,
+    };
     const leaks = entries
       .filter(({ info }) => info)
       .map((entry) => ({ ...entry, leak: redactionLeak(entry.info, scope) }))

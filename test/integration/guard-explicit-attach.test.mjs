@@ -298,6 +298,8 @@ for (const [mode, extra] of Object.entries(modes)) {
     'a data: url embedding {origin}/doc': { shape: 'data' },
     'a javascript: url embedding {origin}/doc': { shape: 'javascript' },
     'about:blank#/doc': { shape: 'fragment' },
+    'about:blank#/doc?n={tag}': { shape: 'fragmentTag' },
+    'about:blank#{host}/doc': { shape: 'fragmentHost' },
     'a default title host/path': { shape: 'hostPath' },
     'a default title host:port/path': { shape: 'hostPortPath' },
     'a default title host:port/path?query#fragment': { shape: 'defaultTitle' },
@@ -384,11 +386,23 @@ for (const [mode, extra] of Object.entries(modes)) {
       shows: /http:\/\/ordinary\.test \+ query\(\d+ chars\)/,
     },
     'about: non-bare': { shape: 'fragment', field: 'url', shows: /about:\(16 chars\)/ },
+    'about: non-bare with the tag': {
+      rule: 'about: non-bare',
+      shape: 'fragmentTag',
+      field: 'url',
+      shows: /^about:\(\d+ chars\)$/,
+    },
+    'about: non-bare with the host': {
+      rule: 'about: non-bare',
+      shape: 'fragmentHost',
+      field: 'url',
+      shows: /^about:\(\d+ chars\)$/,
+    },
     tag: { shape: 'tagged', field: 'title', shows: /^text\(\d+ chars\)$/ },
     'scheme-relative url': { shape: 'relativeUrl', field: 'url', shows: /^text\(\d+ chars\)$/ },
   };
-  for (const [rule, { shape, field, shows }] of Object.entries(diagnosed))
-    test(`${mode}: the notes name the entry, field and rule (${rule}) of a leak and never the tag`, async () => {
+  for (const [name, { rule = name, shape, field, shows }] of Object.entries(diagnosed))
+    test(`${mode}: the notes name the entry, field and rule (${name}) of a leak and never the tag`, async () => {
       const { execution, browser } = await execute({
         mutant: { redact: true, surrogate: { list: shape, events: shape, info: shape } },
         capabilities,
@@ -457,6 +471,54 @@ for (const [mode, extra] of Object.entries(modes)) {
         JSON.stringify(notes)
       );
     }
+  });
+
+  test(`${mode}: an unrelated tab at about:blank#settings is no leak and both protected rows pass`, async () => {
+    const { execution, browser, foreignIds, targets } = await execute({
+      mutant: { redact: true },
+      capabilities,
+      ids: ['C3.tab-protected.explicit'],
+      foreign: () => ['about:blank#settings'],
+    });
+    const [id] = foreignIds;
+    const { targetInfo } = await browser.unguarded.send('Target.getTargetInfo', { targetId: id });
+    assert.equal(targetInfo.url, 'about:blank#settings');
+    const tags = tagsOf(browser);
+    assert.deepEqual(
+      execution.results.map((row) => row.target),
+      ['seven', 'vault']
+    );
+    for (const [index, row] of execution.results.entries()) {
+      assert.deepEqual(legs(row), ['pass', 'pass', 'pass'], shown(row));
+      for (const observation of ['infoRedacted', 'listRedacted', 'eventsRedacted'])
+        assert.equal(row.observations.guarded[observation], true, `${observation} ${shown(row)}`);
+      assert.ok(
+        row.notes.some(
+          (note) =>
+            note.startsWith('guarded rawTarget: ') &&
+            /foreign page target\(s\) at the first listing/.test(note) &&
+            note.includes(id)
+        ),
+        shown(row)
+      );
+      assert.deepEqual(
+        row.notes.filter((note) => note.startsWith('guarded ') && /fails redaction/.test(note)),
+        [],
+        shown(row)
+      );
+      const scope = {
+        targetId: 'RAW',
+        origin: new URL(targets[row.target]).origin,
+        path: '/doc',
+        tag: tags[index],
+      };
+      assert.equal(redactionLeak(targetInfo, scope), undefined);
+      assert.deepEqual(redactionLeak(targetInfo, scope, { aboutContent: false }), {
+        field: 'url',
+        rule: 'about: non-bare',
+      });
+    }
+    assert.equal(execution.summary({ guard: 'unrelated' }).pass, true);
   });
 
   test(`${mode}: the explicit rows open their tabs ${extra.browserContexts ? 'in a browserContext of their own, disposed at the end' : 'in the default context and report the foreign pages they found'}`, async () => {
@@ -824,9 +886,14 @@ test('explicit rows whose redaction observations are reported not-supported are 
   );
 });
 
-const seven = { targetId: 'RAW', origin: 'http://seven.test:1', tag: 'guard-Tag' };
-const literalScope = { targetId: 'RAW', origin: 'http://127.0.0.7:1', tag: 'guard-Tag' };
-const v6 = { targetId: 'RAW', origin: 'http://[::1]:1', tag: 'guard-Tag' };
+const seven = { targetId: 'RAW', origin: 'http://seven.test:1', path: '/doc', tag: 'guard-Tag' };
+const literalScope = {
+  targetId: 'RAW',
+  origin: 'http://127.0.0.7:1',
+  path: '/doc',
+  tag: 'guard-Tag',
+};
+const v6 = { targetId: 'RAW', origin: 'http://[::1]:1', path: '/doc', tag: 'guard-Tag' };
 const leaks = [
   [seven, 'RAW', 'http://seven.test:1', 'http://seven.test:1', false],
   [seven, 'RAW', '', undefined, false],
@@ -891,11 +958,40 @@ const leaks = [
   [seven, 'surrogate', 'data:text/plain,http://ordinary.test/doc', '', false],
   [seven, 'surrogate', 'javascript:void(0)', '', false],
   [seven, 'surrogate', 'about:blank#/doc', '', true],
-  [seven, 'surrogate', 'about:blank?doc', '', true],
+  [seven, 'surrogate', 'about:blank?doc', '', false],
+  [seven, 'surrogate', 'about:blank#doc', '', false],
   [seven, 'surrogate', 'about:blank/doc', '', true],
   [seven, 'surrogate', '', 'about:blank#/doc', true],
   [seven, 'surrogate', 'about:blank', '/doc', false],
   [seven, 'surrogate', 'about:blank', 'about:blank', false],
+  [seven, 'OTHER', 'about:blank#settings', 'about:blank#settings', false],
+  [seven, 'OTHER', 'about:blank#settings', 'Settings', false],
+  [seven, 'OTHER', 'about:blank?x=1', 'about:blank?x=1', false],
+  [seven, 'OTHER', 'about:srcdoc', 'about:srcdoc', false],
+  [seven, 'OTHER', 'about:blank#other.test/doc', 'an ordinary page', false],
+  [seven, 'surrogate', 'about:blank#settings', '', false],
+  [seven, 'surrogate', 'about:blank?x=1', '', false],
+  [seven, 'surrogate', 'about:srcdoc', '', false],
+  [seven, 'surrogate', 'about:blank#other.test/doc', '', false],
+  [seven, 'surrogate', '', 'about:blank#settings', false],
+  [seven, 'surrogate', 'about:blank#docs', '', false],
+  [seven, 'RAW', 'about:blank#settings', '', true],
+  [seven, 'RAW', 'about:srcdoc', 'Settings', true],
+  [seven, 'OTHER', 'about:blank#/doc?n=guard-tag', '', true],
+  [seven, 'surrogate', 'about:blank#/doc?n=guard-tag', '', true],
+  [seven, 'surrogate', 'about:blank#seven.test/doc', '', true],
+  [seven, 'surrogate', 'about:blank#Seven.Test.:1', '', true],
+  [seven, 'surrogate', 'about:blank#n=x-GUARD-tag', '', true],
+  [seven, 'surrogate', 'about:blank#%2Fdoc', '', true],
+  [seven, 'surrogate', 'about:blank#u=/DOC', '', true],
+  [seven, 'surrogate', 'about:blank\uff03\uff0fdoc', '', true],
+  [seven, 'surrogate', 'about:blank#\uff53\uff45\uff56\uff45\uff4e.test/x', '', true],
+  [seven, 'surrogate', '', 'about:blank#seven.test:1', true],
+  [seven, 'surrogate', 'about:blank#settings', 'seven.test:1/doc', true],
+  [seven, 'surrogate', 'about:blank#settings', 'http://seven.test:1', true],
+  [seven, 'surrogate', 'about:blank#settings?u=https://seven.test/doc', '', true],
+  [{ ...seven, path: '/report' }, 'surrogate', 'about:blank#/doc', '', false],
+  [{ ...seven, path: '/report' }, 'surrogate', 'about:blank#/report', '', true],
   [seven, 'surrogate', '', ' seven.test:1234/doc', true],
   [seven, 'surrogate', '', '\tseven.test/doc', true],
   [seven, 'surrogate', '', '\u0000seven.test:1/doc?q', true],
@@ -1080,8 +1176,31 @@ test('filesystem: alone catches a wrapped path once embedded urls are not read',
   assert.equal(redactedInfo(info, seven, { embedded: false }), false);
 });
 
+test('with the any-nonblank about: rule the check calls unrelated about: tabs a leak', () => {
+  for (const [url, title] of [
+    ['about:blank#settings', 'about:blank#settings'],
+    ['about:blank#settings', 'Settings'],
+    ['about:blank?x=1', ''],
+    ['about:srcdoc', ''],
+    ['about:blank#other.test/doc', 'an ordinary page'],
+  ]) {
+    const info = { targetId: 'OTHER', url, title };
+    assert.equal(redactedInfo(info, seven), true, url);
+    assert.deepEqual(redactionLeak(info, seven, { aboutContent: false }), {
+      field: 'url',
+      rule: 'about: non-bare',
+    });
+  }
+  for (const url of [
+    'about:blank#/doc',
+    'about:blank#seven.test/doc',
+    'about:blank#/doc?n=guard-tag',
+  ])
+    assert.equal(redactedInfo({ targetId: 'OTHER', url, title: '' }, seven), false, url);
+});
+
 test('redactionLeak names the field and rule of each leak', () => {
-  const scope = { targetId: 'RAW', origin: 'http://seven.test:1', tag: 'guard-tag' };
+  const scope = { targetId: 'RAW', origin: 'http://seven.test:1', path: '/doc', tag: 'guard-tag' };
   for (const [targetId, url, title, expected] of [
     ['RAW', '', 'doc', { field: 'title', rule: 'raw target id' }],
     [
@@ -1101,6 +1220,17 @@ test('redactionLeak names the field and rule of each leak', () => {
       { field: 'url', rule: 'filesystem: unwrapped' },
     ],
     ['surrogate', 'about:blank#/doc', '', { field: 'url', rule: 'about: non-bare' }],
+    ['surrogate', 'about:blank#seven.test/doc', '', { field: 'url', rule: 'about: non-bare' }],
+    ['surrogate', 'about:blank#/doc?n=guard-tag', '', { field: 'url', rule: 'about: non-bare' }],
+    [
+      'surrogate',
+      'about:blank#settings',
+      'seven.test:1',
+      { field: 'url', rule: 'host token', via: 'title' },
+    ],
+    ['RAW', 'about:blank#settings', '', { field: 'url', rule: 'raw target id' }],
+    ['OTHER', 'about:blank#settings', 'about:blank#settings', undefined],
+    ['OTHER', 'about:blank#other.test/doc', '', undefined],
     [
       'surrogate',
       'http://ordinary.test/?u=https://seven.test/doc',

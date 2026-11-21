@@ -3,6 +3,7 @@ import { outcome, parseURL } from '../../guard-driver.mjs';
 import { protectedOrigins } from '../../protected.mjs';
 import { redactProtectedURLs } from '../../redirect-redaction.mjs';
 import { applyCookiePlant } from './cookie-plant-emulator.mjs';
+import { explicitAttachGuard } from './explicit-attach-emulator.mjs';
 import { applySignInHold } from './sign-in-hold-emulator.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -2774,6 +2775,7 @@ function emulatedGuardWithWorkerRules(browser, options = {}) {
 }
 
 export function emulatedGuard(browser, options = {}) {
+  if (options.explicitAttach) return explicitAttachGuard(browser, options);
   const guard = options.workerRules
     ? emulatedGuardWithWorkerRules(browser, options)
     : emulatedGuardPlain(browser, options);

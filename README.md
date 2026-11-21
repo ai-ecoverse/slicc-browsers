@@ -243,6 +243,7 @@ You supply:
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
+| `explicitAttach` | attach only explicitly (no init-script check on a popup's first document) |
 | `closeProtected` | close a protected tab, except live vault/seven-UI disguises |
 | `signInHold` | hold seven's sign-in popups and hide callback-only authorize tabs (incl. callback-origin) without over-blocking ordinary ones |
 | `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); missing → not-supported, or incomplete if declared |

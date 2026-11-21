@@ -280,6 +280,40 @@ const checkRefusals = (check, id) => {
   ])
     checkRefusals(child, id);
 };
+const autoAttachCalls = ['Target.setAutoAttach', 'Target.autoAttachRelated'];
+function explicitSteps(v, steps, requires) {
+  for (const st of steps) {
+    if (st.bindSession && st.cdp !== 'Target.attachToTarget')
+      gv(`${v.id}: bindSession is only for Target.attachToTarget`);
+    const kind = ['rawTarget', 'bindSession', 'via'].find((key) => st[key]);
+    if (kind && !requires.has('explicitAttach'))
+      gv(`${v.id}: a ${kind} step needs an explicitAttach row`);
+  }
+}
+function explicitRules(v, steps, requires) {
+  explicitSteps(v, steps, requires);
+  if (!requires.has('explicitAttach')) return;
+  const binds = steps.filter((st) => st.bindSession);
+  for (const c of ['autoAttach', 'stockSetup', 'syntheticAutoAttach'])
+    if (requires.has(c) || steps.some((st) => (st.requires ?? []).includes(c)))
+      gv(`${v.id}: an explicitAttach row is gated on ${c}`);
+  for (const c of ['browserSession', 'discovery'])
+    if (!requires.has(c)) gv(`${v.id}: an explicitAttach row needs ${c}`);
+  if (steps.some((st) => st.children || autoAttachCalls.includes(st.cdp)))
+    gv(`${v.id}: an explicitAttach row auto-attaches`);
+  if (steps.some((st) => st.page || (st.cdp === 'Target.createTarget' && st.via !== 'unguarded')))
+    gv(`${v.id}: an explicitAttach row creates or opens a target through the guarded client`);
+  if (v.control?.via !== 'unguarded')
+    gv(`${v.id}: an explicitAttach row needs an unguarded control`);
+  if (!steps.some((st) => st.rawTarget)) gv(`${v.id}: an explicitAttach row has no rawTarget step`);
+  if (binds.length !== 1) gv(`${v.id}: an explicitAttach row binds the child session once`);
+  const want = typeof v.expected === 'object' ? v.expected : {};
+  if (
+    binds.some((st) => st.refusable) &&
+    (want.attachRefused !== true || !v.observe?.attachRefused)
+  )
+    gv(`${v.id}: a refusable explicit attach needs attachRefused true`);
+}
 const guardIds = new Set();
 for (const v of guard.vectors ?? []) {
   if (guardIds.has(v.id)) gv(`duplicate id ${v.id}`);
@@ -372,6 +406,7 @@ for (const v of guard.vectors ?? []) {
     if ((o.requires?.length ?? 0) + (o.unless?.length ?? 0) !== both.size)
       gv(`${v.id}: ${name} lists the same capability in requires and unless`);
   }
+  const explicit = (v.requires ?? []).includes('explicitAttach');
   const needs = new Set();
   const top = [...(v.setup ?? []), ...(v.trigger ?? [])];
   for (const st of flat(top)) {
@@ -381,7 +416,7 @@ for (const v of guard.vectors ?? []) {
       (st.cdp === 'Target.setAutoAttach' || st.children || st.session === 'child')
     )
       want.push('autoAttach');
-    if (st.session === 'browser') want.push('browserSession');
+    if (st.session === 'browser' && st.via !== 'unguarded') want.push('browserSession');
     if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
       want.push('browserContexts');
     if (st.client === 'exit') needs.add('clientExit');
@@ -393,6 +428,11 @@ for (const v of guard.vectors ?? []) {
     if (st.client && !top.includes(st)) gv(`${v.id}: a client exit step runs inside children`);
     for (const c of want) {
       if (c === 'autoAttach' && (st.requires ?? []).includes('syntheticAutoAttach')) continue;
+      if (c === 'autoAttach' && explicit && !st.children && st.cdp !== 'Target.setAutoAttach') {
+        if (!(st.requires ?? []).includes('explicitAttach'))
+          gv(`${v.id}: a ${st.cdp ?? st.page} child step doesn't require explicitAttach`);
+        continue;
+      }
       if (!(st.requires ?? []).includes(c))
         gv(`${v.id}: a ${st.cdp ?? st.page ?? 'children'} step doesn't require ${c}`);
     }
@@ -449,6 +489,7 @@ for (const v of guard.vectors ?? []) {
         );
     }
   }
+  explicitRules(v, steps, requires);
   if (requires.has('stockSetup') && v.control?.via !== 'unguarded')
     gv(`${v.id}: a stockSetup row needs an unguarded control`);
   if (

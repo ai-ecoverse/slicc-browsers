@@ -51,6 +51,204 @@ import { canonicalURL, unparseableURLs } from './unparseable-url.mjs';
 export { leftoverPersistentWorker, releasePersistentWorkerSessions, workerTypeForKind };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const explicitVector = (vector) => (vector.requires ?? []).includes('explicitAttach');
+const discoveryMethods = [
+  'Target.targetCreated',
+  'Target.targetInfoChanged',
+  'Target.attachedToTarget',
+];
+const controlPremises = ['discovered', 'listed', 'attachSession', 'reachable'];
+const exclusive = ['stockSetup', 'syntheticAutoAttach'];
+
+const escapes = /(?:%[0-9a-f]{2})+/gi;
+const bytes = (run) =>
+  run.replace(/%([0-9a-f]{2})/gi, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+const decodedRun = (run) => {
+  try {
+    return decodeURIComponent(run);
+  } catch {
+    return bytes(run);
+  }
+};
+const unwrapped = (value) => {
+  let text = String(value ?? '').toLowerCase();
+  for (let next = text; ; text = next) {
+    next = text.replace(escapes, decodedRun).toLowerCase();
+    if (next === text) return text;
+  }
+};
+
+const wrappers = ['blob:', 'view-source:', 'filesystem:'];
+const payloads = {
+  'data:': (rest) => rest.slice(rest.indexOf(',') + 1),
+  'javascript:': (rest) => rest,
+};
+const separators = /[\s"'`<>(){},;=\\]+/;
+const mappedIPv4 = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/;
+const hostEnd = /[/?#\\\s]/;
+const leadingHost = (text) => text.split(hostEnd)[0];
+
+export function normalizeHost(host) {
+  const text = String(host ?? '');
+  const bare = text.slice(text.lastIndexOf('@') + 1);
+  if (!bare || hostEnd.test(text)) return '';
+  const name = (parseURL(`http://${bare}`)?.hostname ?? '').replace(/\.+$/, '');
+  const mapped = mappedIPv4.exec(name);
+  if (!mapped) return name;
+  const [high, low] = mapped.slice(1).map((part) => Number.parseInt(part, 16));
+  return [high >> 8, high & 255, low >> 8, low & 255].join('.');
+}
+
+const layers = (text, schemes = wrappers) => {
+  const url = parseURL(text);
+  if (!url) return [text];
+  const rest = url.href.slice(url.protocol.length).replace(escapes, decodedRun).toLowerCase();
+  if (schemes.includes(url.protocol)) return [text, ...layers(rest, schemes)];
+  const payload = payloads[url.protocol];
+  if (payload)
+    return [
+      text,
+      ...payload(rest)
+        .split(separators)
+        .filter(Boolean)
+        .flatMap((part) => layers(part, schemes)),
+    ];
+  return [text];
+};
+
+const leadingMarks = /^[\s\p{Cc}\p{Cf}\p{Mn}\p{Me}]+/u;
+const trimLead = (text) => text.replace(leadingMarks, '');
+const foldNFKC = (text) => text.normalize('NFKC');
+
+const embeddedStart = /(?:[a-z][a-z0-9+.-]*:)?\/\//g;
+const embeddedEnd = /[\s"'`<>(){}|^,;&]/;
+const asURL = (text) => parseURL(text.startsWith('//') ? `http:${text}` : text);
+const embeddedURLs = (text, relative = true) =>
+  [...text.matchAll(embeddedStart)]
+    .filter((match) => relative || match[0] !== '//')
+    .map((match) => asURL(text.slice(match.index).split(embeddedEnd)[0]))
+    .filter(Boolean);
+const hostOnly = (text) =>
+  text
+    .replace(/^\/\//, '')
+    .replace(/^[^@/?#\s]*@/, '')
+    .replace(/\/$/, '');
+const beyondOrigin = (url) => !['', '/'].includes(url.pathname) || Boolean(url.search || url.hash);
+
+const nonBlankAbout = (text) => parseURL(text)?.protocol === 'about:' && text !== 'about:blank';
+
+const layerRule = (text, check) => {
+  if (nonBlankAbout(text)) return 'about: non-bare';
+  if (check.relative && text.startsWith('//') && check.protectedHost(asURL(text)?.host))
+    return 'scheme-relative url';
+  const urlHost = parseURL(text)?.host;
+  if (check.protectedHost(urlHost))
+    return urlHost === check.exact ? 'protected host' : 'normalised host';
+  return check.protectedHost(check.hostToken(text)) ? 'host token' : undefined;
+};
+
+const namingRule = (all, check) => {
+  for (const [index, text] of all.entries()) {
+    const rule = layerRule(text, check);
+    if (rule) return index > 0 ? `${parseURL(all[0])?.protocol} unwrapped` : rule;
+  }
+  return undefined;
+};
+
+export function redactionLeak(
+  info,
+  { targetId, origin, tag },
+  {
+    normalize = normalizeHost,
+    hostToken = leadingHost,
+    trim = trimLead,
+    schemes = wrappers,
+    embedded = true,
+    relative = true,
+    fold = foldNFKC,
+  } = {}
+) {
+  const exact = parseURL(origin)?.host;
+  const host = normalize(exact ?? '');
+  const protectedHost = (candidate) => Boolean(host && candidate) && normalize(candidate) === host;
+  const check = { exact, protectedHost, hostToken, relative };
+  const prepared = (value) => fold(unwrapped(fold(String(value ?? ''))));
+  const texts = (value) => layers(prepared(value), schemes).map((text) => trim(fold(text)));
+  const embeds = (value) =>
+    embedded &&
+    texts(value).some((text) =>
+      embeddedURLs(text, relative).some((url) => protectedHost(url.host) && beyondOrigin(url))
+    );
+  const inner = (text) => {
+    const scheme = schemes.find((prefix) => text.startsWith(prefix));
+    return scheme ? inner(text.slice(scheme.length)) : text;
+  };
+  const bare = (value) =>
+    [undefined, '', 'about:blank', origin].includes(value) ||
+    inner(String(value ?? '')) === origin ||
+    protectedHost(hostOnly(trim(prepared(value))));
+  const fields = { url: info.url, title: info.title };
+  const names = Object.keys(fields);
+  const naming = names
+    .map((field) => [field, namingRule(texts(fields[field]), check)])
+    .find(([, rule]) => rule);
+  const exposed = names.find((field) => !bare(fields[field]));
+  if ((info.targetId === targetId || naming) && exposed) {
+    const [field, rule] = naming ?? [exposed, 'raw target id'];
+    return { field: exposed, rule, ...(field === exposed ? {} : { via: field }) };
+  }
+  const embedding = names.find((field) => embeds(fields[field]));
+  if (embedding) return { field: embedding, rule: 'embedded url with path' };
+  const secret = String(tag).toLowerCase();
+  const tagged = names.find((field) => unwrapped(fields[field]).includes(secret));
+  return tagged ? { field: tagged, rule: 'tag' } : undefined;
+}
+
+export function redactedInfo(info, scope, options) {
+  return !redactionLeak(info, scope, options);
+}
+
+const shownParts = (text, host) => {
+  const url = parseURL(text);
+  if (url && url.origin !== 'null') {
+    const parts = [
+      ['path', url.pathname === '/' ? '' : url.pathname],
+      ['query', url.search],
+      ['fragment', url.hash],
+    ]
+      .filter(([, part]) => part)
+      .map(([name, part]) => `${name}(${part.length} chars)`);
+    return [url.origin, ...parts].join(' + ');
+  }
+  const token = leadingHost(trimLead(text));
+  if (host && normalizeHost(token) === host)
+    return `${token} + ${text.length - token.length} chars`;
+  return `${url?.protocol ?? 'text'}(${text.length} chars)`;
+};
+
+export function maskedId(targetId, tag) {
+  const text = String(targetId ?? '');
+  if (!text) return '(no id)';
+  return unwrapped(text).includes(String(tag).toLowerCase()) ? `(${text.length}-char id)` : text;
+}
+
+export function maskedValue(value, tag, host) {
+  const text = String(value ?? '');
+  if (!text) return 'empty';
+  const shown = shownParts(text, host);
+  return unwrapped(shown).includes(String(tag).toLowerCase()) ? `(${text.length} chars)` : shown;
+}
+
+export function pickRawTarget(infos, { type, openerId, urlPrefix, known = new Set() }) {
+  return (infos ?? []).find(
+    (info) =>
+      info.type === type &&
+      info.targetId &&
+      !known.has(info.targetId) &&
+      (openerId === undefined || info.openerId === openerId) &&
+      (urlPrefix === undefined || String(info.url ?? '').startsWith(urlPrefix))
+  );
+}
 const namedResultMs = 10000;
 const observeMs = 5000;
 const premises = { chainStarted: 'first hop not observed' };
@@ -242,6 +440,8 @@ class Execution {
     this.cdpTrace = [];
     this.cdpSessionTypes = new Map();
     this.cdpTraceInstalled = false;
+    this.explicit = explicitVector(vector);
+    this.unanswered = new Set();
   }
 
   note(message) {
@@ -702,6 +902,7 @@ class Execution {
           );
         }
         if (
+          !this.explicit &&
           event.method === 'Target.attachedToTarget' &&
           event.params.targetInfo?.targetId !== this.pageTarget &&
           event.params.targetInfo?.targetId !== this.canaryTarget &&
@@ -905,7 +1106,7 @@ class Execution {
     });
     const unanswered =
       step.refusable &&
-      exitsClient(this.vector) &&
+      (exitsClient(this.vector) || this.explicit) &&
       !out.ok &&
       !refused &&
       /timeout|timed out|no answer/i.test(String(out.error?.message ?? out.error));
@@ -1132,6 +1333,7 @@ class Execution {
           castControls: (this.clients.castControls ??= {}),
         })
       );
+    if (step.rawTarget) return outcome(this.rawTarget(step.rawTarget));
     if (step.guess) return this.guess(step.guess, session);
     if (step.isolatedWorld) return outcome(this.isolatedWorld(step));
     if (step.observer) return outcome(this.watchPage(step));
@@ -1594,6 +1796,15 @@ class Execution {
       );
   }
 
+  settleMissing(missing) {
+    if (
+      exitsClient(this.vector) ||
+      (this.explicit && (this.unanswered.size || !this.sessions.child))
+    )
+      this.incomplete.push(missing);
+    else this.errors.push(missing);
+  }
+
   async settle(settle) {
     const refused = () => (settle.dependsOn ?? []).some((name) => this.refused[name]);
     const skipped = () => {
@@ -1633,9 +1844,117 @@ class Execution {
     if (refused() && !alt) return skipped();
     if (settle.required && !met) {
       const missing = `settle: no ${settle.beacon ? `beacon from ${settle.beacon}` : settle.served ? `request for ${settle.served}` : settle.title ? `title ${settle.title}` : 'load'} within ${this.bound(settle.ms ?? 1500)}ms`;
-      if (exitsClient(this.vector)) this.incomplete.push(missing);
-      else this.errors.push(missing);
+      this.settleMissing(missing);
     }
+  }
+
+  async rawTarget(spec) {
+    const known = new Set([this.pageTarget, this.canaryTarget].filter(Boolean));
+    const want = {
+      type: spec.type,
+      openerId: spec.openerId === 'page' ? this.pageTarget : undefined,
+      urlPrefix: spec.urlPrefix,
+      known,
+    };
+    let found;
+    let listing = [];
+    await this.poll(async () => {
+      const listed = await outcome(this.reader.send('Target.getTargets', { filter: [{}] }));
+      listing = listed.ok ? (listed.result?.targetInfos ?? []) : [];
+      found = pickRawTarget(listing, want);
+      return Boolean(found);
+    }, spec.ms);
+    if (!found) {
+      this.incomplete.push(
+        `rawTarget: the observer found no ${spec.type}${spec.openerId ? ' opened by the page' : ''}${spec.urlPrefix ? ` at ${spec.urlPrefix}` : ''} within ${this.bound(spec.ms)}ms`
+      );
+      return { found: false };
+    }
+    this.vars.rawTarget = found.targetId;
+    this.vars.rawTargetUrl = found.url;
+    this.targets.push(found.targetId);
+    this.classifyFirstListing(listing, found, spec.urlPrefix);
+    return { found: true, targetId: found.targetId, type: found.type };
+  }
+
+  classifyFirstListing(listing, found, urlPrefix) {
+    const own = (info) =>
+      info.targetId === found.targetId ||
+      (urlPrefix !== undefined && String(info.url ?? '').startsWith(urlPrefix));
+    this.ownTargets = new Set(listing.filter(own).map((info) => info.targetId));
+    const foreign = listing.filter((info) => !own(info));
+    this.foreignTargets = new Set(foreign.map((info) => info.targetId));
+    const pages = foreign.filter((info) => info.type === 'page');
+    const shown = pages.map(
+      (info) => `${info.targetId} ${maskedValue(parseURL(info.url)?.origin ?? '', this.vars.tag)}`
+    );
+    this.note(
+      `rawTarget: ${pages.length} foreign page target(s) at the first listing${shown.length ? `: ${shown.join(', ')}` : ''}`
+    );
+  }
+
+  async targetClass(info, scope) {
+    if (info.targetId === scope.targetId) return 'raw target';
+    if (this.ownTargets?.has(info.targetId)) return 'own target';
+    const context = this.vars.context;
+    if (
+      this.foreignTargets?.has(info.targetId) ||
+      (context && info.browserContextId && info.browserContextId !== context)
+    )
+      return 'foreign target';
+    if (!this.observerIds) {
+      const out = await this.answered(this.reader.send('Target.getTargets', { filter: [{}] }));
+      this.observerIds = new Set(
+        (out.ok ? (out.result?.targetInfos ?? []) : []).map((i) => i.targetId)
+      );
+    }
+    return this.observerIds.has(info.targetId) ? 'foreign target' : 'id unknown to the observer';
+  }
+
+  async answered(pending) {
+    let timer;
+    const out = await Promise.race([
+      outcome(pending),
+      new Promise((resolve) => {
+        timer = setTimeout(
+          () => resolve({ ok: false, error: { message: 'no answer' } }),
+          this.bound(this.options.namedResultMs ?? namedResultMs)
+        );
+      }),
+    ]);
+    clearTimeout(timer);
+    return out;
+  }
+
+  noAnswer(step, message = 'no answer') {
+    if (step.as) this.unanswered.add(step.as);
+    if (!step.refusable) this.incomplete.push(`${step.as ?? step.cdp}: no answer`);
+    return { ok: false, error: { message } };
+  }
+
+  async explicitCall(step, params, session) {
+    if (q(params).includes('{rawTarget}'))
+      return this.noAnswer(step, 'no answer: the observer found no raw target');
+    if (step.session === 'child' && !this.sessions.child) {
+      if (this.unanswered.has(this.bindName) && step.as) this.unanswered.add(step.as);
+      return { ok: false, error: { message: 'no child session' } };
+    }
+    if (step.cdp === 'Target.setDiscoverTargets' && params.discover) {
+      this.discovering = true;
+      this.discoverName = step.as;
+    }
+    if (params.browserContextId === '{context}') delete params.browserContextId;
+    const client = step.via === 'unguarded' ? this.reader : this.actor();
+    const out = await this.answered(client.send(step.cdp, params, session));
+    if (!out.ok && /timeout|timed out|no answer/i.test(String(out.error?.message ?? out.error)))
+      this.noAnswer(step);
+    if (step.bindSession) {
+      this.bindName = step.as;
+      if (out.ok && out.result?.sessionId) this.sessions.child = out.result.sessionId;
+    }
+    if (step.cdp === 'Target.createTarget' && out.ok && out.result?.targetId)
+      this.targets.push(out.result.targetId);
+    return out;
   }
 
   async guess(guess, session) {
@@ -1674,6 +1993,7 @@ class Execution {
     } catch (error) {
       return { ok: false, error: { message: error.message } };
     }
+    if (this.explicit) return this.explicitCall(step, params, sessionId);
     const session =
       step.session === 'page-or-browser' &&
       supported(['browserSession'], this.options.capabilities) &&
@@ -1864,6 +2184,7 @@ class Execution {
   }
 
   observeEarly(name, check, want) {
+    if (this.explicit && this.explicitIncomplete(check)) return 'incomplete';
     if (name === 'workerReachable' && this.probeStep())
       return this.observeProbeReachable(want, check);
     if (check?.forwarded) return this.forwardedCheck(name, check, want);
@@ -2040,6 +2361,8 @@ class Execution {
   }
 
   async evidence(c) {
+    if (c.redacted) return this.redactedCheck(c.redacted);
+    if (c.detached && this.explicit) return this.explicitDetached();
     if (c.filtered) {
       const calls =
         c.filtered.from === 'all'
@@ -2099,7 +2422,90 @@ class Execution {
     );
   }
 
+  explicitDetached() {
+    const session = this.sessions.child;
+    return this.client.events
+      .slice(this.eventStart, this.cleanupEventStart)
+      .some(
+        (event) =>
+          event.method === 'Target.detachedFromTarget' &&
+          ((session && event.params?.sessionId === session) ||
+            (this.vars.rawTarget && event.params?.targetId === this.vars.rawTarget))
+      );
+  }
+
+  explicitAttached() {
+    if (this.sessions.child) return true;
+    return this.client.events
+      .slice(this.eventStart, this.cleanupEventStart)
+      .some(
+        (event) =>
+          event.method === 'Target.attachedToTarget' &&
+          Boolean(this.vars.rawTarget) &&
+          event.params?.targetInfo?.targetId === this.vars.rawTarget
+      );
+  }
+
+  async redactedCheck(from) {
+    const origin = parseURL(this.vars.rawTargetUrl)?.origin;
+    if (!this.vars.rawTarget || !origin) return 'incomplete';
+    const unread = from === 'events' ? undefined : from.find((name) => this.unread(name));
+    if (unread) {
+      const reason = `redacted: ${unread} gave no reply to read`;
+      if (!this.incomplete.includes(reason)) this.incomplete.push(reason);
+      return 'incomplete';
+    }
+    const entries =
+      from === 'events'
+        ? this.client.events
+            .slice(this.eventStart, this.cleanupEventStart)
+            .filter((event) => discoveryMethods.includes(event.method))
+            .map((event) => ({ info: event.params?.targetInfo, source: event.method }))
+        : from.flatMap((name) => {
+            const out = this.calls[name];
+            return out?.ok
+              ? [out.result?.targetInfo, ...(out.result?.targetInfos ?? [])].map((info) => ({
+                  info,
+                  source: name,
+                }))
+              : [];
+          });
+    const scope = { targetId: this.vars.rawTarget, origin, tag: this.vars.tag };
+    const leaks = entries
+      .filter(({ info }) => info)
+      .map((entry) => ({ ...entry, leak: redactionLeak(entry.info, scope) }))
+      .filter(({ leak }) => leak);
+    for (const { info, source, leak } of leaks.slice(0, 5)) {
+      const id = maskedId(info.targetId, scope.tag);
+      const value = maskedValue(info[leak.field], scope.tag, normalizeHost(parseURL(origin)?.host));
+      const via = leak.via ? ` via ${leak.via}` : '';
+      const note = `${this.observing ?? 'redacted'}: ${source} entry ${id} (${await this.targetClass(info, scope)}) ${leak.field} ${value} fails redaction: ${leak.rule}${via}`;
+      if (!this.notes.includes(note)) this.note(note);
+    }
+    return leaks.length === 0;
+  }
+
+  unread(name) {
+    const out = this.calls[name];
+    return !out || (!out.ok && this.refused[name] !== true);
+  }
+
+  explicitIncomplete(check) {
+    const names = (c) => [
+      ...resultNames(c),
+      ...(Array.isArray(c?.refused) ? c.refused : []),
+      ...(Array.isArray(c?.redacted) ? c.redacted : []),
+      ...(c?.attached !== undefined || c?.detached || c?.session === 'child'
+        ? [this.bindName]
+        : []),
+      ...(c?.event || c?.redacted === 'events' ? [this.discoverName] : []),
+      ...[...(c?.all ?? []), ...(c?.any ?? []), ...(c?.not ? [c.not] : [])].flatMap(names),
+    ];
+    return names(check).some((name) => this.unanswered.has(name));
+  }
+
   attachedCheck(c) {
+    if (this.explicit) return this.explicitAttached();
     const session = this.sessions[c.session ?? 'page'];
     const events = this.client.events.slice(this.eventStart, this.cleanupEventStart);
     if (
@@ -2161,12 +2567,16 @@ class Execution {
   }
 
   async readCheck(c) {
-    const targetId = c.session === 'child' ? this.targets.at(-1) : this.pageTarget;
+    const child = this.explicit ? this.vars.rawTarget : this.targets.at(-1);
+    const targetId = c.session === 'child' ? child : this.pageTarget;
     if (!targetId) return false;
-    const { sessionId } = await this.reader.send('Target.attachToTarget', {
-      targetId,
-      flatten: true,
-    });
+    const attach = this.reader.send('Target.attachToTarget', { targetId, flatten: true });
+    const attached = this.explicit ? await outcome(attach) : { ok: true, result: await attach };
+    if (!attached.ok) {
+      this.incomplete.push(`read: the observer could not attach to ${targetId}`);
+      return 'incomplete';
+    }
+    const { sessionId } = attached.result;
     try {
       const out = await this.evaluate(c.expression ?? 'document.title', sessionId, this.reader);
       return matches(observedValue(out, 'result.result.value'), c.title ?? c.equals);
@@ -2178,6 +2588,10 @@ class Execution {
   async observeAll(unseen) {
     const observed = { ...this.refused };
     const incomplete = [];
+    if (await this.explicitLost()) {
+      for (const name of Object.keys(this.vector.observe ?? {})) observed[name] = 'incomplete';
+      return { observed, incomplete };
+    }
     const capabilities = withCookiePlantCaps(this.options.capabilities, this.calls.probe?.result);
     let measured = 0;
     let excused = 0;
@@ -2196,6 +2610,7 @@ class Execution {
         continue;
       }
       measured++;
+      this.observing = name;
       observed[name] = await this.observe(name, observation.check);
       if (observed[name] === 'unwatched') {
         observed[name] = 'incomplete';
@@ -2211,6 +2626,7 @@ class Execution {
       if (holds === 'incomplete') incomplete.push(name);
     }
     this.premises(observed);
+    this.explicitPremises(observed);
     if (this.side === 'control' && excused && !measured) this.incomplete.push('measured nothing');
     return { observed, incomplete };
   }
@@ -2229,6 +2645,37 @@ class Execution {
     for (const name of missing) this.incomplete.push(`${name}: ${premises[name]}`);
     for (const name of Object.keys(observe))
       if (want?.[name] === true && observed[name] === false) observed[name] = 'incomplete';
+  }
+
+  async explicitLost() {
+    if (!this.explicit || !this.vars.rawTarget) return false;
+    const targetId = this.vars.rawTarget;
+    const read = await outcome(this.reader.send('Target.getTargetInfo', { targetId }));
+    if (read.ok && read.result?.targetInfo) return false;
+    this.incomplete.push(
+      `rawTarget: the observer lost ${targetId} before the guarded probes ended`
+    );
+    this.unrun();
+    return true;
+  }
+
+  unrun() {
+    const unrun = this.errors.filter((error) => / failed without a refusal: /.test(error));
+    this.errors = this.errors.filter((error) => !unrun.includes(error));
+    this.incomplete.push(...unrun);
+  }
+
+  explicitPremises(observed) {
+    if (!this.explicit || this.side !== 'control') return;
+    this.unrun();
+    const observe = this.vector.observe ?? {};
+    const missing = controlPremises.filter(
+      (name) => Object.hasOwn(observe, name) && observed[name] !== true
+    );
+    for (const name of missing)
+      if (observed[name] !== 'incomplete')
+        this.incomplete.push(`${name}: the unguarded control did not show it`);
+    if (missing.length) for (const name of Object.keys(observe)) observed[name] = 'incomplete';
   }
 
   async either(check, value, name, unseen) {
@@ -2308,6 +2755,8 @@ class Execution {
   }
 
   async cleanupLeg() {
+    if (this.discovering)
+      await this.answered(this.client.send('Target.setDiscoverTargets', { discover: false }));
     if (this.watch)
       await outcome(
         this.reader.send('Target.detachFromTarget', { sessionId: this.watch.sessionId })
@@ -2393,7 +2842,8 @@ const needsObserver = (vector) =>
       step.protectedParentIframes ||
       step.credentialExport ||
       step.signInHold ||
-      step.cookiePlant
+      step.cookiePlant ||
+      step.rawTarget
   ) ||
   vector.control.via === 'unguarded' ||
   observerRequired(vector.liveCheck) ||
@@ -2900,6 +3350,9 @@ function validateScales(opts) {
 function validate(set, opts) {
   if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
   validateScales(opts);
+  const both = exclusive.filter((capability) => declared(capability, opts.capabilities));
+  if (declared('explicitAttach', opts.capabilities) && both.length)
+    throw new TypeError(`explicitAttach excludes ${both.join(' and ')} in one run`);
   for (const vector of set.vectors)
     for (const [name, observation] of Object.entries(vector.observe ?? {}))
       if (!observation.check) throw new TypeError(`${vector.id}: ${name} lacks a check`);

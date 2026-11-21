@@ -60,6 +60,7 @@ const (
 	GuardCapRequestInterception = "requestInterception"
 	GuardCapFetchInterception   = "fetchInterception"
 	GuardCapLegacyInterception  = "legacyInterception"
+	GuardCapExplicitAttach      = "explicitAttach"
 	GuardObserverWatch          = "watch"
 	GuardObserverFail           = "fail"
 	GuardClientExit             = "exit"
@@ -68,6 +69,7 @@ const (
 	GuardSessionBrowser         = "browser"
 	GuardSessionEither          = "page-or-browser"
 	GuardSessionChild           = "child"
+	GuardBindChild              = "child"
 )
 
 type GuardVectors struct {
@@ -214,6 +216,9 @@ type GuardStep struct {
 	Params                 json.RawMessage `json:"params,omitempty"`
 	Refusable              bool            `json:"refusable,omitempty"`
 	ReuseSession           bool            `json:"reuseSession,omitempty"`
+	BindSession            string          `json:"bindSession,omitempty"`
+	Via                    string          `json:"via,omitempty"`
+	RawTarget              *GuardRawTarget `json:"rawTarget,omitempty"`
 	Refusal                *GuardRefusal   `json:"refusal,omitempty"`
 	Page                   string          `json:"page,omitempty"`
 	URL                    string          `json:"url,omitempty"`
@@ -242,6 +247,13 @@ type GuardWhere struct {
 	URLPrefix string   `json:"urlPrefix,omitempty"`
 	Type      string   `json:"type,omitempty"`
 	Types     []string `json:"types,omitempty"`
+}
+
+type GuardRawTarget struct {
+	Type      string `json:"type"`
+	OpenerID  string `json:"openerId,omitempty"`
+	URLPrefix string `json:"urlPrefix,omitempty"`
+	MS        int    `json:"ms"`
 }
 
 type GuardRefusal struct {

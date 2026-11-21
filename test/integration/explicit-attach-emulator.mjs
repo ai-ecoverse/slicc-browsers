@@ -62,6 +62,8 @@ export function explicitAttachGuard(browser, options = {}) {
       data: `data:text/plain,${origin}/doc`,
       javascript: `javascript:"${origin}/doc"`,
       fragment: 'about:blank#/doc',
+      fragmentTag: `about:blank#/doc?n=${new URL(original.url).searchParams.get('n')}`,
+      fragmentHost: `about:blank#${parsed?.hostname}${port}/doc`,
       filesystem: `filesystem:${origin}/persistent/doc`,
       embeddedQuery: `http://ordinary.test/?u=${origin}/doc`,
       embeddedFragment: `http://ordinary.test/#u=${origin}/doc`,

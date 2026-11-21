@@ -621,7 +621,25 @@ async function targetListExposure(client, frameURL, extensionId, missing, result
   }
 }
 
-function targetEventExposure(
+function matchTargetEvent(event, page, ids, frameURL, extensionId, seen) {
+  if (
+    event.method === 'Target.attachedToTarget' &&
+    event.sessionId === page &&
+    ids.has(event.params?.targetInfo?.targetId) &&
+    typeof event.params.sessionId === 'string'
+  )
+    seen.attached.add(event.params.targetInfo.targetId);
+  if (
+    !seen.eventURL &&
+    ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
+      event.method
+    ) &&
+    exposesExtension(event.params, extensionId, frameURL)
+  )
+    seen.eventURL = true;
+}
+
+async function targetEventExposure(
   client,
   page,
   ids,
@@ -630,34 +648,48 @@ function targetEventExposure(
   eventStart,
   missing,
   result,
-  { autoAttach, discovery }
+  { autoAttach, attachWait, discovery, budgetMs, notes }
 ) {
   if (eventStart === undefined || !Array.isArray(client.events)) {
     missing.push('target event stream is unavailable');
+    return undefined;
+  }
+  const seen = { attached: new Set(), eventURL: false };
+  const done = () =>
+    (!attachWait || seen.attached.size >= ids.size) && (!discovery || seen.eventURL);
+  const started = Date.now();
+  let cursor = eventStart;
+  for (;;) {
+    for (; cursor < client.events.length; cursor++)
+      matchTargetEvent(client.events[cursor], page, ids, frameURL, extensionId, seen);
+    const elapsed = Date.now() - started;
+    if (done() || elapsed >= budgetMs) break;
+    await pause(Math.min(25, budgetMs - elapsed));
+  }
+  const waitedMs = Date.now() - started;
+  if (autoAttach) result.autoAttached = seen.attached.size > 0;
+  if (discovery) result.eventURL = seen.eventURL;
+  const parts = [
+    ...(autoAttach ? [`autoAttached ${seen.attached.size} of ${ids.size} frames`] : []),
+    ...(discovery ? [`eventURL ${seen.eventURL ? 'seen' : 'not seen'}`] : []),
+  ];
+  notes?.push(`target events after ${waitedMs}ms (budget ${budgetMs}ms): ${parts.join(', ')}`);
+  return waitedMs;
+}
+
+function silentAttach({ side, attachControls, result, refused, waitedMs, budgetMs, missing }) {
+  if (side === 'control') {
+    if (attachControls) attachControls.autoAttached = result.autoAttached === true;
     return;
   }
-  const events = client.events.slice(eventStart);
-  if (autoAttach)
-    result.autoAttached = events.some(
-      (event) =>
-        event.method === 'Target.attachedToTarget' &&
-        event.sessionId === page &&
-        ids.has(event.params?.targetInfo?.targetId) &&
-        typeof event.params.sessionId === 'string'
-    );
-  if (discovery)
-    result.eventURL = events.some(
-      (event) =>
-        ['Target.attachedToTarget', 'Target.targetCreated', 'Target.targetInfoChanged'].includes(
-          event.method
-        ) && exposesExtension(event.params, extensionId, frameURL)
-    );
+  if (attachControls?.autoAttached !== true || result.autoAttached !== false || refused) return;
+  missing.push(
+    `autoAttached: the control auto-attached the frame; the guarded leg saw neither an attach event nor a refusal after ${waitedMs ?? 0}ms (budget ${budgetMs}ms)`
+  );
 }
 
 async function targetExposure({
   client,
-  reader,
-  observer,
   page,
   frames,
   frameURL,
@@ -666,6 +698,10 @@ async function targetExposure({
   frameMs,
   missing,
   capabilities = {},
+  side,
+  notes,
+  attachControls,
+  attachRefused = false,
 }) {
   const result = { autoAttached: false, eventURL: false, listed: false };
   const ids = new Set(frames.map((frame) => frame.targetId));
@@ -684,13 +720,30 @@ async function targetExposure({
       )
     : { ok: false };
   try {
-    if (autoAttach || discovery) {
-      await painted(reader, observer, frameMs);
-      targetEventExposure(client, page, ids, frameURL, extensionId, eventStart, missing, result, {
-        autoAttach,
-        discovery,
+    const budgetMs = Number.isFinite(frameMs) && frameMs > 0 ? frameMs : 0;
+    let waitedMs;
+    if (autoAttach || discovery)
+      waitedMs = await targetEventExposure(
+        client,
+        page,
+        ids,
+        frameURL,
+        extensionId,
+        eventStart,
+        missing,
+        result,
+        { autoAttach, attachWait: autoAttach && auto.ok, discovery, budgetMs, notes }
+      );
+    if (autoAttach)
+      silentAttach({
+        side,
+        attachControls,
+        result,
+        refused: attachRefused || (!auto.ok && protectedRefusal(auto)),
+        waitedMs,
+        budgetMs,
+        missing,
       });
-    }
     if (browserSession) await targetListExposure(client, frameURL, extensionId, missing, result);
     return result;
   } finally {
@@ -1542,6 +1595,7 @@ export async function extensionFrame({
   capabilities = {},
   notes,
   castControls,
+  attachControls,
 }) {
   const attached = await reader.send('Target.attachToTarget', { targetId, flatten: true });
   const observer = attached.sessionId;
@@ -1637,10 +1691,12 @@ export async function extensionFrame({
         await driveReveal(client, reader, page, observer, frameMs, missing, side)
       );
     result.frameAttach = false;
+    let attachRefused = false;
     for (const entry of frames) {
       const frameAttach = await outcome(
         client.send('Target.attachToTarget', { targetId: entry.targetId, flatten: true })
       );
+      if (!frameAttach.ok && protectedRefusal(frameAttach)) attachRefused = true;
       if (frameAttach.ok) {
         result.frameAttach = true;
         await outcome(
@@ -1652,8 +1708,6 @@ export async function extensionFrame({
       result,
       await targetExposure({
         client,
-        reader,
-        observer,
         page,
         frames,
         frameURL,
@@ -1662,6 +1716,10 @@ export async function extensionFrame({
         frameMs,
         missing,
         capabilities,
+        side,
+        notes,
+        attachControls,
+        attachRefused,
       })
     );
     const alive = await outcome(

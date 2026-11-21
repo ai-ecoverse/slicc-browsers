@@ -302,3 +302,7 @@ test('the crates job takes only the crates.io 429 for too many versions of the c
 test('the workflow has no comments but renovate annotations', () => {
   for (const line of ci.split('\n')) if (/^\s*#/.test(line)) assert.match(line, /^\s*# renovate: /);
 });
+
+test('README.md stays within 20,000 characters', async () => {
+  assert.ok([...(await read('README.md'))].length <= 20000);
+});

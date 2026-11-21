@@ -2523,10 +2523,19 @@ function assertNetworkCookieSessions(browser, mutant, label) {
   const methods = new Set(misroutes.map((m) => m.method));
   assert.ok(methods.has('Network.getAllCookies'), `jar read misrouted: ${label}`);
   assert.ok(methods.has('Network.deleteCookies'), `jar clear misrouted: ${label}`);
-  assert.ok(
-    misroutes.every((m) => m.mode === mutant.networkSession),
-    label
-  );
+  for (const m of misroutes) {
+    const route = `${label}: ${JSON.stringify(m)}`;
+    assert.equal(m.mode, mutant.networkSession, route);
+    assert.ok(m.from && m.to && m.from !== m.to, route);
+    if (mutant.networkSession === 'guard') {
+      assert.equal(m.toTarget, m.fromTarget, `guard session on the attempt tab: ${route}`);
+      assert.equal(m.toContext, m.fromContext, route);
+    } else {
+      assert.notEqual(m.toTarget, m.fromTarget, `session on another target: ${route}`);
+      assert.equal(m.toContext, 'X0', route);
+      assert.notEqual(m.fromContext, 'X0', route);
+    }
+  }
   if (mutant.networkSession === 'guard') {
     assert.deepEqual(
       rejects.map((r) => `${r.method} ${r.sessionId}`).sort(),
@@ -2535,7 +2544,7 @@ function assertNetworkCookieSessions(browser, mutant, label) {
     );
     return;
   }
-  assert.deepEqual(rejects, [], label);
+  assert.deepEqual(rejects, [], `a live foreign-target session passes the assert: ${label}`);
 }
 
 function assertGuardedVerdict(row, expected, label) {

@@ -144,10 +144,12 @@ export function cookiePlantFake(options = {}) {
     if (!cookiesByContext.has(id)) cookiesByContext.set(id, []);
     return cookiesByContext.get(id);
   };
-  const contextOfSession = (sessionId) => {
-    const tab = tabs.get(sessions.get(sessionId));
-    return tab?.browserContextId || 'B1';
+  const foreignTargets = new Map();
+  const targetOf = (sessionId) => {
+    const targetId = sessions.get(sessionId);
+    return tabs.get(targetId) ?? foreignTargets.get(targetId);
   };
+  const contextOfSession = (sessionId) => targetOf(sessionId)?.browserContextId || 'B1';
   const cookies = jarOf('B1');
   const connections = [];
   let next = 0;
@@ -235,15 +237,31 @@ export function cookiePlantFake(options = {}) {
     }
     return null;
   };
+  const foreignSessionOn = (conn) => {
+    for (const [sid, targetId] of sessions)
+      if (foreignTargets.has(targetId) && sessionConns.get(sid) === conn) return sid;
+    const targetId = `TX${++next}`;
+    foreignTargets.set(targetId, { targetId, url: 'about:blank', browserContextId: 'X0' });
+    const sid = `SX${++next}`;
+    sessions.set(sid, targetId);
+    sessionConns.set(sid, conn);
+    return sid;
+  };
   const misrouteNetworkCookie = (conn, method, sessionId) => {
     const guardSession = networkCookieWrongSession ? guardSessionOn(conn, sessionId) : null;
-    if (!guardSession) return { sessionId, context: null };
-    if (networkCookieWrongSession === 'guard') {
-      networkCookieMisroutes.push({ method, mode: 'guard', from: sessionId, to: guardSession });
-      return { sessionId: guardSession, context: null };
-    }
-    networkCookieMisroutes.push({ method, mode: 'foreign', from: sessionId, to: 'X0' });
-    return { sessionId, context: 'X0' };
+    if (!guardSession) return sessionId;
+    const to = networkCookieWrongSession === 'guard' ? guardSession : foreignSessionOn(conn);
+    networkCookieMisroutes.push({
+      method,
+      mode: networkCookieWrongSession,
+      from: sessionId,
+      to,
+      fromTarget: sessions.get(sessionId),
+      toTarget: sessions.get(to),
+      fromContext: contextOfSession(sessionId),
+      toContext: contextOfSession(to),
+    });
+    return to;
   };
   const assertNetworkCookieSession = (conn, method, sessionId) => {
     const reject = (why) => {
@@ -251,11 +269,7 @@ export function cookiePlantFake(options = {}) {
       throw new Error(`cookie-plant-fake: ${method} ${why}`);
     };
     if (!sessionId) reject('requires attempt tab session');
-    if (
-      !sessions.has(sessionId) ||
-      !tabs.has(sessions.get(sessionId)) ||
-      sessionConns.get(sessionId) !== conn
-    )
+    if (!sessions.has(sessionId) || !targetOf(sessionId) || sessionConns.get(sessionId) !== conn)
       reject(`session ${sessionId} !== attempt tab session`);
   };
   const recordPreTriggerPlantHit = (tab) => {
@@ -577,11 +591,8 @@ export function cookiePlantFake(options = {}) {
 
   async function handle(conn, method, params = {}, sessionId) {
     await tick();
-    let networkCookieJar = null;
     if (NETWORK_COOKIE_METHODS.includes(method)) {
-      const routed = misrouteNetworkCookie(conn, method, sessionId);
-      sessionId = routed.sessionId;
-      networkCookieJar = routed.context;
+      sessionId = misrouteNetworkCookie(conn, method, sessionId);
       assertNetworkCookieSession(conn, method, sessionId);
     } else if (sessionId && !sessions.has(sessionId))
       throw new Error(`Session with given id not found: ${sessionId}`);
@@ -710,7 +721,7 @@ export function cookiePlantFake(options = {}) {
       return {};
     }
     if (method === 'Network.setCookie') {
-      const jar = jarOf(networkCookieJar ?? contextOfSession(sessionId));
+      const jar = jarOf(contextOfSession(sessionId));
       const domain = params.domain ?? (params.url ? hostOf(params.url) : '');
       const storeDomain = domain
         ? domain.startsWith('.')
@@ -737,7 +748,7 @@ export function cookiePlantFake(options = {}) {
       const tab = tabs.get(sessions.get(sessionId));
       recordPreTriggerPlantHit(tab);
       if (preTriggerPlantHit) await tick();
-      const jar = jarOf(networkCookieJar ?? (tab?.browserContextId || contextOfSession(sessionId)));
+      const jar = jarOf(contextOfSession(sessionId));
       const host = params.url ? hostOf(params.url) : (params.domain ?? '').replace(/^\./, '');
       for (let i = jar.length - 1; i >= 0; i -= 1) {
         const cookie = jar[i];
@@ -769,7 +780,7 @@ export function cookiePlantFake(options = {}) {
                 ? 'B1'
                 : params?.browserContextId
             )
-          : jarOf(networkCookieJar ?? contextOfSession(sessionId));
+          : jarOf(contextOfSession(sessionId));
       const hasPlant = jar.some(
         (cookie) =>
           String(cookie.name).startsWith('cplant') &&

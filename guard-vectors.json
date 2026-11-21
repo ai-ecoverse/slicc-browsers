@@ -36695,7 +36695,7 @@
           }
         }
       },
-      "live": "the unguarded reader planted Domain=.<protected host> through interception and read it back from the jar",
+      "live": "the unguarded reader planted Domain=.<protected host> through interception and read it back from the jar; two pass modes: protected hosts block the plant shapes; credential origins require answered + refused + not planted with in-row door proof; evidenceForm values commandRefused, answeredNotPlanted, allowedPlant",
       "liveCheck": {
         "result": "probe",
         "path": "result.live",
@@ -36818,7 +36818,8 @@
         "legacy unsupported in this Chrome when Network.setRequestInterception is absent (Chrome 156+)",
         "fulfillObject uses the real map/object responseHeaders form; Chrome rejects it: not a plant path",
         "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
-        "control proves the unguarded door and that the guard does not over-block ordinary/adobe/deletion; protected plant encodings run only on the guarded leg"
+        "control proves the unguarded door and that the guard does not over-block ordinary/adobe/deletion; protected plant encodings run only on the guarded leg",
+        "pass modes and evidenceForm: protected hosts vs credential origins; commandRefused, answeredNotPlanted, allowedPlant"
       ],
       "blockedMarkers": [
         "chrome-error://chromewebdata/",
@@ -37634,7 +37635,7 @@
           ]
         },
         "hostOnlyPlanted": {
-          "means": "C10.cookie-plant.credential: host-only Set-Cookie on an IMS request landed in the jar",
+          "means": "C10.cookie-plant.credential: host-only Set-Cookie on an IMS request must not plant (evidenceForm commandRefused when answered+refused+not planted)",
           "check": {
             "result": "probe",
             "path": "result.hostOnlyPlanted",
@@ -37671,7 +37672,7 @@
           ]
         },
         "domainCoverPlanted": {
-          "means": "C10.cookie-plant.credential: Domain covering an IMS host from an ordinary request: Chrome does not store it: not a plant path",
+          "means": "C10.cookie-plant.credential: Domain covering an IMS host from an ordinary request: Chrome does not store it: not a plant path (evidenceForm answeredNotPlanted when answered+not refused+not planted)",
           "check": {
             "result": "probe",
             "path": "result.domainCoverPlanted",
@@ -37708,7 +37709,7 @@
           ]
         },
         "subHostPlanted": {
-          "means": "C10.cookie-plant.credential: sub-host Domain Set-Cookie landed in the jar",
+          "means": "C10.cookie-plant.credential: sub-host Domain Set-Cookie landed in the jar (evidenceForm allowedPlant when answered+not refused+planted)",
           "check": {
             "result": "probe",
             "path": "result.subHostPlanted",
@@ -37807,7 +37808,7 @@
           }
         }
       },
-      "live": "the unguarded reader planted a credential-origin cookie through interception and read it back from the jar",
+      "live": "the unguarded reader planted a credential-origin cookie through interception and read it back from the jar; two pass modes: protected hosts block the plant shapes; credential origins require answered + refused + not planted with in-row door proof; evidenceForm values commandRefused, answeredNotPlanted, allowedPlant",
       "liveCheck": {
         "result": "probe",
         "path": "result.live",
@@ -37935,7 +37936,8 @@
       "notes": [
         "legacy unsupported in this Chrome when Network.setRequestInterception is absent (Chrome 156+)",
         "host mapping uses the https fixture for HSTS-preloaded adobelogin.com like C7/#328",
-        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)"
+        "CHROME_NO_STORE labels measurement notes only; a raw-leg store scores the path as a plant path (guarded planted must be false)",
+        "pass modes and evidenceForm: protected hosts vs credential origins; commandRefused, answeredNotPlanted, allowedPlant"
       ],
       "blockedMarkers": [
         "chrome-error://chromewebdata/",

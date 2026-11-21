@@ -450,7 +450,7 @@ async function continueItselfEvidence({ fixtureLog, url, since, tag, proofTag, c
   const planted = plantedOf(
     jar?.error?.message?.includes('timeout') ? { incomplete: 'cookie jar unreadable' } : jar
   );
-  return { fixtureHits: hits, planted };
+  return { fixtureHits: hits, planted, jar };
 }
 
 async function pollHandleEvidence({
@@ -506,6 +506,7 @@ async function waitPauseOrBlocked({
   let probedRefusal = false;
   let fixtureHits = null;
   let planted = null;
+  let jar = null;
   const quietMs = Math.min(150, Math.max(50, Math.floor(pauseMs / 16)));
   const since = triggerSentAt ?? Date.now();
   const triggerDone = Promise.resolve(triggerPromise).then(
@@ -527,6 +528,7 @@ async function waitPauseOrBlocked({
     early,
     fixtureHits,
     planted,
+    jar,
   });
   const finish = async (paused, early, opts = {}) => {
     href = (await readTabHref({ reader, pageTarget })) ?? href;
@@ -568,6 +570,7 @@ async function waitPauseOrBlocked({
     if (polled.bios) {
       fixtureHits = polled.bios.fixtureHits;
       planted = polled.bios.planted;
+      jar = polled.bios.jar ?? null;
       return finish(null, true, { skipRefusalProbe: true, skipQuiet: true });
     }
     if (polled.postTriggerRefusal) {
@@ -616,6 +619,7 @@ async function evidenceAfterTrigger({
       page: { href: cached.href, ready: true },
       fixtureHits: cached.fixtureHits,
       planted: cached.planted,
+      jar: cached.jar ?? null,
       afterTriggerAt: cached.afterTriggerAt,
     };
   }
@@ -631,8 +635,9 @@ async function evidenceAfterTrigger({
     href: page.href ?? hrefHint ?? null,
     fixtureHits,
     planted,
+    jar,
   };
-  return { page, fixtureHits, planted, afterTriggerAt };
+  return { page, fixtureHits, planted, jar, afterTriggerAt };
 }
 
 function storageContextParams(browserContextId) {
@@ -808,13 +813,47 @@ async function readJar(handle, { name, domain, value, path }, { urlHints = [] } 
   return { via: view.via, missing: true, cookies: view.cookies };
 }
 
+function jarAuditFields(handle, jar) {
+  if (!jar) return { jarRead: false };
+  const canaryName = handle?.canary?.name ?? jar.canaryName ?? null;
+  const browserContextId =
+    handle && Object.prototype.hasOwnProperty.call(handle, 'browserContextId')
+      ? (handle.browserContextId ?? null)
+      : (jar.browserContextId ?? null);
+  const canaryVisible =
+    jar.canaryOk === true
+      ? true
+      : jar.canaryMissing === true || jar.canaryVisible === false
+        ? false
+        : Boolean(jar.canaryVisible);
+  return {
+    jarRead: true,
+    canaryName,
+    canaryVisible,
+    via: jar.via ?? null,
+    browserContextId,
+  };
+}
+
+function evidenceFormOf({ answered, refused, planted }) {
+  if (answered !== true) return null;
+  if (refused === true && planted === false) return 'commandRefused';
+  if (refused === false && planted === true) return 'allowedPlant';
+  if (refused === false && planted === false) return 'answeredNotPlanted';
+  return null;
+}
+
 async function readJarWithCanary(handle, cookie) {
   requireAttemptHandle(handle, 'readJarWithCanary');
   const canary = handle.canary;
   if (!canary) throw new Error('cookie-plant.readJarWithCanary: handle.canary required');
   const urlHints = jarUrlHints(cookie, canary);
   const jar = await readJar(handle, cookie, { urlHints });
-  if (jar?.incomplete) return jar;
+  const audit = {
+    canaryName: canary.name,
+    browserContextId: handle.browserContextId ?? null,
+  };
+  if (jar?.incomplete) return { ...jar, ...audit, canaryVisible: false };
   const canaryHit = (jar.cookies ?? []).some((entry) =>
     jarCookieMatch(entry, {
       name: canary.name,
@@ -824,8 +863,14 @@ async function readJarWithCanary(handle, cookie) {
     })
   );
   if (!canaryHit)
-    return { incomplete: 'jar view canary absent', via: jar?.via, canaryMissing: true };
-  return { ...jar, canaryOk: true };
+    return {
+      incomplete: 'jar view canary absent',
+      via: jar?.via,
+      canaryMissing: true,
+      canaryVisible: false,
+      ...audit,
+    };
+  return { ...jar, canaryOk: true, canaryVisible: true, ...audit };
 }
 
 function plantedOf(jar) {
@@ -1195,7 +1240,11 @@ async function finishPlant({ out, cookie, notes, label, handle }) {
   requireAttemptHandle(handle, 'finishPlant');
   const unknown = jarContextIncomplete(handle);
   if (unknown) {
-    note(notes, `cookie-plant.${label}`, { ...unknown, ...timingOf(handle) });
+    note(notes, `cookie-plant.${label}`, {
+      ...unknown,
+      jarRead: false,
+      ...timingOf(handle),
+    });
     return attemptRecord(out, 'incomplete');
   }
   const jar = await capped(readJarWithCanary(handle, cookie), 1500, 'readJar');
@@ -1206,10 +1255,18 @@ async function finishPlant({ out, cookie, notes, label, handle }) {
     answered: answered(out),
     refused: refused(out),
     planted,
-    via: jar?.via,
     jarIncomplete: jar?.incomplete,
+    ...jarAuditFields(handle, jar),
     ...timingOf(handle),
   };
+  if (handle.credential) {
+    const form = evidenceFormOf({
+      answered: evidence.answered,
+      refused: evidence.refused,
+      planted,
+    });
+    if (form) evidence.evidenceForm = form;
+  }
   note(notes, `cookie-plant.${label}`, evidence);
   return attemptRecord(out, planted);
 }
@@ -1387,6 +1444,7 @@ function scoreProtectedPlant({
   rawDoor = null,
   plantSurfaceRefused = false,
   readerBlocked = false,
+  jar = null,
 }) {
   const signals = protectedPlantSignals({
     pauseCount,
@@ -1437,6 +1495,7 @@ function scoreProtectedPlant({
           rawIncomplete: Boolean(rawDoor.incomplete),
         }
       : {}),
+    ...jarAuditFields(handle, jar),
     ...timingOf(handle),
   };
   const early = scoreRawOrDoorBranch({
@@ -1774,6 +1833,7 @@ async function scoreDoorAbsentPause({
       fetchEnableOk,
       doorAbsent: true,
       rawDoor,
+      jar,
     })
   );
 }
@@ -1828,6 +1888,7 @@ async function scorePausedGuardedPlant(args) {
         fetchEnableOk,
         doorAbsent,
         rawDoor,
+        jar,
       })
     );
   }
@@ -1876,6 +1937,7 @@ async function scorePausedGuardedPlant(args) {
         fetchEnableOk,
         doorAbsent,
         rawDoor,
+        jar,
       })
     );
   }
@@ -1908,6 +1970,7 @@ async function scorePausedGuardedPlant(args) {
       fetchEnableOk,
       doorAbsent,
       rawDoor,
+      jar: evidence.jar ?? jar,
     })
   );
 }
@@ -1947,6 +2010,7 @@ async function scoreUnpausedGuardedPlant(args) {
           page: { href: waited.href ?? null, ready: true },
           fixtureHits: waited.fixtureHits,
           planted: waited.planted,
+          jar: waited.jar ?? null,
           afterTriggerAt: Date.now(),
         }
       : await evidenceAfterTrigger({
@@ -1988,6 +2052,7 @@ async function scoreUnpausedGuardedPlant(args) {
       doorAbsent,
       rawDoor,
       readerBlocked,
+      jar: evidence.jar ?? null,
     })
   );
 }
@@ -2033,6 +2098,7 @@ async function runGuardedProtectedPlantBody({
       doorAbsent,
       rawDoor,
       plantSurfaceRefused: true,
+      jar,
     });
   }
   if (!handle.pageSession) {
@@ -2404,9 +2470,8 @@ async function proveDoor({
         note(notes, 'cookie-plant.door', {
           answered: answered(out),
           planted,
-          via: jar?.via,
           domain,
-          browserContextId,
+          ...jarAuditFields(jarHandle, jar),
         });
         await capped(clearCookie(jarHandle, cookie), 800, 'door-clear');
         if (!answered(out))
@@ -2597,6 +2662,7 @@ async function withFreshAttemptTab(ctx, run) {
     browserContextId: tabContextId,
     browserContexts: Boolean(ctx.browserContexts),
     canary,
+    credential: Boolean(ctx.credential),
     transport: enabled.transport,
     fetchEnable: enabled.fetchEnable ?? null,
     internalSessions,
@@ -3018,7 +3084,7 @@ async function observeRawPlantSend({
         timedOut,
         doorPresent: false,
         incomplete: jar?.canaryMissing ? 'jar view canary absent' : 'cookie jar unreadable',
-        browserContextId,
+        ...jarAuditFields(jarHandle, jar),
       },
       'raw leg incomplete',
       handle,
@@ -3036,16 +3102,17 @@ async function observeRawPlantSend({
     doorPresent,
     browserContextId,
   };
+  const audited = { ...raw, ...jarAuditFields(jarHandle, jar) };
   noteRawDoor(
     notes,
     label,
-    { ...raw, via: jar?.via },
+    audited,
     doorPresent ? 'raw leg planted: plant path' : 'door not present on this browser',
     handle,
     pathStartedAt
   );
   await capped(clearCookie(jarHandle, cookie), 800, 'raw-clear');
-  return raw;
+  return audited;
 }
 
 async function measureRawDoor(ctx, spec) {
@@ -3575,6 +3642,12 @@ function controlAttacks(ctx) {
           return incompleteDeletion(
             seeded?.incomplete ? 'seed jar unreadable' : 'seed missing exact name+domain+path'
           );
+        const seedJar = await capped(readJarWithCanary(handle, deleteOnOrdinary), 1500, 'readJar');
+        note(ctx.notes, 'cookie-plant.deletion.seed', {
+          seeded: true,
+          ...jarAuditFields(handle, seedJar),
+          ...timingOf(handle),
+        });
         const attempt = await allowedHeaderAttempt({
           ...diag(handle),
           url: ordinaryUrl,
@@ -3588,6 +3661,7 @@ function controlAttacks(ctx) {
           note(ctx.notes, 'cookie-plant.deletion.cleared', {
             cleared: 'incomplete',
             incomplete: 'delete attempt incomplete',
+            jarRead: false,
             browserContextId,
             ...timingOf(handle),
           });
@@ -3603,7 +3677,7 @@ function controlAttacks(ctx) {
           note(ctx.notes, 'cookie-plant.deletion.cleared', {
             cleared: 'incomplete',
             incomplete: 'after jar unreadable',
-            browserContextId,
+            ...jarAuditFields(handle, after),
             ...timingOf(handle),
           });
           return { ...attempt, cleared: 'incomplete' };
@@ -3611,9 +3685,8 @@ function controlAttacks(ctx) {
         const cleared = afterPlanted === false;
         note(ctx.notes, 'cookie-plant.deletion.cleared', {
           cleared,
-          via: after?.via,
-          browserContextId,
           seedVia: seeded?.via,
+          ...jarAuditFields(handle, after),
           ...timingOf(handle),
         });
         return { ...attempt, cleared };
@@ -3999,6 +4072,11 @@ async function proveDoorOnOwnTab({
       answered: raw.answered,
       planted: raw.planted,
       domain,
+      jarRead: raw.jarRead ?? false,
+      canaryName: raw.canaryName ?? null,
+      canaryVisible: raw.canaryVisible,
+      via: raw.via ?? null,
+      browserContextId: raw.browserContextId ?? null,
     });
     return { live: true };
   }
@@ -4260,6 +4338,8 @@ export { cookieNames };
 export const cookiePlantHandleApi = {
   requireAttemptHandle,
   jarContextIncomplete,
+  jarAuditFields,
+  evidenceFormOf,
   plantCanary,
   clearCookie,
   readJar,

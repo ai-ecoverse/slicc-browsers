@@ -246,6 +246,7 @@ export async function connect(url, { inbound, outbound } = {}) {
   let id = 0;
   const pending = new Map();
   const waiters = new Set();
+  const listeners = new Set();
   const events = [];
   const messages = [];
   const deliver = (data, message) => {
@@ -262,6 +263,7 @@ export async function connect(url, { inbound, outbound } = {}) {
       } else entry.resolve(message.result);
     } else {
       events.push(message);
+      for (const listener of listeners) listener(message);
       for (const waiter of waiters)
         if (waiter.pred(message)) {
           clearTimeout(waiter.timer);
@@ -325,6 +327,10 @@ export async function connect(url, { inbound, outbound } = {}) {
         }, ms);
         waiters.add(entry);
       }),
+    listen: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     close: () => ws.close(),
   };
 }

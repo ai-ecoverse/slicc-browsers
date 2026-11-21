@@ -20,7 +20,7 @@ One catalog, four vector sets and schemas, shared as a Go module, Rust crate and
 
 | file | what it is |
 | --- | --- |
-| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, with install paths per OS, discovery and ranking rules, seven's launch flags and prefs, profile locations, protected and credential origins |
+| [`catalog.json`](catalog.json) | every known Chromium browser and Electron app, and the rules for finding, ranking and launching them ([below](#the-catalog)) |
 | [`corpus/`](corpus), `corpus.json` | discovery conformance cases: a fake machine each, with the ranked browser list it must produce |
 | [`protected.json`](protected.json), [`protected.mjs`](protected.mjs) | protected-origin test vectors, and a reference matcher in JavaScript |
 | [`guard-vectors.json`](guard-vectors.json) | the CDP scenarios every guard must pass |
@@ -105,19 +105,19 @@ The catalog is `"schema": 1`. Minor releases only add fields; changing or removi
 
 ## Discovery
 
-A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a probe of ports 9222 to 9229, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). [slicc-cli's README](https://github.com/ai-ecoverse/slicc-cli#slicc-browsers---json---cdp-url---no-bundle-scan) describes that output. Seven's tabs are reported by origin only, never with a path, query or title.
+A program lists the browsers it can attach to, from four sources: `DevToolsActivePort` files in known user-data dirs and SLICC profiles, `--cdp` URLs, a port probe, and the process list. It ranks the endpoints, adds the installed browsers it could launch, and prints the list in the shape of [`schema/browsers.schema.json`](schema/browsers.schema.json). Seven's tabs are reported by origin only, never with a path, query or title.
 
 ### The process source
 
-The process scan finds browsers that something else started with `--remote-debugging-port`. It reads `ps` on Unix and `Get-CimInstance Win32_Process` on Windows, skips wrappers such as `node`, `npx` or a shell, and takes the port and the `--user-data-dir` from the command line, even when the path has spaces. With port 0 it reads the port from that dir's `DevToolsActivePort`. The exact parsing rules are in `catalog.json`'s `discovery.process` and the corpus's `process-*` cases. Tests always fake the process list.
+The process scan finds browsers that something else started with `--remote-debugging-port`. The exact parsing rules are in `catalog.json`'s `discovery.process` and the corpus's `process-*` cases.
 
 ### SLICC six's profiles
 
-SLICC six, the previous generation, launches Chrome in a profile of its own (`browser-coding-agent-chrome` under six's profile root, or `SLICC_USER_DATA_DIR`). Discovery lists such an endpoint, marks it `six: true` and ranks it last, but **never picks it by itself**. Only an explicit request, such as `slicc --profile six`, uses it. The roots per OS are in `catalog.json`'s `profiles.six`.
+SLICC six, the previous generation, launches Chrome in a profile of its own. Discovery lists such an endpoint, marks it `six: true` and ranks it last, but **never picks it by itself**. Only an explicit request, such as `slicc --profile six`, uses it. The roots per OS are in `catalog.json`'s `profiles.six`.
 
 ## The corpus
 
-Each case in `corpus/<case>/` is a fake machine: a home directory, `DevToolsActivePort` files, fake `/json/version` and `/json/list` answers, a fake process list, `--cdp` URLs and installed browsers. `expected.json` holds the ranked list it must produce. `case.json`'s `needs` say what a program must support to run the case (`process`, `probe`, `six`, `tabs`, …), and a program skips cases it can't run.
+Each case in `corpus/<case>/` is a fake machine: a home directory, `DevToolsActivePort` files, fake `/json/version` and `/json/list` answers, a fake process list, `--cdp` URLs and installed browsers. `expected.json` holds the ranked list it must produce. `case.json`'s `needs` say what a program must support to run the case, and a program skips cases it can't run.
 
 For each case, a test harness:
 1. writes the case's files into a temporary home;
@@ -154,7 +154,7 @@ for case in corpus().cases {
 }
 ```
 
-slicc-cli's `test/integration/corpus_test.go` is a complete harness. The corpus never uses ports 9222 to 9229, where a developer's own Chrome may be listening.
+slicc-cli's `test/integration/corpus_test.go` is a complete harness.
 
 ## Protected origins
 
@@ -185,7 +185,7 @@ Credential origins (`catalog.credentialOrigins`) withhold cookie/storage export 
 
 ## Guard vectors
 
-A guard sits between a CDP client and the browser and keeps the client away from protected origins. `guard-vectors.json` holds the attacks every guard must pass: navigation, redirects, popups, frames, interception, cookies, storage, privileged and error pages, foreign worlds, debugger tricks and session overrides.
+A guard sits between a CDP client and the browser and keeps the client away from protected origins. `guard-vectors.json` holds the attacks every guard must pass.
 
 Each vector runs twice. The **control** runs against an ordinary origin and must work. The **guarded** leg runs through the guard against a protected target and must be refused or have no effect. A **liveness** check outside the guard proves the target was really there. All three must pass.
 
@@ -271,7 +271,7 @@ You need Go 1.26, Rust stable with `wasm32-wasip1`, Node 24+, and Chrome or Chro
 | --- | --- |
 | `npm run corpus` | rebuilds `corpus.json` from `corpus/` |
 | `npm run validate` | checks every file against its schema and the rules a schema can't express, and runs `protected.json` through `protected.mjs` |
-| `npm run lint` | Biome, the slicc lint rules, `gofmt`, `go vet` for Linux, macOS and Windows, golangci-lint, `cargo fmt`, clippy and a `wasm32-wasip1` check of each feature |
+| `npm run lint` | the JavaScript, Go and Rust linters and formatters, and a `wasm32-wasip1` check of each feature |
 | `npm test` | every file in `test/integration/`: validation, the Node, Go and Rust tests, and the reference runner against real Chromium with no guard, where every control must pass and every protection must fail |
 | `npm run build` | the Go module, the crate (also for `wasm32-wasip1`), and the npm package |
 

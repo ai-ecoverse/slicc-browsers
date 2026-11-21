@@ -13,7 +13,7 @@ import { cookiePlantFake } from './cookie-plant-fake.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 import { drivable, capabilities as sweepCaps } from './guard-sweep.mjs';
 
-const { evidenceFormOf } = cookiePlantHandleApi;
+const { evidenceFormOf, finishPlant } = cookiePlantHandleApi;
 
 const execFileAsync = promisify(execFile);
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -632,16 +632,16 @@ test('b) canary absent => incomplete', async () => {
 function parsePlantedNotes(notes) {
   return (notes ?? [])
     .map((line) => {
-      const m = /^(?:guarded |control )?(cookie-plant\.[^:]+):\s*(\{.*\})\s*$/.exec(line);
+      const m = /^(?:(guarded|control) )?(cookie-plant\.[^:]+):\s*(\{.*\})\s*$/.exec(line);
       if (!m) return null;
       let evidence;
       try {
-        evidence = JSON.parse(m[2]);
+        evidence = JSON.parse(m[3]);
       } catch {
         return null;
       }
       if (!Object.hasOwn(evidence, 'planted')) return null;
-      return { label: m[1], ...evidence };
+      return { leg: m[1] ?? null, label: m[2], ...evidence };
     })
     .filter(Boolean);
 }
@@ -678,68 +678,298 @@ test('Network cookie call with a foreign session fails in the fake', async () =>
     targetId: created.targetId,
     flatten: true,
   });
+  const guardSide = await browser.client.send('Target.attachToTarget', {
+    targetId: created.targetId,
+    flatten: true,
+  });
+  const url = 'http://ordinary.example.test/';
+  const calls = [
+    ['Network.setCookie', { name: 'cplantx', value: 'v', url }],
+    ['Network.getCookies', { urls: [url] }],
+    ['Network.getAllCookies', {}],
+    ['Network.deleteCookies', { name: 'cplantx', url }],
+  ];
+  const wrong = [undefined, 'not-an-attempt-session', guardSide.sessionId];
+  for (const [method, params] of calls) {
+    for (const sessionId of wrong)
+      await assert.rejects(
+        () => browser.unguarded.send(method, params, sessionId),
+        /attempt tab session/,
+        `${method} on ${sessionId}`
+      );
+    await browser.unguarded.send(method, params, attached.sessionId);
+  }
+  assert.equal(browser.networkCookieRejects().length, calls.length * wrong.length);
+  await browser.unguarded.send('Target.closeTarget', { targetId: created.targetId });
   await assert.rejects(
-    () => browser.unguarded.send('Network.getAllCookies', {}, 'not-an-attempt-session'),
+    () => browser.unguarded.send('Network.getAllCookies', {}, attached.sessionId),
     /attempt tab session/
   );
-  await browser.unguarded.send('Network.getAllCookies', {}, attached.sessionId);
 });
 
-test('evidenceFormOf covers commandRefused, answeredNotPlanted, allowedPlant and rejects the rest', () => {
-  assert.equal(evidenceFormOf({ answered: true, refused: true, planted: false }), 'commandRefused');
-  assert.equal(
-    evidenceFormOf({ answered: true, refused: false, planted: false }),
-    'answeredNotPlanted'
+const EVIDENCE_FORMS = {
+  commandRefused: { answered: true, refused: true, planted: false },
+  answeredNotPlanted: { answered: true, refused: false, planted: false },
+  allowedPlant: { answered: true, refused: false, planted: true },
+};
+
+function expectedEvidenceForm({ answered, refused, planted }) {
+  const hit = Object.entries(EVIDENCE_FORMS).find(
+    ([, shape]) =>
+      shape.answered === answered && shape.refused === refused && shape.planted === planted
   );
-  assert.equal(evidenceFormOf({ answered: true, refused: false, planted: true }), 'allowedPlant');
-  assert.equal(evidenceFormOf({ answered: true, refused: true, planted: true }), null);
-  assert.equal(evidenceFormOf({ answered: false, refused: true, planted: false }), null);
-  assert.equal(evidenceFormOf({ answered: true, refused: false, planted: 'incomplete' }), null);
-  assert.equal(evidenceFormOf({ answered: 'incomplete', refused: false, planted: false }), null);
+  return hit ? hit[0] : null;
+}
+
+test('evidenceFormOf classifier matrix: only the three answered shapes classify', () => {
+  const values = [true, false, 'incomplete', 'not-supported', null, undefined];
+  const classified = [];
+  for (const answered of values)
+    for (const refused of values)
+      for (const planted of values) {
+        const cell = { answered, refused, planted };
+        const form = evidenceFormOf(cell);
+        assert.equal(form, expectedEvidenceForm(cell), JSON.stringify(cell));
+        if (form) classified.push(form);
+      }
+  assert.deepEqual(classified.sort(), Object.keys(EVIDENCE_FORMS).sort());
+  for (const rejected of [
+    { answered: false, refused: false, planted: false },
+    { answered: false, refused: true, planted: false },
+    { answered: false, refused: false, planted: true },
+    { answered: true, refused: true, planted: true },
+    { answered: true, refused: false, planted: 'incomplete' },
+    { answered: true, refused: true, planted: 'incomplete' },
+    { answered: 'incomplete', refused: 'incomplete', planted: 'incomplete' },
+  ])
+    assert.equal(evidenceFormOf(rejected), null, JSON.stringify(rejected));
 });
 
-test('credential path notes carry evidenceForm matching the classifier', async () => {
-  const out = await rows(
-    {
-      oneTarget: true,
-      onlyPaths: ['hostOnly', 'domainCover', 'subHost', 'adobe', 'deletion'],
+const STUB_CANARY = {
+  name: 'cplantcanarystub',
+  value: 'canary-stub',
+  domain: 'ims-na1.adobelogin.com',
+  path: '/',
+  url: 'https://ims-na1.adobelogin.com/',
+};
+const STUB_PLANT = {
+  name: 'cplantstub',
+  value: 'ho-stub',
+  domain: 'ims-na1.adobelogin.com',
+  url: 'https://ims-na1.adobelogin.com/',
+};
+const STUB_OUTS = {
+  answered: { out: { ok: true, result: {} }, answered: true, refused: false },
+  refused: {
+    out: { ok: false, error: { message: 'slicc: refused: credential origin' } },
+    answered: true,
+    refused: true,
+  },
+  unanswered: {
+    out: { ok: false, error: { message: 'Fetch.fulfillRequest timeout' } },
+    answered: false,
+    refused: false,
+  },
+};
+const jarEntry = ({ name, value, domain }) => ({ name, value, domain, path: '/' });
+const STUB_JARS = {
+  planted: { planted: true, cookies: () => [jarEntry(STUB_CANARY), jarEntry(STUB_PLANT)] },
+  notPlanted: { planted: false, cookies: () => [jarEntry(STUB_CANARY)] },
+  unreadable: {
+    planted: 'incomplete',
+    cookies: () => {
+      throw new Error('jar read rejected');
     },
-    credentialVectors
-  );
-  const row = out.results.find((r) => r.id === 'C10.cookie-plant.credential' && r.target === 'idp');
-  assert.ok(row, JSON.stringify(out.results));
-  const labels = new Set([
-    'cookie-plant.hostOnly',
-    'cookie-plant.domainCover',
-    'cookie-plant.subHost',
-    'cookie-plant.adobe',
-    'cookie-plant.deletion',
-  ]);
-  const credentialNotes = parsePlantedNotes(row.notes).filter((n) => labels.has(n.label));
-  assert.ok(credentialNotes.length >= 1, JSON.stringify(row.notes));
-  const seen = new Set();
-  for (const n of credentialNotes) {
-    assert.ok(Object.hasOwn(n, 'evidenceForm'), JSON.stringify(n));
-    const form = evidenceFormOf({
-      answered: n.answered,
-      refused: n.refused,
-      planted: n.planted,
+  },
+  canaryAbsent: { planted: 'incomplete', cookies: () => [jarEntry(STUB_PLANT)] },
+  timeout: { planted: 'incomplete', cookies: () => new Promise(() => {}) },
+};
+
+function stubJarHandle(jar, credential) {
+  const reader = {
+    events: [],
+    send: async (method) => {
+      if (
+        method === 'Storage.getCookies' ||
+        method === 'Network.getAllCookies' ||
+        method === 'Network.getCookies'
+      )
+        return { cookies: await jar.cookies() };
+      return {};
+    },
+  };
+  return {
+    reader,
+    readerSession: 'S-stub',
+    browserContextId: null,
+    browserContexts: false,
+    canary: STUB_CANARY,
+    credential,
+    timing: {},
+  };
+}
+
+for (const [outKind, outCase] of Object.entries(STUB_OUTS)) {
+  for (const [jarKind, jar] of Object.entries(STUB_JARS)) {
+    const want = expectedEvidenceForm({
+      answered: outCase.answered,
+      refused: outCase.refused,
+      planted: jar.planted,
     });
-    assert.equal(n.evidenceForm, form, JSON.stringify(n));
-    assert.ok(
-      form === 'commandRefused' || form === 'answeredNotPlanted' || form === 'allowedPlant',
-      JSON.stringify(n)
-    );
-    seen.add(form);
-    assert.match(String(n.canaryName ?? ''), /^cplantcanary/, JSON.stringify(n));
-    assert.ok(Object.hasOwn(n, 'canaryVisible'), JSON.stringify(n));
-    assert.ok(Object.hasOwn(n, 'via'), JSON.stringify(n));
-    assert.ok(Object.hasOwn(n, 'browserContextId'), JSON.stringify(n));
+    test(`finishPlant evidenceForm matrix ${outKind} x ${jarKind} => ${want ?? 'no form'}`, async () => {
+      const runs = await Promise.all(
+        [true, false].map(async (credential) => {
+          const notes = [];
+          await finishPlant({
+            out: outCase.out,
+            cookie: STUB_PLANT,
+            notes,
+            label: 'hostOnly',
+            handle: stubJarHandle(jar, credential),
+          });
+          return { credential, notes };
+        })
+      );
+      for (const { credential, notes } of runs) {
+        const [n] = parsePlantedNotes(notes);
+        assert.ok(n, JSON.stringify(notes));
+        assert.equal(n.answered, outCase.answered, JSON.stringify(n));
+        assert.equal(n.refused, outCase.refused, JSON.stringify(n));
+        assert.equal(n.planted, jar.planted, JSON.stringify(n));
+        if (credential && want) assert.equal(n.evidenceForm, want, JSON.stringify(n));
+        else assert.equal(Object.hasOwn(n, 'evidenceForm'), false, JSON.stringify(n));
+      }
+    });
   }
-  assert.ok(
-    seen.has('commandRefused') || seen.has('answeredNotPlanted') || seen.has('allowedPlant')
-  );
-});
+}
+
+const PROTECTED_ROW_HAS_NO_FORM =
+  'evidenceForm is a C10.cookie-plant.credential field: finishPlant classifies only on credential attempt tabs, and the protected row scores its plant paths by the blocked plant shape';
+
+const EVIDENCE_FORM_PATH_SETS = [
+  {
+    id: 'credential IMS-host plants, allowed sub-host and controls',
+    vectors: credentialVectors,
+    target: 'idp',
+    paths: ['hostOnly', 'domainCover', 'responsePhrase', 'subHost', 'adobe', 'deletion'],
+    forms: {
+      'guarded hostOnly': 'commandRefused',
+      'guarded domainCover': 'commandRefused',
+      'guarded responsePhrase': 'answeredNotPlanted',
+      'guarded subHost': 'allowedPlant',
+      'guarded adobe': 'allowedPlant',
+      'guarded deletion': 'answeredNotPlanted',
+      'control adobe': 'allowedPlant',
+      'control deletion': 'answeredNotPlanted',
+    },
+    cannotHit: {},
+  },
+  {
+    id: 'credential IMS-host plants only',
+    vectors: credentialVectors,
+    target: 'idp',
+    paths: ['hostOnly', 'domainCover'],
+    forms: {
+      'guarded hostOnly': 'commandRefused',
+      'guarded domainCover': 'commandRefused',
+    },
+    cannotHit: {
+      answeredNotPlanted:
+        'the emulated guard refuses both IMS-host Set-Cookie answers with a slicc refusal, and no path in the set is answered unrefused without planting (responsePhrase and deletion are not in the set)',
+      allowedPlant:
+        'both paths set a cookie the IMS host receives (host-only on it, Domain covering it), where planted true is a leak; the set has no allowed path (subHost, adobe, ordinary)',
+    },
+  },
+  {
+    id: 'credential allowed sub-host only',
+    vectors: credentialVectors,
+    target: 'idp',
+    paths: ['subHost'],
+    forms: { 'guarded subHost': 'allowedPlant' },
+    cannotHit: {
+      commandRefused:
+        'subHost is the allowed sub-host plant (subHostRefused false) and the set has no IMS-host plant for the guard to refuse',
+      answeredNotPlanted:
+        'subHostPlanted is true under a correct guard, and the set has no path that is answered without planting (responsePhrase, deletion)',
+    },
+  },
+  {
+    id: 'protected row',
+    vectors: protectedVectors,
+    target: 'seven',
+    paths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
+    forms: {
+      'guarded fulfillArray': null,
+      'guarded ordinary': null,
+      'guarded adobe': null,
+      'guarded deletion': null,
+      'control ordinary': null,
+      'control adobe': null,
+      'control deletion': null,
+    },
+    cannotHit: {
+      commandRefused: PROTECTED_ROW_HAS_NO_FORM,
+      answeredNotPlanted: PROTECTED_ROW_HAS_NO_FORM,
+      allowedPlant: PROTECTED_ROW_HAS_NO_FORM,
+    },
+  },
+];
+
+for (const pathSet of EVIDENCE_FORM_PATH_SETS) {
+  test(`path notes prove evidenceForm coverage: ${pathSet.id}`, async () => {
+    const reachable = [...new Set(Object.values(pathSet.forms).filter(Boolean))].sort();
+    const unreachable = Object.keys(pathSet.cannotHit).sort();
+    assert.deepEqual(
+      [...reachable, ...unreachable].sort(),
+      Object.keys(EVIDENCE_FORMS).sort(),
+      'every form is either hit or named with a reason'
+    );
+    for (const reason of Object.values(pathSet.cannotHit)) assert.ok(reason.length > 20, reason);
+    const out = await rows({ oneTarget: true, onlyPaths: pathSet.paths }, pathSet.vectors);
+    const row = out.results.find(
+      (r) => r.id === pathSet.vectors[0].id && r.target === pathSet.target
+    );
+    assert.ok(row, JSON.stringify(out.results));
+    assert.equal(row.control, 'pass', JSON.stringify(row));
+    assert.equal(row.guarded, 'pass', JSON.stringify(row));
+    assert.equal(row.live, 'pass', JSON.stringify(row));
+    const labels = new Set(pathSet.paths.map((path) => `cookie-plant.${path}`));
+    const pathNotes = parsePlantedNotes(row.notes).filter((n) => labels.has(n.label));
+    const seen = new Set();
+    const keys = [];
+    for (const n of pathNotes) {
+      const key = `${n.leg} ${n.label.slice('cookie-plant.'.length)}`;
+      keys.push(key);
+      assert.ok(
+        Object.hasOwn(pathSet.forms, key),
+        `unexpected path note ${key}: ${JSON.stringify(n)}`
+      );
+      const want = pathSet.forms[key];
+      assert.match(String(n.canaryName ?? ''), /^cplantcanary/, JSON.stringify(n));
+      assert.equal(n.canaryVisible, true, JSON.stringify(n));
+      assert.ok(Object.hasOwn(n, 'via'), JSON.stringify(n));
+      assert.ok(Object.hasOwn(n, 'browserContextId'), JSON.stringify(n));
+      if (!want) {
+        assert.equal(
+          Object.hasOwn(n, 'evidenceForm'),
+          false,
+          `${key} must carry no evidenceForm: ${JSON.stringify(n)}`
+        );
+        continue;
+      }
+      assert.equal(n.evidenceForm, want, JSON.stringify(n));
+      assert.equal(n.evidenceForm, evidenceFormOf(n), JSON.stringify(n));
+      const shape = EVIDENCE_FORMS[want];
+      assert.equal(n.answered, shape.answered, JSON.stringify(n));
+      assert.equal(n.refused, shape.refused, JSON.stringify(n));
+      assert.equal(n.planted, shape.planted, JSON.stringify(n));
+      seen.add(n.evidenceForm);
+    }
+    assert.deepEqual(keys.sort(), Object.keys(pathSet.forms).sort(), JSON.stringify(row.notes));
+    assert.deepEqual([...seen].sort(), reachable);
+    for (const form of unreachable) assert.equal(seen.has(form), false, form);
+  });
+}
 
 test('c) right context with plant landed => fail', async () => {
   const out = await rows({
@@ -2106,6 +2336,81 @@ const MUTANT_MATRIX = [
     },
   },
   {
+    id: 'network-session-right-plant',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
+      fake: { storageGetCookiesFails: true },
+    },
+    plant: ['fulfillArray'],
+    expected: { protected: { off: 'fail', on: 'fail' }, credential: { off: 'fail', on: 'fail' } },
+    allowMap: { fulfillArray: 'hostOnly' },
+  },
+  {
+    id: 'network-session-guard',
+    options: {
+      fake: {
+        storageGetCookiesFails: true,
+        continueItself: true,
+        networkCookieWrongSession: 'guard',
+      },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+    networkSession: 'guard',
+  },
+  {
+    id: 'network-session-guard-plant',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
+      fake: { storageGetCookiesFails: true, networkCookieWrongSession: 'guard' },
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+    allowMap: { fulfillArray: 'hostOnly' },
+    networkSession: 'guard',
+  },
+  {
+    id: 'network-session-foreign',
+    options: {
+      fake: {
+        storageGetCookiesFails: true,
+        continueItself: true,
+        networkCookieWrongSession: 'foreign',
+      },
+      admitProtectedNavigation: true,
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+    networkSession: 'foreign',
+  },
+  {
+    id: 'network-session-foreign-plant',
+    options: {
+      allowPlantPaths: ['fulfillArray'],
+      admitProtectedNavigation: true,
+      fake: { storageGetCookiesFails: true, networkCookieWrongSession: 'foreign' },
+    },
+    plant: ['fulfillArray'],
+    expected: {
+      protected: { off: 'incomplete', on: 'incomplete' },
+      credential: { off: 'incomplete', on: 'incomplete' },
+    },
+    allowMap: { fulfillArray: 'hostOnly' },
+    networkSession: 'foreign',
+  },
+  {
     id: 'admit-plant',
     options: {
       allowPlantPaths: ['fulfillArray'],
@@ -2203,6 +2508,36 @@ function cellLabel(expected) {
   return String(expected);
 }
 
+function assertNetworkCookieSessions(browser, mutant, label) {
+  const misroutes = browser.networkCookieMisroutes();
+  const rejects = browser.networkCookieRejects();
+  if (!mutant.networkSession) {
+    assert.deepEqual(misroutes, [], label);
+    assert.deepEqual(
+      rejects,
+      [],
+      `every Network cookie call used the attempt tab session: ${label}`
+    );
+    return;
+  }
+  const methods = new Set(misroutes.map((m) => m.method));
+  assert.ok(methods.has('Network.getAllCookies'), `jar read misrouted: ${label}`);
+  assert.ok(methods.has('Network.deleteCookies'), `jar clear misrouted: ${label}`);
+  assert.ok(
+    misroutes.every((m) => m.mode === mutant.networkSession),
+    label
+  );
+  if (mutant.networkSession === 'guard') {
+    assert.deepEqual(
+      rejects.map((r) => `${r.method} ${r.sessionId}`).sort(),
+      misroutes.map((m) => `${m.method} ${m.to}`).sort(),
+      `the attempt tab session assert rejects exactly the misrouted calls: ${label}`
+    );
+    return;
+  }
+  assert.deepEqual(rejects, [], label);
+}
+
 function assertGuardedVerdict(row, expected, label) {
   if (expected === 'not-pass') {
     assert.notEqual(row.guarded, 'pass', label);
@@ -2273,7 +2608,7 @@ for (const mutant of MUTANT_MATRIX) {
           );
         }
         const subset = rowKind === 'protected' ? protectedVectors : credentialVectors;
-        const out = await rows(options, subset);
+        const { out, browser } = await rows({ ...options, withBrowser: true }, subset);
         const rowId = rowKind === 'protected' ? 'C10.cookie-plant' : 'C10.cookie-plant.credential';
         const row = out.results.find((r) => r.id === rowId);
         assert.ok(row, `${rowId} missing ${JSON.stringify(out.results)}`);
@@ -2282,6 +2617,7 @@ for (const mutant of MUTANT_MATRIX) {
           expected,
           `matrix ${mutant.id} ${mode} ${rowKind}: ${JSON.stringify(row)}`
         );
+        assertNetworkCookieSessions(browser, mutant, `matrix ${mutant.id} ${mode} ${rowKind}`);
       });
     }
   }

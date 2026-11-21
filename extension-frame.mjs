@@ -141,11 +141,53 @@ async function clickAt(client, _reader, session, _observer, x, y) {
   return { out: down.ok ? up : down, ok: down.ok && up.ok };
 }
 
-async function click(client, reader, session, observer) {
-  await observe(reader, observer, 'delete document.body.dataset.clicked; true');
+const CLICK_MS = 1000;
+const CLICK_ARM = `(() => {
+  delete document.body.dataset.clicked;
+  const target = document.getElementById("c9-click") ?? document;
+  globalThis.__sliccC9Click = new Promise((resolve) =>
+    target.addEventListener("click", () => resolve(true), { once: true })
+  );
+  return true;
+})()`;
+const CLICK_WAIT = `Promise.race([
+  globalThis.__sliccC9Click ?? Promise.resolve(false),
+  new Promise((resolve) => setTimeout(resolve, ${CLICK_MS}, false)),
+]).then((hit) => hit === true || document.body.dataset.clicked === "yes")`;
+
+async function click(client, reader, session, observer, { side, missing, name = 'click' } = {}) {
+  await observe(reader, observer, CLICK_ARM);
   const pressed = await clickAt(client, reader, session, observer, 20, 20);
-  const clicked = await observe(reader, observer, 'document.body.dataset.clicked === "yes"');
-  return { out: pressed.out, ok: pressed.ok && clicked === true };
+  const measured = side === 'control' && Array.isArray(missing);
+  if (!pressed.ok) {
+    if (!measured || protectedRefusal(pressed.out)) return { out: pressed.out, ok: false };
+    missing.push(`${name}: ${refusal(pressed.out) || 'transport error'}`);
+    return { out: pressed.out, ok: 'incomplete' };
+  }
+  let timer;
+  const waited = await Promise.race([
+    outcome(
+      reader.send(
+        'Runtime.evaluate',
+        { expression: CLICK_WAIT, awaitPromise: true, returnByValue: true },
+        observer
+      )
+    ),
+    new Promise((resolve) => {
+      timer = setTimeout(resolve, CLICK_MS * 2, null);
+    }),
+  ]).finally(() => clearTimeout(timer));
+  if (waited?.ok && !waited.result.exceptionDetails && waited.result.result?.value === true)
+    return { out: pressed.out, ok: true };
+  if (!measured) return { out: pressed.out, ok: false };
+  const why =
+    waited == null
+      ? 'no answer'
+      : !waited.ok
+        ? refusal(waited)
+        : (waited.result.exceptionDetails?.text ?? `not delivered within ${CLICK_MS}ms`);
+  missing.push(`${name}: ${why}`);
+  return { out: pressed.out, ok: 'incomplete' };
 }
 
 async function key(client, reader, session, observer, beforeSend, requireTyped = true) {
@@ -835,7 +877,14 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
       const f = ${frameLookup};
       if (!f) return null;
       const r = f.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+      let left = r.left;
+      let top = r.top;
+      for (let w = f.ownerDocument?.defaultView; w && w !== window && w.frameElement; w = w.parent) {
+        const o = w.frameElement.getBoundingClientRect();
+        left += o.left + w.frameElement.clientLeft;
+        top += o.top + w.frameElement.clientTop;
+      }
+      return { x: left + r.width / 2, y: top + r.height / 2, w: r.width, h: r.height };
     })()`
   );
   const point = clearPoint(box);
@@ -858,11 +907,7 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
     box && box.h > 0 ? box.y : 10
   );
   await refocus();
-  const tab = await outcome(
-    client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab' }, page)
-  );
-  await refocus();
-  const pressed = await click(client, reader, page, observer);
+  const pressed = await click(client, reader, page, observer, { side, missing });
   await refocus();
   const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
   await refocus();
@@ -876,6 +921,10 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
     reader,
     observer,
     mode
+  );
+  await refocus();
+  const tab = await outcome(
+    client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab' }, page)
   );
   await refocus();
   const focusedKey = await outcome(
@@ -1350,9 +1399,15 @@ async function finishReveal(
   page,
   observer,
   frameMs,
-  { ok, text, overlap, revealRacePass }
+  { ok, text, overlap, revealRacePass },
+  side,
+  missing
 ) {
-  const revealedPress = await click(client, reader, page, observer);
+  const revealedPress = await click(client, reader, page, observer, {
+    side,
+    missing,
+    name: 'revealedClick',
+  });
   await style(reader, observer, 'hidden', frameMs);
   const rehidden = await shot(client, page);
   return {
@@ -1412,15 +1467,20 @@ export async function driveReveal(client, reader, page, observer, frameMs, missi
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     last = await attemptRevealCapture(client, reader, page, observer, side);
     if (last.overlap !== 'unknown')
-      return finishReveal(client, reader, page, observer, frameMs, last);
+      return finishReveal(client, reader, page, observer, frameMs, last, side, missing);
     if (attempt < maxAttempts) await style(reader, observer, 'hidden', frameMs);
   }
   missing.push(`reveal/capture overlap unproven (${maxAttempts} attempts)`);
-  return finishReveal(client, reader, page, observer, frameMs, {
-    ...last,
-    overlap: 'unknown',
-    revealRacePass: false,
-  });
+  return finishReveal(
+    client,
+    reader,
+    page,
+    observer,
+    frameMs,
+    { ...last, overlap: 'unknown', revealRacePass: false },
+    side,
+    missing
+  );
 }
 
 function frameObservations({ pageAttached, origin, read, leaks, picture, input, captures }) {

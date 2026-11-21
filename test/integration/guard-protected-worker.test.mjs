@@ -153,6 +153,7 @@ test('protected-origin worker rows are attack rows spawned by the unguarded obse
     assert.equal(Object.hasOwn(vector.control.expected, 'attachForwarded'), false, id);
     assert.equal(vector.requires.includes('forwardAudit'), false, id);
     assert.equal(vector.control.expected.workerExists, true, id);
+    assert.equal(vector.control.expected.workerAttached, true, id);
     assert.equal(vector.control.expected.attachSession, true, id);
     assert.equal(vector.control.expected.attachRefused, false, id);
     assert.equal(vector.control.expected.workerReachable, kind.reachable, id);

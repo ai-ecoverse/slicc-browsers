@@ -58,6 +58,7 @@ const discoveryMethods = [
   'Target.attachedToTarget',
 ];
 const controlPremises = ['discovered', 'listed', 'attachSession', 'reachable'];
+const unguardedPremises = ['workerAttached', 'workerReachable'];
 const exclusive = ['stockSetup', 'syntheticAutoAttach'];
 
 const escapes = /(?:%[0-9a-f]{2})+/gi;
@@ -278,6 +279,7 @@ export function pickRawTarget(infos, { type, openerId, urlPrefix, known = new Se
 }
 const namedResultMs = 10000;
 const observeMs = 5000;
+const reachRetryMs = 250;
 const premises = { chainStarted: 'first hop not observed' };
 
 function autoAttachSession(events, start, targetId) {
@@ -1734,8 +1736,41 @@ class Execution {
     return reachable;
   }
 
+  async settleReach() {
+    const step = expand(this.probeStep(), this.vars);
+    const bound = this.bound(observeMs);
+    const start = Date.now();
+    let tries = this.calls.probe?.result ? 1 : 0;
+    let reached = this.calls.probe?.result?.reachable === true;
+    const retry = async () => {
+      if (this.clients.flight?.abandoned) return true;
+      tries++;
+      const out = await probeWorkerSessions({
+        client: this.client,
+        sessions: this.probeSessionIds(step),
+        path: expand(step.probeSessions.path, this.vars),
+        tag: this.vars.tag,
+        detached: (sessionId) => this.detached(sessionId),
+      });
+      if (out.reachable) reached = true;
+      return reached;
+    };
+    if (!reached) await waitFor(retry, bound, this.bound(reachRetryMs), true);
+    this.note(
+      `workerReachable: control probe ${reached ? 'reached' : 'missed'}, ${tries} tries, ${Date.now() - start}ms (bound ${bound}ms)`
+    );
+    if (reached)
+      this.calls.probe = {
+        ok: true,
+        result: { ...(this.calls.probe?.result ?? {}), reachable: true },
+      };
+    return reached;
+  }
+
   async observeProbeReachable(want, check) {
     if (want !== true && want !== false) return this.check(check);
+    if (this.side === 'control' && want === true && this.unguardedPremise('workerReachable'))
+      return this.settleReach();
     let seen = await this.probeFreshSessions();
     if (seen === 'incomplete') return this.side === 'control' ? false : 'incomplete';
     if (seen === true) return true;
@@ -2659,6 +2694,7 @@ class Execution {
       if (holds === 'incomplete') incomplete.push(name);
     }
     this.premises(observed);
+    this.unguardedPremises(observed);
     this.explicitPremises(observed);
     if (this.side === 'control' && excused && !measured) this.incomplete.push('measured nothing');
     return { observed, incomplete };
@@ -2678,6 +2714,23 @@ class Execution {
     for (const name of missing) this.incomplete.push(`${name}: ${premises[name]}`);
     for (const name of Object.keys(observe))
       if (want?.[name] === true && observed[name] === false) observed[name] = 'incomplete';
+  }
+
+  unguardedPremise(name) {
+    return (
+      this.vector.control.via === 'unguarded' &&
+      this.vector.control.expected?.[name] === true &&
+      this.vector.expected?.[name] === false
+    );
+  }
+
+  unguardedPremises(observed) {
+    if (this.side !== 'control') return;
+    for (const name of unguardedPremises)
+      if (this.unguardedPremise(name) && observed[name] === false) {
+        observed[name] = 'incomplete';
+        this.incomplete.push(`${name}: the unguarded control did not show it`);
+      }
   }
 
   async explicitLost() {
@@ -3341,6 +3394,8 @@ function settleIncomplete(row, vector, base, legs) {
   });
   for (const side of ['control', 'guarded'])
     if (legs[side].incomplete?.length && filled[side] === 'pass') row[side] = 'incomplete';
+  if (legs.control.incomplete?.length && row.guarded === 'fail' && filled.guarded === 'pass')
+    row.guarded = 'incomplete';
   if (legs.guarded.live === 'incomplete' && filled.live === 'pass') row.live = 'incomplete';
   row.why = [filled.why, `incomplete: ${incomplete.join('; ')}`].filter(Boolean).join('; ');
 }

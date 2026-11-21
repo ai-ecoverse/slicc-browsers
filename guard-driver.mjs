@@ -378,6 +378,8 @@ function declaredCapabilities(value) {
   return [];
 }
 
+const autoAttachCaps = ['autoAttach', 'stockSetup', 'syntheticAutoAttach'];
+
 function skipWhy(vector, row, known, guard, declared) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
@@ -389,8 +391,10 @@ function skipWhy(vector, row, known, guard, declared) {
       : `skip with a reason the runner never gives: ${reason}`;
   if (reason.startsWith('not-supported:')) {
     const cap = reason.slice('not-supported:'.length);
-    if (cap === 'extensionFrame' && declared.includes(cap))
+    if (['extensionFrame', 'explicitAttach'].includes(cap) && declared.includes(cap))
       return `skip with not-supported:${cap} while the run declared ${cap}`;
+    if (autoAttachCaps.includes(cap) && (vector?.requires ?? []).includes('explicitAttach'))
+      return `skip with not-supported:${cap} on an explicitAttach row`;
     if (known.has(cap)) return null;
   }
   return `skip with a reason the runner never gives: ${reason}`;

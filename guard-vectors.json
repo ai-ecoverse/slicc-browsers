@@ -121,7 +121,8 @@
     "signInHold": "the guard runs seven's sign-in hold: holds about:blank#slicc-sign-in-<marker> popups (and keeps them held after they move to an ordinary URL), and keeps callback-only authorize tabs that name seven's callback out of /json/list, Target.getTargets, discovery events, attach and title/body reads; announcing only the target id with empty URL/title while a Puppeteer-style connect still completes is acceptable; client.signInHold.ask({marker,hostLabel}) may answer the hold when the page-side BroadcastChannel cannot; redirect_uri cut to https://www.sliccy.ai (callback-origin) is hidden like other callback shapes",
     "requestInterception": "the transport admits Fetch.enable with Fetch.fulfillRequest / Fetch.continueResponse, or Network.setRequestInterception with Network.continueInterceptedRequest",
     "fetchInterception": "Fetch.enable and response-writing Fetch.fulfillRequest / Fetch.continueResponse",
-    "legacyInterception": "Network.setRequestInterception and Network.continueInterceptedRequest (headers or rawResponse)"
+    "legacyInterception": "Network.setRequestInterception and Network.continueInterceptedRequest (headers or rawResponse)",
+    "explicitAttach": "the guard refuses Target.setAutoAttach and Target.autoAttachRelated and exposes targets only through session-less Target.setDiscoverTargets / Target.getTargets and explicit Target.attachToTarget {flatten:true}; it hides or redacts protected pages, tabs, iframes, workers and popups in the listing and the discovery events, and refuses attach to them by raw targetId; a run declares it without stockSetup or syntheticAutoAttach; the popup's first document is not measured for init-script effects on this setup"
   },
   "placeholders": {
     "target": "the target's origin; {plain} on the control",
@@ -147,7 +148,8 @@
     "pageTarget": "the current page target id",
     "responseOrigin": "the fixture response CORS origin",
     "browserUi": "the id of one of Chrome's own browser_ui targets, which the runner looks up with its own CDP",
-    "workerTarget": "the id of the protected-origin worker the unguarded spawnWorker step created"
+    "workerTarget": "the id of the protected-origin worker the unguarded spawnWorker step created",
+    "rawTarget": "the real target id the unguarded observer found for the rawTarget step"
   },
   "vectors": [
     {
@@ -31385,6 +31387,705 @@
         "pageAttached": true,
         "driven": true
       }
+    },
+    {
+      "id": "C3.tab-attach.explicit",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "cdp": "Target.setDiscoverTargets",
+          "params": {
+            "discover": true,
+            "filter": [
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "discover",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{target}/doc?n={tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "via": "unguarded",
+          "as": "created",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "rawTarget": {
+            "type": "page",
+            "urlPrefix": "{target}/doc?n={tag}",
+            "ms": 5000
+          },
+          "as": "raw",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Target.getTargets",
+          "params": {},
+          "session": "browser",
+          "as": "listed",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Target.getTargetInfo",
+          "params": {
+            "targetId": "{rawTarget}"
+          },
+          "session": "browser",
+          "as": "info",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{rawTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "bindSession": "child",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Page.enable",
+          "params": {},
+          "session": "child",
+          "as": "childPage",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Runtime.enable",
+          "params": {},
+          "session": "child",
+          "as": "childRuntime",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Page.navigate",
+          "params": {
+            "url": "{target}/doc?n=child-{tag}"
+          },
+          "session": "child",
+          "as": "childNavigate",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n=child-{tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "self.location.href",
+            "returnByValue": true
+          },
+          "session": "child",
+          "as": "reach",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "settle": {
+            "ms": 1000
+          }
+        },
+        {
+          "cdp": "Target.getTargets",
+          "params": {},
+          "session": "browser",
+          "as": "relisted",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        }
+      ],
+      "targets": [
+        "ordinary"
+      ],
+      "requires": [
+        "explicitAttach",
+        "browserSession",
+        "discovery"
+      ],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered discover, listed, info, attach, childPage, childRuntime, childNavigate, relisted without an error",
+          "check": {
+            "all": [
+              {
+                "result": "discover",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "listed",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "info",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "attach",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childPage",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childRuntime",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "childNavigate",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "relisted",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "discovered": {
+          "means": "the client got Target.targetCreated or Target.targetInfoChanged for the raw target id",
+          "check": {
+            "any": [
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{rawTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{rawTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          }
+        },
+        "listed": {
+          "means": "Target.getTargets lists the raw target id",
+          "check": {
+            "result": "listed",
+            "path": "result.targetInfos",
+            "equals": {
+              "$some": {
+                "targetId": "{rawTarget}"
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "attachSession": {
+          "means": "Target.attachToTarget by the raw target id answered a sessionId, or the client got Target.attachedToTarget for that id on any session",
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "the guard refused Target.attachToTarget by the raw target id with slicc: refused:; no answer is incomplete",
+          "check": {
+            "refused": [
+              "attach"
+            ],
+            "refusal": {
+              "match": "^slicc: refused"
+            },
+            "observer": "client"
+          }
+        },
+        "cut": {
+          "means": "the client got Target.detachedFromTarget for the raw target or its bound session",
+          "check": {
+            "detached": "child",
+            "observer": "client"
+          }
+        },
+        "reachable": {
+          "means": "Runtime.evaluate of self.location.href on the bound session returned the target URL",
+          "check": {
+            "result": "reach",
+            "path": "result.result.value",
+            "equals": {
+              "$contains": "{target}/doc"
+            },
+            "observer": "client"
+          }
+        },
+        "driven": {
+          "means": "the unguarded observer finds the tab at the URL the client navigated it to through its explicitly attached session",
+          "check": {
+            "expression": "location.href",
+            "equals": "{target}/doc?n=child-{tag}",
+            "via": "unguarded",
+            "session": "child",
+            "observer": "unguarded"
+          }
+        },
+        "listRedacted": {
+          "means": "Target.getTargets (listed and relisted) shows the raw target, and any entry under any target id whose url or title names its origin, if at all, with that origin only as url and title (or none, or about:blank), and no url or title carries the row's tag, path, query or fragment",
+          "check": {
+            "redacted": [
+              "listed",
+              "relisted"
+            ],
+            "observer": "client"
+          }
+        }
+      },
+      "live": "the stand-in served the first document of the tab the unguarded observer created. The redaction property covers the Target.getTargets listing, the discovery events carrying targetInfo and the Target.getTargetInfo replies; base64 data: payloads are not decoded, Unicode beyond NFKC folding and leading format, control and combining marks is not normalised, and issue #372 tracks both and other events",
+      "liveCheck": {
+        "loaded": "{target}/doc?n={tag}",
+        "observer": "fixture"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "discovered": true,
+          "listed": true,
+          "attachSession": true,
+          "attachRefused": false,
+          "cut": false,
+          "reachable": true,
+          "driven": true,
+          "listRedacted": false
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "discovered": true,
+        "listed": true,
+        "attachSession": true,
+        "attachRefused": false,
+        "cut": false,
+        "reachable": true,
+        "driven": true,
+        "listRedacted": false
+      }
+    },
+    {
+      "id": "C3.tab-protected.explicit",
+      "family": "C",
+      "kind": "cdp",
+      "scope": "any",
+      "setup": [
+        {
+          "cdp": "Target.setDiscoverTargets",
+          "params": {
+            "discover": true,
+            "filter": [
+              {}
+            ]
+          },
+          "session": "browser",
+          "as": "discover",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        }
+      ],
+      "trigger": [
+        {
+          "cdp": "Target.createTarget",
+          "params": {
+            "url": "{target}/doc?n={tag}",
+            "browserContextId": "{context}"
+          },
+          "session": "browser",
+          "via": "unguarded",
+          "as": "created",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "settle": {
+            "served": "{target}/doc?n={tag}",
+            "ms": 5000,
+            "required": true
+          }
+        },
+        {
+          "rawTarget": {
+            "type": "page",
+            "urlPrefix": "{target}/doc?n={tag}",
+            "ms": 5000
+          },
+          "as": "raw",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Target.getTargets",
+          "params": {},
+          "session": "browser",
+          "as": "listed",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Target.getTargetInfo",
+          "params": {
+            "targetId": "{rawTarget}"
+          },
+          "session": "browser",
+          "as": "info",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused",
+            "onlyProtected": true
+          },
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Target.attachToTarget",
+          "params": {
+            "targetId": "{rawTarget}",
+            "flatten": true
+          },
+          "session": "browser",
+          "as": "attach",
+          "bindSession": "child",
+          "refusable": true,
+          "refusal": {
+            "match": "^slicc: refused",
+            "onlyProtected": true
+          },
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        },
+        {
+          "cdp": "Page.enable",
+          "params": {},
+          "session": "child",
+          "as": "childPage",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Runtime.enable",
+          "params": {},
+          "session": "child",
+          "as": "childRuntime",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Runtime.evaluate",
+          "params": {
+            "expression": "self.location.href",
+            "returnByValue": true
+          },
+          "session": "child",
+          "as": "reach",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "settle": {
+            "ms": 1000
+          }
+        },
+        {
+          "cdp": "Target.getTargets",
+          "params": {},
+          "session": "browser",
+          "as": "relisted",
+          "requires": [
+            "explicitAttach",
+            "browserSession",
+            "discovery"
+          ]
+        }
+      ],
+      "targets": [
+        "seven",
+        "vault"
+      ],
+      "requires": [
+        "explicitAttach",
+        "browserSession",
+        "discovery"
+      ],
+      "observe": {
+        "admitted": {
+          "means": "the guard answered discover, listed, relisted without an error",
+          "check": {
+            "all": [
+              {
+                "result": "discover",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "listed",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              },
+              {
+                "result": "relisted",
+                "path": "ok",
+                "equals": true,
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "discovered": {
+          "means": "the client got Target.targetCreated or Target.targetInfoChanged for the raw target id",
+          "check": {
+            "any": [
+              {
+                "event": "Target.targetCreated",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{rawTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              },
+              {
+                "event": "Target.targetInfoChanged",
+                "where": {
+                  "params": {
+                    "targetInfo": {
+                      "targetId": "{rawTarget}"
+                    }
+                  }
+                },
+                "observer": "client"
+              }
+            ],
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "listed": {
+          "means": "Target.getTargets lists the raw target id",
+          "check": {
+            "result": "listed",
+            "path": "result.targetInfos",
+            "equals": {
+              "$some": {
+                "targetId": "{rawTarget}"
+              }
+            },
+            "observer": "client"
+          }
+        },
+        "attachSession": {
+          "means": "Target.attachToTarget by the raw target id answered a sessionId, or the client got Target.attachedToTarget for that id on any session",
+          "check": {
+            "attached": "{target}",
+            "session": "child",
+            "observer": "client"
+          }
+        },
+        "attachRefused": {
+          "means": "the guard refused Target.attachToTarget by the raw target id with slicc: refused:; no answer is incomplete",
+          "check": {
+            "refused": [
+              "attach"
+            ],
+            "refusal": {
+              "match": "^slicc: refused"
+            },
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "reachable": {
+          "means": "Runtime.evaluate of self.location.href on the bound session returned the target URL",
+          "check": {
+            "result": "reach",
+            "path": "result.result.value",
+            "equals": {
+              "$contains": "{target}/doc"
+            },
+            "observer": "client"
+          }
+        },
+        "infoRedacted": {
+          "means": "the Target.getTargetInfo reply shows the raw target, and any entry under any target id whose url or title names its origin, if at all, with that origin only as url and title (or none, or about:blank), and no url or title carries the row's tag, path, query or fragment",
+          "check": {
+            "redacted": [
+              "info"
+            ],
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "listRedacted": {
+          "means": "Target.getTargets (listed and relisted) shows the raw target, and any entry under any target id whose url or title names its origin, if at all, with that origin only as url and title (or none, or about:blank), and no url or title carries the row's tag, path, query or fragment",
+          "check": {
+            "redacted": [
+              "listed",
+              "relisted"
+            ],
+            "observer": "client"
+          },
+          "dependsOn": []
+        },
+        "eventsRedacted": {
+          "means": "every Target.targetCreated, Target.targetInfoChanged and Target.attachedToTarget the client got shows the raw target, and any entry under any target id whose url or title names its origin, if at all, with that origin only as url and title (or none, or about:blank), and no url or title carries the row's tag, path, query or fragment",
+          "check": {
+            "redacted": "events",
+            "observer": "client"
+          },
+          "dependsOn": []
+        }
+      },
+      "live": "the unguarded observer found the {target} tab it created by its raw target id, or the stand-in served {target}/doc?n={tag}. The redaction property covers the Target.getTargets listing, the discovery events carrying targetInfo and the Target.getTargetInfo replies; base64 data: payloads are not decoded, Unicode beyond NFKC folding and leading format, control and combining marks is not normalised, and issue #372 tracks both and other events",
+      "liveCheck": {
+        "any": [
+          {
+            "result": "raw",
+            "path": "result.found",
+            "equals": true,
+            "observer": "client"
+          },
+          {
+            "loaded": "{target}/doc?n={tag}",
+            "observer": "fixture"
+          }
+        ],
+        "observer": "client"
+      },
+      "control": {
+        "origin": "ordinary",
+        "via": "unguarded",
+        "expected": {
+          "admitted": true,
+          "discovered": true,
+          "listed": true,
+          "attachSession": true,
+          "attachRefused": false,
+          "reachable": true,
+          "infoRedacted": false,
+          "listRedacted": false,
+          "eventsRedacted": false
+        }
+      },
+      "expected": {
+        "admitted": true,
+        "discovered": "either",
+        "listed": "either",
+        "attachSession": false,
+        "attachRefused": true,
+        "reachable": false,
+        "infoRedacted": true,
+        "listRedacted": true,
+        "eventsRedacted": true
+      },
+      "designDependent": [
+        "discovered",
+        "listed"
+      ]
     },
     {
       "id": "C3.tab-worker-leak",

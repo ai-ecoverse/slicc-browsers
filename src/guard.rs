@@ -46,6 +46,7 @@ pub const CAP_REQUEST_INTERCEPTION: &str = "requestInterception";
 pub const CAP_FETCH_INTERCEPTION: &str = "fetchInterception";
 pub const CAP_LEGACY_INTERCEPTION: &str = "legacyInterception";
 pub const CAP_ERROR_FRAME_CLASS: &str = "errorFrameClass";
+pub const CAP_EXPLICIT_ATTACH: &str = "explicitAttach";
 pub const OBSERVER_WATCH: &str = "watch";
 pub const OBSERVER_FAIL: &str = "fail";
 pub const CLIENT_EXIT: &str = "exit";
@@ -54,6 +55,7 @@ pub const SESSION_PAGE: &str = "page";
 pub const SESSION_BROWSER: &str = "browser";
 pub const SESSION_PAGE_OR_BROWSER: &str = "page-or-browser";
 pub const SESSION_CHILD: &str = "child";
+pub const BIND_CHILD: &str = "child";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -296,6 +298,16 @@ pub struct Step {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub reuse_session: bool,
+    #[serde(
+        default,
+        rename = "bindSession",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub bind_session: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+    #[serde(default, rename = "rawTarget", skip_serializing_if = "Option::is_none")]
+    pub raw_target: Option<RawTarget>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<Refusal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -338,6 +350,17 @@ pub struct Step {
     pub on: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawTarget {
+    pub r#type: String,
+    #[serde(default, rename = "openerId", skip_serializing_if = "Option::is_none")]
+    pub opener_id: Option<String>,
+    #[serde(default, rename = "urlPrefix", skip_serializing_if = "Option::is_none")]
+    pub url_prefix: Option<String>,
+    pub ms: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -280,6 +280,7 @@ fn the_guard_vectors_parse_and_round_trip() {
         guard::CAP_DISCOVERY,
         guard::CAP_CLIENT_EXIT,
         guard::CAP_SITE_ISOLATION_OFF,
+        guard::CAP_EXPLICIT_ATTACH,
     ] {
         assert!(v.capabilities.contains_key(c));
     }

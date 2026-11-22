@@ -31444,6 +31444,18 @@
           ]
         },
         {
+          "cdp": "Target.getTargetInfo",
+          "params": {
+            "targetId": "{rawTarget}"
+          },
+          "session": "browser",
+          "via": "unguarded",
+          "as": "mapped",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
           "cdp": "Target.getTargets",
           "params": {},
           "session": "browser",
@@ -31643,7 +31655,7 @@
           }
         },
         "listed": {
-          "means": "Target.getTargets lists the raw target id",
+          "means": "Target.getTargets lists the raw target id, asked after the unguarded observer used that id",
           "check": {
             "result": "listed",
             "path": "result.targetInfos",
@@ -31797,6 +31809,18 @@
             "ms": 5000
           },
           "as": "raw",
+          "requires": [
+            "explicitAttach"
+          ]
+        },
+        {
+          "cdp": "Target.getTargetInfo",
+          "params": {
+            "targetId": "{rawTarget}"
+          },
+          "session": "browser",
+          "via": "unguarded",
+          "as": "mapped",
           "requires": [
             "explicitAttach"
           ]
@@ -31966,7 +31990,7 @@
           "dependsOn": []
         },
         "listed": {
-          "means": "Target.getTargets lists the raw target id",
+          "means": "Target.getTargets lists the raw target id, asked after the unguarded observer used that id",
           "check": {
             "result": "listed",
             "path": "result.targetInfos",

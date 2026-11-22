@@ -306,6 +306,14 @@ function explicitRules(v, steps, requires) {
   if (v.control?.via !== 'unguarded')
     gv(`${v.id}: an explicitAttach row needs an unguarded control`);
   if (!steps.some((st) => st.rawTarget)) gv(`${v.id}: an explicitAttach row has no rawTarget step`);
+  const raw = steps.findIndex((st) => st.rawTarget);
+  const mapped = steps.findIndex(
+    (st, i) =>
+      i > raw && st.via === 'unguarded' && JSON.stringify(st.params ?? {}).includes('{rawTarget}')
+  );
+  const listing = steps.findIndex((st) => st.cdp === 'Target.getTargets' && st.via !== 'unguarded');
+  if (raw >= 0 && listing >= 0 && (mapped < 0 || mapped > listing))
+    gv(`${v.id}: an explicitAttach row lists before the observer uses the raw target id`);
   if (binds.length !== 1) gv(`${v.id}: an explicitAttach row binds the child session once`);
   const want = typeof v.expected === 'object' ? v.expected : {};
   if (

@@ -477,14 +477,38 @@ function hostLabelOf(origin) {
   }
 }
 
-async function askHold(client, { marker, hostLabel, notes }) {
+async function prepareHold(client, { useAsk, marker, hostLabel, notes, budget }) {
+  const hold = client?.signInHold;
+  if (!useAsk || typeof hold.prepare !== 'function') return undefined;
+  note(notes, 'sign-in-hold.prepare', { via: 'signInHold.prepare', marker, hostLabel });
+  const ms = Math.min(budget, 6000);
+  let timer;
+  try {
+    const baseline = await Promise.race([
+      Promise.resolve(hold.prepare({ marker, hostLabel })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+    return { baseline };
+  } catch (error) {
+    return { incomplete: `signInHold.prepare: ${error?.message ?? error}` };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function askHold(client, { marker, hostLabel, notes, prepared }) {
   const hold = client?.signInHold;
   if (typeof hold?.ask !== 'function') return { used: false };
   note(notes, 'sign-in-hold.ask', { via: 'signInHold.ask', marker, hostLabel });
+  const asked = prepared
+    ? { marker, hostLabel, baseline: prepared.baseline }
+    : { marker, hostLabel };
   let timer;
   try {
     const answer = await Promise.race([
-      Promise.resolve(hold.ask({ marker, hostLabel })),
+      Promise.resolve(hold.ask(asked)),
       new Promise((_, reject) => {
         timer = setTimeout(() => {
           const error = new Error('signInHold.ask timed out');
@@ -602,6 +626,9 @@ async function heldPopup({
   const before = await outcome(reader.send('Target.getTargets', {}));
   const known = new Set((before.result?.targetInfos ?? []).map((info) => info.targetId));
   const useAsk = !control && typeof client?.signInHold?.ask === 'function';
+  const hostLabel = hostLabelOf(openerOrigin ?? ordinary);
+  const prepared = await prepareHold(client, { useAsk, marker, hostLabel, notes, budget });
+  if (prepared?.incomplete) return { incomplete: prepared.incomplete, openerId };
   const asked = await outcome(
     reader.send(
       'Runtime.evaluate',
@@ -623,11 +650,7 @@ async function heldPopup({
   let holdAnswer = asked.result?.result?.value?.answer ?? 'missing';
   const openedPopup = asked.result?.result?.value?.opened;
   if (useAsk) {
-    const askedHold = await askHold(client, {
-      marker,
-      hostLabel: hostLabelOf(openerOrigin ?? ordinary),
-      notes,
-    });
+    const askedHold = await askHold(client, { marker, hostLabel, notes, prepared });
     if (askedHold.incomplete) {
       const found = await askedPopup(reader, {
         known,
@@ -652,6 +675,7 @@ async function heldPopup({
     control: Boolean(control),
     opened: openedPopup,
     askHook: useAsk,
+    ...(prepared ? { prepared: true } : {}),
   });
   if (openedPopup === false)
     return {

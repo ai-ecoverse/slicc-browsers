@@ -973,3 +973,199 @@ test('callback raw leg stays incomplete when the mark never appears', async () =
   assert.match(String(out.incomplete ?? ''), /callback tab mark/);
   assert.match(String(out.incomplete ?? ''), /\(mark\)|readyState|text without the mark/);
 });
+
+function prepareHooks({ answer = 'held', baseline = { base: 'listed' }, prepare = 'ok' } = {}) {
+  const log = [];
+  return {
+    log,
+    async prepare(args) {
+      log.push(['prepare', args]);
+      if (prepare === 'throw') throw new Error('base down');
+      if (prepare === 'slow') await new Promise((resolve) => setTimeout(resolve, 1500));
+      return baseline;
+    },
+    ask(args) {
+      log.push(['ask', args]);
+      return answer;
+    },
+  };
+}
+
+const heldRow = (out) => out.results.find((r) => r.id === 'C7.sign-in-hold.held-popup');
+
+test('signInHold without prepare asks with marker and hostLabel only and notes no prepare', async () => {
+  const asked = [];
+  const out = await rows({
+    hooks: {
+      ask(args) {
+        asked.push(args);
+        return 'held';
+      },
+    },
+  });
+  const row = heldRow(out);
+  assert.equal(row.guarded, 'pass', JSON.stringify(row));
+  assert.equal(asked.length, 1, JSON.stringify(asked));
+  assert.deepEqual(Object.keys(asked[0]).sort(), ['hostLabel', 'marker']);
+  for (const each of out.results)
+    assert.equal(
+      (each.notes ?? []).some((n) => /prepare/.test(n)),
+      false,
+      JSON.stringify(each.notes)
+    );
+});
+
+test('signInHold.prepare runs on the guarded held-popup leg only, never on the control', async () => {
+  const guarded = prepareHooks();
+  const control = prepareHooks();
+  const out = await rows({ hooks: guarded, unguardedHooks: control });
+  assert.equal(control.log.length, 0, JSON.stringify(control.log));
+  assert.deepEqual(
+    guarded.log.map(([name]) => name),
+    ['prepare', 'ask'],
+    JSON.stringify(guarded.log)
+  );
+  assert.match(guarded.log[0][1].marker, /-guarded-/);
+  for (const id of ids) {
+    const row = out.results.find((r) => r.id === id && r.target === 'seven');
+    assert.equal(row.control, 'pass', `${id} ${JSON.stringify(row)}`);
+    assert.equal(row.guarded, 'pass', `${id} ${JSON.stringify(row)}`);
+  }
+  const browser = signInFake();
+  const direct = prepareHooks();
+  browser.client.signInHold = direct;
+  await signInHold({
+    client: browser.client,
+    reader: browser.unguarded,
+    mode: 'held-popup',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    openerOrigin: 'http://seven.sliccy.ai',
+    tag: 'prepare-control',
+    budget: 300,
+    control: true,
+  });
+  assert.equal(direct.log.length, 0, JSON.stringify(direct.log));
+});
+
+test('signInHold.prepare completes before the popup opens and ask follows the open', async () => {
+  const browser = signInFake();
+  const log = [];
+  browser.client.signInHold = {
+    async prepare({ marker, hostLabel }) {
+      log.push(`prepare ${marker} ${hostLabel}`);
+      await tick();
+      log.push('prepared');
+      return 'base';
+    },
+    ask({ marker, hostLabel, baseline }) {
+      log.push(`ask ${marker} ${hostLabel} ${baseline}`);
+      return 'held';
+    },
+  };
+  const reader = {
+    ...browser.unguarded,
+    async send(method, params, sessionId) {
+      if (method === 'Runtime.evaluate' && String(params?.expression).includes('window.open'))
+        log.push('open');
+      return browser.unguarded.send(method, params, sessionId);
+    },
+  };
+  const notes = [];
+  await signInHold({
+    client: browser.client,
+    reader,
+    mode: 'held-popup',
+    ordinary: 'http://ordinary.example.test',
+    cross: 'http://cross.test',
+    openerOrigin: 'http://seven.sliccy.ai',
+    tag: 'prepare-order',
+    notes,
+    budget: 300,
+  });
+  assert.deepEqual(log, [
+    'prepare hold-prepare-order seven.sliccy.ai',
+    'prepared',
+    'open',
+    'ask hold-prepare-order seven.sliccy.ai base',
+  ]);
+  assert.ok(
+    notes.some((n) => n.startsWith('sign-in-hold.hold: ') && n.includes('"prepared":true')),
+    JSON.stringify(notes)
+  );
+});
+
+test('signInHold.prepare that throws or stalls leaves the row incomplete naming the hook', async () => {
+  for (const [prepare, why] of [
+    ['throw', /signInHold\.prepare: base down/],
+    ['slow', /signInHold\.prepare: timed out/],
+  ]) {
+    const hooks = prepareHooks({ prepare });
+    const out = await rows({ hooks });
+    const row = heldRow(out);
+    const debug = JSON.stringify({ prepare, row });
+    assert.equal(row.control, 'pass', debug);
+    assert.equal(row.guarded, 'incomplete', debug);
+    assert.equal(row.live, 'incomplete', debug);
+    assert.deepEqual(row.errors, [], debug);
+    assert.match(String(row.why ?? ''), why, debug);
+    assert.match((row.incomplete ?? []).join('; '), why, debug);
+    assert.deepEqual(
+      hooks.log.map(([name]) => name),
+      ['prepare'],
+      debug
+    );
+    const report = out.summary({ guard: 'emulator', sha: 'test' });
+    assert.equal(report.pass, false, debug);
+    assert.deepEqual(report.forged, [], debug);
+  }
+});
+
+test('signInHold.prepare baseline reaches ask only and never decides the verdict', async () => {
+  for (const [baseline, answer, held] of [
+    ['held', 'unheld', false],
+    ['unheld', 'held', true],
+    [{ answer: 'held' }, 'none', false],
+  ]) {
+    const hooks = prepareHooks({ baseline, answer });
+    const out = await rows({ hooks });
+    const row = heldRow(out);
+    const debug = JSON.stringify({ baseline, answer, row });
+    assert.equal(hooks.log[1][0], 'ask', debug);
+    assert.equal(hooks.log[1][1].baseline, baseline, debug);
+    assert.equal(row.observations.guarded.held, held, debug);
+    if (held) assert.equal(row.guarded, 'pass', debug);
+    else assert.equal(row.guarded, 'fail', debug);
+  }
+});
+
+test('signInHold.prepare with a leaking guard still fails', async () => {
+  const hooks = prepareHooks();
+  const out = await rows({ hooks, leakGetTargets: true });
+  const row = heldRow(out);
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.equal(row.observations.guarded.targetsListed, true, JSON.stringify(row));
+  assert.deepEqual(
+    hooks.log.map(([name]) => name),
+    ['prepare', 'ask']
+  );
+});
+
+test('signInHold.prepare that ran is recorded in the row notes', async () => {
+  const out = await rows({ hooks: prepareHooks() });
+  const row = heldRow(out);
+  const notes = row.notes ?? [];
+  assert.ok(
+    notes.some((n) => n.startsWith('guarded sign-in-hold.prepare: ')),
+    JSON.stringify(notes)
+  );
+  assert.ok(
+    notes.some((n) => n.startsWith('guarded sign-in-hold.hold: ') && n.includes('"prepared":true')),
+    JSON.stringify(notes)
+  );
+  assert.equal(
+    notes.some((n) => n.startsWith('control ') && /prepare/.test(n)),
+    false,
+    JSON.stringify(notes)
+  );
+});

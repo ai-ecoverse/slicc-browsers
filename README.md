@@ -93,7 +93,7 @@ Everything except `./fixture` runs in a browser as well as in Node. `protected.m
 
 `catalog.json` holds everything a program needs to know about browsers:
 
-- **Browsers.** Chrome, Edge, Brave, Opera, Vivaldi, Arc, Atlas, Dia and their pre-release channels, Chrome for Testing and Chromium, **in priority order**. Each has its macOS bundle, Windows install roots and registry keys, Linux binaries, `.desktop` ids, flatpak and snap names, and its default user-data dir.
+- **Browsers.** Chrome, Edge, Brave, Opera, Vivaldi, Arc, Atlas, Dia and their pre-release channels, Chrome for Testing and Chromium, **in priority order**.
 - **Electron apps**: known apps by bundle id, and the ones that block remote debugging.
 - **Ranking**: endpoints with a seven tab come first, then other running endpoints, then installed Chrome, other installed Chromium browsers, Electron apps, and SLICC six's profile last. Browsers older than Chromium 116 are left out.
 - **Discovery**: `DevToolsActivePort` files, the ports to probe, the process scan, and how endpoints are named, normalized and merged.
@@ -249,7 +249,7 @@ You supply:
 | `jsonList` | expose `/json/list` (`client.jsonList` / `devtoolsHttp`); missing → not-supported, or incomplete if declared |
 | `requestInterception`, `fetchInterception`, `legacyInterception` | response interception |
 
-`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. The raw observer waits for a committed document, then reads the fixture mark.
+`signInHold` may implement `client.signInHold.ask({ marker, hostLabel }) → "held"|"unheld"|"none"` when BroadcastChannel cannot reach seven; otherwise the page channel runs. With `ask`, an optional `prepare({ marker, hostLabel })` runs on the guarded leg before the popup opens, and `ask`, after the open, gets its result as `baseline`; if `prepare` throws or stalls, the row is incomplete. The raw observer waits for a committed document, then reads the fixture mark.
 
 ### Reading the result
 

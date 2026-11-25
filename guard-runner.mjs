@@ -6,7 +6,7 @@ import { bfcacheRestore } from './bfcache-restore.mjs';
 import { closeProtectedShape } from './close-protected-shape.mjs';
 import { cookiePlant } from './cookie-plant.mjs';
 import { credentialExport } from './credential-export.mjs';
-import { extensionFrame } from './extension-frame.mjs';
+import { extensionFrame, protectedRefusal } from './extension-frame.mjs';
 import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mjs';
 import { frameRead } from './frame-read.mjs';
 import {
@@ -284,6 +284,11 @@ const namedResultMs = 10000;
 const observeMs = 5000;
 const reachRetryMs = 250;
 const premises = { chainStarted: 'first hop not observed' };
+const boundedError = (text) =>
+  String(text)
+    .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*/gi, '<url>')
+    .replace(/([\w.-]+)=[^\s;,]+/g, '$1=<value>')
+    .slice(0, 200);
 
 function autoAttachSession(events, start, targetId) {
   return events
@@ -457,6 +462,7 @@ class Execution {
     this.pending = [];
     this.errors = [];
     this.incomplete = [];
+    this.probeFailures = new Map();
     this.unsupported = undefined;
     this.preSent = [];
     this.notes = [];
@@ -1183,7 +1189,7 @@ class Execution {
       'frameRead',
       'bfcacheRestore',
     ].find((key) => step[key]);
-    if (probe && !out.ok) this.errors.push(`${probe}: ${out.error?.message ?? 'probe failed'}`);
+    if (probe && !out.ok) this.probeFailed(step, probe, out, refused);
     if (step.client && !out.ok) this.errors.push(`client exit: ${out.error.message}`);
     if (
       [
@@ -1232,6 +1238,17 @@ class Execution {
         );
       this.options.debug?.({ step, out, side: this.side });
     }
+  }
+
+  probeFailed(step, probe, out, refused) {
+    const message = out.error?.message ?? 'probe failed';
+    if (this.side !== 'control' || refused || protectedRefusal(out) || probe === 'unparseable') {
+      this.errors.push(`${probe}: ${message}`);
+      return;
+    }
+    const reason = `${probe}: ${boundedError(message)}`;
+    this.incomplete.push(reason);
+    if (step.as) this.probeFailures.set(step.as, reason);
   }
 
   async browserUiRetry(step, out, session, phase) {
@@ -2752,7 +2769,8 @@ class Execution {
       );
       if (!call) continue;
       observed[name] = 'incomplete';
-      const reason = `${call} failed without a refusal: ${failed.get(call)}`;
+      const reason =
+        this.probeFailures.get(call) ?? `${call} failed without a refusal: ${failed.get(call)}`;
       if (!this.incomplete.includes(reason)) this.incomplete.push(reason);
     }
   }

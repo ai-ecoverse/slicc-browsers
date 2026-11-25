@@ -318,12 +318,10 @@ async function detectTransport(client, sessionId, notes) {
     note(notes, 'cookie-plant.transport', { kind: 'legacy' });
     return { kind: 'legacy', fetch: false, legacy: true, fetchEnable: null };
   }
-  note(notes, 'cookie-plant.transport', {
-    kind: null,
-    fetchError: String(fetchEnable.error?.message ?? fetchEnable.error),
-    legacyError: String(legacyEnable.error?.message ?? legacyEnable.error),
-  });
-  return { kind: null, fetch: false, legacy: false, fetchEnable: null };
+  const fetchError = String(fetchEnable.error?.message ?? fetchEnable.error);
+  const legacyError = String(legacyEnable.error?.message ?? legacyEnable.error);
+  note(notes, 'cookie-plant.transport', { kind: null, fetchError, legacyError });
+  return { kind: null, fetch: false, legacy: false, fetchEnable: null, fetchError, legacyError };
 }
 
 async function enableLegacy(client, sessionId) {
@@ -2702,23 +2700,45 @@ function timedClient(client, timing) {
   };
 }
 
+const missCap = 200;
+
+function boundedError(error, tag) {
+  const text = String(error?.message ?? error ?? 'no error')
+    .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*/gi, '<url>')
+    .replace(/([\w.-]+)=[^\s;,]+/g, '$1=<value>');
+  return (tag ? text.split(tag).join('<tag>') : text).slice(0, missCap);
+}
+
+function missedTab(ctx, step, error) {
+  return { ...EMPTY_ATTEMPT, missed: { step, error: boundedError(error, ctx.tag) } };
+}
+
+function missedPath(name, attempt, notes) {
+  if (!attempt?.missed) return attempt;
+  const { missed, ...rest } = attempt;
+  note(notes, 'cookie-plant.attach', { path: name, ...missed });
+  const fields = ['Answered', 'Refused', 'Planted', ...(name === 'deletion' ? ['Cleared'] : [])];
+  return {
+    ...rest,
+    ...(name === 'deletion' ? { cleared: 'incomplete' } : {}),
+    premiseMissed: fields.map(
+      (field) => `${name}${field}: fresh tab ${missed.step}: ${missed.error}`
+    ),
+  };
+}
+
 async function withFreshAttemptTab(ctx, run) {
   const { client, reader, homeUrl, notes, internalSessions, browserContextId } = ctx;
   const page = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
-  if (!page.ok)
-    return attemptRecord(
-      { ok: false, error: { message: `open failed: ${page.error?.message ?? page.error}` } },
-      'incomplete'
-    );
-  if (page.result?.incomplete)
-    return attemptRecord({ ok: false, error: { message: page.result.incomplete } }, 'incomplete');
+  if (!page.ok) return missedTab(ctx, 'open', page.error);
+  if (page.result?.incomplete) return missedTab(ctx, 'open', page.result.incomplete);
   const readerSession = page.result.sessionId;
   const pageTarget = page.result.targetId;
   const timing = { pathStartedAt: Date.now() };
   const attached = await attachClientPage(client, pageTarget, internalSessions);
   if (attached.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return attemptRecord({ ok: false, error: { message: attached.incomplete } }, 'incomplete');
+    return missedTab(ctx, attached.step, attached.error);
   }
   if (attached.refused && refused(attached.refused)) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
@@ -2727,20 +2747,17 @@ async function withFreshAttemptTab(ctx, run) {
   const pageSession = attached.pageSession;
   if (!pageSession) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return attemptRecord(
-      { ok: false, error: { message: 'client has no page session for interception attempts' } },
-      'incomplete'
-    );
+    return missedTab(ctx, 'missing page session', 'Target.attachToTarget gave no sessionId');
   }
   const enabled = await enableClientTransport(client, pageSession, notes);
   if (enabled.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return attemptRecord({ ok: false, error: { message: enabled.incomplete } }, 'incomplete');
+    return missedTab(ctx, 'transport', enabled.error ?? enabled.incomplete);
   }
   const tabContextId = await resolveTabContextId(reader, pageTarget, browserContextId ?? null);
   if (ctx.browserContexts && (tabContextId == null || tabContextId === '')) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return attemptRecord({ ok: false, error: { message: 'unknown context' } }, 'incomplete');
+    return missedTab(ctx, 'context', 'Target.getTargetInfo gave no browserContextId');
   }
   const canary = canarySpec({ tag: ctx.tag, homeUrl });
   const handle = {
@@ -3829,14 +3846,14 @@ function fillMissingAttempts(results, legacyReady) {
   }
 }
 
-async function runOneAttempt(name, run, ceiling, legacyReady, results, ran) {
+async function runOneAttempt(name, run, ceiling, legacyReady, results, ran, notes) {
   if (!legacyReady && (name === 'legacyHeaders' || name === 'legacyRaw')) {
     results[name] = notSupportedAttempt();
     ran.add(name);
     return;
   }
   try {
-    results[name] = await withPathBudget(run(), ceiling, name);
+    results[name] = missedPath(name, await withPathBudget(run(), ceiling, name), notes);
   } catch (error) {
     results[name] = attemptRecord(
       { ok: false, error: { message: String(error?.message ?? error) } },
@@ -3846,7 +3863,13 @@ async function runOneAttempt(name, run, ceiling, legacyReady, results, ran) {
   ran.add(name);
 }
 
-async function runAttempts(groups, budget = 5000, onlyPaths = null, legacyReady = true) {
+async function runAttempts(
+  groups,
+  budget = 5000,
+  onlyPaths = null,
+  legacyReady = true,
+  notes = []
+) {
   const results = {};
   const ran = new Set();
   const ceiling = pathCeiling(budget) + cleanupCeiling(budget) + Math.min(budget, 500);
@@ -3855,7 +3878,7 @@ async function runAttempts(groups, budget = 5000, onlyPaths = null, legacyReady 
   for (const group of groups) {
     for (const [name, run] of Object.entries(group ?? {})) {
       if (allow && !allow.has(name)) continue;
-      await runOneAttempt(name, run, ceiling, legacyReady, results, ran);
+      await runOneAttempt(name, run, ceiling, legacyReady, results, ran, notes);
     }
   }
   fillMissingAttempts(results, legacyReady);
@@ -3872,6 +3895,8 @@ async function attachClientPage(client, pageTarget, internalSessions) {
     if (sessionCut(attached) || refused(attached)) return { refused: attached, pageSession: null };
     return {
       incomplete: `client attach failed: ${attached.error?.message ?? attached.error}`,
+      step: 'Target.attachToTarget',
+      error: attached.error,
     };
   }
   const pageSession = attached.result?.sessionId;
@@ -3887,6 +3912,8 @@ async function attachClientPage(client, pageTarget, internalSessions) {
         if (sessionCut(enabled) || refused(enabled)) return { refused: enabled, pageSession };
         return {
           incomplete: `client ${label} failed: ${enabled.error?.message ?? enabled.error}`,
+          step: label,
+          error: enabled.error,
         };
       }
     }
@@ -3900,6 +3927,7 @@ async function enableClientTransport(client, pageSession, notes) {
     return {
       incomplete:
         'neither Fetch.enable nor Network.setRequestInterception is available on the guarded client',
+      error: `Fetch.enable: ${transport.fetchError}; Network.setRequestInterception: ${transport.legacyError}`,
     };
   let fetchEnable = transport.fetchEnable ?? null;
   if (transport.fetch && refused(fetchEnable))
@@ -4418,7 +4446,8 @@ export async function cookiePlant({
         ],
     budget,
     onlyPaths,
-    legacyReady
+    legacyReady,
+    notes
   );
 
   const evidenceIncomplete =

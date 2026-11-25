@@ -33060,7 +33060,7 @@
         "expected": {
           "admitted": true,
           "workerExists": true,
-          "workerAttached": "either",
+          "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
           "attachRefused": false,
@@ -33078,8 +33078,7 @@
         "workerReachable": false
       },
       "designDependent": [
-        "attachRefused",
-        "workerAttached"
+        "attachRefused"
       ]
     },
     {
@@ -34439,7 +34438,7 @@
         "expected": {
           "admitted": true,
           "workerExists": true,
-          "workerAttached": "either",
+          "workerAttached": true,
           "workerListed": true,
           "attachSession": true,
           "attachRefused": false,
@@ -34457,8 +34456,7 @@
         "workerReachable": false
       },
       "designDependent": [
-        "attachRefused",
-        "workerAttached"
+        "attachRefused"
       ]
     },
     {

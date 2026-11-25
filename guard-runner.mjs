@@ -14,6 +14,7 @@ import {
   browserContextStep,
   browserStorageStep,
   canary,
+  cookieStorageRow,
   debuggerCleanup,
   debuggerPaused,
   expand,
@@ -3287,6 +3288,12 @@ async function executeRow(job, opts, made, set, slot, index, flights) {
       live: 'skip',
       reason: 'not-supported:browserSession',
     };
+  if (
+    declared('browserSession', opts.capabilities) &&
+    !declared('browserStorage', opts.capabilities) &&
+    cookieStorageRow(vector)
+  )
+    return skipRow(base, 'not-supported:browserStorage');
   const observerReason = observerSkip(vector, opts, made, clients);
   if (observerReason) return skipRow(base, observerReason);
   const legs = {};
@@ -3674,10 +3681,11 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown', ca
     : line;
   const caps = capabilities ?? {};
   const storageUndeclared = declared('browserSession', caps) && !declared('browserStorage', caps);
+  const counted = incomplete ? `${skipLine} incomplete ${incomplete}` : skipLine;
   return {
     ...value,
     pass: value.pass && observerSkipped === 0,
-    line: incomplete ? `${skipLine} incomplete ${incomplete}` : skipLine,
+    line: storageUndeclared ? `${counted} browserStorage undeclared` : counted,
     skips,
     observerSkipped,
     incomplete,
@@ -3685,7 +3693,7 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown', ca
       ? {
           browserStorageUndeclared: true,
           browserStorageNote:
-            'browserStorage undeclared: page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps ran on the page session, not the browser session',
+            'browserStorage undeclared: rows with a page-or-browser Storage.getCookies, Storage.setCookies or Storage.clearCookies step skipped as not-supported:browserStorage',
         }
       : {}),
     counts: Object.fromEntries(

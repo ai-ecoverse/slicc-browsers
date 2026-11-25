@@ -102,7 +102,7 @@
   "capabilities": {
     "autoAttach": "Target.setAutoAttach, the children steps and child sessions",
     "browserSession": "session-less Target.* and Browser.* calls on the browser session; session-less Storage.* there is browserStorage",
-    "browserStorage": "session-less Storage.* calls on the browser session, with or without browserContextId; needs browserSession; undeclared, page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps run on the row's page session, and a row that must send one on the browser session is skipped",
+    "browserStorage": "session-less Storage.* calls on the browser session, with or without browserContextId; needs browserSession; a run that declares browserSession without browserStorage skips every row with a page-or-browser Storage.getCookies, Storage.setCookies or Storage.clearCookies step as not-supported:browserStorage; a run that declares neither sends those steps on the row's page session",
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
     "extensionFrame": "a browser hosting the harness extension, whose web-accessible frame.html an ordinary page embeds as an out-of-process chrome-extension: frame, like a password manager's autofill list",

@@ -2287,8 +2287,9 @@ class Execution {
       const hint = skips.find(
         (entry) => typeof entry === 'string' && (entry === name || entry.startsWith(`${name}:`))
       );
-      if (hint && !this.incomplete.some((reason) => reason.startsWith(`${name}:`)))
-        this.incomplete.push(hint.includes(': ') ? hint : `${name}: ${hint}`);
+      const reason = incompleteReason(name, hint, want);
+      if (reason && !this.incomplete.some((entry) => entry.startsWith(`${name}:`)))
+        this.incomplete.push(reason);
       return 'incomplete';
     }
     if (this.unmeasured(check)) return 'incomplete';
@@ -2960,6 +2961,11 @@ class Execution {
     this.attachSettings.clear();
   }
 }
+
+const incompleteReason = (name, hint, want) => {
+  if (hint) return hint.includes(': ') ? hint : `${name}: ${hint}`;
+  return want === undefined ? undefined : `${name}: incomplete, no reason recorded`;
+};
 
 const usesPre = (value) =>
   Boolean(value && typeof value === 'object') &&

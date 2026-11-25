@@ -779,7 +779,10 @@ test('auto-attach guards skip the explicit rows as not-supported:explicitAttach,
       const report = execution.summary({ guard: 'auto' });
       assert.deepEqual(report.forged, []);
       assert.equal(report.pass, true);
-      assert.match(report.line, / skips 3 \(not-supported:explicitAttach=3\)$/);
+      assert.match(
+        report.line,
+        / skips 3 \(not-supported:explicitAttach=3\) browserStorage undeclared$/
+      );
     }
   } finally {
     await fixture.close();

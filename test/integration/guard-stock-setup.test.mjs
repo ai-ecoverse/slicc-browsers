@@ -149,7 +149,7 @@ test('a guard that declares neither capability skips every row, never passes it'
     assert.equal(summary.counts.guarded.skip, ids.length);
     assert.match(
       summary.line,
-      / skips 7 \(not-supported:stockSetup=5, not-supported:syntheticAutoAttach=2\)$/
+      / skips 7 \(not-supported:stockSetup=5, not-supported:syntheticAutoAttach=2\) browserStorage undeclared$/
     );
   } finally {
     await fixture.close();

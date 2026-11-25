@@ -113,7 +113,7 @@ The process scan finds browsers that something else started with `--remote-debug
 
 ### SLICC six's profiles
 
-SLICC six, the previous generation, launches Chrome in a profile of its own. Discovery lists such an endpoint, marks it `six: true` and ranks it last, but **never picks it by itself**. Only an explicit request, such as `slicc --profile six`, uses it. The roots per OS are in `catalog.json`'s `profiles.six`.
+SLICC six, the previous generation, launches Chrome in a profile of its own. Discovery lists such an endpoint, marks it `six: true` and ranks it last, but **never picks it by itself**. Only an explicit request uses it. The roots per OS are in `catalog.json`'s `profiles.six`.
 
 ## The corpus
 
@@ -234,7 +234,7 @@ You supply:
 | `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
 | `errorFrameClass` | tell whether a failed (error) iframe was loading a protected URL, without being given the URL |
 | `browserSession` | send `Target.*` and `Browser.*` on the browser session |
-| `browserStorage` | send `Storage.*` there too (needs `browserSession`) |
+| `browserStorage` | send `Storage.*` there too (needs `browserSession`); `browserSession` without it skips the rows with cookie `Storage.*` steps |
 | `browserContexts` | create isolated browser contexts |
 | `discovery` | report target create/change without a session |
 | `chromeUrlsAttach` | attach to `chrome://` pages (DevTools-port CDP; not `chrome.debugger`) |

@@ -158,12 +158,12 @@ function storageBrowser({
   return { client: make(true), unguarded: make(false), sent };
 }
 
-async function execute(ids, browser, capabilities, runner = run) {
+async function execute(ids, browser, capabilities, runner = run, variants = { prompt: 0 }) {
   const fixture = await fixtureServer();
   try {
     const origin = (host) => `http://${host}:${fixture.port}`;
     return await runner(
-      { ...set, vectors: set.vectors.filter((v) => ids.includes(v.id)), variants: { prompt: 0 } },
+      { ...set, vectors: set.vectors.filter((v) => ids.includes(v.id)), variants },
       {
         client: browser.client,
         unguarded: browser.unguarded,
@@ -221,35 +221,6 @@ function storageSessions(browser, id) {
   return browser.sent.filter((call) => call.method === method).map((call) => call.sessionId);
 }
 
-test('a transport that declares browserSession alone runs the C6 storage rows on the page session', async () => {
-  for (const id of storageRows) {
-    const browser = storageBrowser();
-    const results = await rows([id], browser, { browserSession: true });
-    assert.deepEqual(
-      results.map((row) => row.target),
-      targets
-    );
-    for (const row of results) {
-      assert.deepEqual(statuses(row), ['pass', 'pass', 'pass'], JSON.stringify(row));
-      const call = storageCalls[id];
-      assert.ok(
-        row.notes.includes(`control ${call}: ${storageMethod(id)} ran on the page session`),
-        JSON.stringify(row.notes)
-      );
-      assert.ok(
-        row.notes.some(
-          (note) =>
-            note.startsWith(`guarded ${call}: `) && note.endsWith(' ran on the page session')
-        ),
-        JSON.stringify(row.notes)
-      );
-    }
-    const used = storageSessions(browser, id);
-    assert.equal(used.length, 8);
-    assert.ok(used.every((session) => session !== undefined));
-  }
-});
-
 test('a transport that declares browserStorage runs the C6 storage rows on the browser session', async () => {
   for (const id of storageRows) {
     const browser = storageBrowser({ browserStorage: true });
@@ -267,21 +238,6 @@ test('a transport that declares browserStorage runs the C6 storage rows on the b
     const used = storageSessions(browser, id);
     assert.equal(used.length, 8);
     assert.ok(used.every((session) => session === undefined));
-  }
-});
-
-const routedOnBrowserSession = swap(
-  "supported(['browserStorage'], this.options.capabilities) &&",
-  "supported(['browserSession'], this.options.capabilities) &&"
-);
-
-test('mutant: routing the C6 storage rows on browserSession sends them to a browser session without Storage.*', async () => {
-  const mod = await mutant('guard-runner.mjs', routedOnBrowserSession);
-  for (const id of storageRows) {
-    const browser = storageBrowser();
-    const results = await rows([id], browser, { browserSession: true }, mod.run);
-    for (const row of results) assert.notEqual(row.control, 'pass', JSON.stringify(row));
-    assert.ok(storageSessions(browser, id).every((session) => session === undefined));
   }
 });
 
@@ -311,9 +267,7 @@ const controlError = (method) => (sent, leg) =>
 test('a control transport error on a C6 storage call is incomplete with the error text, not a failure', async () => {
   for (const id of storageRows) {
     const method = storageMethod(id);
-    const results = await rows([id], storageBrowser({ fail: controlError(method) }), {
-      browserSession: true,
-    });
+    const results = await rows([id], storageBrowser({ fail: controlError(method) }), {});
     for (const row of results) {
       assert.deepEqual(statuses(row), ['incomplete', 'pass', 'pass'], JSON.stringify(row));
       assert.deepEqual(row.errors, []);
@@ -328,7 +282,7 @@ test('a control transport error on a Network cookie read of a C6 row is incomple
   const results = await rows(
     ['C6.read-cookies'],
     storageBrowser({ fail: controlError('Network.getAllCookies') }),
-    { browserSession: true }
+    {}
   );
   for (const row of results) {
     assert.deepEqual(statuses(row), ['incomplete', 'pass', 'pass'], JSON.stringify(row));
@@ -343,7 +297,7 @@ async function failsWithoutFailedCall(runner) {
     const results = await rows(
       [id],
       storageBrowser({ empty: emptied('Storage.getCookies') }),
-      { browserSession: true },
+      {},
       runner
     );
     assert.equal(results.length, 4);
@@ -378,19 +332,22 @@ for (const [name, change] of Object.entries(withoutFailedCall))
   });
 
 const undeclaredNote =
-  'browserStorage undeclared: page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps ran on the page session, not the browser session';
+  'browserStorage undeclared: rows with a page-or-browser Storage.getCookies, Storage.setCookies or Storage.clearCookies step skipped as not-supported:browserStorage';
+
+const head = `GUARD-PASS reference@test (vectors @ai-ecoverse/slicc-browsers@${set.setVersion})`;
+const undeclaredTail = ' skips 4 (not-supported:browserStorage=4) browserStorage undeclared';
 
 const summaryCases = [
-  [{ browserSession: true }, false, true],
-  [['browserSession', 'browserContexts'], false, true],
-  [{ browserSession: true, browserStorage: true }, true, false],
-  [['browserSession', 'browserStorage'], true, false],
-  [{}, false, false],
-  [['browserContexts'], false, false],
+  [{ browserSession: true }, false, true, undeclaredTail],
+  [['browserSession', 'browserContexts'], false, true, undeclaredTail],
+  [{ browserSession: true, browserStorage: true }, true, false, ''],
+  [['browserSession', 'browserStorage'], true, false, ''],
+  [{}, false, false, ''],
+  [['browserContexts'], false, false, ' skips 4 (not-supported:browserSession=4)'],
 ];
 
 async function namesUndeclared(runner) {
-  for (const [capabilities, browserStorage, named] of summaryCases) {
+  for (const [capabilities, browserStorage, named, tail] of summaryCases) {
     const execution = await execute(
       ['C6.storage-getCookies'],
       storageBrowser({ browserStorage }),
@@ -400,6 +357,7 @@ async function namesUndeclared(runner) {
     const value = execution.summary({ guard: 'reference', sha: 'test' });
     const label = JSON.stringify(capabilities);
     assert.equal(value.pass, true, label);
+    assert.equal(value.line, `${head}${tail}`, label);
     if (named) {
       assert.equal(value.browserStorageUndeclared, true, label);
       assert.equal(value.browserStorageNote, undeclaredNote, label);
@@ -410,7 +368,7 @@ async function namesUndeclared(runner) {
   }
 }
 
-test('the summary names browserStorage undeclared only when browserSession is declared without it', async () => {
+test('the summary and its line name browserStorage undeclared only when browserSession is declared without it', async () => {
   await namesUndeclared(run);
 });
 
@@ -422,6 +380,15 @@ for (const [name, to] of [
 ])
   test(`mutant: a summary that ${name} browserStorage undeclared fails`, async () => {
     const mod = await mutant('guard-runner.mjs', swap(undeclaredAnchor, to));
+    await assert.rejects(namesUndeclared(mod.run), assert.AssertionError);
+  });
+
+for (const [name, to] of [
+  ['always ends', 'line: true ?'],
+  ['never ends', 'line: false ?'],
+])
+  test(`mutant: a summary line that ${name} with browserStorage undeclared fails`, async () => {
+    const mod = await mutant('guard-runner.mjs', swap('line: storageUndeclared ?', to));
     await assert.rejects(namesUndeclared(mod.run), assert.AssertionError);
   });
 
@@ -477,7 +444,7 @@ test('mutant: without the control error rule a control transport error fails the
   const results = await rows(
     ['C6.read-cookies'],
     storageBrowser({ fail: controlError('Storage.getCookies') }),
-    { browserSession: true },
+    {},
     mod.run
   );
   for (const row of results) assert.equal(row.control, 'fail', JSON.stringify(row));
@@ -568,9 +535,10 @@ const forgedCases = [
   [
     byId('C6.read-cookies'),
     'browserStorage',
-    ['browserSession'],
+    ['browserContexts'],
     'on a row that does not need browserStorage',
   ],
+  [byId('C6.write-cookies'), 'browserStorage', {}, 'on a row that does not need browserStorage'],
   [byId('C6.read-cookies'), 'browserSession', [], 'on a row that does not need browserSession'],
   [
     byId('C6.clear-cookies'),
@@ -631,6 +599,245 @@ test('mutant: a driver that ignores a declared browserSession or browserStorage 
     set.vectors
   );
   assert.deepEqual(value.forged, []);
+});
+
+const cookieRows = [...storageRows, 'C6.clear-cookies'];
+const undeclared = 'not-supported:browserStorage';
+const cliShapes = [
+  { browserSession: true, browserContexts: true },
+  ['browserSession', 'browserContexts'],
+];
+const bothShapes = [
+  { browserSession: true, browserContexts: true, browserStorage: true },
+  ['browserSession', 'browserContexts', 'browserStorage'],
+];
+const cookieCalls = (browser) =>
+  browser.sent.filter((call) =>
+    /^Storage\.(getCookies|setCookies|clearCookies)$/.test(call.method)
+  );
+const gate = [
+  '  if (\n',
+  "    declared('browserSession', opts.capabilities) &&\n",
+  "    !declared('browserStorage', opts.capabilities) &&\n",
+  '    cookieStorageRow(vector)\n',
+  '  )\n',
+  "    return skipRow(base, 'not-supported:browserStorage');\n",
+].join('');
+
+async function skipsUndeclared(runner) {
+  for (const capabilities of cliShapes) {
+    const label = JSON.stringify(capabilities);
+    const browser = storageBrowser();
+    const execution = await execute(cookieRows, browser, capabilities, runner, set.variants);
+    for (const variant of Object.keys(set.variants)) {
+      const results = execution.results.filter((row) => row.variant === variant);
+      assert.equal(results.length, 16, label);
+      for (const row of results) {
+        assert.deepEqual(statuses(row), ['skip', 'skip', 'skip'], JSON.stringify(row));
+        assert.equal(row.reason, undeclared, JSON.stringify(row));
+      }
+    }
+    assert.deepEqual(browser.sent, [], label);
+    const value = execution.summary({ guard: 'reference', sha: 'test' });
+    assert.deepEqual(value.forged, [], label);
+    assert.equal(value.pass, true, label);
+    assert.deepEqual(value.skips, { [undeclared]: 32 }, label);
+  }
+  const browser = storageBrowser();
+  const alone = await rows(cookieRows, browser, { browserSession: true }, runner);
+  assert.equal(alone.length, 16);
+  for (const row of alone)
+    assert.equal(
+      row.reason,
+      row.id === 'C6.clear-cookies' ? 'not-supported:browserContexts' : undeclared,
+      JSON.stringify(row)
+    );
+  assert.deepEqual(browser.sent, []);
+}
+
+test('browserSession without browserStorage skips the 16 C6 cookie rows per variant as not-supported:browserStorage', async () => {
+  await skipsUndeclared(run);
+});
+
+test('mutant: without the gate a browserSession-only run sends the C6 cookie rows to the page session', async () => {
+  const mod = await mutant('guard-runner.mjs', swap(gate, ''));
+  await assert.rejects(skipsUndeclared(mod.run), assert.AssertionError);
+});
+
+async function runsDeclared(runner) {
+  for (const capabilities of bothShapes) {
+    const label = JSON.stringify(capabilities);
+    const browser = storageBrowser({ browserStorage: true });
+    const results = await rows(cookieRows, browser, capabilities, runner);
+    assert.equal(results.length, 16, label);
+    for (const row of results) {
+      assert.equal(row.reason, undefined, JSON.stringify(row));
+      assert.deepEqual(statuses(row), ['pass', 'pass', 'pass'], JSON.stringify(row));
+    }
+    const calls = cookieCalls(browser);
+    assert.equal(calls.length, 32, label);
+    assert.ok(
+      calls.every((call) => call.sessionId === undefined),
+      label
+    );
+  }
+}
+
+test('browserSession with browserStorage still runs the 16 C6 cookie rows on the browser session', async () => {
+  await runsDeclared(run);
+});
+
+test('mutant: a gate that ignores browserStorage skips the C6 cookie rows of a run that declares both', async () => {
+  const mod = await mutant(
+    'guard-runner.mjs',
+    swap(
+      "    !declared('browserStorage', opts.capabilities) &&\n    cookieStorageRow(vector)",
+      '    cookieStorageRow(vector)'
+    )
+  );
+  await assert.rejects(runsDeclared(mod.run), assert.AssertionError);
+});
+
+async function keepsNeither(runner) {
+  const browser = storageBrowser();
+  const results = await rows(cookieRows, browser, {}, runner);
+  assert.equal(results.length, 16);
+  for (const row of results) {
+    if (row.id === 'C6.clear-cookies') {
+      assert.deepEqual(statuses(row), ['skip', 'skip', 'skip'], JSON.stringify(row));
+      assert.equal(row.reason, 'not-supported:browserSession', JSON.stringify(row));
+      continue;
+    }
+    assert.deepEqual(statuses(row), ['pass', 'pass', 'pass'], JSON.stringify(row));
+    const call = storageCalls[row.id];
+    assert.ok(
+      row.notes.includes(`control ${call}: ${storageMethod(row.id)} ran on the page session`),
+      JSON.stringify(row.notes)
+    );
+  }
+  const calls = cookieCalls(browser);
+  assert.equal(calls.length, 24);
+  assert.ok(calls.every((call) => call.sessionId !== undefined));
+  const extension = storageBrowser();
+  for (const row of await rows(cookieRows, extension, ['browserContexts'], runner)) {
+    assert.deepEqual(statuses(row), ['skip', 'skip', 'skip'], JSON.stringify(row));
+    assert.equal(row.reason, 'not-supported:browserSession', JSON.stringify(row));
+  }
+  assert.deepEqual(extension.sent, []);
+}
+
+test('a run that declares neither browserSession nor browserStorage keeps the C6 cookie rows as before', async () => {
+  await keepsNeither(run);
+});
+
+test('mutant: a gate applied without browserSession skips the page-session C6 cookie rows', async () => {
+  const mod = await mutant(
+    'guard-runner.mjs',
+    swap(
+      "    declared('browserSession', opts.capabilities) &&\n    !declared('browserStorage'",
+      "    !declared('browserStorage'"
+    )
+  );
+  await assert.rejects(keepsNeither(mod.run), assert.AssertionError);
+});
+
+function genuineUndeclared(summarize) {
+  for (const capabilities of [...cliShapes, { browserSession: true }])
+    for (const id of storageRows) {
+      const value = report(byId(id), undeclared, capabilities, summarize);
+      const label = `${id} ${JSON.stringify(capabilities)}`;
+      assert.deepEqual(value.forged, [], label);
+      assert.equal(value.pass, true, label);
+    }
+}
+
+test('a not-supported:browserStorage skip of a C6 cookie row under browserSession alone is genuine', () => {
+  genuineUndeclared(driverSummary);
+});
+
+test('mutant: a driver that does not know the browserStorage reason forges the genuine skip', async () => {
+  const mod = await mutant(
+    'guard-driver.mjs',
+    swap("    'browserSession',\n    'browserStorage',\n", "    'browserSession',\n")
+  );
+  assert.throws(() => genuineUndeclared(mod.summary), assert.AssertionError);
+});
+
+test('mutant: a driver that never lets those rows need browserStorage forges the genuine skip', async () => {
+  const mod = await mutant(
+    'guard-driver.mjs',
+    swap(
+      " ||\n  (cap === 'browserStorage' && declared.includes('browserSession') && cookieStorageRow(vector))",
+      ''
+    )
+  );
+  assert.throws(() => genuineUndeclared(mod.summary), assert.AssertionError);
+});
+
+function forgesDeclared(summarize) {
+  for (const capabilities of bothShapes)
+    for (const id of cookieRows) {
+      const vector = byId(id);
+      const value = report(vector, undeclared, capabilities, summarize, set.vectors);
+      const label = `${id} ${JSON.stringify(capabilities)}`;
+      assert.equal(value.pass, false, label);
+      assert.equal(
+        value.forged.length,
+        vector.targets.length * Object.keys(set.variants).length,
+        label
+      );
+      assert.ok(
+        value.forged.every(
+          (row) =>
+            row.why ===
+            'skip with not-supported:browserStorage while the run declared browserStorage'
+        ),
+        JSON.stringify(value.forged)
+      );
+    }
+}
+
+test('a not-supported:browserStorage skip of a C6 cookie row is forged when browserStorage is declared', () => {
+  forgesDeclared(driverSummary);
+});
+
+test('mutant: a driver without the declared-browserStorage rule accepts that skip', async () => {
+  const mod = await mutant(
+    'guard-driver.mjs',
+    swap(
+      "['extensionFrame', 'explicitAttach', 'browserSession', 'browserStorage']",
+      "['extensionFrame', 'explicitAttach', 'browserSession']"
+    )
+  );
+  assert.throws(() => forgesDeclared(mod.summary), assert.AssertionError);
+});
+
+const readme = await readFile(join(root, 'README.md'), 'utf8');
+const readmeRow = (text) =>
+  text.split('\n').find((line) => line.startsWith('| `browserStorage` |'));
+
+function statesSkip(capability, row) {
+  assert.match(
+    capability,
+    /; a run that declares browserSession without browserStorage skips every row with a page-or-browser Storage\.getCookies, Storage\.setCookies or Storage\.clearCookies step as not-supported:browserStorage;/
+  );
+  assert.match(
+    row,
+    /; `browserSession` without it skips the rows with cookie `Storage\.\*` steps \|$/
+  );
+}
+
+test('the browserStorage capability text and README row say browserSession without it skips those rows', () => {
+  statesSkip(set.capabilities.browserStorage, readmeRow(readme));
+  assert.ok([...readme].length <= 20000);
+});
+
+test('mutant: the capability text or README row that ran those rows on the page session fails', () => {
+  const oldCapability =
+    "session-less Storage.* calls on the browser session, with or without browserContextId; needs browserSession; undeclared, page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps run on the row's page session, and a row that must send one on the browser session is skipped";
+  const oldRow = '| `browserStorage` | send `Storage.*` there too (needs `browserSession`) |';
+  assert.throws(() => statesSkip(oldCapability, readmeRow(readme)), assert.AssertionError);
+  assert.throws(() => statesSkip(set.capabilities.browserStorage, oldRow), assert.AssertionError);
 });
 
 const skippedDirs = new Set([

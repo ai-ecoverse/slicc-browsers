@@ -78,6 +78,9 @@ const cookieStorageStep = (step) =>
 export const browserStorageStep = (step, capabilities) =>
   cookieStorageStep(step) && has(capabilities, 'browserStorage');
 
+export const cookieStorageRow = (vector) =>
+  flatten([...(vector?.setup ?? []), ...(vector?.trigger ?? [])]).some(cookieStorageStep);
+
 export const browserContextStep = (vector, capabilities) =>
   flatten([...(vector?.setup ?? []), ...(vector?.trigger ?? [])]).some(
     (step) =>
@@ -401,7 +404,8 @@ const autoAttachCaps = ['autoAttach', 'stockSetup', 'syntheticAutoAttach'];
 
 const needsBrowser = (vector, cap, declared) =>
   (vector?.requires ?? []).includes(cap) ||
-  (cap === 'browserSession' && browserContextStep(vector, declared));
+  (cap === 'browserSession' && browserContextStep(vector, declared)) ||
+  (cap === 'browserStorage' && declared.includes('browserSession') && cookieStorageRow(vector));
 
 function skipWhy(vector, row, known, guard, declared) {
   const { reason } = row;
@@ -445,6 +449,7 @@ function forgeries(set, results, guard, capabilitiesList) {
   const declared = declaredCapabilities(capabilitiesList);
   const known = new Set([
     'browserSession',
+    'browserStorage',
     'unguarded-observer',
     'trustedEmulation',
     ...capabilities(set.vectors).filter((c) => typeof c === 'string' && c !== ''),

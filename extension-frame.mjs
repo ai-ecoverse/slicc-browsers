@@ -190,15 +190,49 @@ async function click(client, reader, session, observer, { side, missing, name = 
   return { out: pressed.out, ok: 'incomplete' };
 }
 
-async function key(client, reader, session, observer, beforeSend, requireTyped = true) {
-  await observe(
-    reader,
-    observer,
-    'const i = document.getElementById("typed"); i.value = ""; i.focus(); true'
-  );
-  if (beforeSend) await beforeSend();
-  const out = await outcome(client.send('Input.insertText', { text: 'k' }, session));
-  const typed = await observe(reader, observer, 'document.getElementById("typed").value === "k"');
+const KEY_TRIES = 3;
+const KEY_STEP_MS = 100;
+const KEY_ERROR_CAP = 200;
+const KEY_FOCUS = 'const i = document.getElementById("typed"); i.value = ""; i.focus(); true';
+const KEY_READ = 'document.getElementById("typed").value === "k"';
+const keyError = (out) =>
+  (refusal(out) || 'transport error')
+    .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*/gi, '<url>')
+    .slice(0, KEY_ERROR_CAP);
+
+async function key(
+  client,
+  reader,
+  session,
+  observer,
+  { beforeSend, requireTyped = true, side, missing, notes } = {}
+) {
+  const measured = side === 'control' && Array.isArray(missing);
+  const retry = measured && requireTyped;
+  const started = Date.now();
+  let tries = 0;
+  let out;
+  let typed;
+  do {
+    if (tries) await pause(KEY_STEP_MS);
+    tries += 1;
+    await observe(reader, observer, KEY_FOCUS);
+    if (beforeSend) await beforeSend();
+    out = await outcome(client.send('Input.insertText', { text: 'k' }, session));
+    typed = await observe(reader, observer, KEY_READ);
+  } while (retry && out.ok && typed !== true && tries < KEY_TRIES);
+  if (tries > 1)
+    notes?.push(
+      `key: ${typed === true ? 'delivered' : 'not delivered'} after ${tries} tries in ${Date.now() - started}ms`
+    );
+  if (measured && !out.ok && !protectedRefusal(out)) {
+    missing.push(`key: ${keyError(out)}`);
+    return { out, ok: 'incomplete' };
+  }
+  if (retry && out.ok && typed !== true) {
+    missing.push('key: text was not delivered');
+    return { out, ok: 'incomplete' };
+  }
   return { out, ok: out.ok && (!requireTyped || typed === true) };
 }
 
@@ -896,7 +930,18 @@ async function holdFocus(reader, frame) {
   }
 }
 
-async function driveInput(client, reader, page, observer, inputList, mode, frame, missing, side) {
+async function driveInput(
+  client,
+  reader,
+  page,
+  observer,
+  inputList,
+  mode,
+  frame,
+  missing,
+  side,
+  notes
+) {
   const visible = await observe(
     reader,
     observer,
@@ -962,7 +1007,13 @@ async function driveInput(client, reader, page, observer, inputList, mode, frame
   await refocus();
   const pressed = await click(client, reader, page, observer, { side, missing });
   await refocus();
-  const typed = await key(client, reader, page, observer, refocus, mode !== 'focused');
+  const typed = await key(client, reader, page, observer, {
+    beforeSend: refocus,
+    requireTyped: mode !== 'focused',
+    side,
+    missing,
+    notes,
+  });
   await refocus();
   const inputs = await inputMethods(
     client,
@@ -1672,7 +1723,8 @@ export async function extensionFrame({
       mode,
       frame,
       missing,
-      side
+      side,
+      notes
     );
     const captures = await driveCaptures(client, page, missing);
     const result = frameObservations({

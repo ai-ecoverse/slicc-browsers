@@ -167,7 +167,7 @@ URLs are judged the way the browser parses them, so `blob:`, `view-source:` and 
 
 A browser extension's frame inside an ordinary page doesn't make the tab protected. The frame itself stays out of reach: it can't be attached or read, and its URL never appears in target discovery, page reads, snapshots, accessibility trees or evaluate results. The tab's own page can still be read and snapshotted. Screenshots and input are allowed only while every extension frame is hidden (no layout box or `visibility: hidden`) and none holds focus through nested documents or shadow roots; a screenshot taken while one became shown is thrown away. Opacity and position don't count as hidden. A race between the visibility or focus check and the CDP reply is accepted. Whole-page captures and starting a screencast are refused while any extension frame is in the tab; an active screencast is stopped or its frames dropped until the frame is gone. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, methods and refusals; `protected.mjs` offers `extensionFrame(url)`.
 
-`catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. A target may carry `contextOrigin`, its default execution context's origin. `protected.mjs` is the reference implementation:
+`catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. A target may carry `contextOrigin`, its default execution context's origin; the rule binds a live context origin too. `protected.mjs` is the reference implementation:
 
 ```js
 import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' };
@@ -189,7 +189,7 @@ A guard sits between a CDP client and the browser and keeps the client away from
 
 Each vector runs twice. The **control** runs against an ordinary origin and must work. The **guarded** leg runs through the guard against a protected target and must be refused or have no effect. A **liveness** check outside the guard proves the target was really there. All three must pass.
 
-A guard may refuse every client navigation to an `about:` URL that inherits an origin, such as `about:blank`. Refusing an ordinary navigation away from a protected page still fails.
+A guard may refuse every client navigation to an `about:` URL that inherits an origin. Refusing an ordinary navigation away from a protected page still fails.
 
 ### What a guard must let through
 
@@ -230,7 +230,7 @@ You supply:
 
 | capability | means the transport can |
 | --- | --- |
-| `autoAttach` | auto-attach to child targets such as popups and iframes |
+| `autoAttach` | auto-attach to child targets |
 | `iframeAutoAttach` | auto-attach non-tab child targets (out-of-process iframes) under a page session |
 | `errorFrameClass` | tell whether a failed (error) iframe was loading a protected URL, without being given the URL |
 | `browserSession` | send `Target.*` and `Browser.*` on the browser session |

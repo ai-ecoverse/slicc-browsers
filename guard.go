@@ -41,6 +41,7 @@ const (
 
 	GuardCapAutoAttach          = "autoAttach"
 	GuardCapBrowserSession      = "browserSession"
+	GuardCapBrowserStorage      = "browserStorage"
 	GuardCapBrowserContexts     = "browserContexts"
 	GuardCapChromeURLsAttach    = "chromeUrlsAttach"
 	GuardCapExtensionWorld      = "extensionWorld"

@@ -7,7 +7,12 @@ import { launch, origins } from './cdp-client.mjs';
 import { emulatedGuard } from './guard-emulator.mjs';
 
 const data = JSON.parse(await readFile(new URL('../../guard-vectors.json', import.meta.url)));
-const capabilities = { autoAttach: true, browserSession: true, browserContexts: true };
+const capabilities = {
+  autoAttach: true,
+  browserSession: true,
+  browserStorage: true,
+  browserContexts: true,
+};
 const { protectedOrigins } = JSON.parse(
   await readFile(new URL('../../catalog.json', import.meta.url))
 );

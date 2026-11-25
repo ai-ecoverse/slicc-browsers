@@ -32,6 +32,7 @@ export const partitions = {
 export const capabilities = {
   autoAttach: true,
   browserSession: true,
+  browserStorage: true,
   browserContexts: true,
   chromeUrlsAttach: true,
   extensionWorld: true,

@@ -425,6 +425,13 @@ for (const v of guard.vectors ?? []) {
     )
       want.push('autoAttach');
     if (st.session === 'browser' && st.via !== 'unguarded') want.push('browserSession');
+    if (
+      /^Storage\./.test(st.cdp ?? '') &&
+      st.via !== 'unguarded' &&
+      (st.session === 'browser' ||
+        (st.session === 'page-or-browser' && st.params?.browserContextId !== undefined))
+    )
+      want.push('browserStorage');
     if (st.cdp === 'Target.createBrowserContext' || st.cdp === 'Target.disposeBrowserContext')
       want.push('browserContexts');
     if (st.client === 'exit') needs.add('clientExit');
@@ -447,6 +454,13 @@ for (const v of guard.vectors ?? []) {
     for (const c of st.requires ?? []) needs.add(c);
   }
   const requires = new Set(v.requires ?? []);
+  for (const list of [
+    v.requires,
+    ...flat(top).map((st) => st.requires),
+    ...Object.values(v.observe ?? {}).map((o) => o.requires),
+  ])
+    if ((list ?? []).includes('browserStorage') && !(list ?? []).includes('browserSession'))
+      gv(`${v.id}: browserStorage needs browserSession`);
   if (
     [...requires].some((c) => !needs.has(c) && !optional.has(c)) ||
     [...needs].some((c) => !requires.has(c))

@@ -66,6 +66,25 @@ function named(list, n = { i: 0 }) {
 
 const flatten = (list) => list.flatMap((s) => [s, ...flatten(s.children ?? [])]);
 
+const has = (capabilities, capability) =>
+  Array.isArray(capabilities)
+    ? capabilities.includes(capability)
+    : capabilities?.[capability] === true;
+
+const cookieStorageStep = (step) =>
+  step.session === 'page-or-browser' &&
+  /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp ?? '');
+
+export const browserStorageStep = (step, capabilities) =>
+  cookieStorageStep(step) && has(capabilities, 'browserStorage');
+
+export const browserContextStep = (vector, capabilities) =>
+  flatten([...(vector?.setup ?? []), ...(vector?.trigger ?? [])]).some(
+    (step) =>
+      step.params?.browserContextId !== undefined ||
+      (cookieStorageStep(step) && has(capabilities, 'browserContexts'))
+  );
+
 export const refusals = (vector) =>
   flatten(named([...(vector.setup ?? []), ...(vector.trigger ?? [])]))
     .filter((s) => s.refusable)
@@ -380,6 +399,10 @@ function declaredCapabilities(value) {
 
 const autoAttachCaps = ['autoAttach', 'stockSetup', 'syntheticAutoAttach'];
 
+const needsBrowser = (vector, cap, declared) =>
+  (vector?.requires ?? []).includes(cap) ||
+  (cap === 'browserSession' && browserContextStep(vector, declared));
+
 function skipWhy(vector, row, known, guard, declared) {
   const { reason } = row;
   if (typeof reason !== 'string' || reason === '') return 'skip without a reason';
@@ -391,8 +414,13 @@ function skipWhy(vector, row, known, guard, declared) {
       : `skip with a reason the runner never gives: ${reason}`;
   if (reason.startsWith('not-supported:')) {
     const cap = reason.slice('not-supported:'.length);
-    if (['extensionFrame', 'explicitAttach'].includes(cap) && declared.includes(cap))
+    if (
+      ['extensionFrame', 'explicitAttach', 'browserSession', 'browserStorage'].includes(cap) &&
+      declared.includes(cap)
+    )
       return `skip with not-supported:${cap} while the run declared ${cap}`;
+    if (['browserSession', 'browserStorage'].includes(cap) && !needsBrowser(vector, cap, declared))
+      return `skip with not-supported:${cap} on a row that does not need ${cap}`;
     if (autoAttachCaps.includes(cap) && (vector?.requires ?? []).includes('explicitAttach'))
       return `skip with not-supported:${cap} on an explicitAttach row`;
     if (known.has(cap)) return null;

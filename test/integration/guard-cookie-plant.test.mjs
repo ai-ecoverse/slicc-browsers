@@ -146,6 +146,7 @@ test('requestInterception capability is declared and the row requires it', () =>
     'deletionAnswered',
     'deletionCleared',
     'deletionRefused',
+    'legacySetupRefused',
     'ordinaryAnswered',
     'ordinaryPlanted',
   ]);

@@ -1,13 +1,13 @@
 # slicc-browsers
 
-The browser knowledge SLICC's tools share. SLICC drives Chromium over the Chrome DevTools Protocol (CDP), and several programs in different languages must agree on facts:
+SLICC's Chromium tools share a catalog and conformance tests for:
 
 - which browsers exist, where they are installed, and how to launch them for SLICC;
 - how to find a browser that is already running with a debugging port, and which one to pick;
 - which origins browser control must never touch, starting with seven and the vault;
 - how to prove a CDP guard keeps clients away from them.
 
-One catalog, four vector sets and schemas, shared as a Go module, Rust crate and npm package at one version.
+One version for Go, Rust and npm. See the [signed CDP lease design, wire contract and fixtures](docs/leases/wire.html).
 
 | who | uses it for |
 | --- | --- |

@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Signed CDP leases · One tab, one hour</title>
+    <style>
+    :root {
+      --ink: var(--foreground, light-dark(#182e2c, #e5eeeb));
+      --dim: var(--muted-foreground, light-dark(#4b615f, #b3c6c1));
+      --line: var(--border, light-dark(#c4d3cf, #455e59));
+      --box: var(--card, light-dark(#f6f9f8, #202f2c));
+      --green: light-dark(#006a52, #9ee6cb);
+      --wash: light-dark(#e7f4ee, #203e33);
+      --radius: 12px;
+      --mono: var(--font-mono, ui-monospace, monospace);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font: 15px / 1.53 var(--font-sans, system-ui, sans-serif);
+    }
+    main {
+      max-width: 800px;
+      margin: auto;
+    }
+    header {
+      padding: 12px 0;
+    }
+    h1,
+    h2,
+    h3,
+    p,
+    dl,
+    dd {
+      margin: 0;
+    }
+    h1,
+    h2,
+    h3 {
+      line-height: 1.2;
+      letter-spacing: -0.035em;
+    }
+    h1 {
+      font-size: clamp(33px, 6vw, 52px);
+      margin: 6px 0 10px;
+    }
+    h2 {
+      font-size: 25px;
+      margin: 6px 0 10px;
+    }
+    h3 {
+      font-size: 19px;
+      margin: 5px 0 8px;
+    }
+    section {
+      margin: 26px 0;
+    }
+    .lead {
+      font-size: 19px;
+      max-width: 690px;
+    }
+    .tag,
+    dt,
+    .status {
+      color: var(--green);
+      font: 600 11px / 1.4 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.075em;
+    }
+    .note,
+    small {
+      color: var(--dim);
+    }
+    .box,
+    .demo,
+    .callout {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      background: var(--box);
+    }
+    .callout {
+      background: var(--wash);
+      margin: 12px 0;
+    }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .tabs,
+    .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .actions {
+      margin-bottom: 0;
+    }
+    button {
+      font: 600 14px / 1.35 inherit;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--box);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 11px;
+    }
+    button[aria-pressed="true"],
+    button.go {
+      background: var(--green);
+      color: light-dark(#fff, #142e23);
+      border-color: transparent;
+    }
+    button:focus-visible,
+    a:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--green);
+      outline-offset: 2px;
+    }
+    .demo dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 5px 14px;
+      margin: 12px 0;
+    }
+    dt {
+      padding-top: 3px;
+    }
+    .status {
+      display: block;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 12px;
+    }
+    .terminal,
+    pre {
+      font: 13px / 1.5 var(--mono);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .terminal {
+      background: #162d2a;
+      color: #e4f5ed;
+      margin: 12px 0;
+    }
+    .terminal span {
+      display: block;
+      color: #a0d6c6;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    pre {
+      background: var(--box);
+      border: 1px solid var(--line);
+      margin: 9px 0;
+    }
+    code {
+      font: 0.89em var(--mono);
+      overflow-wrap: anywhere;
+    }
+    a {
+      color: var(--green);
+      text-underline-offset: 3px;
+    }
+    details {
+      border-top: 1px solid var(--line);
+      padding: 12px 0;
+    }
+    summary {
+      font-weight: 650;
+      cursor: pointer;
+    }
+    details p,
+    .box p + p {
+      margin-top: 8px;
+    }
+    ul,
+    ol {
+      padding-left: 21px;
+      margin: 9px 0;
+    }
+    li + li {
+      margin-top: 7px;
+    }
+    .cases {
+      margin-top: 10px;
+    }
+    .cases > div {
+      display: grid;
+      grid-template-columns: minmax(125px, 0.8fr) 2fr;
+      gap: 12px;
+      border-top: 1px solid var(--line);
+      padding: 10px 0;
+    }
+    .cases b {
+      font-size: 14px;
+    }
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 12px 0;
+      color: var(--dim);
+      font-size: 13px;
+    }
+    [hidden] {
+      display: none;
+    }
+    @media (max-width: 505px) {
+      .grid,
+      .cases > div {
+        grid-template-columns: 1fr;
+      }
+      .cases > div {
+        gap: 3px;
+      }
+    }
+    @media print {
+      .tabs,
+      .actions {
+        display: none;
+      }
+      #cli[hidden] {
+        display: block;
+      }
+    }
+    .jump {
+      display: flex;
+      gap: 6px 18px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+    .sequence {
+      container-type: inline-size;
+      background: var(--box);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .sequence figcaption {
+      margin: 0 0 12px;
+    }
+    .ladder {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    .ladder rect {
+      fill: var(--wash);
+      stroke: var(--line);
+    }
+    .ladder text {
+      fill: var(--ink);
+      text-anchor: middle;
+      font: 14px var(--font-sans, system-ui, sans-serif);
+    }
+    .ladder .actor {
+      font-weight: 650;
+    }
+    .ladder .caption {
+      paint-order: stroke;
+      stroke: var(--box);
+      stroke-width: 5px;
+      stroke-linejoin: round;
+    }
+    .lifeline {
+      stroke: var(--line);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 4;
+    }
+    .message {
+      stroke: var(--green);
+      stroke-width: 1.7;
+    }
+    .sequence .note {
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    .diagram-alt {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    @container (max-width: 560px) {
+      .ladder {
+        display: none;
+      }
+      .diagram-alt {
+        position: static;
+        width: auto;
+        height: auto;
+        overflow: visible;
+        clip-path: none;
+        padding-left: 26px;
+      }
+      .diagram-alt li {
+        border-left: 2px solid var(--line);
+        padding-left: 9px;
+        margin-bottom: 9px;
+      }
+      .diagram-alt li::marker {
+        color: var(--green);
+      }
+    }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="tag">Accepted product design · v1</div>
+        <h1>One tab, one hour</h1>
+        <p class="lead">
+          “Let Ledger use my signed-in billing site until 11:00.” The owner chooses where the agent
+          can work and when it must stop. They don’t have to know how the site is built.
+        </p>
+        <nav class="jump" aria-label="Design sections">
+          <a href="wire.html">Implementation wire contract</a><a href="#flows">Flow diagrams</a
+          ><a href="#jwt">JWT contract</a><a href="#exchange">Try the mockups</a>
+        </nav>
+      </header>
+      <p class="callout">
+        <b>Scope the driver, not the page loader.</b> A CDN serving JavaScript is not another site
+        the agent is asking to operate. An embedded support widget isn’t either—until the agent
+        wants to read or click inside it.
+      </p>
+      <section>
+        <h2>What works with one approval?</h2>
+        <p>
+          Suppose you approve <code>https://billing.example</code> in a new tab of your Work
+          profile.
+        </p>
+        <div class="cases">
+          <div>
+            <b>Load the dashboard</b>
+            <p>
+              The site runs its JS, loads fonts and scripts from its CDN, fetches invoices from an
+              API and updates over a WebSocket. No extra lease requests. The agent sees the rendered
+              invoice, not the API response or network log.
+            </p>
+          </div>
+          <div>
+            <b>Use the application</b>
+            <p>
+              Filter the table, open invoice 1042, type into a field, submit a form. History
+              changes, query parameters and hash routes on that origin work by default. These are
+              real actions as the signed-in user, not read-only access.
+            </p>
+          </div>
+          <div>
+            <b>Encounter an embed</b>
+            <p>
+              A chat iframe can render. Its presence doesn’t block the invoice. The agent gets a
+              placeholder instead of that frame’s contents. Reading or clicking inside the widget
+              requires its origin to be approved too.
+            </p>
+          </div>
+          <div>
+            <b>Cross to another site</b>
+            <p>
+              “View receipt” opens <code>https://receipts.example</code>. The agent stops at the
+              boundary; the original tab stays usable. Add just the receipt URL, let the owner
+              handle it, or skip it. No automatic prompt for ads, hidden frames or passive loads.
+            </p>
+          </div>
+        </div>
+        <p class="note">
+          <b>What this does not promise:</b> URL scope is not a network firewall or a restriction on
+          what the account can do. An approved app can show third-party data in its own UI, contact
+          other services, or send an email when the agent clicks Send. Trust the app and its scripts
+          as you would when using it yourself.
+        </p>
+      </section>
+      <section id="exchange">
+        <div class="tag">Exchange mockups</div>
+        <h2>From the agent’s request to the owner’s decision</h2>
+        <div class="tabs" role="group" aria-label="Exchange mockup">
+          <button id="ui-btn" aria-controls="ui" aria-pressed="true">Sliccy / TUI</button
+          ><button id="cli-btn" aria-controls="cli" aria-pressed="false">CLI · one shell</button>
+        </div>
+        <div id="ui">
+          <div class="demo">
+            <div class="status" id="status">Request · 10:00 UTC</div>
+            <div id="screen" aria-live="polite">
+              <h3>Let Ledger use the billing site?</h3>
+              <dl>
+                <dt>Browser</dt>
+                <dd>Chrome · Work · one new tab</dd>
+                <dt>Site</dt>
+                <dd>https://billing.example</dd>
+                <dt>Duration</dt>
+                <dd>1 hour</dd>
+              </dl>
+              <p>
+                Ledger can read, click, type and submit as you. Other tabs stay private.
+                <small>Requester: paired Ledger job.</small>
+              </p>
+            </div>
+            <div id="actions" class="actions"></div>
+          </div>
+          <div class="terminal">
+            <span>REMOTE JOB · SIMULATED</span
+            ><output id="log" aria-live="polite"
+              >Waiting for the owner. No browser access yet.</output
+            >
+          </div>
+          <small
+            >GUI buttons and TUI choices represent the same local decision. All sites, commands and
+            times here are illustrative.</small
+          ><noscript
+            ><p>
+              Approve billing until 11:00 → invoice renders with JS → receipt link is outside scope
+              → grant that URL only, keep the old lease or stop.
+            </p></noscript
+          >
+        </div>
+        <div id="cli" hidden>
+          <h3>Agent: “Copy this line into your local terminal.”</h3>
+          <p>
+            The job adapter creates a key pair, keeps the private key in the sandbox, and computes
+            the public key’s thumbprint. It registers a pending request under that thumbprint with
+            its own Seven client. The agent sends this line in the task conversation:
+          </p>
+          <pre
+            aria-label="Proposed owner command"
+          >slicc lease review --to jkt:GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s --allow https://billing.example --for 1h</pre>
+          <h3>Owner: paste, inspect, then decide</h3>
+          <pre>Holder     jkt:GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s
+Return via Ledger workspace · connected Seven tray
+Browser    Chrome / Work · one new tab
+Site       https://billing.example · 1 hour
+Can read, click, type and submit as you.
+[D]eny   [A]pprove until 11:00   [E]dit scope</pre>
+          <p>
+            <code>review</code> never grants on paste or on Enter alone. Select the browser and
+            return link locally; narrow the site or duration if needed. On approval, the local
+            broker binds <code>cnf.jkt</code> to the full supplied thumbprint and returns the JWT to
+            the waiting adapter over the selected lease-only link. Denial issues nothing. No key
+            file to download, second shell, or grant file to send back.
+          </p>
+          <details open>
+            <summary>Where do the key and return link come from?</summary>
+            <p>
+              A thumbprint identifies a key; it is <b>not</b> an address or proof that the requester
+              is named Ledger. Nothing is looked up on the internet. The owner trusts the source of
+              the pasted line (their task conversation); the job presents its actual public JWK over
+              the link. The broker recomputes its RFC 7638 thumbprint and requires proof of the
+              matching private key before allowing browser use. Changing the key requires a new
+              approval.
+            </p>
+            <p>
+              The CLI matches the pending request by full thumbprint on the owner-selected link. If
+              there’s no link, say
+              <b
+                >“In the requester’s Seven, choose Network → Link a device. Paste its join URL
+                here.”</b
+              >
+              Read the join secret with hidden input, not as part of the copyable command. The local
+              broker starts or reuses a background lease-only peer and follows the tray. On first
+              pairing the owner and job compare the broker’s device fingerprint through their task
+              conversation. The tray hub signals WebRTC; it is not a key directory or JWT mailbox.
+              If multiple links match, ask the owner to pick; if no matching job or supported
+              transport is available, stop without issuing.
+            </p>
+            <p>
+              The adapter generates the line from a fixed command template, a base64url thumbprint
+              and validated, shell-quoted scope arguments. Never interpolate free-text reasons into
+              shell syntax. Only paste the expected review command from your own job, not an
+              arbitrary shell snippet.
+            </p>
+          </details>
+          <details>
+            <summary>No-TTY automation: same thumbprint, explicit owner policy</summary>
+            <p>
+              An owner-controlled script issues directly on a known, paired route. It takes the
+              requester’s thumbprint as data and supplies its own permitted scope and time. It does
+              not execute an agent-supplied command or auto-confirm a review.
+            </p>
+            <pre>owner$ slicc lease grant --to jkt:GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s \
+         --browser work --link ledger-tray --allow https://billing.example --for 1h --no-input</pre>
+            <p>Missing or ambiguous browser, link or waiting holder: fail without issuing.</p>
+          </details>
+          <h3 style="margin-top:18px">Job: continue with the received grant</h3>
+          <p>L1 is a local adapter handle for the delivered JWT, not a bearer credential.</p>
+          <pre>job$ playwright-cli --lease L1 goto https://billing.example
+job$ playwright-cli --lease L1 snapshot
+job$ playwright-cli --lease L1 click e12
+E_SCOPE · Receipt link is outside this lease. Original access continues.
+job$ playwright-cli lease request --from L1 \
+       --add https://receipts.example/r/1042 --reason 'Open receipt 1042'
+R2 · pending owner decision</pre>
+          <h3 style="margin-top:18px">Owner: approve only the difference, or deny it</h3>
+          <pre>owner$ slicc lease grant R2 --add https://receipts.example/r/1042 --keep-expiry
+L2 replaces L1 · same job · ends 11:00 UTC
+owner$ slicc lease revoke L2</pre>
+          <p class="note">
+            The authenticated adapter receives the replacement on its control stream; it updates the
+            grant handle and opens a new data connection with proof for L2 before the job retries.
+            Owner-side automation can make the same exact-match decision. Neither the job nor a web
+            page can approve its own request.
+          </p>
+        </div>
+      </section>
+      <section>
+        <div class="tag">The boundary</div>
+        <h2>Check who is acting, and where</h2>
+        <div class="grid">
+          <div class="box">
+            <h3>App code runs normally</h3>
+            <p>
+              Use the existing signed-in profile. Leave page JavaScript, service workers, fetch,
+              redirects and the normal browser security model intact. Don’t maintain a dependency
+              allowlist or scan network traffic for lease violations. Existing protected-origin
+              rules still apply.
+            </p>
+          </div>
+          <div class="box">
+            <h3>The driver stays scoped</h3>
+            <p>
+              Expose navigation, scoped snapshots and element actions via the local broker. Don’t
+              expose raw browser CDP, arbitrary agent-supplied JS, network interception,
+              cookie/storage export, arbitrary coordinates, file transfers or other tabs.
+              Page-authored JavaScript and agent-authored JavaScript are different permissions.
+            </p>
+          </div>
+        </div>
+        <details open>
+          <summary>URL matching without breaking SPA routes</summary>
+          <p>
+            Default to an exact HTTPS <b>origin</b> (scheme, host and effective port). All paths,
+            query strings and fragments on it are in scope. No implicit sibling origins or
+            subdomains. For a narrower lease, offer <b>exact URL</b> (full canonical URL including
+            query and fragment) or <b>path prefix</b> such as
+            <code>https://billing.example/invoices/**</code> (segment boundary, query and fragment
+            unrestricted). Show the rule type in approval; never silently widen an exact URL into an
+            origin. Prefixes do not isolate hash routes that share a path. These rules control which
+            UI the agent may drive, not which records the app may fetch.
+          </p>
+        </details>
+        <details open>
+          <summary>Navigation, popups and frames: pause the action, not the entire site</summary>
+          <p>
+            Bind a lease to one broker-owned task tab. Don’t enumerate or adopt existing tabs,
+            including matching ones. Resolve element references to the current document and frame;
+            require the top document and each frame on the target path to match. Use scoped semantic
+            snapshots and element-bound actions, not a page-wide screenshot or a blind click through
+            an overlay. Omit an unapproved subtree; if the intended element can’t be verified,
+            decline <em>that action</em>, not the whole page.
+          </p>
+          <p>
+            Decline explicit out-of-scope navigation before dispatch. If site JS, a redirect, a
+            popup or a history change moves outside scope, the browser may load it; the agent cannot
+            inspect or drive it. Invalidate old references and withhold pending results on a
+            document or URL change. Offer a vetted return to a known allowed URL. Keep popups
+            outside agent control by default; for an approved destination, navigate the task tab
+            there instead. A human can complete SSO locally and resume when the verified task tab
+            returns—no need to lease the identity provider. Browser, file, extension and existing
+            protected surfaces stay off limits regardless of approval.
+          </p>
+          <p>
+            Scope errors include a stable code, lease ID, a safe explanation and how to request
+            more. Show a destination only when already known to the agent (e.g. from an allowed
+            link); review an unknown redirect locally without disclosing its query. An explicit
+            expansion shows only added URLs and any time change. A denied expansion leaves the old
+            lease intact. Don’t replay a click/submit: if the site already acted, say so or report
+            an unknown outcome.
+          </p>
+        </details>
+      </section>
+      <section id="flows">
+        <div class="tag">Protocol flows</div>
+        <h2>Two ways to issue. One way to connect.</h2>
+        <p>
+          A JWT records the owner’s decision. The job still has to prove it holds the matching key
+          before the broker opens a task tab.
+        </p>
+        <figure class="sequence">
+          <figcaption>
+            <span class="tag">Flow 01</span>
+            <h3>Interactive · the job requests access</h3>
+          </figcaption>
+          <svg
+            class="ladder"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 720 243"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <marker
+                id="arrow0"
+                viewBox="0 0 9 8"
+                refX="8"
+                refY="4"
+                markerWidth="8"
+                markerHeight="8"
+                orient="auto"
+              >
+                <path d="M0,0 L9,4 L0,8 Z" fill="var(--green)" />
+              </marker>
+            </defs>
+            <rect x="10" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="110" y="22">Remote job</text>
+            <line class="lifeline" x1="110" x2="110" y1="33" y2="238" />
+            <rect x="260" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="360" y="22">Local broker</text>
+            <line class="lifeline" x1="360" x2="360" y1="33" y2="238" />
+            <rect x="510" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="610" y="22">Owner · TUI / GUI</text>
+            <line class="lifeline" x1="610" x2="610" y1="33" y2="238" />
+            <line class="message" x1="110" x2="360" y1="76" y2="76" marker-end="url(#arrow0)" />
+            <text class="caption" x="235" y="68">
+              Request billing.example for 1h; identify job key
+            </text>
+            <line class="message" x1="360" x2="610" y1="121" y2="121" marker-end="url(#arrow0)" />
+            <text class="caption" x="485" y="113">Show verified requester, site and deadline</text>
+            <line class="message" x1="610" x2="360" y1="166" y2="166" marker-end="url(#arrow0)" />
+            <text class="caption" x="485" y="158">Approve billing only, until 11:00</text>
+            <line class="message" x1="360" x2="110" y1="211" y2="211" marker-end="url(#arrow0)" />
+            <text class="caption" x="235" y="203">Sign and deliver JWT L1 on the paired link</text>
+          </svg>
+          <ol class="diagram-alt">
+            <li>
+              <b>Remote job → Local broker</b><br>Request billing.example for 1h; identify job key
+            </li>
+            <li>
+              <b>Local broker → Owner · TUI / GUI</b><br>Show verified requester, site and deadline
+            </li>
+            <li><b>Owner · TUI / GUI → Local broker</b><br>Approve billing only, until 11:00</li>
+            <li><b>Local broker → Remote job</b><br>Sign and deliver JWT L1 on the paired link</li>
+          </ol>
+          <p class="note">A denial ends the request without issuing a JWT or opening a tab.</p>
+        </figure>
+        <figure class="sequence">
+          <figcaption>
+            <span class="tag">Flow 02</span>
+            <h3>CLI · the requester supplies the command</h3>
+          </figcaption>
+          <svg
+            class="ladder"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 720 288"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <marker
+                id="arrow1"
+                viewBox="0 0 9 8"
+                refX="8"
+                refY="4"
+                markerWidth="8"
+                markerHeight="8"
+                orient="auto"
+              >
+                <path d="M0,0 L9,4 L0,8 Z" fill="var(--green)" />
+              </marker>
+            </defs>
+            <rect x="10" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="110" y="22">Remote job</text>
+            <line class="lifeline" x1="110" x2="110" y1="33" y2="283" />
+            <rect x="260" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="360" y="22">Owner · one shell</text>
+            <line class="lifeline" x1="360" x2="360" y1="33" y2="283" />
+            <rect x="510" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="610" y="22">Local broker</text>
+            <line class="lifeline" x1="610" x2="610" y1="33" y2="283" />
+            <line class="message" x1="110" x2="360" y1="76" y2="76" marker-end="url(#arrow1)" />
+            <text class="caption" x="235" y="68">Send review command with job thumbprint</text>
+            <line class="message" x1="360" x2="610" y1="121" y2="121" marker-end="url(#arrow1)" />
+            <text class="caption" x="485" y="113">Paste; select browser and return link</text>
+            <line class="message" x1="610" x2="360" y1="166" y2="166" marker-end="url(#arrow1)" />
+            <text class="caption" x="485" y="158">Show scope, deadline and holder</text>
+            <line class="message" x1="360" x2="610" y1="211" y2="211" marker-end="url(#arrow1)" />
+            <text class="caption" x="485" y="203">Approve locally, or deny</text>
+            <line class="message" x1="610" x2="110" y1="256" y2="256" marker-end="url(#arrow1)" />
+            <text class="caption" x="360" y="248">
+              If approved: deliver JWT on the selected link
+            </text>
+          </svg>
+          <ol class="diagram-alt">
+            <li>
+              <b>Remote job → Owner · one shell</b><br>Send review command with job thumbprint
+            </li>
+            <li>
+              <b>Owner · one shell → Local broker</b><br>Paste; select browser and return link
+            </li>
+            <li><b>Local broker → Owner · one shell</b><br>Show scope, deadline and holder</li>
+            <li><b>Owner · one shell → Local broker</b><br>Approve locally, or deny</li>
+            <li>
+              <b>Local broker → Remote job</b><br>If approved: deliver JWT on the selected link
+            </li>
+          </ol>
+          <p class="note">
+            The thumbprint comes from the requester. The return link comes from local pairing.
+            Neither grants access by itself.
+          </p>
+        </figure>
+        <figure class="sequence">
+          <figcaption>
+            <span class="tag">Flow 03</span>
+            <h3>Both flows · connect once, then drive the app</h3>
+          </figcaption>
+          <svg
+            class="ladder"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 720 378"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <marker
+                id="arrow2"
+                viewBox="0 0 9 8"
+                refX="8"
+                refY="4"
+                markerWidth="8"
+                markerHeight="8"
+                orient="auto"
+              >
+                <path d="M0,0 L9,4 L0,8 Z" fill="var(--green)" />
+              </marker>
+            </defs>
+            <rect x="10" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="110" y="22">Remote job</text>
+            <line class="lifeline" x1="110" x2="110" y1="33" y2="373" />
+            <rect x="260" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="360" y="22">Local broker</text>
+            <line class="lifeline" x1="360" x2="360" y1="33" y2="373" />
+            <rect x="510" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="610" y="22">Leased tab</text>
+            <line class="lifeline" x1="610" x2="610" y1="33" y2="373" />
+            <line class="message" x1="110" x2="360" y1="76" y2="76" marker-end="url(#arrow2)" />
+            <text class="caption" x="235" y="68">OPEN: JWT L1 + job public key</text>
+            <line class="message" x1="360" x2="110" y1="121" y2="121" marker-end="url(#arrow2)" />
+            <text class="caption" x="235" y="113">Validate JWT; send a fresh challenge</text>
+            <line class="message" x1="110" x2="360" y1="166" y2="166" marker-end="url(#arrow2)" />
+            <text class="caption" x="235" y="158">Prove job key on this connection</text>
+            <line class="message" x1="110" x2="360" y1="211" y2="211" marker-end="url(#arrow2)" />
+            <text class="caption" x="235" y="203">Click invoice 1042 · no token per click</text>
+            <line class="message" x1="360" x2="610" y1="256" y2="256" marker-end="url(#arrow2)" />
+            <text class="caption" x="485" y="248">
+              Check active L1, time, document and scope; dispatch
+            </text>
+            <line class="message" x1="610" x2="360" y1="301" y2="301" marker-end="url(#arrow2)" />
+            <text class="caption" x="485" y="293">
+              Return action result on the local CDP socket
+            </text>
+            <line class="message" x1="360" x2="110" y1="346" y2="346" marker-end="url(#arrow2)" />
+            <text class="caption" x="235" y="338">
+              Recheck scope and time; return permitted result
+            </text>
+          </svg>
+          <ol class="diagram-alt">
+            <li><b>Remote job → Local broker</b><br>OPEN: JWT L1 + job public key</li>
+            <li><b>Local broker → Remote job</b><br>Validate JWT; send a fresh challenge</li>
+            <li><b>Remote job → Local broker</b><br>Prove job key on this connection</li>
+            <li><b>Remote job → Local broker</b><br>Click invoice 1042 · no token per click</li>
+            <li>
+              <b>Local broker → Leased tab</b><br>Check active L1, time, document and scope;
+              dispatch
+            </li>
+            <li>
+              <b>Leased tab → Local broker</b><br>Return action result on the local CDP socket
+            </li>
+            <li>
+              <b>Local broker → Remote job</b><br>Recheck scope and time; return permitted result
+            </li>
+          </ol>
+          <p class="note">
+            A reconnect requires a fresh proof. The site’s own scripts, APIs and CDN requests do not
+            pass through the lease approval flow.
+          </p>
+        </figure>
+        <figure class="sequence">
+          <figcaption>
+            <span class="tag">Flow 04</span>
+            <h3>Scope miss · add one receipt or keep the original</h3>
+          </figcaption>
+          <svg
+            class="ladder"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 720 333"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <marker
+                id="arrow3"
+                viewBox="0 0 9 8"
+                refX="8"
+                refY="4"
+                markerWidth="8"
+                markerHeight="8"
+                orient="auto"
+              >
+                <path d="M0,0 L9,4 L0,8 Z" fill="var(--green)" />
+              </marker>
+            </defs>
+            <rect x="10" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="110" y="22">Remote job</text>
+            <line class="lifeline" x1="110" x2="110" y1="33" y2="328" />
+            <rect x="260" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="360" y="22">Local broker</text>
+            <line class="lifeline" x1="360" x2="360" y1="33" y2="328" />
+            <rect x="510" y="1" width="200" height="32" rx="7" />
+            <text class="actor" x="610" y="22">Owner · UI / CLI</text>
+            <line class="lifeline" x1="610" x2="610" y1="33" y2="328" />
+            <line class="message" x1="110" x2="360" y1="76" y2="76" marker-end="url(#arrow3)" />
+            <text class="caption" x="235" y="68">
+              Navigate to a known, out-of-scope receipt URL
+            </text>
+            <line class="message" x1="360" x2="110" y1="121" y2="121" marker-end="url(#arrow3)" />
+            <text class="caption" x="235" y="113">E_SCOPE · L1 still works on billing</text>
+            <line class="message" x1="110" x2="360" y1="166" y2="166" marker-end="url(#arrow3)" />
+            <text class="caption" x="235" y="158">Explicitly request that exact URL</text>
+            <line class="message" x1="360" x2="610" y1="211" y2="211" marker-end="url(#arrow3)" />
+            <text class="caption" x="485" y="203">Review added URL; deadline stays 11:00</text>
+            <line class="message" x1="610" x2="360" y1="256" y2="256" marker-end="url(#arrow3)" />
+            <text class="caption" x="485" y="248">Approve the change, or deny</text>
+            <line class="message" x1="360" x2="110" y1="301" y2="301" marker-end="url(#arrow3)" />
+            <text class="caption" x="235" y="293">
+              Approve: deliver L2 and retire L1. Deny: keep L1.
+            </text>
+          </svg>
+          <ol class="diagram-alt">
+            <li>
+              <b>Remote job → Local broker</b><br>Navigate to a known, out-of-scope receipt URL
+            </li>
+            <li><b>Local broker → Remote job</b><br>E_SCOPE · L1 still works on billing</li>
+            <li><b>Remote job → Local broker</b><br>Explicitly request that exact URL</li>
+            <li>
+              <b>Local broker → Owner · UI / CLI</b><br>Review added URL; deadline stays 11:00
+            </li>
+            <li><b>Owner · UI / CLI → Local broker</b><br>Approve the change, or deny</li>
+            <li>
+              <b>Local broker → Remote job</b><br>Approve: deliver L2 and retire L1. Deny: keep L1.
+            </li>
+          </ol>
+          <p class="note">
+            The job opens L2 with fresh proof before choosing to retry. At expiry or revocation the
+            broker closes the data channel, including idle connections.
+          </p>
+        </figure>
+      </section>
+      <section id="jwt">
+        <div class="tag">Implementation · JWT contract v1</div>
+        <h2>Sign the lease once, not every click.</h2>
+        <p>
+          The issuer is the local <code>slicc-cli</code> broker; the holder is the job adapter. Use
+          a signed JWT (compact JWS), <b>not a bearer token</b>. No OAuth server, refresh token or
+          per-action signature. The browser never receives the token.
+        </p>
+        <details open>
+          <summary>What the broker signs</summary>
+          <p>
+            Decoded example for L1, not a usable credential. Lease and session IDs are abbreviated;
+            the holder thumbprint matches the pasted command; <code>exp</code> is 11:00 UTC on the
+            example day.
+          </p>
+          <pre
+            aria-label="Decoded JWT protected header"
+          >{"typ":"slicc-cdp-lease+jwt","alg":"Ed25519"}</pre>
+          <pre aria-label="Decoded JWT claims">{
+  "iss": "urn:slicc:broker:work-7",
+  "aud": "urn:slicc:cdp-lease:work-7",
+  "jti": "L1",
+  "exp": 1795518000,
+  "cnf": {"jkt": "GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s"},
+  "browser_session": "work-epoch-42",
+  "allow": [{"kind":"origin", "url":"https://billing.example"}]
+}</pre>
+          <p>
+            <code>iss</code> identifies the trusted issuer; <code>aud</code> identifies this
+            broker’s lease endpoint, not the job or the website. <code>jti</code> is a unique random
+            lease ID in production. <code>exp</code> is an exclusive deadline in Unix seconds.
+            <code>cnf.jkt</code> is the base64url SHA-256 RFC 7638 thumbprint of the holder’s public
+            JWK. <code>browser_session</code> is an opaque epoch, not a reusable browser name or
+            port. <code>allow</code> contains typed <code>origin</code>, <code>exact</code> or
+            <code>path-prefix</code> rules with the matching semantics above. The broker associates
+            the active ID with exactly one task tab.
+          </p>
+          <p>
+            JWTs are signed, not encrypted. Transfer grants over a private channel (or in an
+            owner-only file); never put a token in a URL, command argument, log or page. Include no
+            cookies, credentials or sensitive query parameters in the grant.
+          </p>
+        </details>
+        <ol>
+          <li>
+            <b>Validate the grant on OPEN.</b> Use a JOSE library and the broker’s configured issuer
+            key. Pin the protected type and fully specified <code>Ed25519</code> algorithm (RFC
+            9864); reject unsigned tokens, unexpected algorithms, duplicate claims or malformed
+            rules. Never fetch a verification key at a location supplied by the token. Verify the
+            signature, exact issuer and audience, future expiry, current browser epoch and active
+            lease ID.
+          </li>
+          <li>
+            <b>Authenticate the holder on that connection.</b> Use an encrypted channel
+            authenticated end to end to the broker. Check that the presented public JWK matches
+            <code>cnf.jkt</code>. Challenge the holder to sign a short-lived unpredictable nonce and
+            the digest of this compact JWT in a domain-separated lease-open message. The broker
+            binds the nonce to this connection and JWT and consumes it once. A copied JWT or a proof
+            replayed on a different connection cannot open a tab. Reconnects require fresh proof.
+          </li>
+          <li>
+            <b>Authorize each action.</b> Cache verified claims on the authenticated connection, not
+            a blanket “allowed” bit. Before dispatch and before returning results, check live ID,
+            deadline, epoch, tab/document/frame and URL rule. Expiry or revocation removes authority
+            and closes active streams even when idle. Browser or broker restart invalidates the
+            epoch.
+          </li>
+          <li>
+            <b>Replace, don’t edit.</b> Only after local approval, mint a JWT with a new
+            <code>jti</code>, same holder and the approved rule delta. Activate it and retire the
+            still-active parent atomically; close old data streams. Keep the original expiry unless
+            the owner explicitly changes it. If the parent expired or was revoked first, require a
+            fresh grant. Denial changes nothing. No automatic renewal or retry of site actions.
+          </li>
+        </ol>
+        <details>
+          <summary>Delivery across the repositories</summary>
+          <ul>
+            <li>
+              <a
+                href="https://github.com/ai-ecoverse/slicc-cli/blob/e229bd7f7fabd98abf565cd1622bd8941b19119a/internal/caps/cdp/relay.go"
+                >slicc-cli</a
+              >: own grants, background lifecycle, local approvals and a lease-only route beside the
+              existing relay. Use its target/frame and protected-origin guard. Run trusted locator
+              helpers here, not in the remote client. No legacy full-CDP or alternate host
+              capability on the lease route.
+            </li>
+            <li>
+              <a
+                href="https://github.com/ai-ecoverse/slicc-cdp/blob/137e7dfbfbcc40790c2cff2b947c911be19bd702/crates/cdp-client/src/connect.rs"
+                >slicc-cdp</a
+              >: map existing goto, snapshot, click and fill commands to the lease route.
+              Unsupported operations say so rather than falling back to discovery. Native and WASI
+              use the same errors.
+            </li>
+            <li>
+              <a
+                href="https://github.com/ai-ecoverse/slicc-browsers/blob/b3497f37c7803e729a07cb08243e8fa9fdeaefc4/README.md#guard-vectors"
+                >slicc-browsers</a
+              >: share URL rule and guard fixtures. Keep the hard-deny catalog separate from
+              positive user scope.
+            </li>
+            <li>
+              <a
+                href="https://github.com/ai-ecoverse/sliccy-app/blob/a162839eedfe7e62a8f14168dce078f4bc8c3e7f/docs/CLI-CONTRACT.md"
+                >Sliccy</a
+              >: use the owned CLI’s authenticated local control channel for approve, inspect and
+              revoke. A TUI uses the same model; an old CLI reports lease support unavailable.
+            </li>
+            <li>
+              <a
+                href="https://github.com/ai-ecoverse/slicc-kernel/blob/6f533d1224de128cdea180bb92bb62398de54f77/src/cloudflare/options.ts"
+                >slicc-kernel</a
+              >: SLICC maps its paired link to the lease task client. For Cloudflare, add the
+              missing adapter hook, bind the holder key to the job in the Durable Object, and use a
+              broker-authenticated outbound tunnel. Another sandbox can use the native adapter.
+              Reuse existing trusted links where available; an internet-reachable raw debugging port
+              is never a prerequisite.
+            </li>
+          </ul>
+        </details>
+        <details open>
+          <summary>Release gate: prove compatibility as well as containment</summary>
+          <p>
+            Run a signed-in SPA fixture with third-party JS/fonts, API calls, WebSocket updates,
+            query/hash routing, a support iframe and a form submission. <b>Pass:</b> the job
+            completes the in-scope task with one approval and zero dependency prompts. A
+            cross-origin receipt needs exactly one explicit expansion. SSO handoff returns to the
+            same lease. Measure unexpected refusals on representative consented workflows before
+            rollout.
+          </p>
+          <p>
+            Start with an empty owner key directory: paste the request and confirm that no lease
+            exists before approval. Test first pairing, no return link, a key mismatch, denial and
+            delivery to the waiting job. Reject a tampered or unsigned JWT, wrong
+            issuer/audience/epoch, mismatched holder, replayed proof or retired ID before CDP
+            dispatch. Test the exact expiry boundary on an idle stream. Also test redirect and
+            same-document races, stale element references, frame replacement/focus, overlays, popup
+            handling, expiry during output and revoke on reconnect. Verify no outside content or
+            action reaches the job, no unrelated tab is disclosed, and a blocked embed leaves the
+            rest of the app usable. If an operation can’t be made safe, withhold that operation—not
+            all JavaScript.
+          </p>
+        </details>
+      </section>
+      <footer>
+        Scope of this proposal: mediated interaction with a trusted website, not read-only account
+        delegation, browser-wide debugging or network isolation. Commands and mockups describe a
+        design, not a released interface.
+      </footer>
+    </main>
+    <script>
+    const el = (id) => document.getElementById(id);
+    function mode(which) {
+      for (const id of ['ui', 'cli']) {
+        el(id).hidden = id !== which;
+        el(id + '-btn').setAttribute('aria-pressed', String(id === which));
+      }
+    }
+    el('ui-btn').onclick = () => mode('ui');
+    el('cli-btn').onclick = () => mode('cli');
+    if (location.hash === '#cli') mode('cli');
+    const states = {
+      start: [
+        'Request · 10:00 UTC',
+        el('screen').innerHTML,
+        'Waiting for the owner. No browser access yet.',
+        [
+          ['Deny', 'denied'],
+          ['Allow for 1 hour', 'active', 1],
+        ],
+      ],
+      active: [
+        'Active · L1 · until 11:00',
+        '<h3>Invoice 1042 is open.</h3><p>The dashboard loaded its JS bundle, fetched the invoice and opened a live connection. The support widget is embedded but not drivable. No additional permission was needed.</p>',
+        'snapshot → Invoice 1042 · paid · View receipt\nAgent worked on billing.example. No dependency prompts.',
+        [
+          ['Try “View receipt”', 'blocked', 1],
+          ['Revoke now', 'ended'],
+          ['Simulate expiry', 'expired'],
+        ],
+      ],
+      blocked: [
+        'Active · L1 unchanged',
+        '<h3>The receipt lives on a different site.</h3><p>The visible link points to <code>https://receipts.example/r/1042</code>. Ledger may still use the billing site. No approval prompt has been sent.</p>',
+        'E_SCOPE · This receipt URL is outside L1.\nNext: request that URL, skip the receipt, or ask for local help.',
+        [
+          ['Request this URL', 'review', 1],
+          ['Skip receipt', 'active'],
+        ],
+      ],
+      review: [
+        'Expansion request · R2',
+        '<h3>Also let Ledger open this receipt?</h3><dl><dt>Add exact URL</dt><dd>https://receipts.example/r/1042</dd><dt>Keep</dt><dd>billing.example · same job and tab</dd><dt>Ends</dt><dd>11:00 UTC · no extra time</dd></dl>',
+        'R2 pending · L1 remains valid',
+        [
+          ['Keep original scope', 'kept'],
+          ['Add this receipt', 'approved', 1],
+        ],
+      ],
+      kept: [
+        'Active · L1 unchanged',
+        '<h3>The receipt stays out of scope.</h3><p>Ledger can finish with the invoice information it already has.</p>',
+        'R2 denied · continue original task or report missing receipt.',
+        [
+          ['Revoke now', 'ended'],
+          ['Restart demo', 'start'],
+        ],
+      ],
+      approved: [
+        'Active · L2 · until 11:00',
+        '<h3>One receipt added. No other change.</h3><p>Ledger can now navigate the task tab to the receipt. Other receipts, sites and tabs are still outside the lease.</p>',
+        'L2 installed · L1 replaced\nNew explicit navigate → Receipt 1042',
+        [
+          ['Revoke now', 'ended'],
+          ['Simulate expiry', 'expired'],
+        ],
+      ],
+      expired: [
+        'Expired · 11:00 UTC',
+        '<h3>The hour is up.</h3><p>Browser access stopped. A fresh time window requires a new approval.</p>',
+        'E_EXPIRED · request a new lease.',
+        [['Restart demo', 'start']],
+      ],
+      ended: [
+        'Revoked',
+        '<h3>Ledger is disconnected.</h3><p>The browser and your own tabs remain open. Revocation does not undo actions already taken.</p>',
+        'E_REVOKED · stop using this lease.',
+        [['Restart demo', 'start']],
+      ],
+      denied: [
+        'Denied',
+        '<h3>No access granted.</h3><p>No leased tab was opened.</p>',
+        'Request denied · no browser access.',
+        [['Restart demo', 'start']],
+      ],
+    };
+    function draw(key, focus = false) {
+      const [status, html, log, actions] = states[key];
+      el('status').textContent = status;
+      el('screen').innerHTML = html;
+      el('log').textContent = log;
+      el('actions').replaceChildren();
+      for (const [label, to, primary] of actions) {
+        const btn = document.createElement('button');
+        btn.textContent = label;
+        if (primary) btn.className = 'go';
+        btn.onclick = () => draw(to, true);
+        el('actions').append(btn);
+      }
+      if (focus) {
+        const title = el('screen').querySelector('h3');
+        title.tabIndex = -1;
+        title.focus({ preventScroll: true });
+      }
+    }
+    draw('start');
+    </script>
+  </body>
+</html>

@@ -6,6 +6,25 @@ use std::collections::BTreeMap;
 
 const LAYOUT: &str = include_str!("layout.json");
 
+#[test]
+fn lease_wire_examples_include_a_real_proof_and_not_a_private_key() {
+    let suite: Value = serde_json::from_str(slicc_browsers::LEASE_V1).unwrap();
+    let scope: Value = serde_json::from_str(slicc_browsers::LEASE_SCOPE_V1).unwrap();
+    let schema: Value = serde_json::from_str(slicc_browsers::LEASE_V1_SCHEMA).unwrap();
+    assert_eq!(suite["version"], 1);
+    assert_eq!(scope["version"], 1);
+    assert!(schema["$defs"]["claims"].is_object());
+    assert!(suite["issuerJwk"].get("d").is_none());
+    assert!(suite["holderJwk"].get("d").is_none());
+    for mode in ["request", "data"] {
+        let stream = &suite[format!("{mode}Stream")];
+        assert_eq!(stream["open"]["kind"], "cdp-lease-v1");
+        assert_eq!(stream["open"]["mode"], mode);
+        assert_eq!(stream["open"]["jwk"], suite["holderJwk"]);
+        assert_eq!(stream["proof"]["sig"].as_str().unwrap().len(), 86);
+    }
+}
+
 fn strip_nulls(v: Value) -> Value {
     match v {
         Value::Object(m) => Value::Object(

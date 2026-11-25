@@ -2713,10 +2713,29 @@ function missedTab(ctx, step, error) {
   return { ...EMPTY_ATTEMPT, missed: { step, error: boundedError(error, ctx.tag) } };
 }
 
+function refusedTab(ctx, attached, elapsedMs) {
+  return {
+    ...attemptRecord(attached.refused, 'incomplete'),
+    missed: {
+      step: attached.step,
+      refused: true,
+      error: boundedError(attached.refused.error, ctx.tag),
+      elapsedMs,
+    },
+  };
+}
+
 function missedPath(name, attempt, notes) {
   if (!attempt?.missed) return attempt;
   const { missed, ...rest } = attempt;
   note(notes, 'cookie-plant.attach', { path: name, ...missed });
+  if (missed.refused)
+    return {
+      ...rest,
+      premiseMissed: ['Answered', 'Refused', 'Planted']
+        .filter((field) => rest[field.toLowerCase()] === 'incomplete')
+        .map((field) => `${name}${field}: fresh tab ${missed.step} refused: ${missed.error}`),
+    };
   const fields = ['Answered', 'Refused', 'Planted', ...(name === 'deletion' ? ['Cleared'] : [])];
   return {
     ...rest,
@@ -2736,13 +2755,14 @@ async function withFreshAttemptTab(ctx, run) {
   const pageTarget = page.result.targetId;
   const timing = { pathStartedAt: Date.now() };
   const attached = await attachClientPage(client, pageTarget, internalSessions);
+  const attachMs = Date.now() - timing.pathStartedAt;
   if (attached.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
     return missedTab(ctx, attached.step, attached.error);
   }
   if (attached.refused && refused(attached.refused)) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return attemptRecord(attached.refused, 'incomplete');
+    return refusedTab(ctx, attached, attachMs);
   }
   const pageSession = attached.pageSession;
   if (!pageSession) {
@@ -3892,7 +3912,8 @@ async function attachClientPage(client, pageTarget, internalSessions) {
     'attachToTarget'
   );
   if (!attached.ok) {
-    if (sessionCut(attached) || refused(attached)) return { refused: attached, pageSession: null };
+    if (sessionCut(attached) || refused(attached))
+      return { refused: attached, step: 'Target.attachToTarget', pageSession: null };
     return {
       incomplete: `client attach failed: ${attached.error?.message ?? attached.error}`,
       step: 'Target.attachToTarget',
@@ -3909,7 +3930,8 @@ async function attachClientPage(client, pageTarget, internalSessions) {
     ]) {
       const enabled = await capped(outcome(client.send(method, {}, pageSession)), 800, label);
       if (!enabled.ok) {
-        if (sessionCut(enabled) || refused(enabled)) return { refused: enabled, pageSession };
+        if (sessionCut(enabled) || refused(enabled))
+          return { refused: enabled, step: label, pageSession };
         return {
           incomplete: `client ${label} failed: ${enabled.error?.message ?? enabled.error}`,
           step: label,

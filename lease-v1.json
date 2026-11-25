@@ -356,6 +356,85 @@
       "accepted": false
     }
   ],
+  "owner": {
+    "list": {
+      "v": 1,
+      "op": "cdp-lease-list"
+    },
+    "pending": {
+      "v": 1,
+      "ok": true,
+      "pending": [
+        {
+          "request": "R1",
+          "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+          "browser": "work",
+          "link": "fixture-link",
+          "allow": [
+            {
+              "kind": "origin",
+              "url": "https://billing.example"
+            }
+          ],
+          "ttlSeconds": 3600
+        }
+      ],
+      "active": []
+    },
+    "approve": {
+      "v": 1,
+      "op": "cdp-lease-approve",
+      "request": "R1"
+    },
+    "expansion": {
+      "v": 1,
+      "ok": true,
+      "pending": [
+        {
+          "request": "R2",
+          "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+          "browser": "work",
+          "link": "fixture-link",
+          "allow": [
+            {
+              "kind": "exact",
+              "url": "https://receipts.example/r/1042"
+            }
+          ],
+          "parent": "L1"
+        }
+      ],
+      "active": [
+        {
+          "lease": "L1",
+          "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+          "browser": "work",
+          "link": "fixture-link",
+          "allow": [
+            {
+              "kind": "origin",
+              "url": "https://billing.example"
+            }
+          ],
+          "exp": 1795518000
+        }
+      ]
+    },
+    "deny": {
+      "v": 1,
+      "op": "cdp-lease-deny",
+      "request": "R2"
+    },
+    "revoke": {
+      "v": 1,
+      "op": "cdp-lease-revoke",
+      "lease": "L1"
+    },
+    "ack": {
+      "v": 1,
+      "ok": true
+    }
+  },
   "lifecycleCases": [
     {
       "id": "denial-keeps-authority",

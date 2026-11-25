@@ -172,6 +172,45 @@ export function wireVectors() {
       { id: 'retired-after-open', mode: 'data', active: [], accepted: false },
       { id: 'expired-during-proof', mode: 'data', now: claims.exp, accepted: false },
     ],
+    owner: {
+      list: { v: 1, op: 'cdp-lease-list' },
+      pending: {
+        v: 1,
+        ok: true,
+        pending: [
+          { request, jkt, browser: 'work', link: 'fixture-link', allow: [rule], ttlSeconds: 3600 },
+        ],
+        active: [],
+      },
+      approve: { v: 1, op: 'cdp-lease-approve', request },
+      expansion: {
+        v: 1,
+        ok: true,
+        pending: [
+          {
+            request: 'R2',
+            jkt,
+            browser: 'work',
+            link: 'fixture-link',
+            allow: validScope,
+            parent: claims.jti,
+          },
+        ],
+        active: [
+          {
+            lease: claims.jti,
+            jkt,
+            browser: 'work',
+            link: 'fixture-link',
+            allow: [rule],
+            exp: claims.exp,
+          },
+        ],
+      },
+      deny: { v: 1, op: 'cdp-lease-deny', request: 'R2' },
+      revoke: { v: 1, op: 'cdp-lease-revoke', lease: claims.jti },
+      ack: { v: 1, ok: true },
+    },
     lifecycleCases: [
       {
         id: 'denial-keeps-authority',

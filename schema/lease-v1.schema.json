@@ -470,6 +470,100 @@
       "required": ["type", "reason", "message"],
       "additionalProperties": false
     },
+    "ownerRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "v": { "const": 1 }, "op": { "const": "cdp-lease-list" } },
+          "required": ["v", "op"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": { "const": 1 },
+            "op": { "enum": ["cdp-lease-approve", "cdp-lease-deny"] },
+            "request": { "$ref": "#/$defs/handle" }
+          },
+          "required": ["v", "op", "request"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": { "const": 1 },
+            "op": { "const": "cdp-lease-revoke" },
+            "lease": { "$ref": "#/$defs/handle" }
+          },
+          "required": ["v", "op", "lease"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ownerSnapshot": {
+      "type": "object",
+      "properties": {
+        "v": { "const": 1 },
+        "ok": { "const": true },
+        "pending": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "request": { "$ref": "#/$defs/handle" },
+                  "jkt": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                  "browser": { "type": "string", "minLength": 1 },
+                  "link": { "type": "string", "minLength": 1 },
+                  "allow": { "$ref": "#/$defs/allow" },
+                  "ttlSeconds": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+                },
+                "required": ["request", "jkt", "browser", "link", "allow", "ttlSeconds"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "request": { "$ref": "#/$defs/handle" },
+                  "jkt": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                  "browser": { "type": "string", "minLength": 1 },
+                  "link": { "type": "string", "minLength": 1 },
+                  "allow": { "$ref": "#/$defs/allow" },
+                  "parent": { "$ref": "#/$defs/handle" }
+                },
+                "required": ["request", "jkt", "browser", "link", "allow", "parent"],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "active": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lease": { "$ref": "#/$defs/handle" },
+              "jkt": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+              "browser": { "type": "string", "minLength": 1 },
+              "link": { "type": "string", "minLength": 1 },
+              "allow": { "$ref": "#/$defs/allow" },
+              "exp": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+            },
+            "required": ["lease", "jkt", "browser", "link", "allow", "exp"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["v", "ok", "pending", "active"],
+      "additionalProperties": false
+    },
+    "ownerAck": {
+      "type": "object",
+      "properties": { "v": { "const": 1 }, "ok": { "const": true } },
+      "required": ["v", "ok"],
+      "additionalProperties": false
+    },
     "facadeRequest": {
       "oneOf": [
         {

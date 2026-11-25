@@ -230,6 +230,35 @@ test('lease-state transitions retire idle streams and never deliver an old in-fl
   }
 });
 
+test('local owner operations and projections are distinct from authenticated link records', () => {
+  const o = v.owner;
+  for (const req of [o.list, o.approve, o.deny, o.revoke]) {
+    assert.ok(check('ownerRequest', req));
+    assert.ok(!check('', req));
+  }
+  for (const state of [o.pending, o.expansion]) assert.ok(check('ownerSnapshot', state));
+  const [delta] = o.expansion.pending;
+  const [active] = o.expansion.active;
+  assert.equal(delta.parent, active.lease);
+  assert.equal(o.pending.pending[0].ttlSeconds + v.context.now, active.exp);
+  assert.deepEqual(delta.allow, v.expansion.open.allow);
+  assert.ok(check('ownerAck', o.ack));
+  for (const req of [
+    { ...o.deny, allow: delta.allow },
+    { ...o.revoke, request: 'R2' },
+    { ...o.approve, jwt: v.jwt },
+  ])
+    assert.ok(!check('ownerRequest', req));
+  const { parent, ...withoutParent } = delta;
+  for (const pending of [
+    [{ ...delta, ttlSeconds: 1 }],
+    [withoutParent],
+    [{ ...delta, jkt: 'jkt:' + delta.jkt }],
+    [{ ...delta, jwt: v.jwt }],
+  ])
+    assert.ok(!check('ownerSnapshot', { ...o.expansion, pending }));
+});
+
 function readRecords(hex, cuts) {
   const bytes = Buffer.from(hex, 'hex');
   let offset = 0;

@@ -331,18 +331,21 @@ data:    binding_32 = SHA256(ASCII(exact compact JWT))
       </p>
       <p>
         The owner GUI/TUI uses the authenticated local CLI control channel only, with build and
-        process opt-in and live <code>status.offers</code> exactly
+        process opt-in, a verified owned peer and live <code>status.offers</code> exactly
         <code>[&quot;cdp-lease-v1&quot;]</code>. <code>cdp-lease-list</code> yields
         <code>{v:1,ok:true,pending,active}</code>. Pending rows are
         <code>{request,jkt,browser,link,allow,ttlSeconds}</code> for initial and
         <code>{request,jkt,browser,link,allow,parent}</code> for expansions. Display unchanged
-        deadline from still-active <code>parent.exp</code>, never restart the TTL. Active rows are
+        deadline from the still-active parent entry, never restart the TTL. Initial TTL starts at
+        local approval, not request creation. Use bare base64url JKT in the socket projection; only
+        the CLI prepends <code>jkt:</code>. Active rows are
         <code>{lease,jkt,browser,link,allow,exp}</code>. Use <code>{v:1,op,request}</code> for
         <code>cdp-lease-approve</code>/<code>cdp-lease-deny</code> and
         <code>{v:1,op:&quot;cdp-lease-revoke&quot;,lease}</code> for revocation; acknowledge
-        <code>{v:1,ok:true}</code> then reload. IDs bind immutable entries; never grant from stale
-        snapshots or a missing parent. These are local broker IDs, not the remote job&#39;s handles.
-        No grant token, private key or tray secret crosses the UI channel.
+        <code>{v:1,ok:true}</code> then reload the authoritative snapshot. Same-process request IDs
+        bind the exact key, link, browser, scope, parent and epoch. Consume once; never grant from
+        stale snapshots or a missing parent. These are local broker IDs, not the remote job&#39;s
+        handles. No grant token, private key or tray secret crosses the UI channel.
       </p>
       <h2>Running and consuming the contract</h2>
       <ul>

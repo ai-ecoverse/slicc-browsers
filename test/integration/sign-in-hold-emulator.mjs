@@ -263,5 +263,7 @@ export function applySignInHold(guard, browser, options = {}) {
       },
     };
   }
+  if (options.hooks) client.signInHold = options.hooks;
+  if (options.unguardedHooks) unguarded.signInHold = options.unguardedHooks;
   return client;
 }

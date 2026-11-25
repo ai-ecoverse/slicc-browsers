@@ -41,6 +41,8 @@ jobs:
         **/*security*.test.*
         test/integration/browser-runner.test.mjs
         test/integration/fixture-client.test.mjs
+        test/integration/lease-v1.test.mjs
+        test/integration/lease-page.test.mjs
         test/integration/self-contained.test.mjs
         test/integration/seven-corpus.test.mjs
         test/integration/validate.test.mjs

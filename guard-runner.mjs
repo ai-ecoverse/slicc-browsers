@@ -11,6 +11,8 @@ import { DEFAULT_EXTENSION_WORLD_ID, extensionWorld } from './extension-world.mj
 import { frameRead } from './frame-read.mjs';
 import {
   beacon,
+  browserContextStep,
+  browserStorageStep,
   canary,
   debuggerCleanup,
   debuggerPaused,
@@ -377,6 +379,18 @@ const resultNames = (check) =>
       resultNames
     ),
   ].filter(Boolean);
+const callNames = (check) =>
+  !check || typeof check !== 'object'
+    ? []
+    : [
+        check.result,
+        ...[check.from, check.compare, check.refused, check.reached, check.filtered?.from].flat(),
+        ...[...(check.all ?? []), ...(check.any ?? []), ...(check.not ? [check.not] : [])].flatMap(
+          callNames
+        ),
+      ].filter((name) => typeof name === 'string');
+const storageLeg = (step, capabilities) =>
+  `${step.as ?? step.cdp}: ${step.cdp} ran on the ${browserStorageStep(step, capabilities) ? 'browser' : 'page'} session`;
 const stateCheck = (check) =>
   check?.state ||
   [...(check?.all ?? []), ...(check?.any ?? []), ...(check?.not ? [check.not] : [])]
@@ -561,6 +575,11 @@ class Execution {
     this.exitedTo = this.reader;
     this.sessions.page = sessionId;
     return { sessionId, released };
+  }
+
+  stepSession(step) {
+    if (step.session === 'page-or-browser') this.note(storageLeg(step, this.options.capabilities));
+    return this.session(step.session);
   }
 
   session(kind) {
@@ -1195,7 +1214,7 @@ class Execution {
       const step = expand(raw, this.vars);
       if (!supported(step.requires, this.options.capabilities) || step.text) continue;
       if (!childSession && step.session === 'child') await this.childrenSettled();
-      const session = childSession ?? this.session(step.session);
+      const session = childSession ?? this.stepSession(step);
       const first = await this.operation(step, session, phase);
       if (!first) continue;
       const out = await this.browserUiRetry(step, first, session, phase);
@@ -2059,7 +2078,7 @@ class Execution {
     if (this.explicit) return this.explicitCall(step, params, sessionId);
     const session =
       step.session === 'page-or-browser' &&
-      supported(['browserSession'], this.options.capabilities) &&
+      supported(['browserStorage'], this.options.capabilities) &&
       /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp)
         ? undefined
         : sessionId;
@@ -2693,11 +2712,47 @@ class Execution {
       observed[`${name}.either`] = holds;
       if (holds === 'incomplete') incomplete.push(name);
     }
+    this.controlErrors(observed);
     this.premises(observed);
     this.unguardedPremises(observed);
     this.explicitPremises(observed);
     if (this.side === 'control' && excused && !measured) this.incomplete.push('measured nothing');
     return { observed, incomplete };
+  }
+
+  failedCalls() {
+    const failed = new Map();
+    for (const error of this.errors) {
+      const [name, message] = error.split(' failed without a refusal: ');
+      if (message !== undefined) failed.set(name, message);
+    }
+    for (const [name, out] of Object.entries(this.calls)) {
+      if (name === '$cdp' || !out || out.ok || this.refused[name] === true) continue;
+      const message = String(out.error?.message ?? out.error);
+      if (!/refused/.test(message)) failed.set(name, message);
+    }
+    return failed;
+  }
+
+  controlErrors(observed) {
+    if (this.side !== 'control') return;
+    const failed = this.failedCalls();
+    this.unrun();
+    if (!failed.size) return;
+    const order = Object.keys(this.calls);
+    const want = this.vector.control.expected ?? {};
+    for (const [name, observation] of Object.entries(this.vector.observe ?? {})) {
+      if (want[name] !== true || observed[name] !== false) continue;
+      const read = [...(observation.dependsOn ?? []), ...callNames(observation.check)];
+      const last = Math.max(...read.map((entry) => order.indexOf(entry)));
+      const call = [...failed.keys()].find(
+        (entry) => read.includes(entry) || (order.includes(entry) && order.indexOf(entry) < last)
+      );
+      if (!call) continue;
+      observed[name] = 'incomplete';
+      const reason = `${call} failed without a refusal: ${failed.get(call)}`;
+      if (!this.incomplete.includes(reason)) this.incomplete.push(reason);
+    }
   }
 
   premises(observed) {
@@ -2950,14 +3005,6 @@ const skipRow = (base, reason) => ({
   live: 'skip',
   reason,
 });
-const browserContextStep = (vector, capabilities) =>
-  allSteps([...vector.setup, ...vector.trigger]).some(
-    (step) =>
-      step.params?.browserContextId !== undefined ||
-      (step.session === 'page-or-browser' &&
-        /^Storage\.(getCookies|setCookies|clearCookies)$/.test(step.cdp ?? '') &&
-        supported(['browserContexts'], capabilities))
-  );
 
 function nullOrigins(value, targets) {
   return [...q(value).matchAll(/\{([A-Za-z][A-Za-z-]*)\}/g)]
@@ -3435,12 +3482,18 @@ function validateScales(opts) {
     throw new TypeError('refusalScale must be a number of at least 1');
 }
 
+function validateCapabilities(capabilities) {
+  if (declared('browserStorage', capabilities) && !declared('browserSession', capabilities))
+    throw new TypeError('browserStorage needs browserSession in one run');
+  const both = exclusive.filter((capability) => declared(capability, capabilities));
+  if (declared('explicitAttach', capabilities) && both.length)
+    throw new TypeError(`explicitAttach excludes ${both.join(' and ')} in one run`);
+}
+
 function validate(set, opts) {
   if (!opts.fixture?.log) throw new TypeError('fixture.log is required');
   validateScales(opts);
-  const both = exclusive.filter((capability) => declared(capability, opts.capabilities));
-  if (declared('explicitAttach', opts.capabilities) && both.length)
-    throw new TypeError(`explicitAttach excludes ${both.join(' and ')} in one run`);
+  validateCapabilities(opts.capabilities);
   for (const vector of set.vectors)
     for (const [name, observation] of Object.entries(vector.observe ?? {}))
       if (!observation.check) throw new TypeError(`${vector.id}: ${name} lacks a check`);
@@ -3619,6 +3672,8 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown', ca
         .map(([reason, count]) => `${reason}=${count}`)
         .join(', ')})`
     : line;
+  const caps = capabilities ?? {};
+  const storageUndeclared = declared('browserSession', caps) && !declared('browserStorage', caps);
   return {
     ...value,
     pass: value.pass && observerSkipped === 0,
@@ -3626,6 +3681,13 @@ export function summary({ set, results, guard = 'reference', sha = 'unknown', ca
     skips,
     observerSkipped,
     incomplete,
+    ...(storageUndeclared
+      ? {
+          browserStorageUndeclared: true,
+          browserStorageNote:
+            'browserStorage undeclared: page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps ran on the page session, not the browser session',
+        }
+      : {}),
     counts: Object.fromEntries(
       ['control', 'guarded', 'live'].map((side) => [
         side,

@@ -27,6 +27,7 @@ pub const CONTROL: &str = "control";
 pub const GUARDED: &str = "guarded";
 pub const CAP_AUTO_ATTACH: &str = "autoAttach";
 pub const CAP_BROWSER_SESSION: &str = "browserSession";
+pub const CAP_BROWSER_STORAGE: &str = "browserStorage";
 pub const CAP_BROWSER_CONTEXTS: &str = "browserContexts";
 pub const CAP_CHROME_URLS_ATTACH: &str = "chromeUrlsAttach";
 pub const CAP_EXTENSION_WORLD: &str = "extensionWorld";

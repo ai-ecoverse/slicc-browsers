@@ -273,6 +273,7 @@ fn the_guard_vectors_parse_and_round_trip() {
     for c in [
         guard::CAP_AUTO_ATTACH,
         guard::CAP_BROWSER_SESSION,
+        guard::CAP_BROWSER_STORAGE,
         guard::CAP_BROWSER_CONTEXTS,
         guard::CAP_CHROME_URLS_ATTACH,
         guard::CAP_EXTENSION_WORLD,

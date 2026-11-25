@@ -133,8 +133,9 @@ test('a control whose browser_ui targets all close before it attaches stays a fa
   const result = await row(browser.client, browser.client);
   assert.equal(result.control, 'fail', JSON.stringify(result));
   assert.equal(result.guarded, 'fail', JSON.stringify(result));
-  assert.equal(result.observations.control.attached, false);
-  assert.deepEqual(result.errors, [gone, gone]);
+  assert.equal(result.observations.control.attached, 'incomplete');
+  assert.deepEqual(result.errors, [gone]);
+  assert.deepEqual(result.incomplete, [`control ${gone}`]);
   assert.deepEqual(browser.attaches, ['UI-1', 'UI-2', 'UI-3', 'UI-4', 'UI-5', 'UI-6']);
   assert.equal(result.notes.length, 4);
 });
@@ -143,7 +144,7 @@ test('an attach that fails while its browser_ui target is still listed is not re
   const browser = chrome({ broken: true });
   const result = await row(browser.client, browser.client);
   assert.equal(result.control, 'fail', JSON.stringify(result));
-  assert.equal(result.observations.control.attached, false);
+  assert.equal(result.observations.control.attached, 'incomplete');
   assert.deepEqual(browser.attaches, ['UI-1', 'UI-1']);
   assert.equal(result.notes, undefined);
   assert.match(result.errors[0], /the fake cannot attach to a browser_ui target/);

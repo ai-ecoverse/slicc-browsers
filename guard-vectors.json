@@ -101,7 +101,8 @@
   },
   "capabilities": {
     "autoAttach": "Target.setAutoAttach, the children steps and child sessions",
-    "browserSession": "CDP calls on the browser session",
+    "browserSession": "session-less Target.* and Browser.* calls on the browser session; session-less Storage.* there is browserStorage",
+    "browserStorage": "session-less Storage.* calls on the browser session, with or without browserContextId; needs browserSession; undeclared, page-or-browser Storage.getCookies, Storage.setCookies and Storage.clearCookies steps run on the row's page session, and a row that must send one on the browser session is skipped",
     "browserContexts": "Target.createBrowserContext and Target.disposeBrowserContext",
     "extensionWorld": "a browser hosting a foreign content-script extension isolated world on the ordinary fixture page",
     "extensionFrame": "a browser hosting the harness extension, whose web-accessible frame.html an ordinary page embeds as an out-of-process chrome-extension: frame, like a password manager's autofill list",
@@ -18746,7 +18747,11 @@
           },
           "session": "page-or-browser",
           "as": "storage",
-          "on": "control"
+          "on": "control",
+          "requires": [
+            "browserSession",
+            "browserStorage"
+          ]
         },
         {
           "cdp": "Storage.clearCookies",
@@ -18775,7 +18780,8 @@
       ],
       "requires": [
         "browserSession",
-        "browserContexts"
+        "browserContexts",
+        "browserStorage"
       ],
       "observe": {
         "network": {

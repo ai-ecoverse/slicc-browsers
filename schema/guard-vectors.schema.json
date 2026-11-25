@@ -84,6 +84,7 @@
       "required": [
         "autoAttach",
         "browserSession",
+        "browserStorage",
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",
@@ -100,6 +101,10 @@
           "minLength": 1
         },
         "browserSession": {
+          "type": "string",
+          "minLength": 1
+        },
+        "browserStorage": {
           "type": "string",
           "minLength": 1
         },
@@ -212,6 +217,7 @@
       "enum": [
         "autoAttach",
         "browserSession",
+        "browserStorage",
         "browserContexts",
         "chromeUrlsAttach",
         "extensionWorld",

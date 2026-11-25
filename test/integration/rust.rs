@@ -199,6 +199,34 @@ fn the_protected_vectors_parse_and_round_trip() {
     assert!(frames.shown_refusal.contains("showing or focused"));
     assert!(frames.present_refusal.contains("chrome-extension://"));
     assert!(slicc_browsers::PROTECTED_SCHEMA.contains("/schema/protected.schema.json"));
+    let mut reports = std::collections::BTreeSet::new();
+    for t in &v.targets {
+        let Some(o) = t.context_origin.as_deref() else {
+            continue;
+        };
+        reports.insert(o);
+        if po.inheriting.contains(&t.url)
+            && o.to_lowercase().starts_with("about:")
+            && o != "about://"
+        {
+            assert!(t.protected, "{t:?}");
+            continue;
+        }
+        let today = protected::TargetVector {
+            context_origin: None,
+            ..t.clone()
+        };
+        for w in &v.targets {
+            let same = protected::TargetVector {
+                protected: today.protected,
+                ..w.clone()
+            };
+            if same == today {
+                assert_eq!(w.protected, t.protected, "{t:?} / {w:?}");
+            }
+        }
+    }
+    assert!(reports.contains("://") && reports.contains("about://"));
 }
 
 #[test]

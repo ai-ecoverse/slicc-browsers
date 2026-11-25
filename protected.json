@@ -1045,6 +1045,81 @@
       "protected": false
     },
     {
+      "url": "about:blank",
+      "contextOrigin": "://",
+      "protected": false
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://",
+      "protected": false
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://",
+      "opener": "protected",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://",
+      "opener": "unknown",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://",
+      "previous": true,
+      "protected": true
+    },
+    {
+      "url": "about:settings",
+      "contextOrigin": "about://settings",
+      "protected": true
+    },
+    {
+      "url": "about:srcdoc",
+      "contextOrigin": "about://",
+      "protected": false
+    },
+    {
+      "url": "data:text/html,x",
+      "contextOrigin": "about://",
+      "protected": false
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "ABOUT://",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://x",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about:blank",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://example.test",
+      "opener": "unprotected",
+      "protected": false
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://example.test",
+      "opener": "protected",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://example.test",
+      "protected": false
+    },
+    {
       "url": "blob:https://seven.sliccy.ai/0b9e0f6c",
       "protected": true
     },

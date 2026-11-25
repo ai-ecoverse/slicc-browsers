@@ -255,6 +255,31 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 	if !ok || !strings.HasSuffix(s["$id"].(string), "/schema/protected.schema.json") {
 		t.Fatalf("protected schema: %v", s["$id"])
 	}
+	reports := map[string]bool{}
+	for _, tv := range v.Targets {
+		o := tv.ContextOrigin
+		if o == "" {
+			continue
+		}
+		reports[o] = true
+		if slices.Contains(po.Inheriting, tv.URL) && strings.HasPrefix(strings.ToLower(o), "about:") && o != "about://" {
+			if !tv.Protected {
+				t.Fatalf("target vector %+v: an about-family look-alike context origin must be protected", tv)
+			}
+			continue
+		}
+		today := tv
+		today.ContextOrigin = ""
+		for _, w := range v.Targets {
+			today.Protected = w.Protected
+			if today == w && w.Protected != tv.Protected {
+				t.Fatalf("target vector %+v disagrees with %+v", tv, w)
+			}
+		}
+	}
+	if !reports["://"] || !reports["about://"] {
+		t.Fatalf("context origins: %v", reports)
+	}
 }
 
 func TestGuardWhereTypeStaysString(t *testing.T) {

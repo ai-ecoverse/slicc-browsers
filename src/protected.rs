@@ -48,6 +48,12 @@ pub struct TargetVector {
     pub previous: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opener: Option<String>,
+    #[serde(
+        default,
+        rename = "contextOrigin",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub context_origin: Option<String>,
     pub protected: bool,
 }
 

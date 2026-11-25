@@ -510,8 +510,11 @@ owner$ slicc lease revoke L2</pre>
           <p class="note">
             The authenticated adapter receives the replacement on its control stream; it updates the
             grant handle and opens a new data connection with proof for L2 before the job retries.
-            Owner-side automation can make the same exact-match decision. Neither the job nor a web
-            page can approve its own request.
+            The remote job can request more access, but the lease link has no approval operation.
+            The broker trusts the local OS account: an agent running as the same user with access to
+            the owner CLI or control socket can approve its own requests, including expansions,
+            without a person present. Run untrusted jobs under a separate OS account or in an
+            isolated sandbox with no access to the owner’s control socket or CLI credentials.
           </p>
         </div>
       </section>

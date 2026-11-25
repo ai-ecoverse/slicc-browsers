@@ -347,6 +347,12 @@ data:    binding_32 = SHA256(ASCII(exact compact JWT))
         stale snapshots or a missing parent. These are local broker IDs, not the remote job&#39;s
         handles. No grant token, private key or tray secret crosses the UI channel.
       </p>
+      <p>
+        Approval trusts the local OS account, not human presence. A same-user process with access to
+        the owner CLI or control socket can approve its own initial request or expansion unattended.
+        The remote lease link has no approval operation. Keep untrusted jobs in a separate OS
+        account or an isolated sandbox; do not share the owner socket or credentials.
+      </p>
       <h2>Running and consuming the contract</h2>
       <ul>
         <li>

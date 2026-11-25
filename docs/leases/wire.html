@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Signed CDP leases v1 wire contract</title>
+    <style>
+    body {
+      font:
+        1rem / 1.5 system-ui,
+        sans-serif;
+      max-width: 80ch;
+      margin: auto;
+      padding: 1rem;
+    }
+    pre,
+    table {
+      display: block;
+      max-width: 100%;
+      overflow: auto;
+    }
+    td,
+    th {
+      padding: 0.4rem;
+      text-align: left;
+    }
+    code {
+      overflow-wrap: anywhere;
+    }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Signed CDP leases v1</h1>
+      <p>
+        <a href="signed-cdp-leases.html">Accepted product and owner experience</a> ·
+        <a href="../../schema/lease-v1.schema.json">wire schema</a> ·
+        <a href="../../lease-v1.json">signed exchanges and rejection cases</a> ·
+        <a href="../../lease-scope-v1.json">scope and mediation cases</a>
+      </p>
+      <p>
+        This is a conformance contract, not a broker. A transport without the following
+        prerequisites must report lease support unavailable. Nothing here registers a handler, sends
+        signaling, discovers a browser or opts an existing link into leases.
+      </p>
+      <h2>Transport and records</h2>
+      <p>
+        Provision a dedicated job-only Seven tray/registry at trusted construction. The existing
+        <code>slicc-link/1</code> signaling runtime is <strong>not</strong> a security
+        discriminator. The owner selects the paired route and verifies device identity out of band;
+        the adapter checks the actual broker DTLS certificate against its pre-paired pin. The
+        selected end-to-end encrypted link and the job are bound in trusted state. Fail closed on
+        pin mismatch, reconnect without verification, ordinary/mixed tray or unknown peer. Both
+        peers&#39; <code>slicc.link.v1</code> HELLO <code>caps</code> must be exactly
+        <code>[&quot;cdp-lease-v1&quot;]</code>. Do not advertise or register general host services,
+        browser lists, generic CDP, routes, mounts or a full-trust seat. No JWT/key lookup or grant
+        delivery through the signaling hub. The job opens all streams.
+      </p>
+      <p>
+        Link OPEN and OPENED payloads are each <strong>one unprefixed UTF-8 JSON object</strong>.
+        Every subsequent record in the stream&#39;s DATA bytes is
+        <code>uint32be(length) || UTF8(JSON object)</code>, with
+        <code>1 &lt;= length &lt;= 65536</code>. Parse across fragmentation/coalescing; cap before
+        allocation, reject truncated records, invalid UTF-8/BOM, duplicate member names (also after
+        unescaping), unknown fields/types and out-of-state records. Numbers used as IDs/times are
+        positive safe integers. Strings used as IDs/handles/refs are 1–128 ASCII letters, digits,
+        <code>_</code> or <code>-</code>. Base64url is always canonical RFC 4648 URL alphabet,
+        unpadded, with zero unused bits; require decoded lengths.
+        <code>lease-v1.schema.json</code> validates decoded shapes; it cannot replace byte-level
+        checks, sequencing, trusted context or local policy. Tighter local limits may explicitly
+        refuse, never truncate/widen a request.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Job → broker</th>
+            <th>Broker → job</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Initial request OPEN</td>
+            <td>
+              <code
+                >{kind:&quot;cdp-lease-v1&quot;,mode:&quot;request&quot;,jwk,allow,ttlSeconds,reason?}</code
+              >
+            </td>
+            <td>OPENED <code>{nonce}</code></td>
+          </tr>
+          <tr>
+            <td>Expansion request OPEN</td>
+            <td>
+              <code
+                >{kind:&quot;cdp-lease-v1&quot;,mode:&quot;request&quot;,jwk,allow,parent,reason?}</code
+              >
+            </td>
+            <td>OPENED <code>{nonce}</code></td>
+          </tr>
+          <tr>
+            <td>Request proof</td>
+            <td><code>{type:&quot;proof&quot;,sig}</code></td>
+            <td><code>{type:&quot;pending&quot;,request}</code></td>
+          </tr>
+          <tr>
+            <td>Local decision</td>
+            <td>No approval message exists in this direction</td>
+            <td>
+              <code>{type:&quot;grant&quot;,request,jwt}</code> or
+              <code>{type:&quot;error&quot;,reason,message}</code>, then END
+            </td>
+          </tr>
+          <tr>
+            <td>Data OPEN</td>
+            <td><code>{kind:&quot;cdp-lease-v1&quot;,mode:&quot;data&quot;,jwk,jwt}</code></td>
+            <td>OPENED <code>{nonce}</code></td>
+          </tr>
+          <tr>
+            <td>Data proof</td>
+            <td><code>{type:&quot;proof&quot;,sig}</code></td>
+            <td><code>{type:&quot;ready&quot;}</code></td>
+          </tr>
+          <tr>
+            <td>Action</td>
+            <td><code>{type:&quot;action&quot;,id,op,args}</code></td>
+            <td>
+              <code>{type:&quot;result&quot;,id,result}</code> or
+              <code>{type:&quot;error&quot;,id,reason,message}</code>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Table notation names fields, not a second encoding. Literal JSON and complete framed
+        examples are in the vectors. No per-action handle, JWT, target ID, CDP method or signature.
+        On each data stream serialize actions, one in flight, strictly increasing positive IDs.
+        Match response type, ID and result shape to the pending action. Snapshot yields
+        <code>{text:string}</code>; successful goto/click/fill yield <code>{}</code>. Fail safely on
+        a lost response, never implicitly reissue an action. Record errors and pre-accept RESETs
+        must be safe, bounded and not echo peer/browser payloads, tokens, secrets, private URLs or
+        response bodies. On terminal auth/expiry/revoke/protocol errors, close the stream. A scope
+        miss need not terminate the original lease.
+      </p>
+      <p>
+        Create immutable broker request IDs only after proving possession. Bind a request to the
+        exact OPEN, proven holder, selected link, epoch, eligible browser and (for expansion) exact
+        still-live parent. Correlate the final grant to the pending ID on the same private stream.
+        Receipt of pending, matching a thumbprint or accepting OPENED never grants browser access.
+        Do not choose the first of multiple matches. Disconnection invalidates pending delivery;
+        there is no anonymous retrieval by ID/JKT. Approval for a dead request cannot install a
+        grant. Match, approve, sign and activate under broker-controlled state; compensate/retire
+        undelivered grants if delivery fails.
+      </p>
+      <h2>JWT and holder proof</h2>
+      <p>
+        Compact JWS: exactly three segments. Ed25519 (RFC 9864), protected header exactly
+        <code
+          >{&quot;typ&quot;:&quot;slicc-cdp-lease+jwt&quot;,&quot;alg&quot;:&quot;Ed25519&quot;}</code
+        >. Verify the 64-byte signature on ASCII of the <strong>original</strong>
+        <code>header.payload</code>, never reserialize to verify. In production use a JOSE
+        implementation supporting this exact algorithm and configure the local issuer key; ignore no
+        critical fields, reject duplicate names and key URLs/embedded keys rather than trying
+        another algorithm or fetching keys. The broker never gives this JWT to the browser. It is
+        signed, not encrypted; do not include credentials in scopes or log it, pass it on a command
+        line, put it in a URL, or expose it in the owner UI.
+      </p>
+      <p>
+        The only claims in v1 are <code>iss</code>, <code>aud</code>, <code>jti</code>,
+        <code>exp</code>, <code>cnf:{jkt}</code>, <code>browser_session</code>, <code>allow</code>.
+        Enforce exact configured issuer and audience strings, local active random grant ID,
+        immutable grant state, current browser-session epoch and <code>now &lt; exp</code> in Unix
+        seconds. Do not derive authority from untrusted identifiers. <code>aud</code> identifies the
+        broker&#39;s lease endpoint, not a website/job. <code>browser_session</code> is an epoch,
+        not a profile name. Treat malformed or unsupported entries anywhere in <code>allow</code> as
+        failure of the entire grant.
+      </p>
+      <p>
+        Both OPEN modes present exactly the public JWK
+        <code>{kty:&quot;OKP&quot;,crv:&quot;Ed25519&quot;,x}</code>. Check 32-byte <code>x</code>.
+        Its RFC 7638 SHA-256 thumbprint preimage is these UTF-8 bytes, no newline/whitespace:
+      </p>
+      <pre
+      ><code class="language-text">{&quot;crv&quot;:&quot;Ed25519&quot;,&quot;kty&quot;:&quot;OKP&quot;,&quot;x&quot;:&quot;&lt;unpadded public x&gt;&quot;}
+</code></pre>
+      <p>
+        Use a fresh cryptographically random 32-byte nonce for every OPEN. Store its short exclusive
+        deadline (no later than issuance + 30s) with the <em>actual</em> link, stream and immutable
+        validated OPEN. <code>nonce</code> on the wire is unpadded base64url. The holder signature
+        is pure Ed25519 over the following concatenation, <strong>not</strong> Ed25519ph, JSON, hex,
+        the base64 nonce or an already-hashed message:
+      </p>
+      <pre
+      ><code class="language-text">ASCII(&quot;slicc-cdp-lease-v1:&quot; + mode) || byte(0) || raw_nonce_32 || binding_32
+request: binding_32 = SHA256(RFC7638 preimage above)
+data:    binding_32 = SHA256(ASCII(exact compact JWT))
+</code></pre>
+      <p>
+        On a proof record, consume that stream&#39;s outstanding challenge on the first attempt even
+        if verification fails. Verify with the key from OPEN; never accept a peer-supplied
+        replacement nonce, stream ID or key at proof time. On data OPEN
+        <strong>and again before ready</strong>, check the grant including
+        <code>cnf.jkt == base64url(request binding_32)</code> for the presented key, live
+        ID/epoch/time and local paired route. Never allocate/adopt a tab before successful proof.
+        Challenges, streams, grants and pending effects die on restart/epoch change. Every
+        reconnect, even for the same JWT, needs fresh proof. Proof is not authorization for any
+        given operation.
+      </p>
+      <p>
+        Fixture <code>context.now</code> is a test clock. <code>jwtCases</code> override the named
+        members of the base context, holder JWK or JWT (all other inputs unchanged). Some
+        deliberately invalid JWTs are <em>correctly signed</em>. <code>proofCases</code> start from
+        the indicated <code>requestStream</code> or <code>dataStream</code>; overrides change broker
+        state, inputs or submitted proof. A consumed nonce is never restored.
+        <code>framingCases</code> supply raw stream bytes in hex, chunk boundaries and expected
+        decoded records (<code>null</code> = reject). <code>lifecycleCases</code> start with L1
+        live, its data channel authenticated and an L1 outcome pending release; <code>live</code>,
+        <code>data</code> and <code>result</code> are the expected live grant, bound data channel
+        and whether that <strong>old</strong> result reached the job. <code>atExp</code> advances
+        the clock exactly to the deadline, including for idle channels. Only public keys are in the
+        distributed JSON; the
+        <a href="../../test/integration/fixtures/lease-wire.mjs">generator</a> deliberately derives
+        predictable fixture-only keys. Never trust these as installation keys. Header member order
+        is not semantically significant. Equality of the compact JWT bytes <em>is</em> significant
+        for the data proof.
+      </p>
+      <h2>Driver scope</h2>
+      <p>
+        Wire rules are typed <code>{kind,url}</code>. Use WHATWG HTTPS URL parsing and
+        serialization. Reject credentials (even empty userinfo), controls, whitespace, backslashes,
+        malformed percent escapes and wildcard authority. Wire rules must be canonical, without
+        <code>*</code> glob syntax:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th><code>kind</code></th>
+            <th>Stored <code>url</code></th>
+            <th>Comparison</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>origin</code></td>
+            <td>serialized origin, no trailing slash</td>
+            <td>equal scheme, ASCII host and effective port; all paths, queries and fragments</td>
+          </tr>
+          <tr>
+            <td><code>exact</code></td>
+            <td>full canonical href, even <code>/</code> at the root</td>
+            <td>serialized URLs equal, including the full query, fragment and empty delimiters</td>
+          </tr>
+          <tr>
+            <td><code>path-prefix</code></td>
+            <td>origin + literal absolute path; no query/fragment or trailing slash except root</td>
+            <td>
+              same origin, and path equals the prefix or is a descendant at <code>/</code> boundary;
+              ignore query/fragment
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        The <code>--allow</code> shorthand preserves the user&#39;s spelling
+        <strong>before</strong> serialization: <code>https://host</code> is an origin,
+        <code>https://host/</code> an exact root, and any other path/query/fragment an exact URL. A
+        trailing <code>/**</code> on a path with no query/fragment denotes a segment prefix (<code
+          >https://host/**</code
+        >
+        is the root prefix). Reject ambiguous literal wildcard spellings, never widen.
+        <code>--add</code> in the receipt flow denotes an explicit exact URL. See
+        <code>parseLeaseAllow</code> and <code>shorthandCases</code>. A partial client may visibly
+        refuse a shorthand or operation it cannot implement. This contract does not imply support
+        for every type in every CLI.
+      </p>
+      <p>
+        Normalize browser document host case, IDNA and default port; do not infer sibling hosts or
+        include subdomains. For narrow path rules decline ambiguous dot segments and percent-encoded
+        slash/backslash in raw path. Use URL path segments, never string-prefix an entire URL or
+        unescape it a second time. Deny protected browser/file/extension, catalog
+        protected/credential origins and broker-specific protected surfaces first. Never turn a rule
+        parse failure, unknown URL, opaque origin or inherited frame into an allowed origin.
+        Implementations unable to match a canonicalized URL safely must refuse that action; do not
+        silently convert a narrow rule into an origin.
+        <a href="../../lease-scope.mjs"
+          ><code>leaseScope(catalog, allow, extraProtectedOrigins?)</code></a
+        >
+        returns <code>null</code> for an invalid rule set or a positive-scope predicate. A
+        <code>true</code> is <strong>not</strong> a complete browser authorization.
+      </p>
+      <p>
+        At dispatch and result release check live grant, expiry, epoch, the same dedicated tab, same
+        document/frame/URL generation and every ancestor URL on the target path. Sanitize snapshots
+        to semantic results and omit unapproved subtrees. Invalidate stale refs on any intervening
+        change, even a same-document navigation away and back. Verify the actual target at dispatch;
+        refuse if focus, overlay or retargeting cannot be ruled out. No unrelated tabs, arbitrary
+        coordinates, agent JS or raw network outputs. Vetted navigation/back to an approved URL may
+        recover from an out-of-scope top page without reading that page or following its links.
+        Lease scope governs driver operations, <strong>not</strong> site-authored JS, fetches,
+        redirects, workers or dependencies. The browser can load a page without giving the driver
+        access.
+      </p>
+      <p>
+        A denied expansion leaves the parent intact. On approval compare-and-replace the live parent
+        atomically, keeping its holder, epoch, tab and absolute <code>exp</code>; mint a new random
+        <code>jti</code> for the approved delta, retire old channels and challenge anew. If expired,
+        revoked, replaced or disconnected in the meantime, reject the stale request. No time
+        extension on a v1 delta. Close authenticated streams at expiry or revoke, even when idle;
+        withhold pending results. No automatic renewal, replay, or adoption of another tab.
+      </p>
+      <h2>Kernel and native owner seams</h2>
+      <p>
+        The kernel exposes only a trusted boot-time, job-isolated lease facade (<code
+          >cdpLease:{tag,adapter}</code
+        >, <code>CDP_LEASE_VERSION=1</code>). Bind the dedicated job kernel to the authenticated
+        host stamp; use kernel-internal <code>SLICC_CDP_LEASE_URL</code> only. Do not expose raw
+        <code>SLICC_CDP_URL</code>. Neither a runtime query, hostname, public loopback port nor an
+        opaque handle authenticates a job. No discovery, alternate-host routing or raw fallback.
+        <code>Slicc.leaseRequest</code> params: initial <code>{allow,ttlSeconds,reason?}</code> or
+        expansion <code>{lease,allow,reason?}</code> with delta only; returns
+        <code>{request,lease,jkt,reviewCommand?}</code> (no JWT). Generate review text locally from
+        a fixed template after validating the <strong>bare</strong> full <code>jkt</code> and exact
+        typed rules; never print arbitrary remote shell text. If an offer cannot be expressed
+        without losing rule types, refuse rather than widening it.
+        <code>Slicc.leaseAction</code> params <code>{lease,op,args}</code>; <code>goto:{url}</code>,
+        <code>snapshot:{}</code>, <code>click:{ref}</code>, <code>fill:{ref,value}</code>. Returns
+        <code>{result:...}</code>. Errors use CDP <code>error.data.reason</code>, e.g.
+        <code>E_PENDING</code>, <code>E_SCOPE</code>, <code>E_EXPIRED</code>,
+        <code>E_REVOKED</code>, <code>E_UNSUPPORTED</code>, and safe human text. Native adapters
+        need a job-private authenticated endpoint; a shared sandbox&#39;s public localhost is not
+        one.
+      </p>
+      <p>
+        The owner GUI/TUI uses the authenticated local CLI control channel only, with build and
+        process opt-in and live <code>status.offers</code> exactly
+        <code>[&quot;cdp-lease-v1&quot;]</code>. <code>cdp-lease-list</code> yields
+        <code>{v:1,ok:true,pending,active}</code>. Pending rows are
+        <code>{request,jkt,browser,link,allow,ttlSeconds}</code> for initial and
+        <code>{request,jkt,browser,link,allow,parent}</code> for expansions. Display unchanged
+        deadline from still-active <code>parent.exp</code>, never restart the TTL. Active rows are
+        <code>{lease,jkt,browser,link,allow,exp}</code>. Use <code>{v:1,op,request}</code> for
+        <code>cdp-lease-approve</code>/<code>cdp-lease-deny</code> and
+        <code>{v:1,op:&quot;cdp-lease-revoke&quot;,lease}</code> for revocation; acknowledge
+        <code>{v:1,ok:true}</code> then reload. IDs bind immutable entries; never grant from stale
+        snapshots or a missing parent. These are local broker IDs, not the remote job&#39;s handles.
+        No grant token, private key or tray secret crosses the UI channel.
+      </p>
+      <h2>Running and consuming the contract</h2>
+      <ul>
+        <li>
+          JS: import <code>./lease-v1.json</code>, <code>./lease-scope-v1.json</code>,
+          <code>./schema/lease-v1.schema.json</code> or <code>./lease-scope.mjs</code> under
+          <code>@ai-ecoverse/slicc-browsers</code>. <code>npm run validate</code> exercises wire,
+          proof and scope cases.
+          <code>node --test test/integration/lease-{v1,page}.test.mjs</code> also tests the real
+          local page in a disposable Chromium profile. Set <code>CHROME_PATH</code> to Chrome for
+          Testing and <code>SLICC_HEADLESS=1</code>.
+        </li>
+        <li>
+          Go: <code>LeaseV1JSON()</code>, <code>LeaseScopeV1JSON()</code> and
+          <code>LeaseV1SchemaJSON()</code> return independent byte slices. Rust:
+          <code>LEASE_V1_SCHEMA</code>, and with <code>corpus</code>, <code>LEASE_V1</code> and
+          <code>LEASE_SCOPE_V1</code>; no new runtime dependencies.
+        </li>
+        <li>
+          For broker integration: run <code>node test/integration/fixtures/lease-page.mjs</code> in
+          the checkout. It binds loopback on an ephemeral port, generates a disposable TLS key/cert,
+          and prints the host mapping, SPKI and synthetic owner sign-in path. Use
+          <strong>only a new temporary profile</strong> with the printed flags,
+          <code>--no-proxy-server</code> and <code>--use-mock-keychain</code>; never use real
+          cookies or a logged-in profile. Stop with Ctrl-C. The default synthetic session is
+          <code>SameSite=Strict</code>; pass <code>{sameSite:&quot;Strict&quot;}</code> explicitly
+          in containment tests and assert <code>leaseFixtureCookiePolicy</code> on the owner-only
+          harness returns <code>{sameSite:&quot;Strict&quot;,secure:true,httpOnly:true}</code>. This
+          helper discards values. A separate <code>SameSite=Lax</code> premise permits a human
+          cross-site SSO link return; it is not evidence for the Strict case. The one-glyph square
+          WOFF is original synthetic fixture data. The page renders a signed-in invoice with a
+          cross-origin script, stylesheet, font, fetch, WebSocket, SPA URL change, service worker,
+          cross-site iframe, receipt link, real form and a local human SSO handoff (<code
+            >sites.support/sso</code
+          >) back to the same tab. See
+          <a href="../../test/integration/lease-page.test.mjs">premise test</a>.
+        </li>
+      </ul>
+      <p>
+        Conformance of static bytes and of an ordinary page in Chrome does not prove any consumer
+        contains a real browser. End-to-end pairing, holder authentication, broker state, mediated
+        actions and revocation remain release gates in the consuming repositories.
+      </p>
+    </main>
+  </body>
+</html>

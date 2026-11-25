@@ -1,0 +1,811 @@
+{
+  "version": 1,
+  "shorthandCases": [
+    {
+      "input": "https://billing.example",
+      "rule": {
+        "kind": "origin",
+        "url": "https://billing.example"
+      }
+    },
+    {
+      "input": "https://billing.example/",
+      "rule": {
+        "kind": "exact",
+        "url": "https://billing.example/"
+      }
+    },
+    {
+      "input": "https://billing.example/r/1042",
+      "rule": {
+        "kind": "exact",
+        "url": "https://billing.example/r/1042"
+      }
+    },
+    {
+      "input": "https://billing.example?invoice=42#due",
+      "rule": {
+        "kind": "exact",
+        "url": "https://billing.example/?invoice=42#due"
+      }
+    },
+    {
+      "input": "https://billing.example/**",
+      "rule": {
+        "kind": "path-prefix",
+        "url": "https://billing.example/"
+      }
+    },
+    {
+      "input": "https://billing.example/invoices/**",
+      "rule": {
+        "kind": "path-prefix",
+        "url": "https://billing.example/invoices"
+      }
+    },
+    {
+      "input": "https://billing.example//**",
+      "rule": null
+    },
+    {
+      "input": "https://billing.example/r*",
+      "rule": null
+    },
+    {
+      "input": "https://billing.example/r?value=/**",
+      "rule": null
+    },
+    {
+      "input": "https://billing.example/%2e%2e/**",
+      "rule": null
+    },
+    {
+      "input": "https://vault.sliccy.ai",
+      "rule": null
+    },
+    {
+      "input": "http://billing.example/",
+      "rule": null
+    }
+  ],
+  "urlCases": [
+    {
+      "id": "site",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example",
+      "match": true
+    },
+    {
+      "id": "normalization",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "HTTPS://BILLING.EXAMPLE:443/invoices",
+      "match": true
+    },
+    {
+      "id": "spa",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example/invoices?view=old#drafts",
+      "match": true
+    },
+    {
+      "id": "empty-delimiters",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example/?#",
+      "match": true
+    },
+    {
+      "id": "sibling",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://receipts.example/r/1042",
+      "match": false
+    },
+    {
+      "id": "subdomain",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://a.billing.example/",
+      "match": false
+    },
+    {
+      "id": "trailing-dot",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example./",
+      "match": false
+    },
+    {
+      "id": "other-port",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example:444/a",
+      "match": false
+    },
+    {
+      "id": "other-scheme",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "http://billing.example/",
+      "match": false
+    },
+    {
+      "id": "userinfo",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://agent@billing.example/",
+      "match": false
+    },
+    {
+      "id": "empty-userinfo",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://@billing.example/",
+      "match": false
+    },
+    {
+      "id": "backslash",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example\\invoice",
+      "match": false
+    },
+    {
+      "id": "outer-space",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example ",
+      "match": false
+    },
+    {
+      "id": "origin-dependency-load-is-not-driver-authority",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://cdn.example/bundle.js",
+      "match": false
+    },
+    {
+      "id": "inherited",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "about:blank",
+      "match": false
+    },
+    {
+      "id": "blob",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "blob:https://billing.example/abc",
+      "match": false
+    },
+    {
+      "id": "special",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "chrome://newtab/",
+      "match": false
+    },
+    {
+      "id": "prefix-itself",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices",
+      "match": true
+    },
+    {
+      "id": "prefix-descendant",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/1042?state=sent#receipt",
+      "match": true
+    },
+    {
+      "id": "no-string-prefix",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices-archive",
+      "match": false
+    },
+    {
+      "id": "case-sensitive",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/Invoices",
+      "match": false
+    },
+    {
+      "id": "segment-dotdot",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/../admin",
+      "match": false
+    },
+    {
+      "id": "encoded-dotdot",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/%2e%2e/admin",
+      "match": false
+    },
+    {
+      "id": "encoded-slash",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/1042%2fsummary",
+      "match": false
+    },
+    {
+      "id": "encoded-backslash",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/1042%5Csummary",
+      "match": false
+    },
+    {
+      "id": "ordinary-escape",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/invoice%201042",
+      "match": true
+    },
+    {
+      "id": "malformed-escape",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/invoices"
+        }
+      ],
+      "url": "https://billing.example/invoices/%xx",
+      "match": false
+    },
+    {
+      "id": "exact",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/invoice?view=one#paid"
+        }
+      ],
+      "url": "https://billing.example/invoice?view=one#paid",
+      "match": true
+    },
+    {
+      "id": "exact-different-hash",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/invoice?view=one#paid"
+        }
+      ],
+      "url": "https://billing.example/invoice?view=one#unpaid",
+      "match": false
+    },
+    {
+      "id": "exact-no-hash",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/invoice?view=one#paid"
+        }
+      ],
+      "url": "https://billing.example/invoice?view=one",
+      "match": false
+    },
+    {
+      "id": "exact-query-order",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/invoice?view=one#paid"
+        }
+      ],
+      "url": "https://billing.example/invoice?extra=2&view=one#paid",
+      "match": false
+    },
+    {
+      "id": "exact-empty-fragment",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example/#",
+      "match": false
+    },
+    {
+      "id": "exact-empty-query",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example/?",
+      "match": false
+    },
+    {
+      "id": "root-prefix",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example/foo?q#r",
+      "match": true
+    },
+    {
+      "id": "idna",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://xn--bcher-kva.example/r"
+        }
+      ],
+      "url": "https://bücher.example/r",
+      "match": true
+    },
+    {
+      "id": "ipv6",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://[::1]:8443"
+        }
+      ],
+      "url": "https://[::1]:8443/",
+      "match": true
+    }
+  ],
+  "invalidRules": [
+    {
+      "kind": "origin",
+      "url": "https://billing.example/"
+    },
+    {
+      "kind": "origin",
+      "url": "https://billing.example/invoices"
+    },
+    {
+      "kind": "origin",
+      "url": "https://billing.example?"
+    },
+    {
+      "kind": "origin",
+      "url": "http://billing.example"
+    },
+    {
+      "kind": "origin",
+      "url": "https://*.example"
+    },
+    {
+      "kind": "origin",
+      "url": "https://user@billing.example"
+    },
+    {
+      "kind": "origin",
+      "url": "https://vault.sliccy.ai"
+    },
+    {
+      "kind": "origin",
+      "url": "https://ims-na1.adobelogin.com"
+    },
+    {
+      "kind": "origin",
+      "url": "chrome-extension://fixture"
+    },
+    {
+      "kind": "exact",
+      "url": "https://billing.example"
+    },
+    {
+      "kind": "exact",
+      "url": "https://billing.example/#*"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/invoices/**"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/invoices/"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/invoices#"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/invoices?"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/in%2fvoices"
+    },
+    {
+      "kind": "path-prefix",
+      "url": "https://billing.example/a/%2e%2e/invoices"
+    },
+    {
+      "kind": "wildcard",
+      "url": "https://billing.example"
+    },
+    {
+      "kind": "origin",
+      "url": "https://billing.example",
+      "prefix": true
+    }
+  ],
+  "driver": {
+    "allow": [
+      {
+        "kind": "origin",
+        "url": "https://billing.example"
+      }
+    ],
+    "observed": {
+      "tab": "owned",
+      "epoch": "work-epoch-42",
+      "document": "docA",
+      "generation": 1,
+      "urls": ["https://billing.example/invoices/1042"]
+    },
+    "rows": [
+      {
+        "id": "page-script",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "script",
+        "url": "https://cdn.example/app.js"
+      },
+      {
+        "id": "page-stylesheet",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "stylesheet",
+        "url": "https://cdn.example/style.css"
+      },
+      {
+        "id": "page-font",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "font",
+        "url": "https://cdn.example/font.woff2"
+      },
+      {
+        "id": "page-fetch",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "fetch",
+        "url": "https://api.example/data"
+      },
+      {
+        "id": "page-websocket",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "websocket",
+        "url": "wss://push.example/live"
+      },
+      {
+        "id": "page-service-worker",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "service-worker",
+        "url": "https://billing.example/sw.js"
+      },
+      {
+        "id": "page-iframe",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "iframe",
+        "url": "https://support.example/chat"
+      },
+      {
+        "id": "page-redirect",
+        "subject": "page",
+        "expect": "normal-loader",
+        "resource": "redirect",
+        "url": "https://receipts.example/r/1042"
+      },
+      {
+        "id": "scoped-snapshot",
+        "subject": "driver",
+        "expect": "allow"
+      },
+      {
+        "id": "ordinary-app-action",
+        "subject": "driver",
+        "expect": "allow",
+        "op": "fill"
+      },
+      {
+        "id": "approved-child",
+        "subject": "driver",
+        "expect": "allow",
+        "observed": {
+          "urls": ["https://billing.example/", "https://billing.example/frame"]
+        }
+      },
+      {
+        "id": "embedded-widget",
+        "subject": "subtree",
+        "expect": "placeholder",
+        "observed": {
+          "urls": ["https://billing.example/", "https://support.example/chat"]
+        }
+      },
+      {
+        "id": "unapproved-ancestor",
+        "subject": "driver",
+        "expect": "deny",
+        "observed": {
+          "urls": [
+            "https://billing.example/",
+            "https://support.example/chat",
+            "https://billing.example/x"
+          ]
+        }
+      },
+      {
+        "id": "protect-all-subtree",
+        "subject": "driver",
+        "expect": "deny",
+        "observed": {
+          "urls": ["https://billing.example/", "https://seven.sliccy.ai"]
+        }
+      },
+      {
+        "id": "unrelated-tab",
+        "subject": "driver",
+        "expect": "deny",
+        "observed": {
+          "tab": "other"
+        }
+      },
+      {
+        "id": "owned-popup-never-adopt",
+        "subject": "driver",
+        "expect": "deny",
+        "observed": {
+          "tab": "popup"
+        }
+      },
+      {
+        "id": "known-receipt",
+        "subject": "goto",
+        "expect": "deny",
+        "url": "https://receipts.example/r/1042"
+      },
+      {
+        "id": "exact-expansion",
+        "subject": "goto",
+        "expect": "allow",
+        "allow": [
+          {
+            "kind": "origin",
+            "url": "https://billing.example"
+          },
+          {
+            "kind": "exact",
+            "url": "https://receipts.example/r/1042"
+          }
+        ],
+        "url": "https://receipts.example/r/1042"
+      },
+      {
+        "id": "no-sibling-receipt",
+        "subject": "goto",
+        "expect": "deny",
+        "allow": [
+          {
+            "kind": "origin",
+            "url": "https://billing.example"
+          },
+          {
+            "kind": "exact",
+            "url": "https://receipts.example/r/1042"
+          }
+        ],
+        "url": "https://receipts.example/r/10429"
+      },
+      {
+        "id": "after-navigation",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "document": "docB"
+        }
+      },
+      {
+        "id": "same-document-fragment",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "urls": ["https://billing.example/invoices/1042#updated"]
+        }
+      },
+      {
+        "id": "url-away-and-back",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "generation": 3
+        }
+      },
+      {
+        "id": "nested-frame-replaced",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "generation": 2
+        }
+      },
+      {
+        "id": "unknown-redirect",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "urls": ["https://receipts.example/r/1042?private"]
+        }
+      },
+      {
+        "id": "stale-ref-on-dispatch",
+        "subject": "driver",
+        "expect": "deny",
+        "refGeneration": 0
+      },
+      {
+        "id": "overlay-unknown-target",
+        "subject": "driver",
+        "expect": "deny",
+        "targetVerified": false
+      },
+      {
+        "id": "runtime-evaluate",
+        "subject": "driver",
+        "expect": "deny",
+        "op": "evaluate"
+      },
+      {
+        "id": "navigation-active",
+        "subject": "output",
+        "expect": "allow"
+      },
+      {
+        "id": "revoked-before-request",
+        "subject": "driver",
+        "expect": "deny",
+        "active": []
+      },
+      {
+        "id": "expired-before-output",
+        "subject": "output",
+        "expect": "withhold",
+        "now": 1795518000
+      },
+      {
+        "id": "revoked-before-output",
+        "subject": "output",
+        "expect": "withhold",
+        "active": []
+      },
+      {
+        "id": "epoch-changed",
+        "subject": "output",
+        "expect": "withhold",
+        "after": {
+          "epoch": "work-epoch-43"
+        }
+      }
+    ]
+  }
+}

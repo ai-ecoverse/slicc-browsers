@@ -37351,6 +37351,16 @@
             "legacyInterception"
           ]
         },
+        "legacySetupRefused": {
+          "means": "C10.cookie-plant: the guarded Network.setRequestInterception setup got a slicc refusal (accepted: false; missing method or other error: not applicable; control attempt on the unguarded reader)",
+          "optional": true,
+          "check": {
+            "result": "probe",
+            "path": "result.legacySetupRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "ordinaryPlanted": {
           "means": "C10.cookie-plant: ordinary Set-Cookie through Fetch.fulfillRequest landed in the jar",
           "check": {
@@ -37453,6 +37463,7 @@
         "continueAtRequestRefused",
         "legacyHeadersRefused",
         "legacyRawRefused",
+        "legacySetupRefused",
         "fulfillNewlineAnswered",
         "headerPaddedAnswered"
       ],
@@ -37467,7 +37478,8 @@
           "adobeAnswered": true,
           "adobeRefused": false,
           "deletionCleared": true,
-          "adobePlanted": true
+          "adobePlanted": true,
+          "legacySetupRefused": false
         }
       },
       "expected": {
@@ -37534,6 +37546,7 @@
         "legacyRawPlanted": false,
         "legacyRawAnswered": true,
         "legacyRawRefused": "either",
+        "legacySetupRefused": "either",
         "ordinaryPlanted": true,
         "ordinaryAnswered": true,
         "deletionAnswered": true,
@@ -38363,6 +38376,16 @@
             "legacyInterception"
           ]
         },
+        "legacySetupRefused": {
+          "means": "C10.cookie-plant.credential: the guarded Network.setRequestInterception setup got a slicc refusal (accepted: false; missing method or other error: not applicable; control attempt on the unguarded reader)",
+          "optional": true,
+          "check": {
+            "result": "probe",
+            "path": "result.legacySetupRefused",
+            "equals": true,
+            "observer": "client"
+          }
+        },
         "hostOnlyPlanted": {
           "means": "C10.cookie-plant.credential: host-only Set-Cookie on an IMS request must not plant (evidenceForm commandRefused when answered+refused+not planted)",
           "check": {
@@ -38566,6 +38589,7 @@
         "continueAtRequestRefused",
         "legacyHeadersRefused",
         "legacyRawRefused",
+        "legacySetupRefused",
         "hostOnlyRefused",
         "domainCoverRefused",
         "fulfillNewlineAnswered",
@@ -38582,7 +38606,8 @@
           "adobeAnswered": true,
           "adobeRefused": false,
           "deletionCleared": true,
-          "adobePlanted": true
+          "adobePlanted": true,
+          "legacySetupRefused": false
         }
       },
       "expected": {
@@ -38649,6 +38674,7 @@
         "legacyRawPlanted": false,
         "legacyRawAnswered": true,
         "legacyRawRefused": "either",
+        "legacySetupRefused": "either",
         "hostOnlyPlanted": false,
         "hostOnlyAnswered": true,
         "hostOnlyRefused": "either",

@@ -3931,14 +3931,16 @@ async function enableClientTransport(client, pageSession, notes) {
     };
   let fetchEnable = transport.fetchEnable ?? null;
   if (transport.fetch && refused(fetchEnable))
-    return { transport, legacyReady: false, fetchEnable };
+    return { transport, legacyReady: false, fetchEnable, legacySetup: null };
   if (transport.fetch && fetchEnable && !fetchEnable.ok)
-    return { transport, legacyReady: false, fetchEnable };
+    return { transport, legacyReady: false, fetchEnable, legacySetup: null };
   let legacyReady = transport.legacy;
+  let legacySetup = legacyReady ? 'accepted' : null;
   if (!legacyReady && transport.fetch && fetchEnable?.ok) {
     await outcome(client.send('Fetch.disable', {}, pageSession));
     const legacy = await enableLegacy(client, pageSession);
     legacyReady = legacy.ok;
+    legacySetup = legacy.ok ? 'accepted' : refused(legacy) ? 'refused' : null;
     if (legacyReady) {
       transport.legacy = true;
       await outcome(client.send('Network.setRequestInterception', { patterns: [] }, pageSession));
@@ -3959,16 +3961,40 @@ async function enableClientTransport(client, pageSession, notes) {
       800,
       'Fetch.enable'
     );
-    if (refused(fetchEnable)) return { transport, legacyReady, fetchEnable };
-    if (!fetchEnable.ok) return { transport, legacyReady, fetchEnable };
+    if (refused(fetchEnable)) return { transport, legacyReady, fetchEnable, legacySetup };
+    if (!fetchEnable.ok) return { transport, legacyReady, fetchEnable, legacySetup };
     if (legacyReady) note(notes, 'cookie-plant.legacyProbe', { ready: true });
+    else if (legacySetup === 'refused')
+      note(notes, 'cookie-plant.legacyProbe', {
+        ready: false,
+        refused: true,
+        refusal: boundedError(legacy.error),
+      });
     else
       note(notes, 'cookie-plant.legacyProbe', {
         ready: false,
         note: 'legacy unsupported in this Chrome',
       });
   }
-  return { transport, legacyReady, fetchEnable };
+  return { transport, legacyReady, fetchEnable, legacySetup };
+}
+
+async function readerLegacySetup(reader, sessionId) {
+  const setup = await capped(enableLegacy(reader, sessionId), 800, 'control-legacy');
+  if (setup.ok)
+    await capped(
+      outcome(reader.send('Network.setRequestInterception', { patterns: [] }, sessionId)),
+      800,
+      'control-legacy-off'
+    );
+  return refused(setup);
+}
+
+function legacySetupValue(setup, notes) {
+  if (setup === 'refused') return true;
+  if (setup === 'accepted') return false;
+  note(notes, 'cookie-plant.legacySetupRefused', 'not applicable: no slicc refusal of the setup');
+  return 'not-supported';
 }
 
 function credentialAttacks(ctx) {
@@ -4391,6 +4417,9 @@ export async function cookiePlant({
   if (probe.done) return probe.done;
   const transport = probe.enabled.transport;
   const legacyReady = probe.enabled.legacyReady;
+  const legacySetupRefused = control
+    ? await readerLegacySetup(reader, probe.readerSession)
+    : legacySetupValue(probe.enabled.legacySetup, notes);
   await capped(disableInterception(client, probe.pageSession, transport), 800, 'probe-disable');
   await capped(
     outcome(reader.send('Target.closeTarget', { targetId: probe.pageTarget })),
@@ -4467,6 +4496,7 @@ export async function cookiePlant({
     credential,
     fetch: Boolean(transport.fetch),
     legacy: Boolean(legacyReady),
+    legacySetupRefused,
     evidenceIncomplete,
     results,
   });
@@ -4479,7 +4509,15 @@ function doorPremiseMissed(door) {
   };
 }
 
-function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncomplete, results }) {
+function finishCookiePlant({
+  control,
+  credential,
+  fetch,
+  legacy,
+  legacySetupRefused = 'not-supported',
+  evidenceIncomplete,
+  results,
+}) {
   const skips = Object.values(results).flatMap((attempt) => attempt?.premiseMissed ?? []);
   return Object.assign(
     {
@@ -4487,6 +4525,7 @@ function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncompl
       control: Boolean(control),
       fetch,
       legacy,
+      legacySetupRefused,
       credential,
       ...(evidenceIncomplete && !control
         ? { incomplete: 'protected plant evidence incomplete' }

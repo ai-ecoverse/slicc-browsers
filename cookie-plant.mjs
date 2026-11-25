@@ -915,6 +915,38 @@ function plantedOf(jar) {
   return true;
 }
 
+const clearMissed = 'the deleted cookie was still in the jar when the re-read bound ran out';
+
+function clearSettle(budget) {
+  const ms = Number(budget);
+  const scale = Number.isFinite(ms) && ms > 0 ? Math.min(ms / 5000, 1) : 0.1;
+  return { boundMs: Math.round(2000 * scale), stepMs: Math.max(Math.round(250 * scale), 10) };
+}
+
+async function settleCleared(handle, cookie, first, budget) {
+  const { boundMs, stepMs } = clearSettle(budget);
+  const startedAt = Date.now();
+  const state = { jar: first, tries: 1, done: false };
+  const reread = async () => {
+    const jar = await readJarWithCanary(handle, cookie);
+    if (state.done) return true;
+    state.jar = jar;
+    state.tries += 1;
+    return plantedOf(jar) !== true;
+  };
+  if (plantedOf(first) === true) await waitFor(reread, boundMs, stepMs, true);
+  state.done = true;
+  return {
+    jar: state.jar,
+    settle: {
+      tries: state.tries,
+      settleElapsedMs: Date.now() - startedAt,
+      settleBoundMs: boundMs,
+      settleStepMs: stepMs,
+    },
+  };
+}
+
 async function triggerFetch(client, sessionId, url) {
   return outcome(
     client.send(
@@ -3741,26 +3773,45 @@ function controlAttacks(ctx) {
           });
           return { ...attempt, cleared: 'incomplete' };
         }
-        const after = await readJarWithCanary(handle, {
+        const deleted = {
           name: ctx.names.delete,
           domain: deleteOnOrdinary.domain,
           path: deleteOnOrdinary.path,
-        });
+        };
+        const first = await readJarWithCanary(handle, deleted);
+        const { jar: after, settle } = await settleCleared(handle, deleted, first, ctx.budget);
         const afterPlanted = plantedOf(after);
         if (afterPlanted === 'incomplete') {
           note(ctx.notes, 'cookie-plant.deletion.cleared', {
             cleared: 'incomplete',
             incomplete: 'after jar unreadable',
             ...jarAuditFields(handle, after),
+            ...settle,
             ...timingOf(handle),
           });
           return { ...attempt, cleared: 'incomplete' };
+        }
+        if (afterPlanted === true && ctx.control) {
+          note(ctx.notes, 'cookie-plant.deletion.cleared', {
+            cleared: 'incomplete',
+            incomplete: clearMissed,
+            seedVia: seeded?.via,
+            ...jarAuditFields(handle, after),
+            ...settle,
+            ...timingOf(handle),
+          });
+          return {
+            ...attempt,
+            cleared: 'incomplete',
+            premiseMissed: `deletionCleared: ${clearMissed}`,
+          };
         }
         const cleared = afterPlanted === false;
         note(ctx.notes, 'cookie-plant.deletion.cleared', {
           cleared,
           seedVia: seeded?.via,
           ...jarAuditFields(handle, after),
+          ...settle,
           ...timingOf(handle),
         });
         return { ...attempt, cleared };
@@ -4347,6 +4398,7 @@ export async function cookiePlant({
     legStartedAt: Date.now(),
     firstIncomplete: { noted: false },
     guardedProtected: !control && !credential,
+    control: Boolean(control),
     blockedMarkers: Array.isArray(blockedMarkers) ? blockedMarkers : [],
     proofTag: tag,
     rawDoors: {},
@@ -4399,6 +4451,7 @@ function doorPremiseMissed(door) {
 }
 
 function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncomplete, results }) {
+  const skips = Object.values(results).flatMap((attempt) => attempt?.premiseMissed ?? []);
   return Object.assign(
     {
       live: true,
@@ -4409,6 +4462,7 @@ function finishCookiePlant({ control, credential, fetch, legacy, evidenceIncompl
       ...(evidenceIncomplete && !control
         ? { incomplete: 'protected plant evidence incomplete' }
         : {}),
+      ...(skips.length ? { skips } : {}),
     },
     ...Object.entries(results).map(([name, attempt]) => flattenAttempt(name, attempt))
   );

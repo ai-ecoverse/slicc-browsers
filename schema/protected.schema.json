@@ -57,6 +57,7 @@
           "unreachableURL": { "type": "string" },
           "navigating": { "type": "boolean" },
           "opener": { "enum": ["protected", "unprotected", "unknown"] },
+          "contextOrigin": { "type": "string" },
           "protected": { "type": "boolean" }
         }
       }

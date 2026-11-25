@@ -76,6 +76,7 @@ type TargetVector struct {
 	Type           string `json:"type,omitempty"`
 	Previous       bool   `json:"previous,omitempty"`
 	Opener         string `json:"opener,omitempty"`
+	ContextOrigin  string `json:"contextOrigin,omitempty"`
 	Protected      bool   `json:"protected"`
 }
 

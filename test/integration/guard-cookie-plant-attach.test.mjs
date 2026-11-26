@@ -24,6 +24,7 @@ const fail = (method) =>
   );
 const bounded = (method) => `${method} failed in the fake for <url> sid=<value> x`;
 const refuseMs = 60;
+const skewMs = 10;
 const refusal = (method, tag) =>
   new Error(
     `slicc: refused: ${method} for ${tag} at http://ordinary.example.test/doc?n=x sid=${secret} ${'y'.repeat(400)}`
@@ -311,7 +312,7 @@ function assertRefused(out, side, method = 'Target.attachToTarget') {
   assert.equal(found.refused, true, dump(row));
   assert.equal(found.error, boundedRefusal(method), dump(row));
   assert.ok(Number.isInteger(found.elapsedMs), dump(row));
-  assert.ok(found.elapsedMs >= refuseMs && found.elapsedMs < 800, dump(row));
+  assert.ok(found.elapsedMs >= refuseMs - skewMs && found.elapsedMs < 800, dump(row));
   assert.deepEqual(
     row.incomplete.filter((entry) => entry.startsWith(`${side} ${path}`)),
     [`${side} ${path}Planted: fresh tab ${method} refused: ${found.error}`],

@@ -19,13 +19,14 @@ const commitMs = 150;
 const sweepMs = 50;
 const waitMs = 4000;
 const skewMs = 10;
+const slackMs = 75;
 const cap = 200;
 const attemptTab = 4;
 const both = ['control', 'guarded'];
 const mixed = ['binaryLf', 'ordinary'];
 const leak = { allowPlantPaths: ['fulfillArray'], admitProtectedNavigation: true };
 const openKeys = ['targetId', 'url', 'ready'];
-const heldKeys = [...openKeys, 'href', 'requested'];
+const heldKeys = [...openKeys, 'href', 'requested', 'waitedMs'];
 
 function pruned(vector, paths) {
   if (!paths) return vector;
@@ -175,6 +176,14 @@ function assertSameVerdict(out, base) {
   assert.equal(out.summary.pass, base.summary.pass, dump(out.row));
 }
 
+function assertWaited(entry, afterMs, context) {
+  assert.ok(Number.isInteger(entry.waitedMs), context);
+  assert.ok(
+    entry.waitedMs >= Math.max(0, afterMs - slackMs) && entry.waitedMs < waitMs,
+    `${entry.waitedMs} ${context}`
+  );
+}
+
 function assertHeld(row, sides, { href = (entry) => entry.url, requested = true } = {}) {
   for (const side of both) {
     const found = opens(row, side);
@@ -193,6 +202,7 @@ function assertHeld(row, sides, { href = (entry) => entry.url, requested = true 
       assert.deepEqual(Object.keys(entry), heldKeys, dump(row));
       assert.equal(entry.href, href(entry), dump(row));
       assert.equal(entry.requested, requested, dump(row));
+      assertWaited(entry, commitMs, dump(row));
     }
   }
 }
@@ -219,6 +229,11 @@ function assertUncommitted(out, side, reasons) {
     [stuck[0].ready, stuck[0].href, stuck[0].requested],
     [false, 'about:blank', false],
     dump(row)
+  );
+  assert.ok(Number.isInteger(stuck[0].waitedMs), dump(row));
+  assert.ok(
+    stuck[0].waitedMs >= waitMs - slackMs && stuck[0].waitedMs <= out.ms,
+    `${stuck[0].waitedMs} ${out.ms} ${dump(row)}`
   );
   assert.equal(out.stats.earlyAttaches, 0, dump(row));
   assert.ok(out.ms >= waitMs - skewMs && out.ms < waitMs * 2, `${out.ms} ${dump(row)}`);
@@ -298,8 +313,10 @@ test('every existing C10.cookie-plant row keeps its verdict when every fresh tab
     for (const side of both)
       for (const entry of opens(row, side)) {
         assert.equal(entry.ready, true, dump(row));
-        if (Object.hasOwn(entry, 'href'))
-          assert.deepEqual([entry.href, entry.requested], [entry.url, true], dump(row));
+        if (!Object.hasOwn(entry, 'href')) continue;
+        assert.deepEqual(Object.keys(entry), heldKeys, dump(row));
+        assert.deepEqual([entry.href, entry.requested], [entry.url, true], dump(row));
+        assertWaited(entry, sweepMs, dump(row));
       }
   }
   assert.equal(out.summary.pass, base.summary.pass);
@@ -308,7 +325,7 @@ test('every existing C10.cookie-plant row keeps its verdict when every fresh tab
 });
 
 for (const sides of [['guarded'], ['control'], both])
-  test(`${sides.join(' and ')} fresh tabs that report readyState complete on about:blank and commit the requested url after ${commitMs} ms proceed and match the row without the delay`, async () =>
+  test(`${sides.join(' and ')} fresh tabs that report readyState complete on about:blank and commit the requested url after ${commitMs} ms proceed, match the row without the delay and note how long the wait held`, async () =>
     assertCommitted(await late(sides), await mixedRow(), sides));
 
 test('a guarded credential hostOnly fresh tab that commits late matches the row without the delay', async () =>
@@ -337,10 +354,10 @@ test('a leaking guard still fails when every fresh tab commits the requested url
   assertLeak(await leakRun(), await leaked()));
 
 for (const side of both) {
-  test(`a ${side} door tab that stays on about:blank with readyState complete for the whole wait is incomplete naming the premise, never skip, pass or fail`, async () =>
+  test(`a ${side} door tab that stays on about:blank with readyState complete for the whole wait is incomplete naming the premise, never skip, pass or fail, and notes a wait of about ${waitMs} ms`, async () =>
     assertDoorUncommitted(await stuck(side, [1]), side));
 
-  test(`a ${side} attempt tab that stays on about:blank with readyState complete for the whole wait is incomplete naming the premise on its observations`, async () =>
+  test(`a ${side} attempt tab that stays on about:blank with readyState complete for the whole wait is incomplete naming the premise on its observations and notes a wait of about ${waitMs} ms`, async () =>
     assertAttemptUncommitted(await stuck(side, [attemptTab]), side));
 }
 
@@ -385,6 +402,7 @@ const opener = async (...swaps) =>
 
 const heldLine = 'return initialEntry(href) && !sameUrl(href, url);';
 const sameLine = 'return new URL(a).href === new URL(b).href;';
+const waitedLine = 'waitedMs: seen.last - seen.first';
 const readyOnly = [heldLine, 'return false;'];
 const reference = () => baseline('reference', () => mutant(readyOnly));
 
@@ -459,8 +477,12 @@ function assertSlash(out) {
   assert.equal(out.page.ok, true, JSON.stringify(out));
   assert.equal(out.page.result.incomplete, undefined, JSON.stringify(out));
   assert.equal(out.opened.length, 1, JSON.stringify(out));
+  assert.deepEqual(Object.keys(out.opened[0]), heldKeys, JSON.stringify(out));
+  const { waitedMs, ...opened } = out.opened[0];
+  assertWaited({ waitedMs }, commitMs, JSON.stringify(out));
+  assert.ok(waitedMs <= out.ms, JSON.stringify(out));
   assert.deepEqual(
-    out.opened[0],
+    opened,
     {
       targetId: out.page.result.targetId,
       url: out.requested,
@@ -517,7 +539,7 @@ const mutants = {
     check: (out) => assertDoorUncommitted(out, 'guarded'),
   },
   'a runner without the last href in the open note fails the about:blank row': {
-    swap: [['{ href: seen.href.slice(0, 200), requested', '{ requested']],
+    swap: [['href: seen.href.slice(0, 200),\n          requested', 'requested']],
     run: (runner) => stuck('control', [1], runner),
     shows: (out) => opens(out.row, 'control').every((entry) => !Object.hasOwn(entry, 'href')),
     check: (out) => assertDoorUncommitted(out, 'control'),
@@ -541,10 +563,42 @@ const mutants = {
     check: assertLong,
   },
   'a runner that writes the href on every open fails the prompt row': {
-    swap: [['...(seen.held ? {', '...(true ? {']],
+    swap: [['...(seen.held\n      ? {', '...(true\n      ? {']],
     run: mixedRun,
     shows: (out) => opens(out.row, 'guarded').some((entry) => Object.hasOwn(entry, 'href')),
     check: (out) => assertPrompt(out.row),
+  },
+  'a runner that writes waitedMs on every open fails the prompt row': {
+    swap: [
+      [
+        `${waitedLine},\n        }\n      : {}),`,
+        `${waitedLine},\n        }\n      : { ${waitedLine} }),`,
+      ],
+    ],
+    run: mixedRun,
+    shows: (out) => opens(out.row, 'guarded').some((entry) => Object.hasOwn(entry, 'waitedMs')),
+    check: (out) => assertPrompt(out.row),
+  },
+  'a runner without waitedMs in the open note fails the late-commit row': {
+    swap: [[`${waitedLine},`, '']],
+    run: (runner) => late(['guarded'], runner),
+    shows: (out) =>
+      opens(out.row, 'guarded').some(
+        (entry) => Object.hasOwn(entry, 'href') && !Object.hasOwn(entry, 'waitedMs')
+      ),
+    check: async (out) => assertCommitted(out, await mixedRow(), ['guarded']),
+  },
+  'a runner that times only the poll that ended the wait fails the late-commit row': {
+    swap: [['seen.first ??= seen.last;', 'seen.first = seen.last;']],
+    run: (runner) => late(['guarded'], runner),
+    shows: (out) => opens(out.row, 'guarded').some((entry) => entry.waitedMs === 0),
+    check: async (out) => assertCommitted(out, await mixedRow(), ['guarded']),
+  },
+  'a runner that times only the poll that ended the wait fails the about:blank row': {
+    swap: [['seen.first ??= seen.last;', 'seen.first = seen.last;']],
+    run: (runner) => stuck('guarded', [1], runner),
+    shows: (out) => opens(out.row, 'guarded').some((entry) => entry.waitedMs === 0),
+    check: (out) => assertDoorUncommitted(out, 'guarded'),
   },
 };
 

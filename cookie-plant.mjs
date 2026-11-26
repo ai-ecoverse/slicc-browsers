@@ -271,8 +271,10 @@ async function openPage(reader, url, notes, internalSessions, browserContextId =
   );
   if (!created.ok) return created;
   internalSessions.add(created.result.sessionId);
-  const seen = { href: '', held: false };
+  const seen = { href: '', held: false, first: null, last: null };
   const ready = await waitFor(async () => {
+    seen.last = Date.now();
+    seen.first ??= seen.last;
     const read = await outcome(
       reader.send(
         'Runtime.evaluate',
@@ -293,7 +295,13 @@ async function openPage(reader, url, notes, internalSessions, browserContextId =
     targetId: created.result.targetId,
     url,
     ready: Boolean(ready),
-    ...(seen.held ? { href: seen.href.slice(0, 200), requested: sameUrl(seen.href, url) } : {}),
+    ...(seen.held
+      ? {
+          href: seen.href.slice(0, 200),
+          requested: sameUrl(seen.href, url),
+          waitedMs: seen.last - seen.first,
+        }
+      : {}),
   });
   if (!ready)
     return {

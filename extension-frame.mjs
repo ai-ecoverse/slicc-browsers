@@ -435,7 +435,7 @@ async function frameReadNodes(reader, observer, frame, missing) {
   }
 }
 
-function protectedRefusal(out) {
+export function protectedRefusal(out) {
   const text = String(out?.error?.message ?? out?.error ?? '');
   return text === PRESENT || text === SHOWN || /^slicc: refused/.test(text);
 }

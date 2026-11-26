@@ -65,7 +65,7 @@ slicc-browsers = { version = "1", features = ["corpus"] }
 | `serde` | typed `Catalog`, `catalog()`, `Catalog::browser` and `Catalog::priority` |
 | `corpus` | the vectors (`CORPUS`, `PROTECTED`, `GUARD_VECTORS`, `DEBUGGER_STAGE1`) and the modules `corpus`, `protected`, `guard` and `debugger_stage1`, for tests |
 
-Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` so it stays out of release builds.
+Every feature builds for `wasm32-wasip1`.
 
 ### npm
 
@@ -209,7 +209,7 @@ const fixture = await fixtureServer();
 const execution = await run(set, {
   clientFactory: (row) => connectGuardAndObserver(row),
   targets: originsFor(fixture),
-  capabilities: { autoAttach: true, browserSession: true, browserContexts: true, discovery: true },
+  capabilities: { autoAttach: true, browserSession: true },
   parallel: 4,
   fixture,
 });
@@ -237,6 +237,7 @@ You supply:
 | `extensionFrame` | host the harness extension frame an ordinary test page embeds |
 | `clientExit` | close the guarded client mid-row |
 | `siteIsolationOff`, `inboundDelay`, `forwardAudit` | no site isolation; hold inbound; audit forwarded commands |
+| `frameOwnershipProbe` | forward only `DOM.getDocument` then `DOM.disable` during a restore, never the reply |
 | `secureOrigin` | HTTPS origins (service workers) |
 | `stockSetup`, `syntheticAutoAttach` | admit stock clients' setup calls; synthesize auto-attach |
 | `explicitAttach` | attach only explicitly (no init-script check on a popup's first document) |

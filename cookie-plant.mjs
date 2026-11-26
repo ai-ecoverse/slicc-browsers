@@ -2726,6 +2726,19 @@ function refusedTab(ctx, attached, elapsedMs) {
 }
 
 function missedPath(name, attempt, notes) {
+  if (!attempt?.retried) return missedAttempt(name, attempt, notes, '');
+  const { retried, ...settled } = attempt;
+  noteRetried(name, retried, notes);
+  if (!settled.missed) return settled;
+  return missedAttempt(
+    name,
+    { ...settled, missed: { ...settled.missed, retries: retried.length } },
+    notes,
+    afterAttempts(retried, settled.missed.step)
+  );
+}
+
+function missedAttempt(name, attempt, notes, after) {
   if (!attempt?.missed) return attempt;
   const { missed, ...rest } = attempt;
   note(notes, 'cookie-plant.attach', { path: name, ...missed });
@@ -2734,19 +2747,72 @@ function missedPath(name, attempt, notes) {
       ...rest,
       premiseMissed: ['Answered', 'Refused', 'Planted']
         .filter((field) => rest[field.toLowerCase()] === 'incomplete')
-        .map((field) => `${name}${field}: fresh tab ${missed.step} refused: ${missed.error}`),
+        .map(
+          (field) => `${name}${field}: fresh tab ${missed.step} refused: ${missed.error}${after}`
+        ),
     };
   const fields = ['Answered', 'Refused', 'Planted', ...(name === 'deletion' ? ['Cleared'] : [])];
   return {
     ...rest,
     ...(name === 'deletion' ? { cleared: 'incomplete' } : {}),
     premiseMissed: fields.map(
-      (field) => `${name}${field}: fresh tab ${missed.step}: ${missed.error}`
+      (field) => `${name}${field}: fresh tab ${missed.step}: ${missed.error}${after}`
     ),
   };
 }
 
+const settleRefusal = 'slicc: refused: navigation not settled, retry';
+const settleRetries = 3;
+const settleGapMs = 400;
+
+function settleRefused(out) {
+  return !out?.ok && String(out?.error?.message ?? out?.error ?? '') === settleRefusal;
+}
+
+function settleRetry(control) {
+  return control ? null : { left: settleRetries, startedAt: null, attempts: [] };
+}
+
+function retriedOf(retry, tag) {
+  return (retry?.attempts ?? []).map((entry) => ({
+    ...entry,
+    error: boundedError(entry.error, tag),
+  }));
+}
+
+function noteRetried(name, retried, notes) {
+  for (const entry of retried) note(notes, 'cookie-plant.attach.retry', { path: name, ...entry });
+}
+
+function afterAttempts(retried, step) {
+  const tries = retried.filter((entry) => entry.step === step).length;
+  return tries ? ` (after ${tries + 1} attempts)` : '';
+}
+
+async function attachStep(call, label, step, retry) {
+  let out = await capped(outcome(call()), 800, label);
+  for (let attempt = 1; retry?.left > 0 && settleRefused(out); attempt += 1) {
+    retry.left -= 1;
+    retry.attempts.push({
+      step,
+      attempt,
+      error: out.error,
+      elapsedMs: Date.now() - retry.startedAt,
+    });
+    await pause(settleGapMs);
+    out = await capped(outcome(call()), 800, label);
+  }
+  return out;
+}
+
 async function withFreshAttemptTab(ctx, run) {
+  const retry = settleRetry(ctx.control);
+  const out = await freshAttemptTab(ctx, run, retry);
+  const retried = retriedOf(retry, ctx.tag);
+  return retried.length ? { ...out, retried } : out;
+}
+
+async function freshAttemptTab(ctx, run, retry) {
   const { client, reader, homeUrl, notes, internalSessions, browserContextId } = ctx;
   const page = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
   if (!page.ok) return missedTab(ctx, 'open', page.error);
@@ -2754,7 +2820,7 @@ async function withFreshAttemptTab(ctx, run) {
   const readerSession = page.result.sessionId;
   const pageTarget = page.result.targetId;
   const timing = { pathStartedAt: Date.now() };
-  const attached = await attachClientPage(client, pageTarget, internalSessions);
+  const attached = await attachClientPage(client, pageTarget, internalSessions, retry);
   const attachMs = Date.now() - timing.pathStartedAt;
   if (attached.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
@@ -3905,11 +3971,13 @@ async function runAttempts(
   return { results, ran };
 }
 
-async function attachClientPage(client, pageTarget, internalSessions) {
-  const attached = await capped(
-    outcome(client.send('Target.attachToTarget', { targetId: pageTarget, flatten: true })),
-    800,
-    'attachToTarget'
+async function attachClientPage(client, pageTarget, internalSessions, retry = null) {
+  if (retry) retry.startedAt = Date.now();
+  const attached = await attachStep(
+    () => client.send('Target.attachToTarget', { targetId: pageTarget, flatten: true }),
+    'attachToTarget',
+    'Target.attachToTarget',
+    retry
   );
   if (!attached.ok) {
     if (sessionCut(attached) || refused(attached))
@@ -3928,7 +3996,12 @@ async function attachClientPage(client, pageTarget, internalSessions) {
       ['Runtime.enable', 'Runtime.enable'],
       ['Network.enable', 'Network.enable'],
     ]) {
-      const enabled = await capped(outcome(client.send(method, {}, pageSession)), 800, label);
+      const enabled = await attachStep(
+        () => client.send(method, {}, pageSession),
+        label,
+        label,
+        retry
+      );
       if (!enabled.ok) {
         if (sessionCut(enabled) || refused(enabled))
           return { refused: enabled, step: label, pageSession };
@@ -4321,6 +4394,7 @@ async function openPlantClient({
   internalSessions,
   control,
   credential,
+  tag,
   browserContextId = null,
 }) {
   const page = await openPage(reader, homeUrl, notes, internalSessions, browserContextId);
@@ -4329,17 +4403,21 @@ async function openPlantClient({
   if (page.result?.incomplete) return { done: { incomplete: page.result.incomplete } };
   const readerSession = page.result.sessionId;
   const pageTarget = page.result.targetId;
-  const attached = await attachClientPage(client, pageTarget, internalSessions);
+  const retry = settleRetry(control);
+  const attached = await attachClientPage(client, pageTarget, internalSessions, retry);
+  const retried = retriedOf(retry, tag);
+  noteRetried('probe', retried, notes);
+  const after = afterAttempts(retried, attached.step);
   if (attached.incomplete) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
-    return { done: { incomplete: attached.incomplete, live: true } };
+    return { done: { incomplete: `${attached.incomplete}${after}`, live: true } };
   }
   if (attached.refused && sessionCut(attached.refused)) {
     await outcome(reader.send('Target.closeTarget', { targetId: pageTarget }));
     return {
       done: {
         live: true,
-        incomplete: String(attached.refused.error?.message ?? 'session refused before trigger'),
+        incomplete: `${attached.refused.error?.message ?? 'session refused before trigger'}${after}`,
         ...incompletePaths(),
       },
     };
@@ -4434,6 +4512,7 @@ export async function cookiePlant({
     internalSessions,
     control,
     credential,
+    tag,
     browserContextId,
   });
   if (probe.done) return probe.done;

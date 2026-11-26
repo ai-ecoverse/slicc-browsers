@@ -1120,6 +1120,66 @@
       "protected": false
     },
     {
+      "url": "about:blank",
+      "contextOrigin": "AbOuT:blank",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about:",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "abouT:",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about:\n",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://\n",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://\r",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://\t",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about:blank ",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about://x\u0000",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "about:%20",
+      "protected": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "",
+      "protected": false
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "null",
+      "protected": false
+    },
+    {
       "url": "blob:https://seven.sliccy.ai/0b9e0f6c",
       "protected": true
     },

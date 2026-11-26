@@ -84,3 +84,60 @@ for (const [name, options] of mutants) {
     assert.notDeepEqual(disagreements(model(options)), [], name);
   });
 }
+
+const spellings = [
+  ['AbOuT:blank', true],
+  ['about:', true],
+  ['abouT:', true],
+  ['about:\n', true],
+  ['about://\n', true],
+  ['about://\r', true],
+  ['about://\t', true],
+  ['about:blank ', true],
+  ['about://x\u0000', true],
+  ['about:%20', true],
+  ['', false],
+  ['null', false],
+];
+const spelled = (vector) =>
+  Object.keys(vector).length === 3 &&
+  vector.url === 'about:blank' &&
+  spellings.some(([origin]) => vector.contextOrigin === origin);
+
+test('each context origin spelling on about:blank has one row with its answer', () => {
+  for (const [origin, expected] of spellings) {
+    const rows = vectors.targets.filter(
+      (vector) => spelled(vector) && vector.contextOrigin === origin
+    );
+    assert.equal(rows.length, 1, JSON.stringify(origin));
+    assert.equal(rows[0].protected, expected, JSON.stringify(origin));
+    assert.equal(match.target(rows[0]), expected, JSON.stringify(origin));
+    assert.equal(
+      match.target({ url: 'about:blank', contextOrigin: origin }),
+      expected,
+      JSON.stringify(origin)
+    );
+  }
+});
+
+const spellingMutants = [
+  ['the context origin trimmed before the comparison', { failClosed: (o) => lookalike(o.trim()) }],
+  [
+    'the context origin parsed as a URL before the comparison',
+    { failClosed: (o) => lookalike(URL.parse(o)?.href ?? o) },
+  ],
+  [
+    'the context origin compared case-sensitively',
+    { failClosed: (o) => o.startsWith('about:') && o !== 'about://' },
+  ],
+  [
+    'an empty or null context origin fails closed',
+    { failClosed: (o) => o === '' || o === 'null' || lookalike(o) },
+  ],
+];
+
+for (const [name, options] of spellingMutants) {
+  test(`mutant ${name} fails a context origin spelling row`, () => {
+    assert.notDeepEqual(disagreements(model(options)).filter(spelled), [], name);
+  });
+}

@@ -205,6 +205,17 @@ export function cookiePlantFake(options = {}) {
   const preTriggerHitTabs = new Set();
   const leakCloseCount = Math.max(0, Number(options.leakCloseCount ?? 0) || 0);
   let leakedCloses = 0;
+  const commitPlan = typeof options.commit === 'function' ? options.commit : null;
+  const commitStats = { blankReads: 0, earlyAttaches: 0 };
+  const settleCommits = () => {
+    const now = Date.now();
+    for (const tab of tabs.values()) {
+      if (!tab.pending || now < tab.pending.at) continue;
+      tab.url = tab.pending.href;
+      tab.title = tab.pending.href;
+      delete tab.pending;
+    }
+  };
   const contexts = new Map();
   const assertStorageCookieContext = (method, params) => {
     if (staggerContexts) return;
@@ -591,6 +602,7 @@ export function cookiePlantFake(options = {}) {
 
   async function handle(conn, method, params = {}, sessionId) {
     await tick();
+    if (commitPlan) settleCommits();
     if (NETWORK_COOKIE_METHODS.includes(method)) {
       sessionId = misrouteNetworkCookie(conn, method, sessionId);
       assertNetworkCookieSession(conn, method, sessionId);
@@ -621,13 +633,21 @@ export function cookiePlantFake(options = {}) {
         contextCreateCount += 1;
         if (contextCreateCount % 2 === 0) browserContextId = 'B1';
       }
+      const url = params.url ?? 'about:blank';
+      const plan = commitPlan?.(url) ?? null;
       const tab = {
         targetId: `T${++next}`,
-        url: params.url ?? 'about:blank',
-        title: params.url ?? 'about:blank',
+        url: plan ? 'about:blank' : url,
+        title: plan ? 'about:blank' : url,
         fetch: false,
         legacy: false,
         browserContextId,
+        ...(plan
+          ? {
+              creator: conn,
+              pending: { href: plan.href ?? url, at: Date.now() + (plan.afterMs ?? Infinity) },
+            }
+          : {}),
       };
       tabs.set(tab.targetId, tab);
       return { targetId: tab.targetId };
@@ -637,6 +657,7 @@ export function cookiePlantFake(options = {}) {
       if (!tab) throw new Error('No target with given id');
       if (cutBlocksReattach && cutTargets.has(params.targetId))
         throw new Error('slicc: refused: session cut on protected execution context');
+      if (tab.pending && conn !== tab.creator) commitStats.earlyAttaches += 1;
       const id = `S${++next}`;
       sessions.set(id, tab.targetId);
       sessionConns.set(id, conn);
@@ -882,6 +903,11 @@ export function cookiePlantFake(options = {}) {
     }
     if (method === 'Runtime.evaluate') {
       const expression = params.expression ?? '';
+      if (expression.includes('document.readyState') && expression.includes('location.href')) {
+        const tab = tabs.get(sessions.get(sessionId));
+        if (tab?.pending) commitStats.blankReads += 1;
+        return { result: { type: 'object', value: { ready: 'complete', href: tab?.url ?? '' } } };
+      }
       if (expression === 'document.readyState')
         return { result: { type: 'string', value: 'complete' } };
       if (expression === 'location.href') {
@@ -1089,5 +1115,6 @@ export function cookiePlantFake(options = {}) {
     networkCookieRejects: () => [...networkCookieRejects],
     openPageTargets: () => [...tabs.keys()],
     pageTargetCount: () => tabs.size,
+    commitStats: () => ({ ...commitStats }),
   };
 }

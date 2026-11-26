@@ -237,6 +237,21 @@ async function until(check, ms, step = 25) {
   }
 }
 
+const openRead = '({ ready: document.readyState, href: location.href })';
+const initialEntry = (href) => !href || href === 'about:blank';
+
+function sameUrl(a, b) {
+  try {
+    return new URL(a).href === new URL(b).href;
+  } catch {
+    return false;
+  }
+}
+
+function uncommitted(href, url) {
+  return initialEntry(href) && !sameUrl(href, url);
+}
+
 async function openPage(reader, url, notes, internalSessions, browserContextId = null) {
   const created = await outcome(
     createObserverTarget(
@@ -256,25 +271,40 @@ async function openPage(reader, url, notes, internalSessions, browserContextId =
   );
   if (!created.ok) return created;
   internalSessions.add(created.result.sessionId);
+  const seen = { href: '', held: false };
   const ready = await waitFor(async () => {
     const read = await outcome(
       reader.send(
         'Runtime.evaluate',
-        { expression: 'document.readyState', returnByValue: true },
+        { expression: openRead, returnByValue: true },
         created.result.sessionId
       )
     );
-    return read.ok && ['interactive', 'complete'].includes(read.result?.result?.value);
+    const value = read.ok ? read.result?.result?.value : null;
+    if (!value || typeof value !== 'object') return false;
+    seen.href = typeof value.href === 'string' ? value.href : '';
+    if (uncommitted(seen.href, url)) {
+      seen.held = true;
+      return false;
+    }
+    return ['interactive', 'complete'].includes(value.ready);
   }, 4000);
   note(notes, 'cookie-plant.open', {
     targetId: created.result.targetId,
     url,
     ready: Boolean(ready),
+    ...(seen.held ? { href: seen.href.slice(0, 200), requested: sameUrl(seen.href, url) } : {}),
   });
   if (!ready)
     return {
       ok: true,
-      result: { incomplete: 'opener page did not become ready', ...created.result },
+      result: {
+        incomplete:
+          seen.held && uncommitted(seen.href, url)
+            ? 'opener page did not commit the requested url'
+            : 'opener page did not become ready',
+        ...created.result,
+      },
     };
   return created;
 }

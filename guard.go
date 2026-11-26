@@ -52,6 +52,7 @@ const (
 	GuardCapInboundDelay        = "inboundDelay"
 	GuardCapSecureOrigin        = "secureOrigin"
 	GuardCapForwardAudit        = "forwardAudit"
+	GuardCapFrameOwnershipProbe = "frameOwnershipProbe"
 	GuardCapStockSetup          = "stockSetup"
 	GuardCapSyntheticAttach     = "syntheticAutoAttach"
 	GuardCapCloseProtected      = "closeProtected"

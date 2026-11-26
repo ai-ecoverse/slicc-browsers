@@ -3,6 +3,7 @@ import { createObserverTarget } from './observer-target.mjs';
 import { containsSecret } from './redirect-secret.mjs';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const graceMs = 400;
 const refusal = (out) =>
   !out.ok &&
   /^(slicc: refused:)|session.*(closed|not found)|no session|target.*closed/i.test(
@@ -26,6 +27,21 @@ const methods = [
   'Page.captureScreenshot',
   'IO.read',
 ];
+const plain = (item) => item !== null && typeof item === 'object' && !Array.isArray(item);
+const ownershipRead = (command) =>
+  command.method === 'DOM.getDocument' &&
+  plain(command.params) &&
+  Object.keys(command.params).length === 2 &&
+  command.params.depth === -1 &&
+  command.params.pierce === true;
+const ownershipRelease = (command) =>
+  command.method === 'DOM.disable' &&
+  (command.params === undefined ||
+    (plain(command.params) && Object.keys(command.params).length === 0));
+const ledgerEntry = (command) =>
+  plain(command) &&
+  typeof command.method === 'string' &&
+  (command.params === undefined || plain(command.params));
 
 async function bounded(work, ms) {
   let timer;
@@ -44,7 +60,7 @@ class Restore {
     this.url = `${this.protectedOrigin}/bfcache?n=${encodeURIComponent(`${this.tag}-p`)}`;
     this.result = { probes: [], delay: { requestedMs: this.delayMs } };
     this.missing = [];
-    this.pending = [];
+    this.pending = new Map();
     this.probeId = 0;
   }
 
@@ -214,7 +230,8 @@ class Restore {
     const out = await bounded(work, Math.min(this.budget, 250));
     this.answer(record, out);
     record.windowOutcome = record.outcome;
-    this.pending.push(
+    this.pending.set(
+      record,
       outcome(work).then((answer) => {
         this.answer(record, answer);
         record.answeredAt = Date.now();
@@ -309,6 +326,7 @@ class Restore {
       options: { disableCache: true, includeCredentials: false },
     });
     this.stream = resource.result?.resource?.stream;
+    if (this.frameOwnershipProbe) await this.firstProbe();
     this.result.probeStartedAt = Date.now();
     do {
       await this.round();
@@ -331,18 +349,98 @@ class Restore {
   }
 
   async settleProbes() {
+    this.grace = this.held().some((probe) => probe.answeredAt === undefined)
+      ? Math.min(graceMs, this.budget)
+      : 0;
+    this.graceEnd = Date.now() + this.budget;
     await waitFor(
       () => this.result.probes.every((probe) => probe.answeredAt !== undefined),
-      this.budget
+      this.budget - this.grace
     );
     await this.audit(true);
     if (
       this.result.probes.some(
         (probe) =>
-          probe.answeredAt === undefined && !(this.finalAuditComplete && probe.forwarded === false)
+          probe.answeredAt === undefined &&
+          !(
+            this.finalAuditComplete &&
+            (probe.forwarded === false || (this.ownershipExempt && ownershipRead(probe)))
+          )
       )
     )
       this.missingEvidence('probe replies or terminal non-forwarding evidence unavailable');
+  }
+
+  async firstProbe() {
+    const audit = await bounded(
+      typeof this.gate.audit === 'function'
+        ? Promise.resolve().then(() => this.gate.audit({ probes: [], final: false }))
+        : Promise.reject(new Error('forwarding audit unavailable')),
+      this.budget
+    );
+    this.result.delay.firstProbeAudit = audit;
+    this.firstProbeLedger = this.ledger(audit)?.map((command) => JSON.stringify(command));
+    this.lastLedger = this.firstProbeLedger;
+  }
+
+  held() {
+    return this.frameOwnershipProbe
+      ? this.result.probes.filter(
+          (probe) =>
+            probe.forwarded === true && ownershipRead(probe) && probe.windowOutcome === 'no answer'
+        )
+      : [];
+  }
+
+  async late() {
+    const held = this.held();
+    const ms = Math.max(0, Math.min(this.grace, this.graceEnd - Date.now()));
+    if (ms > 0) await bounded(Promise.all(held.map((probe) => this.pending.get(probe))), ms);
+    const late = held.filter(
+      (probe) => probe.answeredAt !== undefined && probe.outcome !== 'refused'
+    );
+    this.result.grace = { ms, late: late.length };
+    if (!late.length) return;
+    this.result.markerHidden = false;
+    this.result.probesRefusedOrUnforwarded = false;
+    if (
+      containsSecret(
+        late.map((probe) => probe.reply),
+        this.protectedOrigin
+      )
+    )
+      this.result.originHidden = false;
+  }
+
+  ledger(audit) {
+    const commands = audit.result?.commands;
+    return Array.isArray(commands) && commands.every(ledgerEntry) ? commands : undefined;
+  }
+
+  ownership(audit) {
+    const forwards = this.result.probes.filter((probe) => probe.forwarded === true);
+    const exempt = forwards.filter(ownershipRead).length;
+    const others = forwards.length > exempt;
+    const commands = this.ledger(audit);
+    const listed = commands?.map((command) => JSON.stringify(command));
+    const previous = this.lastLedger;
+    if (listed && previous && !previous.every((entry, index) => entry === listed[index]))
+      this.ledgerBreak = true;
+    this.lastLedger = listed && previous && !this.ledgerBreak ? listed : undefined;
+    const start = this.firstProbeLedger;
+    if (!this.lastLedger) return { others, ledger: false };
+    const probed = commands.slice(start.length);
+    const first = probed.findIndex(ownershipRead);
+    const reads = probed.filter(ownershipRead).length;
+    return {
+      others,
+      reads,
+      ledger: reads >= exempt,
+      shaped: probed.every((command) => ownershipRead(command) || ownershipRelease(command)),
+      ordered: probed.every(
+        (command, index) => !ownershipRelease(command) || (first >= 0 && index > first)
+      ),
+    };
   }
 
   async audit(final = false) {
@@ -372,12 +470,28 @@ class Restore {
         ? true
         : matches.find((entry) => entry.forwarded === false)?.forwarded;
     }
+    const owned = this.frameOwnershipProbe ? this.ownership(audit) : undefined;
     const forwarded =
       this.result.commandsUnforwarded === false ||
-      this.result.probes.some((probe) => probe.forwarded);
-    this.result.commandsUnforwarded = forwarded ? false : complete ? true : 'incomplete';
+      (owned
+        ? owned.others || owned.shaped === false || (owned.ledger && !owned.ordered)
+        : this.result.probes.some((probe) => probe.forwarded));
+    const proven = complete && (!owned || owned.ledger);
+    this.result.commandsUnforwarded = forwarded ? false : proven ? true : 'incomplete';
     if (final) this.finalAuditComplete = complete;
     if (final && !complete) this.missingEvidence('forwarding audit unavailable');
+    if (final && owned) this.ownershipVerdict(owned, complete);
+  }
+
+  ownershipVerdict(owned, complete) {
+    this.ownershipExempt = complete && owned.ledger;
+    if (!owned.ledger) {
+      this.result.skips = ['commandsUnforwarded: frameOwnershipProbe: command ledger unavailable'];
+      this.missingEvidence(
+        `frameOwnershipProbe: command ledger unavailable${this.ledgerBreak ? ' (ledger does not extend the previous audit)' : ''}`
+      );
+    } else if (owned.reads > 0)
+      this.notes.push(`commandsUnforwarded: exempt:frameOwnershipProbe (${owned.reads} forwards)`);
   }
 
   async judge() {
@@ -493,6 +607,7 @@ class Restore {
         }
       } finally {
         if (this.delay?.release) this.result.delay.release = await outcome(this.delay.release());
+        if (this.ownershipExempt && this.grace) await this.late();
         if (this.session)
           await bounded(
             this.client.send('Target.detachFromTarget', { sessionId: this.session }),
@@ -521,6 +636,7 @@ export function bfcacheRestore({
   notes = [],
   budget = 5000,
   forwardAudit = true,
+  frameOwnershipProbe = false,
   delayMs = 1500,
   windowMs = delayMs + 1000,
 }) {
@@ -536,6 +652,7 @@ export function bfcacheRestore({
     notes,
     budget,
     forwardAudit,
+    frameOwnershipProbe: frameOwnershipProbe && forwardAudit && side !== 'control',
     delayMs,
     windowMs,
   }).run();

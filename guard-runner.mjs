@@ -1333,6 +1333,7 @@ class Execution {
           tag: this.vars.tag,
           mode: step.bfcacheRestore,
           forwardAudit: supported(['forwardAudit'], this.options.capabilities),
+          frameOwnershipProbe: supported(['frameOwnershipProbe'], this.options.capabilities),
           side: this.side,
           notes: this.notes,
           budget: this.bound(5000),

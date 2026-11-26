@@ -148,6 +148,11 @@
           "type": "string",
           "minLength": 1
         },
+        "frameOwnershipProbe": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Declared with forwardAudit, the audit reply on a history-restore session also carries commands: the ordered list the harness observed the browser receiving; it is judged from the first probe on; commands the row's scenario issues before it are not probes. The list covers that session from the hold's start until the audit, client- or guard-originated, each {method, params}, taken from the harness's own record of the wire between the guard and the browser and never from anything the guard reports about itself, and each audit's list starts with the previous one's. Before detaching, the runner waits up to 400 ms for a held DOM.getDocument reply; a reply delivered after that wait is not observable to it."
+        },
         "stockSetup": {
           "type": "string",
           "minLength": 1
@@ -228,6 +233,7 @@
         "inboundDelay",
         "secureOrigin",
         "forwardAudit",
+        "frameOwnershipProbe",
         "stockSetup",
         "syntheticAutoAttach",
         "closeProtected",

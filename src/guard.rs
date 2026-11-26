@@ -38,6 +38,7 @@ pub const CAP_SITE_ISOLATION_OFF: &str = "siteIsolationOff";
 pub const CAP_INBOUND_DELAY: &str = "inboundDelay";
 pub const CAP_SECURE_ORIGIN: &str = "secureOrigin";
 pub const CAP_FORWARD_AUDIT: &str = "forwardAudit";
+pub const CAP_FRAME_OWNERSHIP_PROBE: &str = "frameOwnershipProbe";
 pub const CAP_STOCK_SETUP: &str = "stockSetup";
 pub const CAP_SYNTHETIC_AUTO_ATTACH: &str = "syntheticAutoAttach";
 pub const CAP_CLOSE_PROTECTED: &str = "closeProtected";

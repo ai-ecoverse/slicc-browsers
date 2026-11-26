@@ -280,6 +280,34 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 	if !reports["://"] || !reports["about://"] {
 		t.Fatalf("context origins: %v", reports)
 	}
+	spellings := map[string]bool{
+		"AbOuT:blank":   true,
+		"about:":        true,
+		"abouT:":        true,
+		"about:\n":      true,
+		"about://\n":    true,
+		"about://\r":    true,
+		"about://\t":    true,
+		"about:blank ":  true,
+		"about://x\x00": true,
+		"about:%20":     true,
+		"null":          false,
+	}
+	for o, want := range spellings {
+		n := 0
+		for _, tv := range v.Targets {
+			if tv != (sliccbrowsers.TargetVector{URL: "about:blank", ContextOrigin: o, Protected: tv.Protected}) {
+				continue
+			}
+			n++
+			if tv.Protected != want {
+				t.Fatalf("target vector %+v: want protected %v", tv, want)
+			}
+		}
+		if n != 1 {
+			t.Fatalf("context origin %q: %d about:blank target vectors, want 1", o, n)
+		}
+	}
 }
 
 func TestGuardWhereTypeStaysString(t *testing.T) {

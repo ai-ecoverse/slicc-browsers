@@ -73,11 +73,6 @@ Every feature builds for `wasm32-wasip1`. Keep `corpus` in `[dev-dependencies]` 
 npm install @ai-ecoverse/slicc-browsers
 ```
 
-```js
-import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' };
-import { protectedOrigins } from '@ai-ecoverse/slicc-browsers/protected.mjs';
-```
-
 | export | what it is |
 | --- | --- |
 | `.`, `./catalog.json`, `./corpus.json`, `./protected.json`, `./guard-vectors.json`, `./debugger-stage1.json` | the data |
@@ -167,7 +162,7 @@ URLs are judged the way the browser parses them, so `blob:`, `view-source:` and 
 
 A browser extension's frame inside an ordinary page doesn't make the tab protected. The frame itself stays out of reach: it can't be attached or read, and its URL never appears in target discovery, page reads, snapshots, accessibility trees or evaluate results. The tab's own page can still be read and snapshotted. Screenshots and input are allowed only while every extension frame is hidden (no layout box or `visibility: hidden`) and none holds focus through nested documents or shadow roots; a screenshot taken while one became shown is thrown away. Opacity and position don't count as hidden. A race between the visibility or focus check and the CDP reply is accepted. Whole-page captures and starting a screencast are refused while any extension frame is in the tab; an active screencast is stopped or its frames dropped until the frame is gone. These refusals name the extension frame, not seven. A frame from the program's own extension, and any other protected frame, still makes the whole tab protected. `protectedOrigins.extensionFrames` lists the schemes, methods and refusals; `protected.mjs` offers `extensionFrame(url)`.
 
-`catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. A target may carry `contextOrigin`, its default execution context's origin; the rule binds a live context origin too. `protected.mjs` is the reference implementation:
+`catalog.json`'s `protectedOrigins` holds the rules, and `protected.json` the vectors: URLs, targets, cookie domains and storage keys, each with the expected answer. A target may carry `contextOrigin`, its default execution context's origin; the rule binds a live context origin too. Origins with leading whitespace or control characters are not exercised: browsers do not report them. `protected.mjs` is the reference implementation:
 
 ```js
 import catalog from '@ai-ecoverse/slicc-browsers' with { type: 'json' };

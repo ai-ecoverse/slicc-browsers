@@ -227,6 +227,41 @@ fn the_protected_vectors_parse_and_round_trip() {
         }
     }
     assert!(reports.contains("://") && reports.contains("about://"));
+    let spellings = [
+        ("AbOuT:blank", true),
+        ("about:", true),
+        ("abouT:", true),
+        ("about:\n", true),
+        ("about://\n", true),
+        ("about://\r", true),
+        ("about://\t", true),
+        ("about:blank ", true),
+        ("about://x\0", true),
+        ("about:%20", true),
+        ("", false),
+        ("null", false),
+    ];
+    for (o, want) in spellings {
+        let rows: Vec<_> = v
+            .targets
+            .iter()
+            .filter(|t| {
+                **t == protected::TargetVector {
+                    document_url: None,
+                    unreachable_url: None,
+                    navigating: false,
+                    url: "about:blank".into(),
+                    kind: None,
+                    previous: false,
+                    opener: None,
+                    context_origin: Some(o.into()),
+                    protected: t.protected,
+                }
+            })
+            .collect();
+        assert_eq!(rows.len(), 1, "{o:?}");
+        assert_eq!(rows[0].protected, want, "{o:?}");
+    }
 }
 
 #[test]

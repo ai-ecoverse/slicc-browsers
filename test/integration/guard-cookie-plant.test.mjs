@@ -24,6 +24,9 @@ const ids = ['C10.cookie-plant', 'C10.cookie-plant.credential'];
 const vectors = set.vectors.filter((v) => ids.includes(v.id));
 const protectedVectors = set.vectors.filter((v) => v.id === 'C10.cookie-plant');
 const credentialVectors = set.vectors.filter((v) => v.id === 'C10.cookie-plant.credential');
+const lateMs = 600;
+const skewMs = 10;
+const elapsedOf = (note) => Number(/"elapsedMs":(\d+)/.exec(note)?.[1]);
 
 const caps = {
   requestInterception: true,
@@ -479,7 +482,7 @@ test('blocking guard with replyDelay still passes', async () => {
 
 test('late block after the old short window still passes (event-driven wait)', async () => {
   const out = await rows({
-    replyDelayMs: 600,
+    replyDelayMs: lateMs,
     oneTarget: true,
     onlyPaths: ['fulfillArray', 'ordinary', 'adobe', 'deletion'],
   });
@@ -491,7 +494,8 @@ test('late block after the old short window still passes (event-driven wait)', a
       (n) =>
         /cookie-plant\.fulfillArray:/.test(n) &&
         /"pageHref":"[^"]+"/.test(n) &&
-        /"elapsedMs":[6-9][0-9]{2,}/.test(n)
+        elapsedOf(n) >= lateMs - skewMs &&
+        elapsedOf(n) < 1000
     ),
     JSON.stringify(row.notes)
   );

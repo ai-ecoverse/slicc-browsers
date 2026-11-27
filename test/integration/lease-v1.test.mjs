@@ -184,6 +184,75 @@ test('WHATWG normalization never turns a malformed or protected allow rule into 
     assert.equal(leaseScope(catalog, rules), null);
 });
 
+test('the initial-exact pilot candidate keeps general matching, typed grant echo and operator review distinct', () => {
+  for (const rows of [
+    scope.exactInitialPilotCases,
+    scope.grantEchoCases,
+    scope.exactInitialPilotReviewCases,
+  ]) {
+    assert.equal(new Set(rows.map((r) => r.id)).size, rows.length);
+    assert.ok(rows.every((r) => r.contexts.finalDocument === 'unverified-R12'));
+  }
+  for (const {
+    id,
+    allow,
+    initial,
+    url,
+    contexts: { general, pilot },
+  } of scope.exactInitialPilotCases) {
+    const match = leaseScope(catalog, allow);
+    if (general.portability && !match) {
+      assert.equal(pilot.ruleAccepted, false, id);
+      assert.equal(pilot.gotoAccepted, false, id);
+      continue;
+    }
+    assert.equal(!!match, general.ruleValid, id);
+    assert.equal(!!match?.(url), general.match, id);
+    if (pilot.ruleAccepted) {
+      assert.ok(
+        initial && general.ruleValid && allow.length === 1 && allow[0].kind === 'exact',
+        id
+      );
+      assert.ok(Buffer.byteLength(allow[0].url, 'utf8') <= 2048, id);
+    }
+    if (pilot.gotoAccepted)
+      assert.ok(pilot.ruleAccepted && general.match && allow[0].url === url, id);
+  }
+  for (const {
+    id,
+    offerAllow,
+    grantAllow,
+    contexts: { grantEcho },
+  } of scope.grantEchoCases) {
+    const singleton = (rules) => rules.length === 1 && leaseScope(catalog, rules);
+    const echo = !!(
+      singleton(offerAllow) &&
+      singleton(grantAllow) &&
+      offerAllow[0].kind === grantAllow[0].kind &&
+      offerAllow[0].url === grantAllow[0].url
+    );
+    assert.equal(echo, grantEcho.sameTypedSingleRule, id);
+    if (grantEcho.pilotGrantAccepted) assert.ok(echo && offerAllow[0].kind === 'exact', id);
+  }
+  for (const {
+    id,
+    offer,
+    owner,
+    expectedLine,
+    contexts: { ownerReview },
+  } of scope.exactInitialPilotReviewCases) {
+    assert.equal(
+      owner.jkt === offer.jkt &&
+        owner.ttlSeconds === offer.ttlSeconds &&
+        owner.allow[0].kind === offer.allow[0].kind &&
+        owner.allow[0].url === offer.allow[0].url,
+      ownerReview.matches,
+      id
+    );
+    assert.ok(expectedLine.includes(`--allow '${owner.allow[0].url}' --for `), id);
+  }
+});
+
 test('lease-state transitions retire idle streams and never deliver an old in-flight result under a replacement', () => {
   for (const row of v.lifecycleCases) {
     let live = 'L1',

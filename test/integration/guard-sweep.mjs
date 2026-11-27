@@ -172,7 +172,8 @@ function callDetail(row) {
 
 function rowProblem(vector, row) {
   const legs = [row.control, row.guarded, row.live];
-  const shown = `${legs.join('/')}${row.reason ? ` (${row.reason})` : ''}`;
+  const erred = row.errorLegs ? ` with errors on ${row.errorLegs.join(' and ')}` : '';
+  const shown = `${legs.join('/')}${row.reason ? ` (${row.reason})` : ''}${erred}`;
   if (!vector) return `is not a published vector: ${shown}`;
   if (vector.kind === 'text')
     return legs.every((leg) => leg === 'not-run') ? null : `is a text vector but ${shown}`;
@@ -185,7 +186,8 @@ function rowProblem(vector, row) {
     return `declares no skip but is ${shown}`;
   const guarded = drivable.has(vector.id) ? 'pass' : 'fail';
   const live = expectedLive(vector, row.target);
-  if (row.control === 'pass' && row.guarded === guarded && row.live === live) return null;
+  if (row.control === 'pass' && row.guarded === guarded && row.live === live && !row.errors?.length)
+    return null;
   const extra = [
     row.why,
     row.errors?.length ? `errors ${row.errors.join('; ')}` : null,

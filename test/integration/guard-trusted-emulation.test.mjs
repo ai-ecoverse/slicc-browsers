@@ -194,6 +194,15 @@ async function execute(id, emulation, listed = ['seven']) {
   return execution;
 }
 
+function failsGuarded(execution, control) {
+  const [row] = execution.results;
+  assert.equal(row.control, control, JSON.stringify(row));
+  assert.equal(row.guarded, 'fail', JSON.stringify(row));
+  assert.deepEqual(row.errorLegs, ['guarded'], JSON.stringify(row));
+  assert.equal(execution.summary({ guard: 'fake', sha: 'test' }).pass, false);
+  return row;
+}
+
 for (const id of ids) {
   test(`${id}: Chrome's trusted-client error on the ordinary control is not-supported on every target`, async () => {
     const listed = ['seven', 'vault', 'vault-x', 'apex'];
@@ -212,26 +221,22 @@ for (const id of ids) {
     assert.deepEqual(execution.summary({ guard: 'fake', sha: 'test' }).forged, []);
   });
 
-  test(`${id}: a trusted-client error only on the guarded leg fails as today`, async () => {
+  test(`${id}: a trusted-client error only on the guarded leg fails the guarded leg and keeps the control pass`, async () => {
     const execution = await execute(id, (side, method) =>
       method === methods[id] ? (side === 'guarded' ? 'trusted' : 'ok') : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'pass');
     assert.ok(
       row.errors.some((error) => /only available to trusted clients/i.test(error)),
       JSON.stringify(row.errors)
     );
   });
 
-  test(`${id}: a different control error keeps today's fail verdict`, async () => {
+  test(`${id}: a different control error is no skip and still fails the row`, async () => {
     const execution = await execute(id, (_side, method) =>
       method === methods[id] ? 'other' : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'incomplete');
     assert.ok(
       row.errors.some((error) => /Internal error/.test(error)),
       JSON.stringify(row.errors)
@@ -256,56 +261,46 @@ for (const id of ids) {
     assert.deepEqual(execution.summary({ guard: 'fake', sha: 'test' }).forged, []);
   });
 
-  test(`${id}: chrome.debugger JSON trusted-client error only on the guarded leg fails as today`, async () => {
+  test(`${id}: chrome.debugger JSON trusted-client error only on the guarded leg fails the guarded leg and keeps the control pass`, async () => {
     const execution = await execute(id, (side, method) =>
       method === methods[id] ? (side === 'guarded' ? 'debugger' : 'ok') : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'pass');
     assert.ok(
       row.errors.some((error) => /only available to trusted clients/i.test(error)),
       JSON.stringify(row.errors)
     );
   });
 
-  test(`${id}: chrome.debugger JSON with another code keeps today's fail verdict`, async () => {
+  test(`${id}: chrome.debugger JSON with another code is no skip and still fails the row`, async () => {
     const execution = await execute(id, (_side, method) =>
       method === methods[id] ? 'debugger-other-code' : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'incomplete');
     assert.equal(row.reason, undefined);
   });
 
-  test(`${id}: chrome.debugger JSON with only the message keeps today's fail verdict`, async () => {
+  test(`${id}: chrome.debugger JSON with only the message is no skip and still fails the row`, async () => {
     const execution = await execute(id, (_side, method) =>
       method === methods[id] ? 'debugger-message-only' : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'incomplete');
     assert.equal(row.reason, undefined);
   });
 
-  test(`${id}: raw trusted-client message without a code keeps today's fail verdict`, async () => {
+  test(`${id}: raw trusted-client message without a code is no skip and still fails the row`, async () => {
     const execution = await execute(id, (_side, method) =>
       method === methods[id] ? 'message-only' : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'incomplete');
     assert.equal(row.reason, undefined);
   });
 
-  test(`${id}: a non-JSON control error keeps today's fail verdict`, async () => {
+  test(`${id}: a non-JSON control error is no skip and still fails the row`, async () => {
     const execution = await execute(id, (_side, method) =>
       method === methods[id] ? 'non-json' : 'ok'
     );
-    const [row] = execution.results;
-    assert.equal(row.control, 'fail', JSON.stringify(row));
-    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    const row = failsGuarded(execution, 'incomplete');
     assert.ok(
       row.errors.some((error) => /not a cdp envelope/.test(error)),
       JSON.stringify(row.errors)

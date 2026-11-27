@@ -3353,6 +3353,7 @@ function finishRow(vector, base, legs, opts) {
       ? { guarded: legs.guarded.calls }
       : {}),
   };
+  const errorLegs = ['control', 'guarded'].filter((side) => legs[side].errors.length);
   const row = {
     ...result(vector, {
       ...base,
@@ -3365,6 +3366,7 @@ function finishRow(vector, base, legs, opts) {
     transportVariant: base.transportVariant,
     observations: { control: legs.control.observed, guarded: legs.guarded.observed },
     errors: [...legs.control.errors, ...legs.guarded.errors],
+    ...(errorLegs.length ? { errorLegs } : {}),
     designDependent: vector.designDependent ?? [],
     ...(Object.keys(calls).length ? { calls } : {}),
     ...probeEvidence(legs),
@@ -3375,10 +3377,8 @@ function finishRow(vector, base, legs, opts) {
   ];
   if (notes.length) row.notes = notes;
   settleIncomplete(row, vector, base, legs);
-  if (row.errors.length) {
-    row.control = 'fail';
-    row.guarded = 'fail';
-  }
+  if (legs.control.errors.length) row.control = 'fail';
+  if (row.errors.length) row.guarded = 'fail';
   return row;
 }
 
@@ -3452,7 +3452,7 @@ function settleIncomplete(row, vector, base, legs) {
   );
   if (!incomplete.length) return;
   row.incomplete = incomplete;
-  if (row.errors.length) return;
+  if (legs.control.errors.length) return;
   const fill = (side) => {
     const want = side === 'control' ? vector.control.expected : vector.expected;
     return Object.fromEntries(
@@ -3473,6 +3473,7 @@ function settleIncomplete(row, vector, base, legs) {
   });
   for (const side of ['control', 'guarded'])
     if (legs[side].incomplete?.length && filled[side] === 'pass') row[side] = 'incomplete';
+  if (legs.guarded.errors.length) return;
   if (legs.control.incomplete?.length && row.guarded === 'fail' && filled.guarded === 'pass')
     row.guarded = 'incomplete';
   if (legs.guarded.live === 'incomplete' && filled.live === 'pass') row.live = 'incomplete';

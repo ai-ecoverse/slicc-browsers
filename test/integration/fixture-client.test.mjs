@@ -76,11 +76,13 @@ test('a missing redirect registration endpoint remains an explicit summary failu
       { schemaVersion: 1, setVersion: '0.0.0', variants: { prompt: 0 }, vectors: [vector] },
       { client, unguarded: client, targets: { ordinary }, fixture: { log: async () => [] } }
     );
+    const [row] = execution.results;
     assert.equal(execution.summary().pass, false);
-    assert.equal(execution.results[0].control, 'fail');
-    assert.equal(execution.results[0].guarded, 'fail');
+    assert.equal(row.control, 'incomplete', JSON.stringify(row));
+    assert.equal(row.guarded, 'fail', JSON.stringify(row));
+    assert.deepEqual(row.errorLegs, ['guarded'], JSON.stringify(row));
     assert(
-      execution.results[0].errors.some((error) =>
+      row.errors.some((error) =>
         error.includes(
           'redirectSecret fixture registration required: POST /redirect failed: HTTP 404'
         )

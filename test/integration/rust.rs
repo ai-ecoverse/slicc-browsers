@@ -278,6 +278,66 @@ fn the_protected_vectors_parse_and_round_trip() {
 }
 
 #[test]
+fn the_kept_origins_parse_and_round_trip() {
+    let pilot = "https://lease-pilot.sliccy.ai";
+    let po = catalog().protected_origins;
+    assert_eq!(po.kept_origins, [pilot]);
+    let v = protected::vectors();
+    assert!(v.kept.iter().any(|k| k.kept) && v.kept.iter().any(|k| !k.kept));
+    assert!(v.kept_targets.iter().any(|k| k.kept) && v.kept_targets.iter().any(|k| !k.kept));
+    let openers = [
+        protected::OPENER_PROTECTED,
+        protected::OPENER_UNPROTECTED,
+        protected::OPENER_UNKNOWN,
+    ];
+    assert!(v
+        .kept_targets
+        .iter()
+        .all(|t| t.opener.as_deref().is_none_or(|o| openers.contains(&o))));
+    assert!(v.kept.contains(&protected::KeptVector {
+        url: format!("{pilot}/"),
+        kept: true,
+    }));
+    let row = |url: &str, context_origin: Option<&str>, kept: bool| protected::KeptTargetVector {
+        url: url.to_string(),
+        context_origin: context_origin.map(str::to_string),
+        previous: false,
+        opener: None,
+        kept,
+    };
+    for want in [
+        row("about:blank", Some(pilot), true),
+        row("about:blank", Some("https://seven.sliccy.ai"), false),
+        row("about:blank", None, false),
+        row("blob:https://lease-pilot.sliccy.ai/x", None, false),
+        row("view-source:https://lease-pilot.sliccy.ai/", None, false),
+    ] {
+        assert!(v.kept_targets.contains(&want), "{want:?}");
+    }
+    let raw: Value = serde_json::from_str(PROTECTED).unwrap();
+    assert_eq!(serde_json::to_value(&v.kept).unwrap(), raw["kept"]);
+    assert_eq!(
+        strip_nulls(serde_json::to_value(&v.kept_targets).unwrap()),
+        raw["keptTargets"]
+    );
+    let bare = slicc_browsers::ProtectedOrigins {
+        kept_origins: Vec::new(),
+        ..po
+    };
+    let text = serde_json::to_string(&bare).unwrap();
+    assert!(!text.contains("keptOrigins"));
+    let back: slicc_browsers::ProtectedOrigins = serde_json::from_str(&text).unwrap();
+    assert_eq!(back, bare);
+    let mut old = raw.clone();
+    let fields = old.as_object_mut().unwrap();
+    fields.remove("kept");
+    fields.remove("keptTargets");
+    let parsed: protected::Vectors = serde_json::from_value(old.clone()).unwrap();
+    assert!(parsed.kept.is_empty() && parsed.kept_targets.is_empty());
+    assert_eq!(strip_nulls(serde_json::to_value(&parsed).unwrap()), old);
+}
+
+#[test]
 fn where_type_stays_string() {
     let w = guard::Where {
         opener_id: None,

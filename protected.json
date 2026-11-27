@@ -1393,5 +1393,82 @@
       "key": "",
       "protected": false
     }
+  ],
+  "kept": [
+    { "url": "https://lease-pilot.sliccy.ai/", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/os/x", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/auth/callback", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/os/x/y/z/deep/path/index.html", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/?x=1&y=2", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/#x", "kept": true },
+    { "url": "HTTPS://LEASE-PILOT.SLICCY.AI/", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai./", "kept": true },
+    { "url": "https://user:secret@lease-pilot.sliccy.ai/", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai:443/", "kept": true },
+    { "url": "https://lease-pilot%2Esliccy.ai/", "kept": true },
+    { "url": "https://ｌｅａｓｅ-ｐｉｌｏｔ.sliccy.ai/", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai:8443/", "kept": false },
+    { "url": "https://lease-pilot.sliccy.ai:80/", "kept": false },
+    { "url": "http://lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "http://lease-pilot.sliccy.ai:80/", "kept": false },
+    { "url": "https://a.lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "https://a.b.lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "https://lease-pilot.sliccy.ai.example/", "kept": false },
+    { "url": "https://lease-pilot-sliccy.ai/", "kept": false },
+    { "url": "https://notsliccy.ai/", "kept": false },
+    { "url": "https://lease-pilot.sliccy.aix/", "kept": false },
+    { "url": "https://lease-pilot.sliccy.ai@example.com/", "kept": false },
+    { "url": "wss://lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "ftp://lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "https://sliccy.ai/", "kept": false },
+    { "url": "https://seven.sliccy.ai/", "kept": false },
+    { "url": "https://www.sliccy.ai/", "kept": false },
+    { "url": "https://vault.sliccy.ai/", "kept": false },
+    { "url": "blob:https://lease-pilot.sliccy.ai/x", "kept": false },
+    { "url": "view-source:https://lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "https://lease-pilot.sliccy.ai:99999/", "kept": false }
+  ],
+  "keptTargets": [
+    { "url": "about:blank", "contextOrigin": "https://lease-pilot.sliccy.ai", "kept": true },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://lease-pilot.sliccy.ai",
+      "opener": "protected",
+      "kept": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://lease-pilot.sliccy.ai",
+      "opener": "unprotected",
+      "kept": true
+    },
+    {
+      "url": "about:blank",
+      "contextOrigin": "https://lease-pilot.sliccy.ai",
+      "previous": true,
+      "kept": true
+    },
+    { "url": "about:blank", "contextOrigin": "https://lease-pilot.sliccy.ai:8443", "kept": false },
+    { "url": "about:blank", "contextOrigin": "http://lease-pilot.sliccy.ai", "kept": false },
+    { "url": "about:blank", "contextOrigin": "https://a.lease-pilot.sliccy.ai", "kept": false },
+    { "url": "about:blank", "contextOrigin": "https://seven.sliccy.ai", "kept": false },
+    { "url": "about:blank", "contextOrigin": "https://example.com", "kept": false },
+    { "url": "about:blank", "contextOrigin": "https://lease-pilot.sliccy.ai/", "kept": false },
+    { "url": "about:blank", "contextOrigin": "HTTPS://LEASE-PILOT.SLICCY.AI", "kept": false },
+    { "url": "about:blank", "contextOrigin": "about://", "kept": false },
+    { "url": "about:blank", "contextOrigin": "://", "kept": false },
+    { "url": "about:blank", "kept": false },
+    { "url": "about:blank", "previous": true, "kept": false },
+    { "url": "about:blank", "opener": "protected", "kept": false },
+    { "url": "https://lease-pilot.sliccy.ai/", "kept": true },
+    { "url": "https://lease-pilot.sliccy.ai/os/x", "opener": "unprotected", "kept": true },
+    {
+      "url": "https://seven.sliccy.ai/",
+      "contextOrigin": "https://lease-pilot.sliccy.ai",
+      "kept": false
+    },
+    { "url": "blob:https://lease-pilot.sliccy.ai/x", "kept": false },
+    { "url": "view-source:https://lease-pilot.sliccy.ai/", "kept": false }
   ]
 }

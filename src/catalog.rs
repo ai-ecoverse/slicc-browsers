@@ -206,6 +206,8 @@ pub struct ProtectedOrigins {
     pub error_page: ErrorPageRule,
     pub domains: Vec<String>,
     pub hosts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept_origins: Vec<String>,
     pub schemes: Vec<String>,
     pub inner_schemes: Vec<String>,
     pub any_schemes: Vec<String>,

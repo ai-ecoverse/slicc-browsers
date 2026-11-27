@@ -247,6 +247,40 @@ for (const [field, run, label] of vectorChecks) {
       fail(`protected.json: ${field} ${JSON.stringify(label(v))} should be ${v.protected}`);
   }
 }
+const inherits = (url) => {
+  const u = URL.parse(url);
+  return (
+    url === '' ||
+    (u?.protocol === 'about:' && po.inheriting.includes(`about:${u.pathname.toLowerCase()}`))
+  );
+};
+const keptChecks = [
+  ['kept', (v) => m.kept(v.url), (v) => m.url(v.url)],
+  [
+    'keptTargets',
+    (v) => m.keptTarget(v),
+    (v) => (inherits(v.url) ? m.url(v.contextOrigin ?? '') : m.target(v)),
+  ],
+];
+for (const [field, run, covered] of keptChecks) {
+  for (const v of vectors[field] ?? []) {
+    if (run(v) !== v.kept)
+      fail(`protected.json: ${field} ${JSON.stringify(v)} should be kept ${v.kept}`);
+    if (v.kept && !covered(v))
+      fail(`protected.json: ${field} ${JSON.stringify(v)} is kept but not protected`);
+  }
+}
+const own = protectedOrigins(po);
+for (const o of po.keptOrigins ?? []) {
+  if (URL.parse(o)?.origin !== o)
+    fail(`catalog.json: kept origin ${o} is not a serialized https origin`);
+  if (!own.url(o) || !own.url(`${o}/`))
+    fail(`catalog.json: kept origin ${o} is not a protected origin`);
+  if (!(vectors.kept ?? []).some((v) => v.kept && v.url === `${o}/`))
+    fail(`protected.json: no kept vector for ${o}`);
+  if (!(vectors.keptTargets ?? []).some((v) => v.kept && v.contextOrigin === o))
+    fail(`protected.json: no kept inheriting-document vector for ${o}`);
+}
 if (reserved.test(JSON.stringify(vectors))) fail('protected.json: never use ports 9222-9229');
 
 const co = catalog.credentialOrigins;

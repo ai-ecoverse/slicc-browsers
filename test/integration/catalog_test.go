@@ -26,12 +26,12 @@ func decode(t *testing.T, b []byte) any {
 
 func TestIsSevenLabel(t *testing.T) {
 	seven := sliccbrowsers.Default().Seven
-	for _, label := range []string{"seven", "www", "link-websockets"} {
+	for _, label := range []string{"seven", "www", "link-websockets", "lease", "pilot", "lease-pilot2", "my-lease-pilot", "lease-pilots", "lease--pilot", "pilot-lease", "lease-pilot-x"} {
 		if !seven.IsSevenLabel(label) {
 			t.Errorf("IsSevenLabel(%q) = false, want true", label)
 		}
 	}
-	for _, label := range []string{"", "vault", "vault-preview", "get", "mcpcat", "echo", "vault-feature-x"} {
+	for _, label := range []string{"", "vault", "vault-preview", "get", "mcpcat", "echo", "vault-feature-x", "lease-pilot"} {
 		if seven.IsSevenLabel(label) {
 			t.Errorf("IsSevenLabel(%q) = true, want false", label)
 		}

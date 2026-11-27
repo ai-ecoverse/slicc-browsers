@@ -22,7 +22,19 @@ fn strip_nulls(v: Value) -> Value {
 #[test]
 fn is_seven_label() {
     let seven = &catalog().seven;
-    for label in ["seven", "www", "link-websockets"] {
+    for label in [
+        "seven",
+        "www",
+        "link-websockets",
+        "lease",
+        "pilot",
+        "lease-pilot2",
+        "my-lease-pilot",
+        "lease-pilots",
+        "lease--pilot",
+        "pilot-lease",
+        "lease-pilot-x",
+    ] {
         assert!(seven.is_seven_label(label), "{label} should be seven");
     }
     for label in [
@@ -33,6 +45,7 @@ fn is_seven_label() {
         "mcpcat",
         "echo",
         "vault-feature-x",
+        "lease-pilot",
     ] {
         assert!(!seven.is_seven_label(label), "{label} should not be seven");
     }

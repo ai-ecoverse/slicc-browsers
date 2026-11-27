@@ -1,3 +1,4 @@
+import { protectedRefusal } from './extension-frame.mjs';
 import { outcome, parseURL, waitFor } from './guard-driver.mjs';
 import { createObserverTarget } from './observer-target.mjs';
 
@@ -16,6 +17,41 @@ const attachWhy = ({ outcome: kind, error }) =>
   kind === 'answered'
     ? 'client attach answered without a sessionId'
     : `client attach ${kind === 'refused' ? 'refused' : 'failed'}: ${error}`;
+
+const bounded = (error) =>
+  String(error?.message ?? error)
+    .replace(/[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]*/gi, '<url>')
+    .replace(/([\w.-]+)=[^\s;,]+/g, '$1=<value>')
+    .slice(0, 200);
+
+const enables = (session, discovery) => [
+  ['Page.enable', {}, session],
+  ['Runtime.enable', {}, session],
+  ...(discovery ? [['Target.setDiscoverTargets', { discover: true }]] : []),
+];
+
+const notLive = (result, liveWhy) => ({ ...result, live: false, attached: false, liveWhy });
+
+async function attachClient({ client, targetId, discovery, side, result, missing }) {
+  const attached = await outcome(client.send('Target.attachToTarget', { targetId, flatten: true }));
+  const session = attached.result?.sessionId;
+  result.diagnostics = { clientAttach: attachOutcome(attached) };
+  if (!session) return { stop: notLive(result, attachWhy(result.diagnostics.clientAttach)) };
+  for (const [method, ...args] of enables(session, discovery)) {
+    const out = await outcome(client.send(method, ...args));
+    if (out.ok) continue;
+    if (!protectedRefusal(out))
+      throw Object.assign(new Error(out.error.message), { cdp: out.error });
+    const why = bounded(out.error);
+    return {
+      stop:
+        side === 'control'
+          ? missing(`${method} refused on the control leg: ${why}`)
+          : notLive(result, `${method} refused: ${why}`),
+    };
+  }
+  return { session };
+}
 
 const commitWhy = ({ elapsedMs, budgetMs, frame, targetInfo }) =>
   `error commit not seen after ${elapsedMs}ms (budget ${budgetMs}ms): frame ${frame.url} unreachableUrl ${frame.unreachableUrl ?? 'none'}, target ${targetInfo.url}`;
@@ -344,21 +380,9 @@ export async function protectedErrorPage({
   try {
     const unseeded = await seed(reader, observer, loaded, initial, `${ordinary}/blank`);
     if (unseeded) return missing(unseeded);
-    const attached = await outcome(
-      client.send('Target.attachToTarget', { targetId, flatten: true })
-    );
-    session = attached.result?.sessionId;
-    result.diagnostics = { clientAttach: attachOutcome(attached) };
-    if (!session)
-      return {
-        ...result,
-        live: false,
-        attached: false,
-        liveWhy: attachWhy(result.diagnostics.clientAttach),
-      };
-    await client.send('Page.enable', {}, session);
-    await client.send('Runtime.enable', {}, session);
-    if (discovery) await client.send('Target.setDiscoverTargets', { discover: true });
+    const ready = await attachClient({ client, targetId, discovery, side, result, missing });
+    if (ready.stop) return ready.stop;
+    session = ready.session;
     if (side === 'control') {
       failing = true;
       await reader.send(

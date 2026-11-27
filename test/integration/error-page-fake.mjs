@@ -308,6 +308,7 @@ export function quarantining(
     closeProtected = false,
     refuseClose = false,
     allowKeptClose = false,
+    reject = () => undefined,
   } = {}
 ) {
   const locked = new Map();
@@ -354,6 +355,8 @@ export function quarantining(
   };
   conn.send = async (method, params = {}, sessionId) => {
     const tab = browser.tabOf(sessionId, params.targetId);
+    const rejected = reject(method, tab, quarantined);
+    if (rejected) throw rejected;
     if (
       method === 'Runtime.evaluate' &&
       tab &&

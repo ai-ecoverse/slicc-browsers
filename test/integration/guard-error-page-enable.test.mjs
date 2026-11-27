@@ -207,10 +207,11 @@ const cases = {
       }
     },
     check: (legs, step) => {
-      for (const { row, today } of Object.values(legs)) {
-        assert.equal(row.control, 'fail', shown(row));
+      for (const [side, { row, today }] of Object.entries(legs)) {
+        assert.equal(row.control, side === 'control' ? 'fail' : 'pass', shown(row));
         assert.equal(row.guarded, 'fail', shown(row));
         assert.deepEqual(row.errors, [`errorPage: ${failure(step).message}`], shown(row));
+        assert.deepEqual(row.errorLegs, [side], shown(row));
         assert.equal(row.incomplete, undefined, shown(row));
         assert.deepEqual(stable(row), stable(today));
       }
@@ -241,18 +242,22 @@ for (const step of steps)
     test(`${step}: ${kase.name}`, async () => kase.check(await kase.run(step), step));
 
 for (const step of steps)
-  test(`${step}: a guarded refusal changes only the control cell, which reads what control measured`, async () => {
+  test(`${step}: a guarded refusal is no row error, and control reads what it measured either way`, async () => {
     const fixture = await fixtureServer();
     try {
       const options = { reject: guardedAt(step, refusal(step)) };
       const [row] = await rows([recover], { options, fixture });
       const [today] = await rows([recover], { options, runner: await before, fixture });
       assert.deepEqual(
-        [today.control, today.guarded, today.errors],
-        ['fail', 'fail', [`errorPage: ${refusal(step).message}`]],
+        [today.control, today.guarded, today.errors, today.errorLegs],
+        ['pass', 'fail', [`errorPage: ${refusal(step).message}`], ['guarded']],
         shown(today)
       );
-      assert.deepEqual([row.control, row.guarded, row.errors], ['pass', 'fail', []], shown(row));
+      assert.deepEqual(
+        [row.control, row.guarded, row.errors, row.errorLegs],
+        ['pass', 'fail', [], undefined],
+        shown(row)
+      );
     } finally {
       await fixture.close();
     }

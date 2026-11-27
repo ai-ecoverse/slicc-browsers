@@ -186,6 +186,33 @@ test('a row must pass its control and fail its protection, unless it is a drivab
   assert.deepEqual(changed('apex', 'C6.read-cookies', {}), []);
 });
 
+test('a row with errors on a leg fails the sweep even when its verdicts match', () => {
+  const runnable = vector(
+    (v) =>
+      v.kind === 'cdp' &&
+      v.targets.includes('seven') &&
+      !expectedSkip(v, 'seven') &&
+      !drivable.has(v.id) &&
+      !liveNeedsGuard.has(v.id)
+  );
+  for (const errorLegs of [['guarded'], ['control'], ['control', 'guarded']]) {
+    const problems = changed('seven', runnable.id, {
+      errors: errorLegs.map((side) => `${side} boom`),
+      errorLegs,
+    });
+    assert.equal(problems.length, 2, JSON.stringify(problems));
+    for (const problem of problems) {
+      assert.match(
+        problem,
+        new RegExp(`but is pass/fail/pass with errors on ${errorLegs.join(' and ')}`)
+      );
+      assert.match(problem, /errors (control|guarded) boom/);
+    }
+  }
+  assert.equal(changed('seven', runnable.id, { errors: ['row timed out'] }).length, 2);
+  assert.deepEqual(changed('seven', runnable.id, { errors: [] }), []);
+});
+
 test('a failing sweep row includes errors, notes and named call errors in the problem', () => {
   const set = selection(published, 'vault');
   const results = clean(set, 'vault').map((row) =>

@@ -96,9 +96,10 @@ test('C3.popup-self-nav: a settle whose beacon never arrives without a refusal s
 });
 
 const guardedOnly = (fail) => ({ guarded: fail });
-const failsWith = (result, text) => {
-  assert.equal(result.control, 'fail', JSON.stringify(result));
+const failsWith = (result, text, control) => {
+  assert.equal(result.control, control, JSON.stringify(result));
   assert.equal(result.guarded, 'fail', JSON.stringify(result));
+  assert.deepEqual(result.errorLegs, ['guarded'], JSON.stringify(result));
   assert.ok(
     result.errors.some((error) => error.startsWith(text)),
     JSON.stringify(result.errors)
@@ -113,7 +114,7 @@ test('a guarded setup error that keeps the popup steps from running fails the ro
       method === 'Target.setAutoAttach' && params.autoAttach ? 'Internal error' : undefined
     )
   );
-  failsWith(result, 'refused.2 failed without a refusal: Internal error');
+  failsWith(result, 'refused.2 failed without a refusal: Internal error', 'pass');
 });
 
 test('a guarded step that times out instead of being refused fails the row', async () => {
@@ -126,7 +127,7 @@ test('a guarded step that times out instead of being refused fails the row', asy
         : undefined
     )
   );
-  failsWith(result, 'refused.2 failed without a refusal: Target.setAutoAttach timed out');
+  failsWith(result, 'refused.2 failed without a refusal: Target.setAutoAttach timed out', 'pass');
 });
 
 test('a dependsOn step that failed rather than was refused fails the row', async () => {
@@ -137,7 +138,8 @@ test('a dependsOn step that failed rather than was refused fails the row', async
       child && method === 'Page.addScriptToEvaluateOnNewDocument' ? 'Internal error' : undefined
     )
   );
-  failsWith(result, 'refused.5 failed without a refusal: Internal error');
+  failsWith(result, 'refused.5 failed without a refusal: Internal error', 'fail');
+  assert.match(result.why, /^refused only on the control: refused\.5(;|$)/);
   assert.equal(result.observations.guarded['refused.5'], false);
   for (const name of ['allowedBeacon', 'beacon'])
     assert.equal(typeof result.observations.guarded[name], 'boolean', `${name} was skipped`);

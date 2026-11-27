@@ -128,13 +128,14 @@ test('a guard refuses the replacement browser_ui target after the control lost i
   assert.deepEqual(guard.asked, ['UI-2']);
 });
 
-test('a control whose browser_ui targets all close before it attaches stays a failure after three attempts', async () => {
+test('a control whose browser_ui targets all close before it attaches stays incomplete after three attempts, and the row fails', async () => {
   const browser = chrome({ closing: () => true });
   const result = await row(browser.client, browser.client);
-  assert.equal(result.control, 'fail', JSON.stringify(result));
+  assert.equal(result.control, 'incomplete', JSON.stringify(result));
   assert.equal(result.guarded, 'fail', JSON.stringify(result));
   assert.equal(result.observations.control.attached, 'incomplete');
   assert.deepEqual(result.errors, [gone]);
+  assert.deepEqual(result.errorLegs, ['guarded']);
   assert.deepEqual(result.incomplete, [`control ${gone}`]);
   assert.deepEqual(browser.attaches, ['UI-1', 'UI-2', 'UI-3', 'UI-4', 'UI-5', 'UI-6']);
   assert.equal(result.notes.length, 4);
@@ -143,7 +144,8 @@ test('a control whose browser_ui targets all close before it attaches stays a fa
 test('an attach that fails while its browser_ui target is still listed is not retried', async () => {
   const browser = chrome({ broken: true });
   const result = await row(browser.client, browser.client);
-  assert.equal(result.control, 'fail', JSON.stringify(result));
+  assert.equal(result.control, 'incomplete', JSON.stringify(result));
+  assert.equal(result.guarded, 'fail', JSON.stringify(result));
   assert.equal(result.observations.control.attached, 'incomplete');
   assert.deepEqual(browser.attaches, ['UI-1', 'UI-1']);
   assert.equal(result.notes, undefined);

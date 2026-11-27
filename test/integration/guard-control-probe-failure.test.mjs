@@ -217,13 +217,19 @@ function assertControlIncomplete({ row, summary }, spec) {
   assert.deepEqual(summary.forged, []);
 }
 
-function assertRowError({ row }, error) {
-  assert.deepEqual([row.control, row.guarded], ['fail', 'fail'], shown(row));
+function assertRowError({ row }, error, side = 'control') {
+  assert.deepEqual(
+    [row.control, row.guarded],
+    [side === 'control' ? 'fail' : 'pass', 'fail'],
+    shown(row)
+  );
   assert.deepEqual(row.errors, [error], shown(row));
+  assert.deepEqual(row.errorLegs, [side], shown(row));
   assert.deepEqual(row.incomplete ?? [], [], shown(row));
 }
 
-const assertGuardedError = (out, spec) => assertRowError(out, `${spec.probe}: ${spec.message}`);
+const assertGuardedError = (out, spec) =>
+  assertRowError(out, `${spec.probe}: ${spec.message}`, 'guarded');
 const assertControlRefusal = (out, spec) =>
   assertRowError(out, `${spec.probe}: ${spec.said(refusal)}`);
 
@@ -242,7 +248,7 @@ const cases = [
     check: assertControlIncomplete,
   },
   {
-    name: 'the same failure on the guarded leg stays a row error',
+    name: 'the same failure on the guarded leg stays a row error that fails only the guarded leg',
     side: 'guarded',
     check: assertGuardedError,
   },

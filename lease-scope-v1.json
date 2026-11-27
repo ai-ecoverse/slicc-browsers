@@ -1,5 +1,3627 @@
 {
   "version": 1,
+  "exactInitialPilotCandidate": {
+    "status": "candidate",
+    "contexts": {
+      "general": "Existing catalog-aware v1 leaseScope reference over the complete typed allow array and raw candidate; not a universal ingress policy. consumerOverrides map named seam exceptions. Go enforces 2048 bytes and runs its protected checks, kernel rule is generic up to 8192 without a protected-host policy. BIOS must independently enforce the pilot protected deny list. WASI proves emitted/absent typed request and command, not authority.",
+      "pilot": "Single initial typed exact rule, byte-identical canonical HTTPS href at intake and at externally supplied goto. A true means syntactic eligibility, not authority. Reject parent, query and fragment even when empty. ASCII DNS A-label multi-label host, no trailing dot, IP/numeric alias, localhost or single-label. Canonical non-default port allowed. Path is root or slash-delimited nonempty ASCII unreserved segments, optional trailing slash, no dot/dotdot, NO percent escapes of any kind. Cap 2048 UTF-8 bytes before/after serialization. Never widen/fallback/retry. False pilot columns for a valid origin are not a legacy-origin refusal. Root and a terminal slash are distinct; nonterminal empty path segments are forbidden. Admission assumes other checks such as the 900s pilot term and holder are already satisfied. In pilot syntax failures, no emitted command and no adapter call; never infer that for a valid independent legacy origin.",
+      "grantEcho": "Given independently valid signed grant and bound context, compare immutable offerAllow and grantAllow cardinality, canonical kind and URL byte-for-byte. sameTypedSingleRule tests identity even when not eligible for this pilot; additionally require valid D2 offer for pilotGrantAccepted. False means zero data OPENs and zero browser dispatch (not zero request control OPENs). Kill kind-only mutant at tuple-comparison unit seam; an earlier kind/prefix rejection must not be reported as that mutant kill.",
+      "ownerReview": "Compare proven requests to the owner-selected holder, rule tuple and duration using the actual emitted command in POSIX argv; quote each accepted exact URL atom. Negative D2 input must not produce an owner line. PTY compatibility is separate from signing and production release evidence. offer is the proven pending broker request. owner is the decoded owner review line. expectedLine names the owner-side test input, and only the positive case also specifies exact WASI output. A mismatched line in a negative case is not output expected from a legitimate producer.",
+      "finalDocument": "unverified-R12: no row asserts the final committed URL, generation or disclosure after redirect. Broker R12 owns that verification."
+    },
+    "freeze": "Candidate data only. Record acceptance separately against the unchanged digest after WASI, kernel, BIOS and Go have each run and acknowledged these exact bytes in CI. A discrepancy is a named finding, not an expected-pass waiver. No authority, dispatch, final-document identity, deployment or release follows from this digest."
+  },
+  "exactInitialPilotCases": [
+    {
+      "id": "exact-root",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example/",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-path",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-unreserved",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/A-z_9.~"
+        }
+      ],
+      "url": "https://billing.example/A-z_9.~",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-case-sensitive",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-sibling",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1043",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-bare-wire",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example/",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "legacy-origin",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "origin-with-slash",
+      "allow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "exact-root-slashless-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "url": "https://billing.example",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "multiple-exact",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        },
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1043"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "mixed-invalid",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        },
+        {
+          "kind": "exact",
+          "url": "https://billing.example"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "prefix",
+      "allow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "parent-expansion",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": false,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "uppercase-host-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://BILLING.EXAMPLE/Invoice_1042"
+        }
+      ],
+      "url": "https://BILLING.EXAMPLE/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "uppercase-host-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://BILLING.EXAMPLE/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "uppercase-scheme-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "HTTPS://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "HTTPS://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "uppercase-scheme-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "HTTPS://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "explicit-default-port-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example:443/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example:443/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "explicit-default-port-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example:443/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "nondefault-port",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example:8443/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example:8443/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "different-port",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example:8443/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "trailing-dot-identical",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example./Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example./Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "trailing-dot-vs-undotted",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example./Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "undotted-vs-trailing-dot",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example./Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "ascii-alabel",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://xn--bcher-kva.example/Invoice_1042"
+        }
+      ],
+      "url": "https://xn--bcher-kva.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "unicode-idn-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://bücher.example/Invoice_1042"
+        }
+      ],
+      "url": "https://bücher.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "unicode-idn-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://xn--bcher-kva.example/Invoice_1042"
+        }
+      ],
+      "url": "https://bücher.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "canonical-ipv4",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://127.0.0.1/invoice"
+        }
+      ],
+      "url": "https://127.0.0.1/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "canonical-ipv6",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://[::1]/invoice"
+        }
+      ],
+      "url": "https://[::1]/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "decimal-ipv4",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://2130706433/invoice"
+        }
+      ],
+      "url": "https://2130706433/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "octal-ipv4",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://0177.0.0.1/invoice"
+        }
+      ],
+      "url": "https://0177.0.0.1/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "hex-ipv4",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://0x7f.0.0.1/invoice"
+        }
+      ],
+      "url": "https://0x7f.0.0.1/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "single-label",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://intranet/invoice"
+        }
+      ],
+      "url": "https://intranet/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "localhost",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://localhost/invoice"
+        }
+      ],
+      "url": "https://localhost/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-dns-label",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://a..example/invoice"
+        }
+      ],
+      "url": "https://a..example/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "underscore-host",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://not_dns.example/invoice"
+        }
+      ],
+      "url": "https://not_dns.example/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "leading-hyphen-label",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://-not.example/invoice"
+        }
+      ],
+      "url": "https://-not.example/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "http-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "http://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "http://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "http-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "http://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "wss-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "wss://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "wss://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "wss-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "wss://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "data-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "data:text/plain,example"
+        }
+      ],
+      "url": "data:text/plain,example",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "data-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "data:text/plain,example",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "blob-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "blob:https://billing.example/fixture"
+        }
+      ],
+      "url": "blob:https://billing.example/fixture",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "blob-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "blob:https://billing.example/fixture",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "javascript-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "javascript:void(0)"
+        }
+      ],
+      "url": "javascript:void(0)",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "javascript-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "javascript:void(0)",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "file-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "file:///fixture"
+        }
+      ],
+      "url": "file:///fixture",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "file-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "file:///fixture",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "userinfo-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://agent@billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://agent@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "userinfo-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://agent@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-userinfo-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://@billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-userinfo-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "userinfo-pass-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://agent:p@billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://agent:p@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "userinfo-pass-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://agent:p@billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-backslash-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example\\Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example\\Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-backslash-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example\\Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-ctl-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoi\u0001ce_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoi\u0001ce_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-ctl-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoi\u0001ce_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-tab-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoi\tce_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoi\tce_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-tab-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoi\tce_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "dot-segment-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/./Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/./Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "dot-segment-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/./Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "dotdot-segment-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/old/../Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old/../Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "dotdot-segment-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old/../Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-dotdot-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/old/%2E%2e/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old/%2E%2e/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-dotdot-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old/%2E%2e/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-slash-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/old%2fInvoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old%2fInvoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-slash-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old%2fInvoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-backslash-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/old%5CInvoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old%5CInvoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "encoded-backslash-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/old%5CInvoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "malformed-percent-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Inv%xx"
+        }
+      ],
+      "url": "https://billing.example/Inv%xx",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "malformed-percent-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Inv%xx",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "wildcard-authority-rule",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://*.example/Invoice_1042"
+        }
+      ],
+      "url": "https://*.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "wildcard-authority-goto",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://*.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-path-segment",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a//b"
+        }
+      ],
+      "url": "https://billing.example/a//b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "double-root-slash",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example//"
+        }
+      ],
+      "url": "https://billing.example//",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "terminal-slash-is-valid",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042/"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042/",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "terminal-slash-is-not-stripped",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042/"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "terminal-slash-is-not-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042/",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "query-equal",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?view=one"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?view=one",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "query-absent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?view=one"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "query-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?view=one",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "fragment-equal",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042#paid"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042#paid",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "fragment-absent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042#paid"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "fragment-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042#paid",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-query-equal",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-query-absent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-query-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-fragment-equal",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042#"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042#",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-fragment-absent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042#"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "empty-fragment-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042#",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "both-empty-equal",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?#"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?#",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "both-empty-absent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?#"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "both-empty-added",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "url": "https://billing.example/Invoice_1042?#",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-41",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%41b"
+        }
+      ],
+      "url": "https://billing.example/a%41b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-7e",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%7eb"
+        }
+      ],
+      "url": "https://billing.example/a%7eb",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-2E",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%2Eb"
+        }
+      ],
+      "url": "https://billing.example/a%2Eb",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-25",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%25b"
+        }
+      ],
+      "url": "https://billing.example/a%25b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-20",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%20b"
+        }
+      ],
+      "url": "https://billing.example/a%20b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-40",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%40b"
+        }
+      ],
+      "url": "https://billing.example/a%40b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-24",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%24b"
+        }
+      ],
+      "url": "https://billing.example/a%24b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-27",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%27b"
+        }
+      ],
+      "url": "https://billing.example/a%27b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-3F",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%3Fb"
+        }
+      ],
+      "url": "https://billing.example/a%3Fb",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-23",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%23b"
+        }
+      ],
+      "url": "https://billing.example/a%23b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-00",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%00b"
+        }
+      ],
+      "url": "https://billing.example/a%00b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-0A",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%0Ab"
+        }
+      ],
+      "url": "https://billing.example/a%0Ab",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-7F",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%7Fb"
+        }
+      ],
+      "url": "https://billing.example/a%7Fb",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-E282AC",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%E2%82%ACb"
+        }
+      ],
+      "url": "https://billing.example/a%E2%82%ACb",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "percent-c3a4",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%c3%a4b"
+        }
+      ],
+      "url": "https://billing.example/a%c3%a4b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-space",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a b"
+        }
+      ],
+      "url": "https://billing.example/a b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-percent",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a%b"
+        }
+      ],
+      "url": "https://billing.example/a%b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-single-quote",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a'b"
+        }
+      ],
+      "url": "https://billing.example/a'b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-double-quote",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a\"b"
+        }
+      ],
+      "url": "https://billing.example/a\"b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-backtick",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a`b"
+        }
+      ],
+      "url": "https://billing.example/a`b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-dollar",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a$b"
+        }
+      ],
+      "url": "https://billing.example/a$b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-semicolon",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a;b"
+        }
+      ],
+      "url": "https://billing.example/a;b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-ampersand",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a&b"
+        }
+      ],
+      "url": "https://billing.example/a&b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-pipe",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a|b"
+        }
+      ],
+      "url": "https://billing.example/a|b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-lt",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a<b"
+        }
+      ],
+      "url": "https://billing.example/a<b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-gt",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a>b"
+        }
+      ],
+      "url": "https://billing.example/a>b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-lparen",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a(b"
+        }
+      ],
+      "url": "https://billing.example/a(b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-rparen",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a)b"
+        }
+      ],
+      "url": "https://billing.example/a)b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-star",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a*b"
+        }
+      ],
+      "url": "https://billing.example/a*b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-question",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a?b"
+        }
+      ],
+      "url": "https://billing.example/a?b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-hash",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a#b"
+        }
+      ],
+      "url": "https://billing.example/a#b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-bang",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a!b"
+        }
+      ],
+      "url": "https://billing.example/a!b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-lbrace",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a{b"
+        }
+      ],
+      "url": "https://billing.example/a{b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-rbrace",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a}b"
+        }
+      ],
+      "url": "https://billing.example/a}b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-lbracket",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a[b"
+        }
+      ],
+      "url": "https://billing.example/a[b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-rbracket",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a]b"
+        }
+      ],
+      "url": "https://billing.example/a]b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-caret",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a^b"
+        }
+      ],
+      "url": "https://billing.example/a^b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-backslash",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a\\b"
+        }
+      ],
+      "url": "https://billing.example/a\\b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-colon",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a:b"
+        }
+      ],
+      "url": "https://billing.example/a:b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-at",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a@b"
+        }
+      ],
+      "url": "https://billing.example/a@b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-plus",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a+b"
+        }
+      ],
+      "url": "https://billing.example/a+b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-comma",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a,b"
+        }
+      ],
+      "url": "https://billing.example/a,b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "raw-char-equals",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/a=b"
+        }
+      ],
+      "url": "https://billing.example/a=b",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "protected-host",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://vault.sliccy.ai/invoice"
+        }
+      ],
+      "url": "https://vault.sliccy.ai/invoice",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": false,
+          "match": false
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      },
+      "consumerOverrides": {
+        "kernelRuleValid": true
+      },
+      "policy": "catalog.protectedOrigins: the shared reference and Go apply the protected catalog at rule validation; the BIOS pilot must deny this protected surface, while the generic kernel rule checks syntax only."
+    },
+    {
+      "id": "limit-2048",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "url": "https://billing.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": true,
+          "gotoAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "limit-2049",
+      "allow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "url": "https://billing.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "initial": true,
+      "contexts": {
+        "general": {
+          "ruleValid": true,
+          "match": true
+        },
+        "pilot": {
+          "ruleAccepted": false,
+          "gotoAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      },
+      "consumerOverrides": {
+        "goRuleValid": false,
+        "goMatch": false
+      }
+    }
+  ],
+  "grantEchoCases": [
+    {
+      "id": "root-same",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": true,
+          "pilotGrantAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "path-same",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": true,
+          "pilotGrantAccepted": true
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "legacy-origin-same",
+      "offerAllow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": true,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "identical-invalid",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "root-to-origin",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "origin-to-root",
+      "offerAllow": [
+        {
+          "kind": "origin",
+          "url": "https://billing.example"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "kind-only-same-literal",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "path-prefix",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "path-to-root",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "sibling",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1043"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "slash",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042/"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "subdomain",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://sub.billing.example/Invoice_1042"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "extra-rule",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        },
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1043"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "no-rule",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        }
+      ],
+      "grantAllow": [],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "same-multiple",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        },
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1043"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042"
+        },
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1043"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": false,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "same-query",
+      "offerAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?x"
+        }
+      ],
+      "grantAllow": [
+        {
+          "kind": "exact",
+          "url": "https://billing.example/Invoice_1042?x"
+        }
+      ],
+      "contexts": {
+        "grantEcho": {
+          "sameTypedSingleRule": true,
+          "pilotGrantAccepted": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    }
+  ],
+  "exactInitialPilotReviewCases": [
+    {
+      "id": "ttl-900s-to-15m",
+      "offer": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "owner": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "contexts": {
+        "ownerReview": {
+          "matches": true
+        },
+        "finalDocument": "unverified-R12"
+      },
+      "expectedLine": "slicc lease review --to jkt:bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw --allow 'https://billing.example/Invoice_1042' --for 15m"
+    },
+    {
+      "id": "ttl-901s-not-15m",
+      "offer": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 901
+      },
+      "owner": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "contexts": {
+        "ownerReview": {
+          "matches": false
+        },
+        "finalDocument": "unverified-R12"
+      },
+      "expectedLine": "slicc lease review --to jkt:bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw --allow 'https://billing.example/Invoice_1042' --for 15m"
+    },
+    {
+      "id": "jkt-mismatch",
+      "offer": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "owner": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s",
+        "ttlSeconds": 900
+      },
+      "contexts": {
+        "ownerReview": {
+          "matches": false
+        },
+        "finalDocument": "unverified-R12"
+      },
+      "expectedLine": "slicc lease review --to jkt:GcQ_AwlsJJaOnKknp1hXLIo08um7bX0k796qClT9C8s --allow 'https://billing.example/Invoice_1042' --for 15m"
+    },
+    {
+      "id": "kind-root-mismatch",
+      "offer": {
+        "allow": [
+          {
+            "kind": "origin",
+            "url": "https://billing.example"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "owner": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "expectedLine": "slicc lease review --to jkt:bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw --allow 'https://billing.example/' --for 15m",
+      "contexts": {
+        "ownerReview": {
+          "matches": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    },
+    {
+      "id": "path-mismatch",
+      "offer": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1042"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "owner": {
+        "allow": [
+          {
+            "kind": "exact",
+            "url": "https://billing.example/Invoice_1043"
+          }
+        ],
+        "jkt": "bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw",
+        "ttlSeconds": 900
+      },
+      "expectedLine": "slicc lease review --to jkt:bNUTD5WUPIW-uCR_97yUej0bQGPtlILr5vcjk-KoRxw --allow 'https://billing.example/Invoice_1043' --for 15m",
+      "contexts": {
+        "ownerReview": {
+          "matches": false
+        },
+        "finalDocument": "unverified-R12"
+      }
+    }
+  ],
   "shorthandCases": [
     {
       "input": "https://billing.example",

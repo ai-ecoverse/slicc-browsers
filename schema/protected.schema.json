@@ -85,6 +85,35 @@
           "protected": { "type": "boolean" }
         }
       }
+    },
+    "kept": {
+      "description": "Expected answers of the reference kept judge for a URL. Keeping only narrows and never grants protection: every kept row is also protected, and consumers evaluate protected and kept together.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "kept"],
+        "properties": {
+          "url": { "type": "string" },
+          "kept": { "type": "boolean" }
+        }
+      }
+    },
+    "keptTargets": {
+      "description": "Expected answers of the reference kept judge for a target. The about:blank rows only mean something beside the consumer's own context-origin judge; keeping only narrows and never grants protection.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "kept"],
+        "properties": {
+          "url": { "type": "string" },
+          "contextOrigin": { "type": "string", "minLength": 1 },
+          "previous": { "type": "boolean" },
+          "opener": { "enum": ["protected", "unprotected", "unknown"] },
+          "kept": { "type": "boolean" }
+        }
+      }
     }
   }
 }

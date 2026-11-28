@@ -17,6 +17,10 @@ pub struct Vectors {
     pub targets: Vec<TargetVector>,
     pub cookie_domains: Vec<CookieVector>,
     pub storage_keys: Vec<KeyVector>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept: Vec<KeptVector>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kept_targets: Vec<KeptTargetVector>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -55,6 +59,28 @@ pub struct TargetVector {
     )]
     pub context_origin: Option<String>,
     pub protected: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct KeptVector {
+    pub url: String,
+    pub kept: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct KeptTargetVector {
+    pub url: String,
+    #[serde(
+        default,
+        rename = "contextOrigin",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub context_origin: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub previous: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opener: Option<String>,
+    pub kept: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

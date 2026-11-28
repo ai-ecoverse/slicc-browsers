@@ -310,6 +310,84 @@ func TestTheProtectedVectorsParse(t *testing.T) {
 	}
 }
 
+func TestTheKeptOriginsParse(t *testing.T) {
+	pilot := "https://lease-pilot.sliccy.ai"
+	po := sliccbrowsers.Default().ProtectedOrigins
+	if !slices.Equal(po.KeptOrigins, []string{pilot}) {
+		t.Fatalf("keptOrigins: %q", po.KeptOrigins)
+	}
+	v, err := sliccbrowsers.Protected()
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers := map[string]map[bool]int{"kept": {}, "keptTargets": {}}
+	for _, k := range v.Kept {
+		answers["kept"][k.Kept]++
+	}
+	openers := []string{"", sliccbrowsers.OpenerProtected, sliccbrowsers.OpenerUnprotected, sliccbrowsers.OpenerUnknown}
+	for _, k := range v.KeptTargets {
+		answers["keptTargets"][k.Kept]++
+		if !slices.Contains(openers, k.Opener) {
+			t.Fatalf("keptTargets row %+v has opener %q", k, k.Opener)
+		}
+	}
+	for field, n := range answers {
+		if n[true] == 0 || n[false] == 0 {
+			t.Fatalf("%s: %v, want kept and not kept rows", field, n)
+		}
+	}
+	if !slices.Contains(v.Kept, sliccbrowsers.KeptVector{URL: pilot + "/", Kept: true}) {
+		t.Fatal("kept: no row for the pilot root")
+	}
+	for _, row := range []sliccbrowsers.KeptTargetVector{
+		{URL: "about:blank", ContextOrigin: pilot, Kept: true},
+		{URL: "about:blank", ContextOrigin: "https://seven.sliccy.ai"},
+		{URL: "about:blank"},
+		{URL: "blob:https://lease-pilot.sliccy.ai/x"},
+		{URL: "view-source:https://lease-pilot.sliccy.ai/"},
+	} {
+		if !slices.Contains(v.KeptTargets, row) {
+			t.Fatalf("keptTargets: no row %+v", row)
+		}
+	}
+	raw, ok := decode(t, sliccbrowsers.ProtectedJSON()).(map[string]any)
+	if !ok {
+		t.Fatal("protected.json is not an object")
+	}
+	back, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := decode(t, back).(map[string]any)
+	for _, field := range []string{"kept", "keptTargets"} {
+		if !reflect.DeepEqual(again[field], raw[field]) {
+			t.Fatalf("%s does not round-trip through the Go types", field)
+		}
+	}
+	var bare sliccbrowsers.ProtectedOrigins
+	if err := json.Unmarshal([]byte(`{"domains":["sliccy.ai"]}`), &bare); err != nil || bare.KeptOrigins != nil {
+		t.Fatalf("without keptOrigins: %v, %q", err, bare.KeptOrigins)
+	}
+	var old sliccbrowsers.ProtectedVectors
+	if err := json.Unmarshal([]byte(`{"schema":1,"urls":[]}`), &old); err != nil || old.Kept != nil || old.KeptTargets != nil {
+		t.Fatalf("without kept rows: %v, %+v", err, old)
+	}
+	for _, b := range [][]byte{mustMarshal(t, bare), mustMarshal(t, old)} {
+		if bytes.Contains(b, []byte(`"keptOrigins"`)) || bytes.Contains(b, []byte(`"kept"`)) || bytes.Contains(b, []byte(`"keptTargets"`)) {
+			t.Fatalf("an absent kept field is written: %s", b)
+		}
+	}
+}
+
+func mustMarshal(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func TestGuardWhereTypeStaysString(t *testing.T) {
 	w := sliccbrowsers.GuardWhere{Type: "page"}
 	if w.Type != "page" {

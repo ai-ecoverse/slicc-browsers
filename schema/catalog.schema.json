@@ -209,6 +209,12 @@
             "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
           }
         },
+        "keptOrigins": {
+          "description": "Exact https origins (scheme and host, no port, path or trailing slash) whose documents are kept. A URL is kept when it parses as https on the default port and its host equals an entry's host, compared case-insensitively with one trailing dot ignored, for any path, query or fragment; userinfo does not change the host, and wrapped URLs (blob:, view-source:) are not kept. An inheriting document (about:blank) is kept when its context origin equals an entry exactly. Every kept origin is also a protected origin. Keeping only narrows and never grants protection: a consumer evaluates protected and kept together, and keeping never changes whether a page is protected. The about:blank case only means something beside the consumer's own context-origin judge. Optional; consumers without a kept notion ignore it.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^https://[a-z0-9.-]+$" }
+        },
         "schemes": { "$ref": "#/$defs/schemes", "type": "array", "minItems": 1 },
         "innerSchemes": { "$ref": "#/$defs/schemes" },
         "anySchemes": { "$ref": "#/$defs/schemes" },

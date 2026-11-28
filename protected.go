@@ -37,6 +37,7 @@ type ProtectedOrigins struct {
 	ErrorPage          ErrorPageRule      `json:"errorPage"`
 	Domains            []string           `json:"domains"`
 	Hosts              []string           `json:"hosts"`
+	KeptOrigins        []string           `json:"keptOrigins,omitempty"`
 	Schemes            []string           `json:"schemes"`
 	InnerSchemes       []string           `json:"innerSchemes"`
 	AnySchemes         []string           `json:"anySchemes"`
@@ -52,15 +53,17 @@ type ProtectedOrigins struct {
 }
 
 type ProtectedVectors struct {
-	ErrorPage          ErrorPageRule  `json:"errorPage"`
-	Unparseable        string         `json:"unparseable"`
-	UnparseableRefusal string         `json:"unparseableRefusal"`
-	Schema             int            `json:"schema"`
-	Origins            []string       `json:"origins"`
-	URLs               []URLVector    `json:"urls"`
-	Targets            []TargetVector `json:"targets"`
-	CookieDomains      []CookieVector `json:"cookieDomains"`
-	StorageKeys        []KeyVector    `json:"storageKeys"`
+	ErrorPage          ErrorPageRule      `json:"errorPage"`
+	Unparseable        string             `json:"unparseable"`
+	UnparseableRefusal string             `json:"unparseableRefusal"`
+	Schema             int                `json:"schema"`
+	Origins            []string           `json:"origins"`
+	URLs               []URLVector        `json:"urls"`
+	Targets            []TargetVector     `json:"targets"`
+	CookieDomains      []CookieVector     `json:"cookieDomains"`
+	StorageKeys        []KeyVector        `json:"storageKeys"`
+	Kept               []KeptVector       `json:"kept,omitempty"`
+	KeptTargets        []KeptTargetVector `json:"keptTargets,omitempty"`
 }
 
 type URLVector struct {
@@ -78,6 +81,19 @@ type TargetVector struct {
 	Opener         string `json:"opener,omitempty"`
 	ContextOrigin  string `json:"contextOrigin,omitempty"`
 	Protected      bool   `json:"protected"`
+}
+
+type KeptVector struct {
+	URL  string `json:"url"`
+	Kept bool   `json:"kept"`
+}
+
+type KeptTargetVector struct {
+	URL           string `json:"url"`
+	ContextOrigin string `json:"contextOrigin,omitempty"`
+	Previous      bool   `json:"previous,omitempty"`
+	Opener        string `json:"opener,omitempty"`
+	Kept          bool   `json:"kept"`
 }
 
 type CookieVector struct {
